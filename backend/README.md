@@ -25,6 +25,15 @@ export ATLAS_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32)
 
 L’hôte par défaut du lancement Python (`python -m atlas_backend.main`) est également `127.0.0.1`. Toutes les routes sauf `/health`, dont `/openapi.json`, demandent `Authorization: Bearer $ATLAS_TOKEN`. Si le jeton n’est pas configuré, les routes protégées répondent `401`. Le jeton n’est ni fourni par défaut ni enregistré dans SQLite.
 
+Le serveur reste lié à `127.0.0.1` par défaut. Pour le seul scénario de test avec l’émulateur Android, lancer temporairement Uvicorn sur `0.0.0.0` et utiliser `10.0.2.2` comme hôte depuis l’émulateur :
+
+```sh
+ATLAS_TOKEN="$ATLAS_TOKEN" ATLAS_DB_PATH="/tmp/atlas-e2e.sqlite3" \
+  /tmp/v4/venv/bin/python -m uvicorn atlas_backend.main:app --host 0.0.0.0 --port 8000 --no-access-log
+```
+
+Ne pas utiliser cette liaison pour exposer le service sur un réseau public. Le script `scripts/v4-backend-e2e.sh` génère un jeton aléatoire temporaire, une base éphémère et arrête le serveur à la fin.
+
 Pour désactiver des capacités individuellement, fournir un objet JSON limité aux flags connus. Les autres capacités gardent leur valeur par défaut :
 
 ```sh
@@ -71,6 +80,8 @@ OpenAPI généré : `curl -H "Authorization: Bearer $ATLAS_TOKEN" http://127.0.0
 
 `AgentAdapter` ne peut fournir qu’une proposition. `MockAgentAdapter` est déterministe, ignore le texte fourni et ne fait aucun appel réseau. `PolicyEngine` compare chaque action au mandat et à la capability correspondante ; ce backend n’exécute aucune action Android ou système. Les textes entrants sont des données non fiables, limités en taille et jamais évalués comme code. Les objets JSON refusent les champs supplémentaires. Les contenus du catalogue sont du texte brut et chaque URL est validée en HTTPS ; aucune page ou métadonnée distante n’est récupérée.
 
+Le contrat de synchronisation est versionné par `contract_version: 1` dans la requête et la réponse de `/v1/sync`; voir `contracts/sync-v1.schema.json`. Chaque événement utilise un UUID stable dans `event_id` (nom Android : `clientEventId`), une date RFC 3339 UTC avec suffixe `Z` et un payload scalaire limité. Un rejeu identique renvoie le même accusé sans nouvel enregistrement. Réutiliser un UUID avec un contenu différent renvoie `409 idempotency_conflict`. Les erreurs exposent la version et un code stable sous `error.code` (`contracts/error-v1.schema.json`); les requêtes mal formées renvoient `contract_validation_failed` sans refléter les valeurs fournies.
+
 OpenClaw est `unsupported` : **adaptateur non implémenté**. Il n’y a pas de client OpenClaw, LLM, RSS ou intégration externe. SQLite et ce jeton local conviennent uniquement à une démonstration sur la machine. Le serveur est conçu pour écouter sur loopback ; ce n’est pas un déploiement HTTPS pour réseau public. Les changements de policy et l’exécution d’actions Android restent la responsabilité déterministe du client, avec son propre consentement.
 
 ## Tests
@@ -78,4 +89,3 @@ OpenClaw est `unsupported` : **adaptateur non implémenté**. Il n’y a pas de 
 ```sh
 .venv/bin/python -m pytest -q
 ```
-

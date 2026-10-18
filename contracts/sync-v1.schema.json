@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/sync-v1.schema.json",
+  "title": "ATLAS event sync v1",
+  "description": "POST /v1/sync request and response. Replays use event_id as a stable UUID idempotency key.",
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "event_type", "occurred_at", "payload"],
+      "properties": {
+        "event_id": {"type": "string", "format": "uuid"},
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "focus_started",
+            "focus_paused",
+            "focus_completed",
+            "habit_checkin",
+            "directive_responded",
+            "content_opened"
+          ]
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "description": "UTC instant in RFC 3339 form."
+        },
+        "payload": {
+          "type": "object",
+          "maxProperties": 20,
+          "additionalProperties": {
+            "type": ["string", "integer", "number", "boolean", "null"]
+          }
+        }
+      }
+    },
+    "acknowledgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "status", "received", "inserted", "duplicates", "results"],
+      "properties": {
+        "contract_version": {"const": 1},
+        "status": {"const": "ok"},
+        "received": {"type": "integer", "minimum": 0},
+        "inserted": {"type": "integer", "minimum": 0},
+        "duplicates": {"type": "integer", "minimum": 0},
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["event_id", "status", "recorded_at"],
+            "properties": {
+              "event_id": {"type": "string", "format": "uuid"},
+              "status": {"const": "accepted"},
+              "recorded_at": {"type": "string", "format": "date-time", "pattern": "Z$"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "title": "request",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "events"],
+      "properties": {
+        "contract_version": {"const": 1},
+        "events": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/event"}}
+      }
+    },
+    {"$ref": "#/$defs/acknowledgement"}
+  ]
+}

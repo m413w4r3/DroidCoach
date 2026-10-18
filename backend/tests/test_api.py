@@ -19,10 +19,16 @@ def test_health_is_public_and_reports_mock_mode(client):
 
 
 def test_auth_rejects_missing_and_incorrect_token(client):
-    assert client.get("/v1/directives/current").status_code == 401
-    assert client.get(
+    missing = client.get("/v1/directives/current")
+    assert missing.status_code == 401
+    assert missing.headers["www-authenticate"] == "Bearer"
+    assert missing.json()["contract_version"] == 1
+    assert missing.json()["error"]["code"] == "authentication_required"
+    rejected = client.get(
         "/v1/directives/current", headers={"Authorization": "Bearer wrong-token"}
-    ).status_code == 401
+    )
+    assert rejected.status_code == 401
+    assert rejected.json()["error"]["code"] == "authentication_required"
 
 
 def test_event_replay_returns_same_result_and_stores_one_row(client, auth_headers):
@@ -35,11 +41,23 @@ def test_event_replay_returns_same_result_and_stores_one_row(client, auth_header
     assert len(exported["events"]) == 1
 
 
+def test_event_uuid_cannot_be_reused_for_a_different_body(client, auth_headers):
+    body = event_body()
+    assert client.post("/v1/events", json=body, headers=auth_headers).status_code == 200
+    changed = {**body, "payload": {"duration_minutes": 25}}
+    response = client.post("/v1/events", json=changed, headers=auth_headers)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "idempotency_conflict"
+    assert len(client.get("/v1/export", headers=auth_headers).json()["events"]) == 1
+
+
 def test_all_five_directive_choices_are_supported(client, auth_headers):
     current = client.get("/v1/directives/current", headers=auth_headers)
     assert current.status_code == 200
     directive = current.json()
     assert directive["schema_version"] == 1
+    assert directive["created_at"].endswith("Z")
+    assert directive["expires_at"].endswith("Z")
     assert set(directive["choices"]) == {"start", "discuss", "alternative", "postpone", "pause"}
     for choice in ("start", "discuss", "alternative", "postpone", "pause"):
         response = client.post(
@@ -116,6 +134,8 @@ def test_size_limits_reject_large_message_and_request(client, auth_headers):
         headers={**auth_headers, "Content-Type": "application/json"},
     )
     assert too_large_body.status_code == 413
+    assert too_large_body.json()["contract_version"] == 1
+    assert too_large_body.json()["error"]["code"] == "request_too_large"
 
 
 def test_export_contains_events_and_responses_without_auth_token(client, auth_headers, token):
@@ -135,14 +155,39 @@ def test_export_contains_events_and_responses_without_auth_token(client, auth_he
 
 
 def test_sync_ingests_events_idempotently(client, auth_headers):
-    body = {"events": [event_body(), event_body()]}
+    body = {"contract_version": 1, "events": [event_body(), event_body()]}
     first = client.post("/v1/sync", json=body, headers=auth_headers)
     replay = client.post("/v1/sync", json=body, headers=auth_headers)
     assert first.status_code == replay.status_code == 200
+    assert first.json()["contract_version"] == 1
+    assert [item["event_id"] for item in first.json()["results"]] == [
+        item["event_id"] for item in body["events"]
+    ]
+    assert all(item["status"] == "accepted" for item in first.json()["results"])
     assert first.json()["inserted"] == 2
     assert replay.json()["inserted"] == 0
     assert replay.json()["duplicates"] == 2
     assert len(client.get("/v1/export", headers=auth_headers).json()["events"]) == 2
+
+
+def test_sync_rejects_unknown_contract_version(client, auth_headers):
+    response = client.post(
+        "/v1/sync",
+        json={"contract_version": 2, "events": []},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["contract_version"] == 1
+    assert response.json()["error"]["code"] == "contract_validation_failed"
+
+
+def test_event_timestamps_are_normalized_to_utc(client, auth_headers):
+    body = event_body()
+    body["occurred_at"] = "2026-10-18T14:00:00+02:00"
+    response = client.post("/v1/events", json=body, headers=auth_headers)
+    assert response.status_code == 200
+    exported = client.get("/v1/export", headers=auth_headers).json()
+    assert exported["events"][0]["occurred_at"].replace("+00:00", "Z") == "2026-10-18T12:00:00Z"
 
 
 def test_recommendations_are_limited_to_three_validated_https_urls(client, auth_headers):

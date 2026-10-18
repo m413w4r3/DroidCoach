@@ -10,19 +10,21 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Path as ApiPath
-from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi import Depends, FastAPI, HTTPException, Path as ApiPath, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .agent import AgentAdapter, MockAgentAdapter, ProposedAction
 from .content import DEMO_CONTENT
 from .policy import MANDATE, PolicyEngine, configured_capabilities
-from .store import SQLiteStore
+from .store import EventIdConflict, SQLiteStore
 
 MAX_REQUEST_BYTES = 65_536
+API_CONTRACT_VERSION = 1
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEMO_DIRECTIVE_ID = "demo-focus-001"
 DIRECTIVE_CHOICES = ("start", "discuss", "alternative", "postpone", "pause")
@@ -51,6 +53,13 @@ class DirectiveOut(StrictModel):
     created_at: datetime
     expires_at: datetime
     requires_explicit_confirmation: bool = False
+
+    @field_validator("created_at", "expires_at")
+    @classmethod
+    def timestamps_are_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("directive timestamps must include timezone")
+        return value.astimezone(timezone.utc)
 
     @model_validator(mode="after")
     def valid_expiry(self) -> "DirectiveOut":
@@ -99,6 +108,7 @@ class EventRequest(StrictModel):
 
 
 class SyncRequest(StrictModel):
+    contract_version: Literal[1] = 1
     events: list[EventRequest] = Field(default_factory=list, max_length=100)
 
 
@@ -124,12 +134,22 @@ class RequestSizeLimitMiddleware:
             try:
                 if int(length) > self.max_bytes:
                     await JSONResponse(
-                        status_code=413, content={"detail": "requête trop volumineuse"}
+                        status_code=413,
+                        content={
+                            "contract_version": API_CONTRACT_VERSION,
+                            "detail": "requête trop volumineuse",
+                            "error": {"code": "request_too_large", "message": "requête trop volumineuse"},
+                        },
                     )(scope, receive, send)
                     return
             except ValueError:
                 await JSONResponse(
-                    status_code=400, content={"detail": "Content-Length invalide"}
+                    status_code=400,
+                    content={
+                        "contract_version": API_CONTRACT_VERSION,
+                        "detail": "Content-Length invalide",
+                        "error": {"code": "invalid_content_length", "message": "Content-Length invalide"},
+                    },
                 )(scope, receive, send)
                 return
 
@@ -146,7 +166,12 @@ class RequestSizeLimitMiddleware:
             size += len(chunk)
             if size > self.max_bytes:
                 await JSONResponse(
-                    status_code=413, content={"detail": "requête trop volumineuse"}
+                    status_code=413,
+                    content={
+                        "contract_version": API_CONTRACT_VERSION,
+                        "detail": "requête trop volumineuse",
+                        "error": {"code": "request_too_large", "message": "requête trop volumineuse"},
+                    },
                 )(scope, receive, send)
                 return
             chunks.append(chunk)
@@ -208,6 +233,38 @@ def create_app(
     app.state.store = store
     app.state.policy = policy
     app.state.agent = active_agent
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        code_by_status = {
+            401: "authentication_required",
+            403: "policy_denied",
+            404: "not_found",
+            409: "idempotency_conflict",
+        }
+        message = str(exc.detail)
+        code = code_by_status.get(exc.status_code, "request_rejected")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "contract_version": API_CONTRACT_VERSION,
+                "detail": exc.detail,
+                "error": {"code": code, "message": message},
+            },
+            headers=exc.headers,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def contract_error(_request: Request, _exc: RequestValidationError) -> JSONResponse:
+        message = "La requête ne respecte pas le contrat ATLAS v1."
+        return JSONResponse(
+            status_code=422,
+            content={
+                "contract_version": API_CONTRACT_VERSION,
+                "detail": message,
+                "error": {"code": "contract_validation_failed", "message": message},
+            },
+        )
 
     async def require_local_token(
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
@@ -290,7 +347,10 @@ def create_app(
             "status": "accepted",
             "recorded_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         }
-        return store.insert_event(normalized, result)
+        try:
+            return store.insert_event(normalized, result)
+        except EventIdConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     @app.post("/v1/events", dependencies=auth, tags=["events"])
     def create_event(event: EventRequest) -> dict:
@@ -356,6 +416,7 @@ def create_app(
             results.append(result)
             inserted_count += int(inserted)
         return {
+            "contract_version": body.contract_version,
             "status": "ok",
             "received": len(body.events),
             "inserted": inserted_count,
@@ -382,6 +443,6 @@ app = create_app()
 if __name__ == "__main__":
     uvicorn.run(
         "atlas_backend.main:app",
-        host=os.getenv("ATLAS_HOST", "127.0.0.1"),
+        host="127.0.0.1",
         port=int(os.getenv("ATLAS_PORT", "8000")),
     )

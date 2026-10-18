@@ -41,6 +41,7 @@ class SQLiteStore:
 
     def insert_event(self, event: dict[str, Any], result: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         event_id = event["event_id"]
+        payload_json = json.dumps(event["payload"], ensure_ascii=False, sort_keys=True)
         with self.connect() as connection:
             inserted = connection.execute(
                 "INSERT OR IGNORE INTO events(event_id,event_type,occurred_at,payload_json,result_json) "
@@ -49,15 +50,22 @@ class SQLiteStore:
                     event_id,
                     event["event_type"],
                     event["occurred_at"],
-                    json.dumps(event["payload"], ensure_ascii=False, sort_keys=True),
+                    payload_json,
                     json.dumps(result, ensure_ascii=False, sort_keys=True),
                 ),
             ).rowcount == 1
             if inserted:
                 return result, True
             existing = connection.execute(
-                "SELECT result_json FROM events WHERE event_id = ?", (event_id,)
+                "SELECT event_type,occurred_at,payload_json,result_json FROM events WHERE event_id = ?",
+                (event_id,),
             ).fetchone()
+            if (
+                existing["event_type"] != event["event_type"]
+                or existing["occurred_at"] != event["occurred_at"]
+                or existing["payload_json"] != payload_json
+            ):
+                raise EventIdConflict("event_id déjà utilisé pour un événement différent")
             return json.loads(existing["result_json"]), False
 
     def event_result(self, event_id: str) -> dict[str, Any] | None:
@@ -115,3 +123,7 @@ class SQLiteStore:
                 for row in response_rows
             ],
         }
+
+
+class EventIdConflict(ValueError):
+    """An idempotency key was reused with a different event body."""
