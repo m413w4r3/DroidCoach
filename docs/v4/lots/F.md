@@ -130,4 +130,4 @@ Dans `SettingsScreen` de `AtlasApp.kt`, ajouter une carte « Partage backend (fa
 - Appliquer les diffs manifest/debug uniquement pendant l'intégration centrale, puis exécuter `scripts/v4-backend-e2e.sh` sur l'AVD existant.
 - Raccorder le mode et les consentements à `AtlasController` / settings, persister les consentements séparément, et ajouter une reprise réseau Android si le produit la demande.
 - Rejouer la suite JVM complète après stabilisation du lot E.
-- SHA du commit : à renseigner après le commit du lot F.
+- SHA du commit principal du lot F : `7f5a5b9` (`V4 F: implement consented backend sync`).
