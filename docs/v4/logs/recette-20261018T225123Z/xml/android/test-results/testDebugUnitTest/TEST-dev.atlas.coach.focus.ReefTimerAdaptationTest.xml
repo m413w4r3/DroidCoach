@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.focus.ReefTimerAdaptationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-18T22:48:08.694Z" hostname="all" time="0.01">
+  <properties/>
+  <testcase name="reefDurationsConvertFromMillisecondsToFocusPlanSeconds" classname="dev.atlas.coach.focus.ReefTimerAdaptationTest" time="0.005"/>
+  <testcase name="timerStateProjectionKeepsAtlasPauseAndPhaseSemantics" classname="dev.atlas.coach.focus.ReefTimerAdaptationTest" time="0.003"/>
+  <testcase name="focusStatisticsCountElapsedWorkAndCompletedCycles" classname="dev.atlas.coach.focus.ReefTimerAdaptationTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

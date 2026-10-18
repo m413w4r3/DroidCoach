@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.coach.CoachTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-18T22:48:08.536Z" hostname="all" time="0.066">
+  <properties/>
+  <testcase name="coachJournalAndSnapshotHistoryStayWithinRetentionLimit" classname="dev.atlas.coach.coach.CoachTest" time="0.056"/>
+  <testcase name="everyChoiceChangesStateReturnsVisibleEffectAndWritesOneJournalEntry" classname="dev.atlas.coach.coach.CoachTest" time="0.009"/>
+  <testcase name="choicesAreProposalsAndUnlistedChoicesAreRejected" classname="dev.atlas.coach.coach.CoachTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.rules.RuleEvaluatorTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-10-18T22:48:08.767Z" hostname="all" time="0.013">
+  <properties/>
+  <testcase name="emergencyPauseLastsThirtyMinutes" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.001"/>
+  <testcase name="duplicateEventIdsAreIgnored" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <testcase name="threeOpensDoNotTrigger" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <testcase name="fourthOpenWithinTwentyFiveMinutesProducesExactlyOneIntervention" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.001"/>
+  <testcase name="quietHoursCoverDaytimeBoundariesAndIntervalsAcrossMidnight" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <testcase name="evaluatorStateCanBeSnapshottedAndRestored" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.001"/>
+  <testcase name="eventsOlderThanWindowArePurged" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <testcase name="processedIdsExpireWithTheRuleWindow" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <testcase name="vitalPackagesAreNeverIntervenedOn" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.001"/>
+  <testcase name="interventionHistoryIsBoundedToTwoHundredEntries" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.007"/>
+  <testcase name="oldPackageCountersAreRemovedFromRecentRuleState" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.001"/>
+  <testcase name="ruleCooldownIsIndependentPerAppAndRule" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <testcase name="simulatorCreatesNSpacedSyntheticEventsFromInjectedClock" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.001"/>
+  <testcase name="cooldownSuppressesEventsAndRearmsAfterFifteenMinutes" classname="dev.atlas.coach.rules.RuleEvaluatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

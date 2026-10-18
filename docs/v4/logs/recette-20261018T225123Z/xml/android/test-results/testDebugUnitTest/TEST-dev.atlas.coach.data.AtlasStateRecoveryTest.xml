@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.data.AtlasStateRecoveryTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-18T22:48:08.619Z" hostname="all" time="0.011">
+  <properties/>
+  <testcase name="malformedRuleOpeningWithoutAnEventIdDoesNotEscapeRecovery" classname="dev.atlas.coach.data.AtlasStateRecoveryTest" time="0.005"/>
+  <testcase name="malformedSessionFallsBackToNoSessionWithoutDiscardingOtherSections" classname="dev.atlas.coach.data.AtlasStateRecoveryTest" time="0.001"/>
+  <testcase name="malformedPolicyFallsBackOnlyForPolicyAndMalformedRuleEventFallsBackOnlyForRules" classname="dev.atlas.coach.data.AtlasStateRecoveryTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

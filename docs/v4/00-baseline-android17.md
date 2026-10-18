@@ -38,3 +38,50 @@ Logs : `/tmp/v4/baseline-gradle.log`, `/tmp/v4/baseline-connected*.log` (copiés
 ## Limites
 - Pas de Pixel physique ; un seul AVD ; pas de `platforms/android-37.2` donc `compileSdk 37.2` non encore testé (le lot A doit installer/valider via `sdkmanager`, hors ligne possible ou non à vérifier).
 - Les 51/10/14 tests des anciens rapports sont désormais reproduits ici (10 instrumentés seulement après correctif Espresso).
+
+## Après migration — lot A (2026-10-19)
+
+### SDK et réseau
+- `sdkmanager --list` a terminé avec le code 0 et a listé les plateformes stables `platforms;android-37.0`, `37.1` et `37.2`. Le réseau Google Maven / services Gradle est accessible.
+- `sdkmanager --install 'platforms;android-37.2'` a téléchargé `platform-37.2_r01.zip`; `platforms/android-37.2/android.jar` est présent. `source.properties` indique `AndroidVersion.ApiLevel=37.2`, extension level 24.
+- Build-tools disponibles après la compilation : `30.0.3`, `34.0.0`, `35.0.0`, `36.0.0-rc1`, `36.0.0` et `37.0.0`. Le build d’essai AGP 9.3.1 a téléchargé `36.0.0`, réutilisé ensuite par la chaîne finale; `37.0.0` était déjà installé.
+- `sdkmanager` est en version 16.0. Il signale que ses outils ne lisent que les formats SDK XML jusqu'à 3 alors qu'un fichier local est en version 4; `--list` et l'installation de la plateforme ont néanmoins réussi.
+- Appareil ciblé par les tests : AVD `Pixel_9_Pro_XL_2`, `emulator-5556`, Android 17, `SDK_INT=37`, `sdk_full=37.2`, ABI `x86_64`. Aucun AVD créé, wipé ou arrêté.
+
+### Chaîne de build finale
+| Élément | Valeur finale |
+|---|---|
+| AGP | 9.4.1 |
+| Gradle wrapper | 9.6.0 |
+| Kotlin | 2.2.10 intégré à AGP 9.4.1; Compose compiler plugin 2.2.10 |
+| Compose BOM | 2024.12.01, inchangé |
+| `compileSdk` | API 37, `minorApiLevel = 2` |
+| `targetSdk` / `minSdk` | 35 / 26 |
+| Java hôte / bytecode | JDK 21.0.12.1 / 17 |
+
+Le DSL `compileSdk { version = release(37) { minorApiLevel = 2 } }` compile avec AGP 9.4.1 sur la plateforme 37.2. AGP 9.4.1 fournit Kotlin intégré; le plugin Kotlin Android séparé a été retiré, et `kotlinOptions` a été remplacé par `compilerOptions`.
+
+Références officielles vérifiées : [configuration SDK Android 17](https://developer.android.com/about/versions/17/setup-sdk), [compatibilité AGP/API](https://developer.android.com/build/releases/about-agp), [notes AGP 9.4](https://developer.android.com/build/releases/agp-9-4-0-release-notes), [DSL compileSdk mineur](https://developer.android.com/reference/tools/gradle-api/8.13/com/android/build/api/dsl/CompileSdkSpec) et [compatibilité Kotlin Gradle](https://kotlinlang.org/docs/gradle-configure-project.html).
+
+Le `targetSdk` reste à 35 : l’audit des changements Android 17 (`behavior-changes-17` et `behavior-changes-all`) n’a pas été réalisé dans ce lot. Son augmentation reste une décision ultérieure, réversible et soumise à audit.
+
+### Recette exécutée
+`scripts/v4-recette.sh` a terminé avec le code 0 le 2026-10-18 à 22:51:23 UTC. Le détail réel des commandes et sorties, les XML Gradle et pytest ainsi que le hash de l’APK sont dans [les logs de recette](logs/recette-20261018T225123Z/).
+
+| Étape | Résultat |
+|---|---|
+| `adb devices -l` et contrôle API / `sdk_full` / identité AVD | PASS — `emulator-5556`, API 37 / 37.2 |
+| `:app:testDebugUnitTest` | PASS — 51 tests, 0 échec |
+| `:app:assembleDebug` | PASS |
+| `:app:lintDebug` | PASS — tâche réussie, 13 avertissements Lint consignés ci-dessous |
+| `:app:connectedDebugAndroidTest` | PASS — 10 tests, 0 échec sur l’AVD |
+| `/tmp/v4/venv/bin/python -m pytest -q` | PASS — 14 tests, 1 avertissement de dépréciation Starlette/AnyIO externe |
+| Rapports XML | PASS — 15 fichiers XML JVM, 1 instrumenté, 1 pytest copiés/présents sous `docs/v4/logs/` |
+
+SHA-256 de `android/app/build/outputs/apk/debug/app-debug.apk` : `76975a1cd56e88318c466538a50d03c844b8acccb00c663db740eaa5e0637ef3`.
+
+### Avertissements Lint et limites
+- `OldTargetApi` est attendu tant que `targetSdk=35`; le changer sans l’audit de comportement demandé serait prématuré.
+- `AndroidGradlePluginVersion` recommande Gradle 9.8.1 alors que le wrapper 9.6.0 requis par AGP 9.4.1 a passé la recette complète. Aucun saut supplémentaire du wrapper n’a été effectué pour éviter une migration sans besoin fonctionnel.
+- Les autres avertissements sont des recommandations de mise à jour de dépendances (`compose-bom`, `activity-compose`, AndroidX test, `org.json`) et des constats `DataExtractionRules` / `UseKtx` sur des sources et le manifeste hors du périmètre autorisé. Ils sont visibles dans `android/app/build/reports/lint-results-debug.xml`; aucun fichier source principal ou manifeste n’a été modifié par le lot A.
+- Aucun avertissement de compatibilité `compileSdk 37.2` ni d’API DSL Kotlin n’est apparu avec la chaîne finale. Les scénarios manuels §6.2–§6.11 restent hors de la recette technique du lot A; l’AVD est le seul environnement d’exécution, pas un Pixel physique.

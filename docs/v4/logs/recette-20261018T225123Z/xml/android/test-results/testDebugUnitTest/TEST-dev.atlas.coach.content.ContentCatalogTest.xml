@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.content.ContentCatalogTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-18T22:48:08.605Z" hostname="all" time="0.011">
+  <properties/>
+  <testcase name="chooserFailureFallsBackToDirectThenReportsMissingApp" classname="dev.atlas.coach.content.ContentCatalogTest" time="0.006"/>
+  <testcase name="rejectsHttpJavascriptAndUnknownHosts" classname="dev.atlas.coach.content.ContentCatalogTest" time="0.001"/>
+  <testcase name="missingHandlerIsDetectedBeforeChooserIsLaunched" classname="dev.atlas.coach.content.ContentCatalogTest" time="0.002"/>
+  <testcase name="demoCatalogIsLimitedAndRequestsUseValidatedHttpsUris" classname="dev.atlas.coach.content.ContentCatalogTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

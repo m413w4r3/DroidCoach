@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.focus.FocusEngineTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-18T22:48:08.668Z" hostname="all" time="0.021">
+  <properties/>
+  <testcase name="tenMinuteVariantUsesTwoMinuteBreak" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.003"/>
+  <testcase name="forceStopRestorationPreservesSubsecondProgressFromWallClock" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.006"/>
+  <testcase name="acceleratedPlanCanUseScaledOrExplicitSecondDurations" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.004"/>
+  <testcase name="fakeClockAndRepositoryExposeSynchronousSessionLifecycle" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.002"/>
+  <testcase name="snapshotRestoresRunningTimerUsingBoundedWallClockElapsedTime" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.001"/>
+  <testcase name="pomodoro25_5CompletesWorkAndShortBreak" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.001"/>
+  <testcase name="pauseResumeFinishAndCancelAreIdempotent" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.002"/>
+  <testcase name="longBreakFollowsFourthCompletedWorkCycle" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
