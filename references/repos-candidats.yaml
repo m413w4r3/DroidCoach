@@ -1,0 +1,44 @@
+# Catalogue de références : URL uniquement. L'agent fige les SHA lors de l'audit.
+repos:
+  - name: Reef
+    url: https://github.com/aload0/Reef
+    role: candidate_focus_and_app_controls
+    use: audit_first
+    license: README_claims_MIT_with_extra_terms_VERIFY
+  - name: Loop Habit Tracker
+    url: https://github.com/iSoron/uhabits
+    role: habit_integration_reference
+    use: external_first
+    license: GPL-3.0
+  - name: Lawnchair
+    url: https://github.com/LawnchairLauncher/lawnchair
+    role: launcher_reference
+    use: architecture_reference
+    license: Apache-2.0_in_main_license_VERIFY_ALL_COMPONENTS
+  - name: Olauncher
+    url: https://github.com/tanujnotes/Olauncher
+    role: ux_reference
+    use: inspiration_only
+    license: GPL-3.0
+  - name: ReVanced Manager
+    url: https://github.com/ReVanced/revanced-manager
+    role: external_video_application_management
+    use: no_code_merge
+    license: GPL-3.0
+  - name: ReVanced patches mirror
+    url: https://gitlab.com/revanced/revanced-patches
+    role: manual_configuration_reference
+    use: no_dependency
+    license: VERIFY
+  - name: AnkiDroid
+    url: https://github.com/ankidroid/Anki-Android
+    role: later_learning_integration
+    use: later
+    license: GPL-3.0
+other_external_services:
+  - name: Miniflux
+    url: https://miniflux.app/docs/api.html
+    use: optional_server_curation
+  - name: OpenClaw
+    url: https://docs.openclaw.ai/
+    use: optional_agent_adapter

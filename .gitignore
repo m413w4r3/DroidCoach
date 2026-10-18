@@ -1,0 +1,17 @@
+_research/
+.gradle/
+.idea/
+**/build/
+*.apk
+*.aab
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+.venv/
+*.db
+.DS_Store
+
+# clones de référence (ne pas versionner)
+references/repos/
