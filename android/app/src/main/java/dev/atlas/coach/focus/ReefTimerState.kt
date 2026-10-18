@@ -17,6 +17,7 @@ data class TimerSessionState(
     val currentCycle: Int = 0,
     val totalCycles: Int = 4,
     val isPomodoroMode: Boolean = false,
+    val continuous: Boolean = false,
 )
 
 enum class PomodoroPhase { FOCUS, SHORT_BREAK, LONG_BREAK, COMPLETE }
@@ -27,10 +28,13 @@ data class PomodoroConfig(
     val shortBreakDuration: Long,
     val longBreakDuration: Long,
     val cyclesBeforeLongBreak: Int,
+    val totalWorkCycles: Int = 4,
+    val continuous: Boolean = false,
 ) {
     init {
         require(focusDuration > 0 && shortBreakDuration > 0 && longBreakDuration > 0)
         require(cyclesBeforeLongBreak > 0)
+        require(totalWorkCycles > 0)
     }
 
     fun toFocusPlan(presetId: String = "reef-pomodoro"): FocusPlan = FocusPlan(
@@ -39,6 +43,8 @@ data class PomodoroConfig(
         shortBreakSeconds = shortBreakDuration.toSecondsRoundedUp(),
         longBreakSeconds = longBreakDuration.toSecondsRoundedUp(),
         longBreakEveryCycles = cyclesBeforeLongBreak,
+        totalWorkCycles = totalWorkCycles,
+        continuous = continuous,
     )
 }
 
@@ -48,12 +54,15 @@ data class ReefPomodoroConfig(
     val shortBreakMinutes: Int,
     val longBreakMinutes: Int,
     val cycles: Int,
+    val totalWorkCycles: Int = cycles,
+    val continuous: Boolean = false,
 ) {
     init {
         require(focusMinutes in 1..180)
         require(shortBreakMinutes in 1..60)
         require(longBreakMinutes in 1..120)
         require(cycles in 1..12)
+        require(totalWorkCycles in 1..100)
     }
 
     fun toPomodoroConfig(): PomodoroConfig = PomodoroConfig(
@@ -61,6 +70,8 @@ data class ReefPomodoroConfig(
         shortBreakDuration = shortBreakMinutes * MILLIS_PER_MINUTE,
         longBreakDuration = longBreakMinutes * MILLIS_PER_MINUTE,
         cyclesBeforeLongBreak = cycles,
+        totalWorkCycles = totalWorkCycles,
+        continuous = continuous,
     )
 
     companion object {
@@ -86,9 +97,11 @@ fun FocusSession.toReefTimerState(): TimerSessionState {
         focusTimeElapsed = completedFocusMillis,
         breakBudget = if (this.phase == FocusPhase.WORK) 0L else remainingMillis,
         pomodoroPhase = phase,
-        currentCycle = (completedWorkCycles + 1).coerceAtMost(longBreakEveryCycles),
-        totalCycles = longBreakEveryCycles,
+        currentCycle = (completedWorkCycles.toLong() + 1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            .let { if (continuous) it else it.coerceAtMost(totalWorkCycles) },
+        totalCycles = totalWorkCycles,
         isPomodoroMode = true,
+        continuous = continuous,
     )
 }
 

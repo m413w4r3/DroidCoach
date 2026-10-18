@@ -45,6 +45,8 @@ class FocusEngine(
             shortBreakSeconds = plan.shortBreakSeconds,
             longBreakSeconds = plan.longBreakSeconds,
             longBreakEveryCycles = plan.longBreakEveryCycles,
+            totalWorkCycles = plan.totalWorkCycles,
+            continuous = plan.continuous,
         ).also { session = it }
     }
 
@@ -146,18 +148,26 @@ class FocusEngine(
         while (elapsed >= phaseRemainingMillis && session?.status == FocusStatus.RUNNING) {
             elapsed -= phaseRemainingMillis
             val active = session ?: return
-            val nextPhase: FocusPhase
+            val nextPhase: FocusPhase?
             val completedCycles: Int
             if (active.phase == FocusPhase.WORK) {
                 completedCycles = active.completedWorkCycles + 1
-                nextPhase = if (completedCycles % active.longBreakEveryCycles == 0) {
-                    FocusPhase.LONG_BREAK
-                } else {
-                    FocusPhase.SHORT_BREAK
+                nextPhase = FocusTransitions.afterWork(active, completedCycles)
+                if (nextPhase == null) {
+                    phaseRemainingMillis = 0L
+                    phaseStartedMonotonicMillis = null
+                    session = active.copy(
+                        status = FocusStatus.FINISHED,
+                        completedWorkCycles = completedCycles,
+                        remainingSeconds = 0L,
+                        remainingMillis = 0L,
+                        updatedAtUtcMillis = clock.nowMillis(),
+                    )
+                    return
                 }
             } else {
                 completedCycles = active.completedWorkCycles
-                nextPhase = FocusPhase.WORK
+                nextPhase = FocusTransitions.afterBreak()
             }
             phaseRemainingMillis = when (nextPhase) {
                 FocusPhase.WORK -> active.workSeconds * MILLIS_PER_SECOND
@@ -187,4 +197,18 @@ class FocusEngine(
         private const val MILLIS_PER_SECOND = 1_000L
         private const val MAX_RESTORE_ELAPSED_MILLIS = 24L * 60L * 60L * MILLIS_PER_SECOND
     }
+}
+
+/** Shared phase-transition rules used by the engine and the persisted-state alarm schedule. */
+internal object FocusTransitions {
+    fun afterWork(session: FocusSession, completedCycles: Int): FocusPhase? {
+        if (!session.continuous && completedCycles >= session.totalWorkCycles) return null
+        return if (completedCycles % session.longBreakEveryCycles == 0) {
+            FocusPhase.LONG_BREAK
+        } else {
+            FocusPhase.SHORT_BREAK
+        }
+    }
+
+    fun afterBreak(): FocusPhase = FocusPhase.WORK
 }

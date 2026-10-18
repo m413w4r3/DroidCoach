@@ -40,4 +40,10 @@ class FakeClock(
         require(millis >= 0L) { "millis must be non-negative" }
         elapsedMillis += millis
     }
+
+    /** Sets monotonic time to model a process/clock discontinuity in deterministic tests. */
+    fun setMonotonicMillis(millis: Long) {
+        require(millis >= 0L) { "millis must be non-negative" }
+        elapsedMillis = millis
+    }
 }

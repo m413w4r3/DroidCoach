@@ -36,6 +36,8 @@ data class FocusPlan(
     val shortBreakSeconds: Long,
     val longBreakSeconds: Long = 15 * 60L,
     val longBreakEveryCycles: Int = 4,
+    val totalWorkCycles: Int = 4,
+    val continuous: Boolean = false,
 ) {
     init {
         require(presetId.isNotBlank()) { "presetId must not be blank" }
@@ -45,6 +47,7 @@ data class FocusPlan(
             "Focus phase durations must be positive"
         }
         require(longBreakEveryCycles > 0) { "longBreakEveryCycles must be positive" }
+        require(totalWorkCycles > 0) { "totalWorkCycles must be positive" }
     }
 
     fun scaled(factor: Double): FocusPlan {
@@ -65,10 +68,12 @@ data class FocusPlan(
             shortBreakSeconds = preset.shortBreakSeconds,
         )
 
-        fun custom(workSeconds: Long): FocusPlan = FocusPlan(
+        fun custom(workSeconds: Long, totalWorkCycles: Int = 4, continuous: Boolean = false): FocusPlan = FocusPlan(
             presetId = "custom-$workSeconds",
             workSeconds = workSeconds,
             shortBreakSeconds = 5 * 60L,
+            totalWorkCycles = totalWorkCycles,
+            continuous = continuous,
         )
     }
 }
@@ -89,6 +94,9 @@ data class FocusSession(
     val longBreakSeconds: Long,
     val longBreakEveryCycles: Int,
     val remainingMillis: Long = remainingSeconds * 1_000L,
+    /** For legacy maps without these fields, fromMap migrates to an unbounded continuous session. */
+    val totalWorkCycles: Int = Int.MAX_VALUE,
+    val continuous: Boolean = true,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "id" to id,
@@ -105,6 +113,8 @@ data class FocusSession(
         "shortBreakSeconds" to shortBreakSeconds,
         "longBreakSeconds" to longBreakSeconds,
         "longBreakEveryCycles" to longBreakEveryCycles,
+        "totalWorkCycles" to totalWorkCycles,
+        "continuous" to continuous,
     )
 
     fun toPlan(): FocusPlan = FocusPlan(
@@ -113,6 +123,8 @@ data class FocusSession(
         shortBreakSeconds = shortBreakSeconds,
         longBreakSeconds = longBreakSeconds,
         longBreakEveryCycles = longBreakEveryCycles,
+        totalWorkCycles = totalWorkCycles,
+        continuous = continuous,
     )
 
     companion object {
@@ -133,6 +145,12 @@ data class FocusSession(
                 require(remainingSeconds <= Long.MAX_VALUE / 1_000L) { "Invalid focus progress" }
                 remainingSeconds * 1_000L
             }
+            val legacyUnboundedSession = !values.containsKey("totalWorkCycles")
+            val totalWorkCycles = (values["totalWorkCycles"] as? Number)?.toLong()?.let {
+                require(it in 1L..Int.MAX_VALUE.toLong()) { "Invalid total work cycles" }
+                it.toInt()
+            } ?: Int.MAX_VALUE
+            val continuous = values["continuous"] as? Boolean ?: legacyUnboundedSession
             val session = FocusSession(
                 id = id,
                 directiveId = values["directiveId"] as? String,
@@ -148,6 +166,8 @@ data class FocusSession(
                 longBreakSeconds = requiredLong("longBreakSeconds"),
                 longBreakEveryCycles = requiredInt("longBreakEveryCycles"),
                 remainingMillis = remainingMillis,
+                totalWorkCycles = totalWorkCycles,
+                continuous = continuous,
             )
             require(id.isNotBlank() && presetId.isNotBlank()) { "Focus IDs must not be blank" }
             require(session.createdAtUtcMillis >= 0L && session.updatedAtUtcMillis >= 0L) { "Invalid focus timestamps" }
@@ -161,6 +181,7 @@ data class FocusSession(
                 FocusPhase.LONG_BREAK -> plan.longBreakSeconds
             }
             require(session.remainingMillis <= phaseLimitSeconds * 1_000L)
+            require(session.totalWorkCycles > 0 && session.longBreakEveryCycles > 0) { "Invalid focus cycle plan" }
             val roundedSeconds = session.remainingMillis / 1_000L + if (session.remainingMillis % 1_000L == 0L) 0 else 1
             require(session.remainingSeconds == roundedSeconds) { "Inconsistent focus progress" }
             return session

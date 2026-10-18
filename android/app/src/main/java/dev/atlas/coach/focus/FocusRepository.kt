@@ -2,7 +2,9 @@ package dev.atlas.coach.focus
 
 /** Synchronous API: the S1 module has no coroutine or persistence dependency. */
 interface FocusRepository {
-    fun start(durationSeconds: Long, directiveId: String? = null): FocusSession
+    fun start(plan: FocusPlan, directiveId: String? = null): FocusSession
+    fun start(durationSeconds: Long, directiveId: String? = null): FocusSession =
+        start(FocusPlan.custom(durationSeconds), directiveId)
     fun pause(id: String): FocusSession?
     fun resume(id: String): FocusSession?
     fun finish(id: String): FocusSession?
@@ -17,6 +19,8 @@ class InMemoryFocusRepository(
 
     override fun start(durationSeconds: Long, directiveId: String?): FocusSession =
         engine.start(durationSeconds, directiveId)
+
+    override fun start(plan: FocusPlan, directiveId: String?): FocusSession = engine.start(plan, directiveId)
 
     override fun pause(id: String): FocusSession? = engine.pause(id)
 
