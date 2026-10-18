@@ -2,7 +2,9 @@ package dev.atlas.coach.habits
 
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.UUID
 import dev.atlas.coach.habits.thirdparty.loop.HabitStrengthCalculator
@@ -12,19 +14,25 @@ fun interface HabitClock {
     fun nowUtcMillis(): Long
 }
 
-enum class HabitScheduleKind { DAILY, WEEKDAYS, TIMES_PER_WEEK }
+enum class HabitScheduleKind { DAILY, WEEKDAYS, TIMES_PER_WEEK, ALTERNATING_DAYS }
 
 /** A small, framework-free schedule whose fields can be persisted directly. */
 data class HabitSchedule(
     val kind: HabitScheduleKind,
     val weekdaysMask: Int = 0,
     val timesPerWeek: Int = 0,
+    val weekStartsOn: DayOfWeek = DayOfWeek.MONDAY,
+    val anchorDateEpochDay: Long? = null,
+    val intervalDays: Int = 0,
 ) {
     init {
         when (kind) {
-            HabitScheduleKind.DAILY -> require(weekdaysMask == 0 && timesPerWeek == 0)
-            HabitScheduleKind.WEEKDAYS -> require(weekdaysMask in 1..127 && timesPerWeek == 0)
-            HabitScheduleKind.TIMES_PER_WEEK -> require(weekdaysMask == 0 && timesPerWeek in 1..7)
+            HabitScheduleKind.DAILY -> require(weekdaysMask == 0 && timesPerWeek == 0 && anchorDateEpochDay == null && intervalDays == 0)
+            HabitScheduleKind.WEEKDAYS -> require(weekdaysMask in 1..127 && timesPerWeek == 0 && anchorDateEpochDay == null && intervalDays == 0)
+            HabitScheduleKind.TIMES_PER_WEEK -> require(weekdaysMask == 0 && timesPerWeek in 1..7 && anchorDateEpochDay == null && intervalDays == 0)
+            HabitScheduleKind.ALTERNATING_DAYS -> require(
+                weekdaysMask == 0 && timesPerWeek == 0 && anchorDateEpochDay != null && intervalDays >= 2,
+            )
         }
     }
 
@@ -32,17 +40,24 @@ data class HabitSchedule(
         HabitScheduleKind.DAILY -> true
         HabitScheduleKind.WEEKDAYS -> weekdaysMask and (1 shl (date.dayOfWeek.value - 1)) != 0
         HabitScheduleKind.TIMES_PER_WEEK -> {
-            val monday = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-            val completedEarlierThisWeek = checkIns.count { it.date >= monday && it.date < date }
+            val weekStart = date.with(TemporalAdjusters.previousOrSame(weekStartsOn))
+            val completedEarlierThisWeek = checkIns.count { it.date >= weekStart && it.date < date }
             completedEarlierThisWeek < timesPerWeek
+        }
+        HabitScheduleKind.ALTERNATING_DAYS -> {
+            val start = LocalDate.ofEpochDay(requireNotNull(anchorDateEpochDay))
+            !date.isBefore(start) && ChronoUnit.DAYS.between(start, date) % intervalDays == 0L
         }
     }
 
-    fun toMap(): Map<String, Any> = mapOf(
-        "kind" to kind.name,
-        "weekdaysMask" to weekdaysMask,
-        "timesPerWeek" to timesPerWeek,
-    )
+    fun toMap(): Map<String, Any> = buildMap {
+        put("kind", kind.name)
+        put("weekdaysMask", weekdaysMask)
+        put("timesPerWeek", timesPerWeek)
+        put("weekStartsOn", weekStartsOn.name)
+        anchorDateEpochDay?.let { put("anchorDateEpochDay", it) }
+        put("intervalDays", intervalDays)
+    }
 
     companion object {
         fun daily() = HabitSchedule(HabitScheduleKind.DAILY)
@@ -52,13 +67,31 @@ data class HabitSchedule(
             weekdaysMask = days.fold(0) { mask, day -> mask or (1 shl (day.value - 1)) },
         )
 
-        fun timesPerWeek(count: Int) = HabitSchedule(HabitScheduleKind.TIMES_PER_WEEK, timesPerWeek = count)
+        fun timesPerWeek(count: Int, weekStartsOn: DayOfWeek = DayOfWeek.MONDAY) =
+            HabitSchedule(HabitScheduleKind.TIMES_PER_WEEK, timesPerWeek = count, weekStartsOn = weekStartsOn)
 
-        fun fromMap(map: Map<String, Any?>) = HabitSchedule(
-            kind = HabitScheduleKind.valueOf(map.requiredString("kind")),
-            weekdaysMask = map.requiredInt("weekdaysMask"),
-            timesPerWeek = map.requiredInt("timesPerWeek"),
+        fun alternatingDays(startDate: LocalDate, intervalDays: Int = 2) = HabitSchedule(
+            kind = HabitScheduleKind.ALTERNATING_DAYS,
+            anchorDateEpochDay = startDate.toEpochDay(),
+            intervalDays = intervalDays,
         )
+
+        fun fromMap(map: Map<String, Any?>): HabitSchedule {
+            // S6 persisted daily habits without a schedule. Keep those records readable.
+            val rawKind = map["kind"] as? String ?: return daily()
+            val kind = runCatching { HabitScheduleKind.valueOf(rawKind) }
+                .getOrElse { throw IllegalArgumentException("Type de planning inconnu : $rawKind", it) }
+            return HabitSchedule(
+                kind = kind,
+                weekdaysMask = map.optionalInt("weekdaysMask") ?: 0,
+                timesPerWeek = map.optionalInt("timesPerWeek") ?: 0,
+                weekStartsOn = (map["weekStartsOn"] as? String)?.let {
+                    runCatching { DayOfWeek.valueOf(it) }.getOrDefault(DayOfWeek.MONDAY)
+                } ?: DayOfWeek.MONDAY,
+                anchorDateEpochDay = (map["anchorDateEpochDay"] as? Number)?.toLong(),
+                intervalDays = map.optionalInt("intervalDays") ?: 0,
+            )
+        }
     }
 }
 
@@ -68,26 +101,36 @@ data class Habit(
     val schedule: HabitSchedule,
     val createdAtUtcMillis: Long,
     val archivedAtUtcMillis: Long? = null,
+    val createdOnEpochDay: Long? = null,
+    val reminder: HabitReminder? = null,
 ) {
+    /** Stable local calendar date for new records; legacy records fall back to their UTC date. */
+    fun createdDate(): LocalDate = createdOnEpochDay?.let(LocalDate::ofEpochDay) ?: createdAtUtcMillis.utcDate()
+
     fun toMap(): Map<String, Any?> = mapOf(
         "id" to id,
         "name" to name,
         "schedule" to schedule.toMap(),
         "createdAtUtcMillis" to createdAtUtcMillis,
         "archivedAtUtcMillis" to archivedAtUtcMillis,
+        "createdOnEpochDay" to createdOnEpochDay,
+        "reminder" to reminder?.toMap(),
     )
 
     companion object {
         fun fromMap(map: Map<String, Any?>): Habit {
             @Suppress("UNCHECKED_CAST")
-            val scheduleMap = map["schedule"] as? Map<String, Any?>
-                ?: throw IllegalArgumentException("schedule is required")
+            val scheduleMap = (map["schedule"] as? Map<String, Any?>) ?: emptyMap()
+            @Suppress("UNCHECKED_CAST")
+            val reminderMap = map["reminder"] as? Map<String, Any?>
             return Habit(
                 id = map.requiredString("id"),
                 name = map.requiredString("name"),
                 schedule = HabitSchedule.fromMap(scheduleMap),
                 createdAtUtcMillis = map.requiredLong("createdAtUtcMillis"),
                 archivedAtUtcMillis = map["archivedAtUtcMillis"]?.toLongValue(),
+                createdOnEpochDay = (map["createdOnEpochDay"] as? Number)?.toLong(),
+                reminder = reminderMap?.let(HabitReminder::fromMap),
             )
         }
     }
@@ -118,6 +161,47 @@ data class HabitCheckIn(
     }
 }
 
+/** Small local event envelope; it never contains video playback or screen data. */
+data class HabitCoachEvent(
+    val eventId: String,
+    val type: String,
+    val habitId: String,
+    val dateEpochDay: Long,
+    val occurredAtUtcMillis: Long,
+    val sourceCheckInId: String,
+) {
+    val date: LocalDate get() = LocalDate.ofEpochDay(dateEpochDay)
+
+    fun toMap(): Map<String, Any> = mapOf(
+        "eventId" to eventId,
+        "type" to type,
+        "habitId" to habitId,
+        "dateEpochDay" to dateEpochDay,
+        "occurredAtUtcMillis" to occurredAtUtcMillis,
+        "sourceCheckInId" to sourceCheckInId,
+    )
+}
+
+object HabitCoachEventConverter {
+    fun checkInConfirmed(checkIn: HabitCheckIn) = HabitCoachEvent(
+        eventId = "habit-checkin:${checkIn.id}",
+        type = "habit.check_in.confirmed",
+        habitId = checkIn.habitId,
+        dateEpochDay = checkIn.dateEpochDay,
+        occurredAtUtcMillis = checkIn.createdAtUtcMillis,
+        sourceCheckInId = checkIn.id,
+    )
+
+    fun checkInRevoked(checkIn: HabitCheckIn, revokedAtUtcMillis: Long) = HabitCoachEvent(
+        eventId = "habit-checkin-revoked:${checkIn.id}",
+        type = "habit.check_in.revoked",
+        habitId = checkIn.habitId,
+        dateEpochDay = checkIn.dateEpochDay,
+        occurredAtUtcMillis = revokedAtUtcMillis,
+        sourceCheckInId = checkIn.id,
+    )
+}
+
 enum class HabitDayStatus { DUE, DONE, NOT_DUE }
 
 data class HabitHistoryDay(
@@ -138,6 +222,8 @@ data class HabitHistory(
     val completedDueDays: Int,
     val completionRate: Double,
     val currentStreak: Int,
+    val bestStreak: Int = currentStreak,
+    val notDueDays: Int = 0,
 ) {
     val startDate: LocalDate get() = LocalDate.ofEpochDay(startDateEpochDay)
     val endDate: LocalDate get() = LocalDate.ofEpochDay(endDateEpochDay)
@@ -148,6 +234,8 @@ interface HabitRepository {
     fun add(name: String, schedule: HabitSchedule): Habit
     fun checkIn(habitId: String, date: LocalDate): HabitCheckIn
     fun undoCheckIn(habitId: String, date: LocalDate): Boolean
+    fun setReminder(habitId: String, reminder: HabitReminder?): Habit =
+        throw UnsupportedOperationException("Ce repository ne permet pas de modifier les rappels.")
 
     fun history(habitId: String, endDate: LocalDate, days: Int): HabitHistory
     fun checkIns(habitId: String): List<HabitCheckIn>
@@ -161,6 +249,7 @@ interface HabitRepository {
 class InMemoryHabitRepository(
     private val clock: HabitClock = HabitClock(System::currentTimeMillis),
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    private val zoneProvider: () -> ZoneId = ZoneId::systemDefault,
 ) : HabitRepository {
     private val habits = linkedMapOf<String, Habit>()
     private val checkInsByHabitAndDay = linkedMapOf<Pair<String, Long>, HabitCheckIn>()
@@ -173,14 +262,16 @@ class InMemoryHabitRepository(
         val normalizedName = name.trim()
         require(normalizedName.isNotEmpty()) { "Le nom de l'habitude est obligatoire." }
         val id = newId().also { require(it.isNotBlank() && it !in habits) { "ID d'habitude invalide ou déjà utilisé." } }
-        return Habit(id, normalizedName, schedule, clock.nowUtcMillis()).also { habits[id] = it }
+        val createdAt = clock.nowUtcMillis()
+        val createdOn = java.time.Instant.ofEpochMilli(createdAt).atZone(zoneProvider()).toLocalDate().toEpochDay()
+        return Habit(id, normalizedName, schedule, createdAt, createdOnEpochDay = createdOn).also { habits[id] = it }
     }
 
     @Synchronized
     override fun checkIn(habitId: String, date: LocalDate): HabitCheckIn {
         val habit = habits[habitId] ?: throw IllegalArgumentException("Habitude inconnue : $habitId")
         require(habit.archivedAtUtcMillis == null) { "Cette habitude est archivée." }
-        require(!date.isBefore(habit.createdAtUtcMillis.utcDate())) { "La date précède la création de l'habitude." }
+        require(!date.isBefore(habit.createdDate())) { "La date précède la création de l'habitude." }
         val key = habitId to date.toEpochDay()
         return checkInsByHabitAndDay.getOrPut(key) {
             HabitCheckIn(newId(), habitId, date.toEpochDay(), clock.nowUtcMillis())
@@ -194,11 +285,18 @@ class InMemoryHabitRepository(
     }
 
     @Synchronized
+    override fun setReminder(habitId: String, reminder: HabitReminder?): Habit {
+        val habit = habits[habitId] ?: throw IllegalArgumentException("Habitude inconnue : $habitId")
+        require(habit.archivedAtUtcMillis == null) { "Cette habitude est archivée." }
+        return habit.copy(reminder = reminder).also { habits[habitId] = it }
+    }
+
+    @Synchronized
     override fun history(habitId: String, endDate: LocalDate, days: Int): HabitHistory {
         val habit = habits[habitId] ?: throw IllegalArgumentException("Habitude inconnue : $habitId")
         require(days == 7 || days == 30) { "L'historique accepte 7 ou 30 jours." }
         val startDate = endDate.minusDays((days - 1).toLong())
-        val createdDate = habit.createdAtUtcMillis.utcDate()
+        val createdDate = habit.createdDate()
         val checkIns = checkInsByHabitAndDay.values.filter { it.habitId == habitId }
         val checkInsByDay = checkIns.associateBy { it.dateEpochDay }
         val historyDays = (0 until days).map { offset ->
@@ -218,6 +316,7 @@ class InMemoryHabitRepository(
         }
         val dueDays = historyDays.count { it.isDue }
         val completedDueDays = historyDays.count { it.isDue && it.isCheckedIn }
+        val notDueDays = historyDays.count { it.date >= createdDate && !it.isDue }
         var streak = 0
         if (!endDate.isBefore(createdDate)) {
             var cursor = endDate
@@ -237,6 +336,22 @@ class InMemoryHabitRepository(
                 }
             }
         }
+        var bestStreak = 0
+        var runningStreak = 0
+        if (!endDate.isBefore(createdDate)) {
+            var cursor = createdDate
+            while (!cursor.isAfter(endDate)) {
+                if (habit.schedule.isDueOn(cursor, checkIns)) {
+                    if (cursor.toEpochDay() in checkInsByDay) {
+                        runningStreak++
+                        bestStreak = maxOf(bestStreak, runningStreak)
+                    } else {
+                        runningStreak = 0
+                    }
+                }
+                cursor = cursor.plusDays(1)
+            }
+        }
         return HabitHistory(
             habitId = habitId,
             startDateEpochDay = startDate.toEpochDay(),
@@ -246,6 +361,8 @@ class InMemoryHabitRepository(
             completedDueDays = completedDueDays,
             completionRate = if (dueDays == 0) 0.0 else completedDueDays.toDouble() / dueDays,
             currentStreak = streak,
+            bestStreak = bestStreak,
+            notDueDays = notDueDays,
         )
     }
 
@@ -365,8 +482,7 @@ class HabitLinkPolicy(
 private fun Map<String, Any?>.requiredString(key: String): String =
     this[key] as? String ?: throw IllegalArgumentException("$key must be a string")
 
-private fun Map<String, Any?>.requiredInt(key: String): Int =
-    (this[key] as? Number)?.toInt() ?: throw IllegalArgumentException("$key must be a number")
+private fun Map<String, Any?>.optionalInt(key: String): Int? = (this[key] as? Number)?.toInt()
 
 private fun Map<String, Any?>.requiredLong(key: String): Long =
     (this[key] as? Number)?.toLong() ?: throw IllegalArgumentException("$key must be a number")

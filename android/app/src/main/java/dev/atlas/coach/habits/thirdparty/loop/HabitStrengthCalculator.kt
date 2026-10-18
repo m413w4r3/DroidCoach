@@ -26,7 +26,6 @@ import dev.atlas.coach.habits.HabitCheckIn
 import dev.atlas.coach.habits.HabitSchedule
 import dev.atlas.coach.habits.HabitScheduleKind
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.ArrayDeque
 import kotlin.math.min
@@ -37,7 +36,7 @@ object HabitStrengthCalculator {
     private const val NO = 0
 
     fun recompute(habit: Habit, checkIns: Collection<HabitCheckIn>, through: LocalDate): List<Score> {
-        val from = habit.createdAtUtcMillis.utcDate()
+        val from = habit.createdDate()
         if (from.isAfter(through)) return emptyList()
 
         val frequency = habit.schedule.toLoopFrequency()
@@ -86,8 +85,6 @@ object HabitStrengthCalculator {
         HabitScheduleKind.DAILY -> Frequency.DAILY
         HabitScheduleKind.WEEKDAYS -> Frequency(Integer.bitCount(weekdaysMask), 7)
         HabitScheduleKind.TIMES_PER_WEEK -> Frequency(timesPerWeek, 7)
+        HabitScheduleKind.ALTERNATING_DAYS -> Frequency(1, intervalDays)
     }
-
-    private fun Long.utcDate(): LocalDate =
-        java.time.Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 }

@@ -7,9 +7,11 @@ import android.net.Uri
 import android.content.pm.PackageManager
 
 /** Android-only adapter; URL validation and request construction remain JVM-testable. */
-class AndroidContentOpener(context: Context) : ContentOpener {
-    private val gateway = AndroidContentLaunchGateway(context.applicationContext)
-    private val fallback = FallbackContentOpener(gateway)
+class AndroidContentOpener private constructor(private val fallback: ContentOpener) : ContentOpener {
+    constructor(context: Context) : this(FallbackContentOpener(AndroidContentLaunchGateway(context.applicationContext)))
+
+    /** Injectable JVM boundary; tests can exercise this adapter without Android services. */
+    internal constructor(gateway: ContentLaunchGateway) : this(FallbackContentOpener(gateway))
 
     override fun open(request: ContentOpenRequest): ContentOpenResult = fallback.open(request)
 }
