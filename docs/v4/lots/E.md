@@ -26,6 +26,10 @@ Date : 2026-10-19. Ce lot étend les frontières existantes de `HabitRepository`
 
 Les fichiers `THIRD_PARTY_NOTICES.md` et `docs/AUDIT_CIBLE.md` ont été vérifiés : les adaptations Loop déjà présentes y sont attribuées au SHA `c06b682f6b7b9c09eb278a06ffb57a42f0cddd38`, avec leurs fichiers ATLAS et la licence GPL-3.0-or-later. Ce lot n'a copié aucun nouveau code Loop ni ReVanced; il adapte le calcul Loop existant pour la date locale persistée et la fréquence de l'alternance.
 
+## Commit
+
+Commit principal E : `d28a8b8` — `feat: V4 E: planifier habitudes et gérer les liens vidéo`. L'outil de proposition Nimbalyst a refusé les chemins comme hors des dépôts de session; le commit a été créé avec le repli CLI, après staging explicite des seuls 12 chemins autorisés.
+
 ## API publique stable
 
 Les signatures existantes restent utilisables. Les champs ajoutés ont des valeurs par défaut, et `HabitRepository.setReminder` a une implémentation par défaut pour ne pas casser les autres implémentations.
