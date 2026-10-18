@@ -727,3 +727,20 @@ the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
 ```
+
+## V4 — candidats évalués (non intégrés)
+
+Le lot B a évalué les candidats ci-dessous sans ajouter de code à l’application. Les reprises S6 déjà recensées dans les sections précédentes restent inchangées; cette évaluation ne constitue pas une nouvelle intégration ni une autorisation de redistribuer ces composants.
+
+| Candidat | Révision / licence observée | Résultat V4 du lot B |
+|---|---|---|
+| Reef | 044358fb26bf11aa85dddadf919106ca4053d926; MIT annoncé avec conditions d’attribution dans le README | Cinq sources de calcul compilées dans un spike de recherche seulement. Aucun nouveau timer, service, routine ou bloqueur copié dans ATLAS. |
+| Olauncher | f8e8d6497c457734c7a3171d36374157678e1f33; GPLv3 | Parcours HOME/liste/gestes/rôle examinés en référence. Aucune nouvelle source Olauncher ajoutée par B. |
+| Lawnchair / Launcher3 | fc100ae9095a83b8b51c447a3b0a4ce2b399ad59; Apache-2.0 à la racine | Spike structurel uniquement; aucun sous-module, fichier ou dépendance Lawnchair intégré. |
+| Loop / uhabits | c06b682f6b7b9c09eb278a06ffb57a42f0cddd38; GPL-3.0-or-later | Rappels/widgets/plannings évalués; aucune source additionnelle de ces fonctionnalités intégrée par B. Les adaptations S6 antérieures restent celles listées plus haut. |
+| ReVanced Manager | 2a88257b71d35c9f141907ffea67c87e51bbb0db; GPL-3.0 | App externe; pas de code, APK ou patch intégré. Le lot recommande seulement un Intent Android public pour les liens vidéo. |
+| ReVanced patches | Miroir officiel GitLab, 015fe10a23ea5b919a3fda6e7da2c176517ae75d; GPLv3 | Aucun patch ni gestionnaire utilisé. |
+| Tasker | Docs officielles d’intents non versionnées; application propriétaire | Aucun code ni dépendance intégrés; pas d’API ATLAS identifiée. |
+| Miniflux | API REST documentée; dépôt serveur miniflux/v2 Apache-2.0 | Aucune intégration Android; piste de curation backend facultative pour plus tard. |
+
+Les fichiers de recherche et copies temporaires sont sous _research/ ignoré par Git et ne sont pas des composants distribués par ATLAS. Aucun texte de licence supplémentaire n’est requis pour le code de l’application au titre du seul lot B.

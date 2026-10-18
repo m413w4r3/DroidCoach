@@ -81,3 +81,19 @@ Audit effectué le 2026-10-18 sur les clones en lecture seule de `references/rep
 | `android/app/src/main/java/dev/atlas/coach/habits/thirdparty/loop/HabitStrengthCalculator.kt` | `uhabits-core/src/commonMain/kotlin/org/isoron/uhabits/core/models/ScoreList.kt` | `c06b682f6b7b9c09eb278a06ffb57a42f0cddd38` | GPLv3-or-later | Adaptation du calcul de fenêtre roulante |
 | `android/app/src/main/java/dev/atlas/coach/habits/thirdparty/loop/LoopCsvLine.kt` | `uhabits-core/src/commonMain/kotlin/org/isoron/platform/io/Strings.kt` | `c06b682f6b7b9c09eb278a06ffb57a42f0cddd38` | GPLv3-or-later | Copie adaptée de l'échappement CSV |
 | `android/app/src/main/java/dev/atlas/coach/habits/thirdparty/loop/LoopHabitCsvExporter.kt` | `uhabits-core/src/commonMain/kotlin/org/isoron/uhabits/core/io/HabitsCSVExporter.kt` | `c06b682f6b7b9c09eb278a06ffb57a42f0cddd38` | GPLv3-or-later | Adaptation de l'export aux contrats ATLAS |
+
+## V4 — candidats évalués (non intégrés)
+
+Le lot B a vérifié les révisions épinglées suivantes et n’a intégré aucun nouveau code tiers. Les adaptations déjà attribuées dans les sections S6 ci-dessus ne sont pas annulées par cette évaluation.
+
+| Référence | Révision | Fichiers source examinés / frontière de l’audit | Décision B |
+|---|---|---|---|
+| Reef | 044358fb26bf11aa85dddadf919106ca4053d926 | timer/TimerState.kt, timer/TimerScreen.kt, data/FocusStats.kt, data/Routine.kt, routine/Routines.kt, services/routines/*, accessibility/UsageTracker.kt, accessibility/BlockerService.kt, FocusModeService.kt, MindfulLaunchActivity.kt | Adapter des modèles/calculs purs derrière les contrats ATLAS. Service timer, stockage/routines d’apps, notifications bloquantes et Accessibility écartés. |
+| Olauncher | f8e8d6497c457734c7a3171d36374157678e1f33 | data/AppModel.kt, helper/Utils.kt#getAppsList, ui/HomeFragment.kt, ui/AppDrawerAdapter.kt, ui/AppDrawerFragment.kt, ui/SettingsFragment.kt, MainActivity.kt, helper/Extensions.kt#showLauncherSelector | Référence UX et algorithmes de liste/recherche; pas de nouvelle source ajoutée par B. |
+| Lawnchair / Launcher3 | fc100ae9095a83b8b51c447a3b0a4ce2b399ad59 | settings.gradle, build.gradle, manifests; AlphabeticalAppsList.java, ShortcutRequest.java, LauncherAppWidgetHost.java, WorkProfileManager.java, PrivateProfileManager.java, quickstep/.../RecentsView.java | Spike structurel chiffré; garder HOME maison Compose, aucun module ou fork. |
+| Loop / uhabits | c06b682f6b7b9c09eb278a06ffb57a42f0cddd38 | commonMain/.../Frequency.kt, WeekdayList.kt, Reminder.kt, EntryList.kt, StreakList.kt, Score.kt, ScoreList.kt; scheduler, receiver et widgets Android | Reprendre les calculs de fréquence/séries/rappels adaptés à l’unique HabitRepository; ne pas importer un second stockage ni les widgets Loop. |
+| ReVanced | Manager 2a88257b71d35c9f141907ffea67c87e51bbb0db; locator 0d6dc3b4a8d6a0e5e5daf6e59a17fa9ed8fbed5f; miroir 015fe10a23ea5b919a3fda6e7da2c176517ae75d | Manager README, état officiel du dépôt de patches et licence GitLab; aucun clone | App indépendante. Utiliser ACTION_VIEW pour les liens vidéo; ne patcher ni piloter ReVanced. |
+| Tasker | Docs officielles sans SHA versionné | Documentation publique « Intents » seulement | Pas d’intégration obligatoire; pas de protocole propre ATLAS vérifié. |
+| Miniflux | Dépôt serveur HEAD observé c317f84bc3779bc5d936b75408b631589983c81a; API versionnée par serveur | API REST /v1 uniquement, aucun code Android | Backend facultatif de curation ultérieure; pas de contrôle YouTube/ReVanced. |
+
+Le détail des dépendances, licences, preuves de spike, limites API 37 et recommandations par lot figure dans docs/v4/01-reemploi-open-source.md.
