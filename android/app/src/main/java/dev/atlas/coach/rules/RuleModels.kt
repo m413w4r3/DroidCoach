@@ -29,12 +29,18 @@ data class LocalPolicy(
     val pauseUntil: Long? = null,
     val vitalPackageNames: Set<String> = emptySet(),
     val emergencyPauseMillis: Long = 30L * 60L * 1_000L,
+    /** Null preserves legacy simulator callers; UsageObserver always replaces it with explicit consent. */
+    val allowlistedPackageNames: Set<String>? = null,
+    /** User-selected exceptions may narrow observation; they cannot override the safety denylist. */
+    val excludedPackageNames: Set<String> = emptySet(),
 ) {
     init {
         require(ruleId.isNotBlank()) { "ruleId must not be blank" }
         require(openThreshold in 1..RuleRetention.MAX_HISTORY_RECORDS) { "openThreshold must be between 1 and the history limit" }
         require(windowMillis > 0L && cooldownMillis >= 0L) { "Invalid rule durations" }
         require(emergencyPauseMillis > 0L) { "emergencyPauseMillis must be positive" }
+        require(allowlistedPackageNames?.none(String::isBlank) != false) { "Allowlisted package names must not be blank" }
+        require(excludedPackageNames.none(String::isBlank)) { "Excluded package names must not be blank" }
     }
 
     fun withEmergencyPause(nowUtc: Long): LocalPolicy = copy(

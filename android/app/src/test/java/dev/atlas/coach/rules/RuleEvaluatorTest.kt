@@ -15,7 +15,7 @@ class RuleEvaluatorTest {
     @Test
     fun fourthOpenWithinTwentyFiveMinutesProducesExactlyOneIntervention() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         val events = listOf(0L, 5L, 10L, 15L, 16L).mapIndexed { index, minute ->
             event("open-$index", "video.app", minute * MINUTE)
         }
@@ -30,14 +30,14 @@ class RuleEvaluatorTest {
     fun threeOpensDoNotTrigger() {
         val evaluator = RuleEvaluator(utc)
         repeat(3) { index ->
-            assertNull(evaluator.evaluate(event("three-$index", "video.app", index * MINUTE), LocalPolicy()))
+            assertNull(evaluator.evaluate(event("three-$index", "video.app", index * MINUTE), videoPolicy()))
         }
     }
 
     @Test
     fun duplicateEventIdsAreIgnored() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         val duplicate = event("same", "video.app", 0L)
         evaluator.evaluate(duplicate, policy)
         assertNull(evaluator.evaluate(duplicate, policy))
@@ -49,7 +49,7 @@ class RuleEvaluatorTest {
     @Test
     fun cooldownSuppressesEventsAndRearmsAfterFifteenMinutes() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         repeat(4) { index ->
             val intervention = evaluator.evaluate(event("first-$index", "video.app", index * MINUTE), policy)
             if (index == 3) assertNotNull(intervention) else assertNull(intervention)
@@ -67,7 +67,7 @@ class RuleEvaluatorTest {
     @Test
     fun eventsOlderThanWindowArePurged() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         evaluator.evaluate(event("old-1", "video.app", 0L), policy)
         evaluator.evaluate(event("old-2", "video.app", MINUTE), policy)
         evaluator.evaluate(event("old-3", "video.app", 2 * MINUTE), policy)
@@ -81,7 +81,7 @@ class RuleEvaluatorTest {
     @Test
     fun processedIdsExpireWithTheRuleWindow() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         evaluator.evaluate(event("old-id", "video.app", 0L), policy)
         evaluator.evaluate(event("new-id", "video.app", 26 * MINUTE), policy)
 
@@ -91,7 +91,7 @@ class RuleEvaluatorTest {
     @Test
     fun interventionHistoryIsBoundedToTwoHundredEntries() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         repeat(201) { block ->
             val base = block * 20L * MINUTE
             repeat(4) { index ->
@@ -106,7 +106,9 @@ class RuleEvaluatorTest {
     @Test
     fun oldPackageCountersAreRemovedFromRecentRuleState() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = LocalPolicy(
+            allowlistedPackageNames = (0 until 31).map { "app-$it" }.toSet(),
+        )
         repeat(31) { minute ->
             evaluator.evaluate(event("package-$minute", "app-$minute", minute * MINUTE), policy)
         }
@@ -119,6 +121,7 @@ class RuleEvaluatorTest {
         val quietPolicy = LocalPolicy(
             openThreshold = 1,
             quietHours = QuietHours(LocalTime.of(22, 0), LocalTime.of(6, 0)),
+            allowlistedPackageNames = setOf("video.app"),
         )
         val evaluator = RuleEvaluator(utc)
         assertNull(evaluator.evaluate(event("night-1", "video.app", utcMillis(23, 30)), quietPolicy))
@@ -128,6 +131,7 @@ class RuleEvaluatorTest {
         val daytimeQuiet = LocalPolicy(
             openThreshold = 1,
             quietHours = QuietHours(LocalTime.of(13, 0), LocalTime.of(14, 0)),
+            allowlistedPackageNames = setOf("video.app"),
         )
         assertNull(RuleEvaluator(utc).evaluate(event("lunch", "video.app", utcMillis(13, 0)), daytimeQuiet))
 
@@ -143,7 +147,7 @@ class RuleEvaluatorTest {
     @Test
     fun emergencyPauseLastsThirtyMinutes() {
         val now = utcMillis(12, 0)
-        val policy = LocalPolicy(openThreshold = 1).withEmergencyPause(now)
+        val policy = LocalPolicy(openThreshold = 1, allowlistedPackageNames = setOf("video.app")).withEmergencyPause(now)
         assertEquals(now + 30 * MINUTE, policy.pauseUntil)
         val evaluator = RuleEvaluator(utc)
         assertNull(evaluator.evaluate(event("paused", "video.app", now + 29 * MINUTE), policy))
@@ -152,14 +156,18 @@ class RuleEvaluatorTest {
 
     @Test
     fun vitalPackagesAreNeverIntervenedOn() {
-        val policy = LocalPolicy(openThreshold = 1, vitalPackageNames = setOf("phone.app"))
+        val policy = LocalPolicy(
+            openThreshold = 1,
+            vitalPackageNames = setOf("phone.app"),
+            allowlistedPackageNames = setOf("phone.app"),
+        )
         assertNull(RuleEvaluator(utc).evaluate(event("call", "phone.app", 0L), policy))
     }
 
     @Test
     fun evaluatorStateCanBeSnapshottedAndRestored() {
         val first = RuleEvaluator(utc)
-        val policy = LocalPolicy()
+        val policy = videoPolicy()
         repeat(3) { index -> first.evaluate(event("restore-$index", "video.app", index * MINUTE), policy) }
         val state = first.snapshot()
         val restored = RuleEvaluator(utc, state)
@@ -179,13 +187,13 @@ class RuleEvaluatorTest {
         assertEquals("demo.app", events.last().packageName)
 
         val evaluator = RuleEvaluator(utc)
-        assertEquals(1, events.count { evaluator.evaluate(it, LocalPolicy()) != null })
+        assertEquals(1, events.count { evaluator.evaluate(it, LocalPolicy(allowlistedPackageNames = setOf("demo.app"))) != null })
     }
 
     @Test
     fun ruleCooldownIsIndependentPerAppAndRule() {
         val evaluator = RuleEvaluator(utc)
-        val policy = LocalPolicy(openThreshold = 1)
+        val policy = LocalPolicy(openThreshold = 1, allowlistedPackageNames = setOf("a.app", "b.app"))
         assertNotNull(evaluator.evaluate(event("app-a", "a.app", 0L), policy))
         assertNotNull(evaluator.evaluate(event("app-b", "b.app", 0L), policy))
         assertNotNull(evaluator.evaluate(event("rule-b", "a.app", 0L), policy.copy(ruleId = "another-rule")))
@@ -193,6 +201,8 @@ class RuleEvaluatorTest {
 
     private fun event(eventId: String, packageName: String, timestamp: Long) =
         AppOpenEvent(eventId, packageName, timestamp)
+
+    private fun videoPolicy() = LocalPolicy(allowlistedPackageNames = setOf("video.app"))
 
     private fun utcMillis(hour: Int, minute: Int, dayOffset: Int = 0): Long =
         (dayOffset * 24L * 60L + hour * 60L + minute) * MINUTE

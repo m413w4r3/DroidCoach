@@ -32,7 +32,9 @@ class RuleEvaluator(
         trimProcessedIds()
 
         val localTime = Instant.ofEpochMilli(event.timestampUtc).atZone(zoneId).toLocalTime()
-        if (event.packageName in policy.vitalPackageNames) return null
+        if (policy.allowlistedPackageNames != null && event.packageName !in policy.allowlistedPackageNames) return null
+        if (event.packageName in policy.excludedPackageNames || event.packageName in policy.vitalPackageNames) return null
+        if (SafetyDenylist.isProtected(event.packageName)) return null
         if (policy.quietHours?.contains(localTime) == true) return null
         if (policy.pauseUntil != null && event.timestampUtc < policy.pauseUntil) return null
 
