@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -267,6 +268,7 @@ private fun RowScope.AtlasNavItem(label: String, destination: String, active: St
         modifier = Modifier.weight(1f).sizeIn(minHeight = 56.dp).semantics {
             contentDescription = "Ouvrir $label"
             role = Role.Tab
+            selected = active == destination
         },
         colors = ButtonDefaults.textButtonColors(
             contentColor = if (active == destination) androidx.compose.material3.MaterialTheme.colorScheme.primary else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,

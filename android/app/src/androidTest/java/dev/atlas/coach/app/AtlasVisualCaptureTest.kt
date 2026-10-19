@@ -11,8 +11,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -55,7 +59,7 @@ class AtlasVisualCaptureTest {
                 AtlasTheme {
                     AtlasScreenFrame(
                         title = screen.value.title,
-                        activeDestination = AtlasRoutes.MORE,
+                        activeDestination = screen.value.activeDestination,
                         canGoBack = false,
                         emergencyPaused = controller.isEmergencyPaused,
                         onBack = {},
@@ -98,10 +102,15 @@ class AtlasVisualCaptureTest {
         val night = mutableIntStateOf(Configuration.UI_MODE_NIGHT_NO)
         val fontScale = mutableStateOf(1f)
         show(controller, screen, night, fontScale)
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
+        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
         capture("G-home-light.png")
         composeRule.runOnUiThread { night.intValue = Configuration.UI_MODE_NIGHT_YES }
+        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
         capture("G-home-dark.png")
         composeRule.runOnUiThread { fontScale.value = 2f }
+        composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
         capture("G-font-2.0.png")
     }
 
@@ -203,5 +212,13 @@ private enum class CaptureScreen(val title: String) {
     LIBRARY("Bibliothèque"),
     SETTINGS("Paramètres"),
     DIAGNOSTICS("Diagnostic avancé"),
-    SYNC("Partage backend"),
+    SYNC("Partage backend");
+
+    val activeDestination: String
+        get() = when (this) {
+            HOME, LAUNCHER -> AtlasRoutes.HOME
+            FOCUS -> AtlasRoutes.FOCUS
+            HABITS -> AtlasRoutes.HABITS
+            else -> AtlasRoutes.MORE
+        }
 }

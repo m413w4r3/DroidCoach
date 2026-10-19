@@ -7,6 +7,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -108,9 +110,14 @@ class AtlasPresentationTest {
             }
         }
 
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
+        composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsNotSelected()
         composeRule.onNodeWithText("Un pas à la fois").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
+        composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsSelected()
         composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick()
         composeRule.onNodeWithText("Aucun lien vidéo ajouté.").assertIsDisplayed()
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
@@ -119,6 +126,8 @@ class AtlasPresentationTest {
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
     }
 
     private fun shell(command: String): String =
