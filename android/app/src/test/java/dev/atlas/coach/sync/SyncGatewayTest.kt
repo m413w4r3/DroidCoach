@@ -178,6 +178,19 @@ class SyncGatewayTest {
     }
 
     @Test
+    fun manualSyncCanMakeDeferredEventsDueAndClearTheQueue() {
+        val outbox = DurableEventOutbox(MemoryStorage())
+        val event = shareableEvent(100L)
+        assertTrue(outbox.enqueue(event, focusConsent()))
+        outbox.defer(event.clientEventId, 50_000L)
+        assertTrue(outbox.pending(1_000L).isEmpty())
+        assertEquals(1, outbox.makeDueNow())
+        assertEquals(event.clientEventId, outbox.pending(1_000L).single().event.clientEventId)
+        assertEquals(1, outbox.clear())
+        assertEquals(0, outbox.size())
+    }
+
+    @Test
     fun privateAppDetailsRequireSeparateExplicitConsentAndStableUuidIsEnforced() {
         val detail = SyncEvent(
             eventType = SyncEventType.FOCUS_STARTED,

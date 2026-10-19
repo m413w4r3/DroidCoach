@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.content.edit
 import java.nio.charset.StandardCharsets
 import java.io.File
 import java.security.KeyStore
@@ -87,4 +88,36 @@ object AndroidSyncStorage {
     fun outbox(context: Context): EventOutbox = DurableEventOutbox(
         FileOutboxStorage(File(context.applicationContext.filesDir, "atlas_sync_outbox_v1.json")),
     )
+
+    fun settings(context: Context): AndroidSyncSettingsStore = AndroidSyncSettingsStore(context)
+}
+
+data class PersistedSyncSettings(
+    val baseUrl: String = "",
+    val selectedCategories: Set<SyncDataCategory> = emptySet(),
+)
+
+/** Private non-secret backend configuration; bearer credentials live in the Keystore-backed store above. */
+class AndroidSyncSettingsStore(context: Context) {
+    private val preferences = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    fun read(): PersistedSyncSettings = PersistedSyncSettings(
+        baseUrl = preferences.getString(BASE_URL_KEY, "").orEmpty(),
+        selectedCategories = preferences.getStringSet(CATEGORIES_KEY, emptySet()).orEmpty()
+            .mapNotNull { stored -> SyncDataCategory.entries.firstOrNull { it.wireValue == stored } }
+            .toSet(),
+    )
+
+    fun write(baseUrl: String, selectedCategories: Set<SyncDataCategory>) {
+        preferences.edit {
+            putString(BASE_URL_KEY, baseUrl.trim())
+            putStringSet(CATEGORIES_KEY, selectedCategories.mapTo(mutableSetOf(), SyncDataCategory::wireValue))
+        }
+    }
+
+    companion object {
+        const val PREFERENCES_NAME = "atlas_sync_preferences"
+        private const val BASE_URL_KEY = "backend_base_url"
+        private const val CATEGORIES_KEY = "consented_categories"
+    }
 }

@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,11 +77,34 @@ import dev.atlas.coach.routines.FocusRoutine
 import dev.atlas.coach.routines.InMemoryFocusRoutineRepository
 import dev.atlas.coach.routines.RoutineEvaluator
 import dev.atlas.coach.routines.RoutineSchedule
+import dev.atlas.coach.sync.AndroidSyncStorage
+import dev.atlas.coach.sync.CoachGateway
+import dev.atlas.coach.sync.DataScope
+import dev.atlas.coach.sync.EventOutbox
+import dev.atlas.coach.sync.LocalMockCoachGateway
+import dev.atlas.coach.sync.LocalMockSyncGateway
+import dev.atlas.coach.sync.RemoteBackendGateway
+import dev.atlas.coach.sync.SharedPreferencesBearerTokenStore
+import dev.atlas.coach.sync.SyncConsent
+import dev.atlas.coach.sync.SyncDataCategory
+import dev.atlas.coach.sync.SyncEvent
+import dev.atlas.coach.sync.SyncEventType
+import dev.atlas.coach.sync.SyncGateway
+import dev.atlas.coach.sync.SyncResult
+import dev.atlas.coach.sync.SyncStatus
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.LocalTime
 import java.time.ZonedDateTime
 import java.util.UUID
+import java.net.URI
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 
 /** Owns the small, synchronous local graph used by the Compose demo. */
@@ -88,6 +113,21 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     override fun monotonicMillis(): Long = SystemClock.elapsedRealtime()
 }) {
     private val appContext = context.applicationContext
+    private val syncOutbox: EventOutbox = AndroidSyncStorage.outbox(appContext)
+    private val syncTokenStore = SharedPreferencesBearerTokenStore(appContext)
+    private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
+    private val persistedSyncSettings = syncSettingsStore.read()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val syncWorker: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { task ->
+        Thread(task, "atlas-sync-worker").apply { isDaemon = true }
+    }
+    private val syncRunning = AtomicBoolean(false)
+    private val syncGeneration = AtomicLong(0L)
+    private val effectiveConsent = AtomicReference(SyncConsent.DISABLED)
+    @Volatile private var remoteBackend: RemoteBackendGateway? = null
+    @Volatile private var syncRetryFuture: ScheduledFuture<*>? = null
+    @Volatile private var coachGateway: CoachGateway = LocalMockCoachGateway()
+    @Volatile private var syncGateway: SyncGateway = LocalMockSyncGateway()
     private val phaseAlarms = AndroidPhaseAlarmScheduler(appContext)
     private val focusNotifications = AndroidFocusNotifications(appContext)
     private val routineAlarms = AndroidRoutineProposalScheduler(appContext)
@@ -198,6 +238,20 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         private set
     var capabilities by mutableStateOf(readCapabilities(restored["capabilities"].asMap()))
         private set
+    var syncBaseUrl by mutableStateOf(persistedSyncSettings.baseUrl)
+        private set
+    var selectedSyncCategories by mutableStateOf(persistedSyncSettings.selectedCategories - SyncDataCategory.APP_USAGE_DETAIL)
+        private set
+    var syncTokenConfigured by mutableStateOf(syncTokenStore.token() != null)
+        private set
+    var syncStatus by mutableStateOf(SyncStatus.LOCAL_ONLY)
+        private set
+    var syncPendingCount by mutableIntStateOf(syncOutbox.size())
+        private set
+    var syncInProgress by mutableStateOf(false)
+        private set
+    var syncStatusMessage by mutableStateOf("Le mode local ne contacte aucun serveur.")
+        private set
     var launcherPinnedPackages by mutableStateOf(restored["launcherPins"].asList().filterIsInstance<String>().toSet())
         private set
     var historyDays by mutableIntStateOf(7)
@@ -235,11 +289,13 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             routineAlarms.scheduleAll(focusRoutinesSnapshot, ZonedDateTime.now(), ZoneId.systemDefault())
         }
         if (capabilities[CAP_HABIT_REMINDERS] == true) habitReminderScheduler.rescheduleAll()
+        refreshSyncRuntime()
         when {
             recoveryReason != null && persistenceAllowed -> persist()
             recoveryReason != null -> touch()
             stateReadResult == StateReadResult.Missing -> persist()
         }
+        if (canUseRemoteSync() && syncOutbox.size() > 0) scheduleSync(0L)
     }
 
     val directive: Directive get() = directiveSnapshot
@@ -303,6 +359,264 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         touch()
     }
 
+    fun setSyncEnabled(enabled: Boolean) {
+        if (enabled) {
+            capabilities = capabilities + (CAP_SYNC to true)
+            refreshSyncRuntime()
+            syncStatusMessage = when {
+                selectedSyncCategories.isEmpty() -> "Choisissez au moins une catégorie avant tout envoi."
+                syncBaseUrl.isBlank() -> "Saisissez l'URL du backend et enregistrez-la."
+                !syncTokenConfigured -> "Saisissez un jeton Bearer pour authentifier le backend."
+                else -> "Sync activée selon les catégories consenties."
+            }
+        } else {
+            disableAndPurgeSync()
+            return
+        }
+        persist()
+    }
+
+    fun setSyncCategory(category: SyncDataCategory, enabled: Boolean) {
+        if (category == SyncDataCategory.APP_USAGE_DETAIL) return
+        selectedSyncCategories = if (enabled) selectedSyncCategories + category else selectedSyncCategories - category
+        syncSettingsStore.write(syncBaseUrl, selectedSyncCategories)
+        refreshSyncRuntime()
+        syncPendingCount = syncOutbox.size()
+        syncStatusMessage = if (syncPendingCount > 0) {
+            "En attente de synchronisation : $syncPendingCount événement(s)."
+        } else if (capabilities[CAP_SYNC] == true && selectedSyncCategories.isEmpty()) {
+            "Aucune catégorie consentie : aucune requête ne sera envoyée."
+        } else {
+            "Consentements enregistrés. Les catégories décochées sont purgées de la file."
+        }
+        persist()
+    }
+
+    /** Saves only the URL and an optional new token. The token is encrypted by Android Keystore. */
+    fun saveSyncConfiguration(baseUrl: String, newToken: String?) {
+        val normalizedUrl = baseUrl.trim().trimEnd('/')
+        if (normalizedUrl.isNotEmpty() && !isAllowedBackendUrl(normalizedUrl)) {
+            syncStatusMessage = "URL invalide. Utilisez une adresse HTTP ou HTTPS complète."
+            touch()
+            return
+        }
+        try {
+            if (!newToken.isNullOrBlank()) syncTokenStore.configureToken(newToken)
+            syncBaseUrl = normalizedUrl
+            syncTokenConfigured = syncTokenStore.token() != null
+            syncSettingsStore.write(syncBaseUrl, selectedSyncCategories)
+            refreshSyncRuntime()
+            syncStatusMessage = when {
+                syncBaseUrl.isBlank() -> "URL du backend effacée. Aucune requête ne sera envoyée."
+                !syncTokenConfigured -> "URL enregistrée; un jeton Bearer est requis avant la synchronisation."
+                else -> "Configuration enregistrée. Le jeton est chiffré par Android Keystore."
+            }
+            if (canUseRemoteSync() && syncOutbox.size() > 0 && syncTokenConfigured) scheduleSync(0L)
+        } catch (_: Exception) {
+            syncStatusMessage = "Configuration non enregistrée. Vérifiez la valeur puis réessayez."
+        }
+        touch()
+    }
+
+    fun clearSyncToken() {
+        runCatching { syncTokenStore.configureToken(null) }
+        syncTokenConfigured = false
+        refreshSyncRuntime()
+        syncStatus = if (syncPendingCount > 0) SyncStatus.AUTH_REQUIRED else SyncStatus.LOCAL_ONLY
+        syncStatusMessage = "Jeton supprimé. Aucun envoi authentifié n'est possible."
+        touch()
+    }
+
+    fun syncNow() {
+        if (!canUseRemoteSync()) {
+            syncStatus = if (capabilities[CAP_SYNC] == true) SyncStatus.NOTHING_TO_SYNC else SyncStatus.LOCAL_ONLY
+            syncPendingCount = syncOutbox.size()
+            syncStatusMessage = when {
+                capabilities[CAP_SYNC] != true -> "Sync désactivée. LocalMock reste disponible hors ligne."
+                selectedSyncCategories.isEmpty() -> "Aucune catégorie consentie : aucune requête n'a été envoyée."
+                syncBaseUrl.isBlank() -> "URL du backend manquante. La file reste locale."
+                else -> "URL invalide. La file reste locale."
+            }
+            touch()
+            return
+        }
+        if (!syncTokenConfigured) {
+            syncStatus = SyncStatus.AUTH_REQUIRED
+            syncStatusMessage = "Jeton Bearer requis. La file reste sur cet appareil."
+            syncPendingCount = syncOutbox.size()
+            touch()
+            return
+        }
+        syncOutbox.makeDueNow()
+        syncInProgress = true
+        syncStatusMessage = "Synchronisation en cours…"
+        touch()
+        scheduleSync(0L)
+    }
+
+    fun clearSyncQueue() {
+        syncGeneration.incrementAndGet()
+        syncRetryFuture?.cancel(false)
+        val removed = syncOutbox.clear()
+        syncPendingCount = 0
+        syncInProgress = false
+        syncStatus = if (capabilities[CAP_SYNC] == true) SyncStatus.NOTHING_TO_SYNC else SyncStatus.LOCAL_ONLY
+        syncStatusMessage = "$removed événement(s) supprimé(s) de la file locale."
+        touch()
+    }
+
+    fun disableAndPurgeSync() {
+        syncGeneration.incrementAndGet()
+        syncRetryFuture?.cancel(false)
+        effectiveConsent.set(SyncConsent.DISABLED)
+        val removed = syncOutbox.clear()
+        capabilities = capabilities + (CAP_SYNC to false)
+        selectedSyncCategories = emptySet()
+        syncSettingsStore.write(syncBaseUrl, emptySet())
+        remoteBackend = null
+        coachGateway = LocalMockCoachGateway()
+        syncGateway = LocalMockSyncGateway()
+        syncPendingCount = 0
+        syncInProgress = false
+        syncStatus = SyncStatus.LOCAL_ONLY
+        syncStatusMessage = "Sync désactivée; $removed événement(s) supprimé(s). Aucun réseau ne sera ouvert."
+        persist()
+    }
+
+    private fun refreshSyncRuntime() {
+        val consent = if (capabilities[CAP_SYNC] == true) {
+            SyncConsent(selectedSyncCategories, sharePrivateAppDetails = false)
+        } else SyncConsent.DISABLED
+        effectiveConsent.set(consent)
+        val removed = syncOutbox.discardDisallowed(consent)
+        syncPendingCount = syncOutbox.size()
+        val generation = syncGeneration.incrementAndGet()
+        syncRetryFuture?.cancel(false)
+
+        val configuredRemote = if (consent.enabledCategories.isNotEmpty() && isAllowedBackendUrl(syncBaseUrl)) {
+            RemoteBackendGateway(
+                baseUrl = syncBaseUrl,
+                tokenProvider = syncTokenStore,
+                outbox = syncOutbox,
+                consentProvider = effectiveConsent::get,
+            )
+        } else null
+        remoteBackend = configuredRemote
+        if (configuredRemote == null) {
+            coachGateway = LocalMockCoachGateway()
+            syncGateway = LocalMockSyncGateway()
+        } else {
+            coachGateway = configuredRemote
+            syncGateway = configuredRemote
+        }
+        if (removed > 0 && syncStatus != SyncStatus.LOCAL_ONLY) {
+            syncStatusMessage = "$removed événement(s) retiré(s) car le consentement correspondant est désactivé."
+        }
+        if (generation > 0L && capabilities[CAP_SYNC] != true) syncStatus = SyncStatus.LOCAL_ONLY
+    }
+
+    private fun canUseRemoteSync(): Boolean =
+        capabilities[CAP_SYNC] == true &&
+            effectiveConsent.get().enabledCategories.isNotEmpty() &&
+            isAllowedBackendUrl(syncBaseUrl) && remoteBackend != null
+
+    private fun scheduleSync(delayMillis: Long) {
+        if (!canUseRemoteSync()) return
+        val generation = syncGeneration.get()
+        syncRetryFuture?.cancel(false)
+        syncRetryFuture = syncWorker.schedule({ executeSync(generation) }, delayMillis.coerceAtLeast(0L), TimeUnit.MILLISECONDS)
+    }
+
+    private fun executeSync(generation: Long) {
+        if (generation != syncGeneration.get() || !syncRunning.compareAndSet(false, true)) return
+        val result = try {
+            syncGateway.syncNow()
+        } catch (_: Exception) {
+            SyncResult(SyncStatus.PROTOCOL_ERROR, pending = syncOutbox.size(), message = "La synchronisation a échoué; la file locale est conservée.")
+        } finally {
+            syncRunning.set(false)
+        }
+        mainHandler.post {
+            if (generation != syncGeneration.get()) return@post
+            syncInProgress = false
+            syncStatus = result.status
+            syncPendingCount = syncOutbox.size()
+            syncStatusMessage = when (result.status) {
+                SyncStatus.SUCCESS -> "${result.acknowledged} événement(s) synchronisé(s); $syncPendingCount en attente."
+                SyncStatus.NOTHING_TO_SYNC -> if (syncPendingCount > 0) {
+                    "$syncPendingCount événement(s) en attente du prochain délai de reprise."
+                } else "Aucun événement en attente."
+                SyncStatus.RETRY_SCHEDULED -> "Backend hors ligne ou temporairement indisponible; $syncPendingCount événement(s) restent en attente."
+                SyncStatus.AUTH_REQUIRED -> "Authentification refusée ou jeton manquant; $syncPendingCount événement(s) restent sur l'appareil."
+                else -> result.message ?: "Réponse backend non reconnue; la file locale est conservée."
+            }
+            touch()
+            val nextAt = when (result.status) {
+                SyncStatus.RETRY_SCHEDULED -> result.retryAtUtcMillis
+                SyncStatus.NOTHING_TO_SYNC -> syncOutbox.nextAttemptAtUtcMillis()
+                else -> null
+            }
+            if (nextAt != null && syncPendingCount > 0 && canUseRemoteSync()) {
+                scheduleSync((nextAt - System.currentTimeMillis()).coerceAtLeast(0L))
+            }
+        }
+    }
+
+    private fun enqueueSyncEvent(
+        type: SyncEventType,
+        category: SyncDataCategory,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val consent = effectiveConsent.get()
+        if (!consent.enabledCategories.contains(category)) return
+        runCatching {
+            val event = SyncEvent(
+                eventType = type,
+                occurredAtUtcMillis = clock.nowMillis(),
+                category = category,
+                dataScope = DataScope.SHAREABLE,
+                payload = payload,
+            )
+            if (syncOutbox.enqueue(event, consent)) {
+                syncPendingCount = syncOutbox.size()
+                syncStatusMessage = "$syncPendingCount événement(s) en attente."
+                if (canUseRemoteSync() && syncTokenConfigured) scheduleSync(0L)
+            }
+        }.onFailure {
+            syncStatusMessage = "Événement conservé localement; impossible de l'ajouter à la file sync."
+            syncStatus = SyncStatus.PROTOCOL_ERROR
+            touch()
+        }
+    }
+
+    /** LocalCoach remains authoritative; the selected response is also sent remotely only after consent. */
+    private fun sendRemoteCoachResponse(choice: DirectiveChoice) {
+        if (!effectiveConsent.get().enabledCategories.contains(SyncDataCategory.COACH_INTERACTION)) return
+        val generation = syncGeneration.get()
+        syncWorker.execute {
+            if (generation != syncGeneration.get()) return@execute
+            val remote = coachGateway as? RemoteBackendGateway ?: return@execute
+            try {
+                val remoteDirective = remote.currentDirective()
+                if (choice.contractValue in remoteDirective.choices) remote.respond(remoteDirective.id, choice.contractValue)
+            } catch (_: Exception) {
+                mainHandler.post {
+                    if (generation == syncGeneration.get()) {
+                        syncStatus = SyncStatus.AUTH_REQUIRED
+                        syncStatusMessage = "Le backend coach n'a pas répondu; la réponse locale reste enregistrée."
+                        touch()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isAllowedBackendUrl(value: String): Boolean = runCatching {
+        val uri = URI(value)
+        (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) &&
+            !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null
+    }.getOrDefault(false)
+
     fun respond(choice: DirectiveChoice) {
         if (choice == DirectiveChoice.START && capabilities[CAP_FOCUS] != true) {
             latestMessage = "Le focus est désactivé dans les paramètres."
@@ -319,10 +633,17 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             val result = coach.respond(activeDirective.id, choice)
             directiveSnapshot = coach.currentDirective()
             latestMessage = result.message
+            enqueueSyncEvent(
+                SyncEventType.DIRECTIVE_RESPONDED,
+                SyncDataCategory.COACH_INTERACTION,
+                mapOf("choice" to choice.contractValue),
+            )
+            sendRemoteCoachResponse(choice)
             if (choice == DirectiveChoice.START) {
                 archiveCurrentTerminalFocus()
                 val seconds = ((result.requestedDurationMinutes ?: 10) * 60L).coerceAtLeast(1L)
                 focusEngine.start(FocusPlan.custom(seconds).copy(presetId = "directive-${activeDirective.id}"), activeDirective.id)
+                enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS)
                 screen = SCREEN_FOCUS
             }
         } catch (error: IllegalArgumentException) {
@@ -364,6 +685,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
         archiveCurrentTerminalFocus()
         val started = focusEngine.start(plan, directive.id)
+        enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS)
         if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) phaseAlarms.schedule(started)
         latestMessage = if (plan.continuous) {
             "Focus continu démarré · ${plan.workSeconds}s de concentration par cycle."
@@ -431,6 +753,13 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             }
         }
         if (transitioned && current.status == FocusStatus.FINISHED) archiveFocusSession(current)
+        if (transitioned && current.status == FocusStatus.FINISHED) {
+            enqueueSyncEvent(
+                SyncEventType.FOCUS_COMPLETED,
+                SyncDataCategory.FOCUS,
+                mapOf("completed_work_cycles" to current.completedWorkCycles),
+            )
+        }
         if (transitioned && capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
             if (current.status == FocusStatus.RUNNING) phaseAlarms.schedule(current) else phaseAlarms.cancel(current.id)
         }
@@ -449,7 +778,10 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             return
         }
         val session = focusSession ?: return
-        if (session.status == FocusStatus.RUNNING) focusEngine.pause(session.id)
+        if (session.status == FocusStatus.RUNNING) {
+            focusEngine.pause(session.id)
+            enqueueSyncEvent(SyncEventType.FOCUS_PAUSED, SyncDataCategory.FOCUS)
+        }
         else if (session.status == FocusStatus.PAUSED) focusEngine.resume(session.id)
         focusSnapshot = focusEngine.currentSession()
         focusSnapshot?.let { current ->
@@ -475,6 +807,13 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         focusSession?.let { phaseAlarms.cancel(it.id); focusNotifications.cancel(it.id) }
         focusSession?.let { focusEngine.finish(it.id)?.let(::archiveFocusSession) }
         focusSnapshot = focusEngine.currentSession()
+        if (focusSnapshot?.status == FocusStatus.FINISHED) {
+            enqueueSyncEvent(
+                SyncEventType.FOCUS_COMPLETED,
+                SyncDataCategory.FOCUS,
+                mapOf("completed_work_cycles" to (focusSnapshot?.completedWorkCycles ?: 0)),
+            )
+        }
         latestMessage = if (focusSnapshot?.completedWorkCycles ?: 0 >= (focusSnapshot?.totalWorkCycles ?: Int.MAX_VALUE) && focusSnapshot?.continuous != true) {
             "Session terminée. Voulez-vous la relier à une habitude ?"
         } else {
@@ -499,6 +838,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         )) {
             is FocusLinkResult.Recorded -> {
                 habitLinkPolicy.confirmLink(session.id, habitId, LocalDate.now())
+                enqueueSyncEvent(SyncEventType.HABIT_CHECKIN, SyncDataCategory.HABIT)
                 latestMessage = "Habitude cochée après votre confirmation."
             }
             is FocusLinkResult.AlreadyRecorded -> latestMessage = "Cette session a déjà été reliée; aucun deuxième pointage n'a été ajouté."
@@ -546,6 +886,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             latestMessage = "Validation annulée."
         } else {
             habits.checkIn(habit.id, today)
+            enqueueSyncEvent(SyncEventType.HABIT_CHECKIN, SyncDataCategory.HABIT)
             latestMessage = "Habitude validée pour aujourd'hui."
         }
         persist()
@@ -726,6 +1067,11 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                 .also { latestMessage = it.message; touch() }
         }
         val result = catalog.open(id, AndroidContentOpener(context))
+        if (result.status in setOf(
+                dev.atlas.coach.content.ContentOpenStatus.OPENED_CHOOSER,
+                dev.atlas.coach.content.ContentOpenStatus.OPENED_DIRECT_FALLBACK,
+            )
+        ) enqueueSyncEvent(SyncEventType.CONTENT_OPENED, SyncDataCategory.CONTENT)
         latestMessage = result.message
         persist()
         return result
@@ -925,6 +1271,10 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun setCapability(name: String, enabled: Boolean) {
+        if (name == CAP_SYNC) {
+            setSyncEnabled(enabled)
+            return
+        }
         if (name == CAP_APP_TRACKING) {
             if (enabled) {
                 latestMessage = "L'observation ne peut être activée que depuis l'écran Observation, après choix des apps et vérification d'Android."
@@ -1091,6 +1441,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         const val SCREEN_ABOUT = "À propos / Licences"
         const val SCREEN_FOCUS_STATS = "Statistiques de focus"
         const val SCREEN_ROUTINES = "Routines de focus"
+        const val SCREEN_SYNC_SETTINGS = "Partage backend"
         const val CAP_FOCUS = "focus"
         const val CAP_HABITS = "habits"
         const val CAP_CONTENT = "content"
@@ -1101,6 +1452,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         const val CAP_FOCUS_ROUTINES = "focusRoutines"
         const val CAP_FOCUS_NOTIFICATIONS = "focusNotifications"
         const val CAP_HABIT_REMINDERS = "habitReminders"
+        const val CAP_SYNC = "sync"
         const val FOCUS_CHECKPOINT_INTERVAL_MILLIS = 20_000L
         const val MAX_FOCUS_HISTORY = 100
         const val MAX_FOCUS_ROUTINES = 100
@@ -1118,6 +1470,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                 CAP_FOCUS_ROUTINES to false,
                 CAP_FOCUS_NOTIFICATIONS to false,
                 CAP_HABIT_REMINDERS to false,
+                CAP_SYNC to false,
             )
             return defaults + values.orEmpty().mapNotNull { (key, value) -> (value as? Boolean)?.let { key to it } }
         }

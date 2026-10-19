@@ -182,6 +182,7 @@ fun AtlasApp(
                     )
                     AtlasController.SCREEN_SIMULATOR -> SimulatorScreen(controller, revision)
                     AtlasController.SCREEN_DIAGNOSTICS -> DiagnosticsScreen(controller)
+                    AtlasController.SCREEN_SYNC_SETTINGS -> SyncSettingsScreen(controller, revision)
                     AtlasController.SCREEN_OBSERVATION -> ObservationScreen(controller, context, requestNotifications)
                     AtlasController.SCREEN_LAUNCHER -> if (controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true) {
                         LauncherHomeScreen(controller, context, openSystemHome)
@@ -768,6 +769,10 @@ private fun DiagnosticsScreen(controller: AtlasController) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Diagnostic avancé / développeur", style = MaterialTheme.typography.headlineSmall)
         Text("Les événements ci-dessous sont synthétiques. Ils ne lisent pas les applications installées et ne représentent pas une observation réelle.")
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+            onClick = { controller.navigate(AtlasController.SCREEN_SYNC_SETTINGS) },
+        ) { Text("Partage backend (facultatif)") }
         CapabilityRow("Simulateur de règles", controller, AtlasController.CAP_SIMULATED_RULES)
         OutlinedButton(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),

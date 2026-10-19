@@ -60,6 +60,49 @@ class RemoteBackendE2eInstrumentationTest {
                 assertEquals(SyncStatus.SUCCESS, result.status)
                 assertEquals(1, result.acknowledged)
                 assertEquals(0, outbox.size())
+                assertTrue("Replaying the exact same UUID must re-enqueue the same event", outbox.enqueue(event, consent))
+                val replay = gateway.syncNow()
+                assertEquals(SyncStatus.SUCCESS, replay.status)
+                assertEquals(1, replay.acknowledged)
+                assertEquals(0, outbox.size())
+                android.util.Log.i("ATLAS_H2", "scenario=online acknowledged=1 replay_acknowledged=1 pending=0")
+            }
+            "unauthorized" -> {
+                val event = SyncEvent(
+                    eventType = SyncEventType.FOCUS_STARTED,
+                    occurredAtUtcMillis = System.currentTimeMillis(),
+                    category = SyncDataCategory.FOCUS,
+                    dataScope = DataScope.SHAREABLE,
+                )
+                assertTrue(outbox.enqueue(event, consent))
+                tokenStore.configureToken("${token}-invalid")
+                val result = gateway.syncNow()
+                assertEquals(SyncStatus.AUTH_REQUIRED, result.status)
+                assertEquals(1, outbox.size())
+                android.util.Log.i("ATLAS_H2", "scenario=unauthorized status=${result.status} pending=${result.pending}")
+                tokenStore.configureToken(token)
+                outbox.clear()
+            }
+            "disabled" -> {
+                val disabledConsent = SyncConsent.DISABLED
+                val event = SyncEvent(
+                    eventType = SyncEventType.FOCUS_STARTED,
+                    occurredAtUtcMillis = System.currentTimeMillis(),
+                    category = SyncDataCategory.FOCUS,
+                    dataScope = DataScope.SHAREABLE,
+                )
+                assertFalse(outbox.enqueue(event, disabledConsent))
+                val disabledGateway = RemoteBackendGateway(
+                    baseUrl = backendUrl,
+                    tokenProvider = tokenStore,
+                    outbox = outbox,
+                    consentProvider = { disabledConsent },
+                    connectTimeoutMillis = 3_000,
+                    readTimeoutMillis = 3_000,
+                )
+                assertEquals(SyncStatus.NOTHING_TO_SYNC, disabledGateway.syncNow().status)
+                assertEquals(0, outbox.size())
+                android.util.Log.i("ATLAS_H2", "scenario=disabled accepted=false pending=0 requests=0")
             }
             "offline" -> {
                 val event = SyncEvent(
@@ -74,6 +117,7 @@ class RemoteBackendE2eInstrumentationTest {
                 assertEquals(SyncStatus.RETRY_SCHEDULED, result.status)
                 assertEquals(1, outbox.size())
                 assertEquals(event.clientEventId, outbox.all().single().event.clientEventId)
+                android.util.Log.i("ATLAS_H2", "scenario=offline status=${result.status} pending=${result.pending} stable_uuid=true")
             }
             "resume" -> {
                 val queuedId = outbox.all().single().event.clientEventId
@@ -83,10 +127,12 @@ class RemoteBackendE2eInstrumentationTest {
                 assertEquals(0, outbox.size())
                 assertEquals(SyncStatus.NOTHING_TO_SYNC, gateway.syncNow().status)
                 assertFalse(queuedId.isBlank())
+                android.util.Log.i("ATLAS_H2", "scenario=resume acknowledged=1 pending=0 stable_uuid=true")
                 queueFile.delete()
                 tokenStore.configureToken(null)
             }
             else -> error("Unsupported scenario")
         }
+        tokenStore.configureToken(null)
     }
 }

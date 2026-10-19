@@ -25,7 +25,10 @@ interface EventOutbox {
     fun acknowledge(clientEventIds: Set<String>)
     fun defer(clientEventId: String, nextAttemptAtUtcMillis: Long)
     fun discardDisallowed(consent: SyncConsent): Int
+    fun clear(): Int
+    fun makeDueNow(): Int
     fun size(): Int
+    fun nextAttemptAtUtcMillis(): Long?
 }
 
 /** Private app-files storage with fsync + atomic rename so a crash cannot truncate the queue. */
@@ -104,7 +107,30 @@ class DurableEventOutbox(private val storage: OutboxStorage) : EventOutbox {
     }
 
     @Synchronized
+    override fun clear(): Int {
+        val removed = entries.size
+        if (removed > 0) {
+            entries.clear()
+            persist()
+        }
+        return removed
+    }
+
+    @Synchronized
+    override fun makeDueNow(): Int {
+        val ready = entries.values.count { it.nextAttemptAtUtcMillis > 0L }
+        if (ready > 0) {
+            entries.replaceAll { _, queued -> queued.copy(nextAttemptAtUtcMillis = 0L) }
+            persist()
+        }
+        return ready
+    }
+
+    @Synchronized
     override fun size(): Int = entries.size
+
+    @Synchronized
+    override fun nextAttemptAtUtcMillis(): Long? = entries.values.minOfOrNull(QueuedEvent::nextAttemptAtUtcMillis)
 
     @Synchronized
     fun all(): List<QueuedEvent> = entries.values.toList()
