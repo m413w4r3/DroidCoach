@@ -34,7 +34,7 @@ class AgentApiClient(
     baseUrl: String,
     private val tokenProvider: BearerTokenProvider,
     private val connectTimeoutMillis: Int = 4_000,
-    private val readTimeoutMillis: Int = 6_000,
+    private val readTimeoutMillis: Int = 65_000,
 ) {
     private val base = baseUrl.trimEnd('/')
 
@@ -54,13 +54,29 @@ class AgentApiClient(
         val body = JSONObject()
             .put("conversation_id", conversationId ?: JSONObject.NULL)
             .put("message", message)
-            .put("shared_context", JSONObject().put("categories", JSONArray(mandate.sharedDataCategories.sorted())))
+            .put("shared_context", JSONObject()
+                .put("consented_categories", JSONArray(mandate.sharedDataCategories.sorted()))
+                .put("categories", JSONObject()))
             .put("mandate_summary", JSONObject()
                 .put("id", mandate.id)
                 .put("version", mandate.version)
                 .put("mode", mandate.mode.wireValue)
                 .put("allowed_actions", JSONArray(mandate.allowedActions.sorted()))
-                .put("shared_data_categories", JSONArray(mandate.sharedDataCategories.sorted())))
+                .put("focus_window", JSONObject()
+                    .put("days", JSONArray(mandate.focusWindow.days.sorted().map(::weekdayName)))
+                    .put("starts_at", mandate.focusWindow.start)
+                    .put("ends_at", mandate.focusWindow.end)
+                    .put("timezone", mandate.focusWindow.timezone)
+                    .put("max_minutes_per_session", mandate.focusWindow.maxMinutesPerSession)
+                    .put("max_sessions_per_day", mandate.focusWindow.maxSessionsPerDay))
+                .put("app_policy_bounds", JSONObject().also { bounds ->
+                    mandate.appPolicyBounds.toSortedMap().forEach { (packageRef, bound) ->
+                        bounds.put(packageRef, JSONObject()
+                            .put("min_limit_minutes", bound.minLimitMinutes)
+                            .put("max_mode", bound.maxMode)
+                            .put("max_valid_days", bound.maxValidDays))
+                    }
+                }))
         val result = request("POST", "/v2/agent/chat", body)
         val reply = result.optString("reply")
         require(reply.length <= MAX_REPLY_LENGTH) { "Agent reply is too long" }
@@ -135,5 +151,16 @@ class AgentApiClient(
         private const val MAX_REPLY_LENGTH = 4_000
         private const val MAX_PROPOSALS = 5
         private const val MAX_PROPOSALS_PER_PULL = 100
+
+        private fun weekdayName(day: Int): String = when (day) {
+            1 -> "monday"
+            2 -> "tuesday"
+            3 -> "wednesday"
+            4 -> "thursday"
+            5 -> "friday"
+            6 -> "saturday"
+            7 -> "sunday"
+            else -> error("Invalid weekday in local focus mandate")
+        }
     }
 }

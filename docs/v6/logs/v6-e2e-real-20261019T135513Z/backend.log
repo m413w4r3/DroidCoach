@@ -1,0 +1,16 @@
+INFO:     Started server process [2516408]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:50943 (Press CTRL+C to quit)
+INFO:     127.0.0.1:47518 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47522 - "GET /v2/agent/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47532 - "GET /v2/agent/inbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47532 - "POST /v2/agent/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47532 - "POST /v2/agent/proposals/e9c7e708-0c46-4353-9fcb-7224c1fa70cb/ack HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:47532 - "POST /v2/agent/proposals/e9c7e708-0c46-4353-9fcb-7224c1fa70cb/ack HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:47532 - "POST /v2/agent/proposals/793068f4-80f9-4c3b-a485-479167eb7112/ack HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:47532 - "POST /v2/agent/proposals/e9c7e708-0c46-4353-9fcb-7224c1fa70cb/ack HTTP/1.1" 409 Conflict
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2516408]

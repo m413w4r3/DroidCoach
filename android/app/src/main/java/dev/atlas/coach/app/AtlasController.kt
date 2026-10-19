@@ -687,8 +687,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
 
     private fun refreshAgentApiRuntime() {
         val configured = capabilities[CAP_AGENT] == true && syncTokenStore.token() != null &&
-            syncBaseUrl.isNotBlank() && isAllowedBackendUrl(syncBaseUrl) &&
-            runCatching { URI(syncBaseUrl).scheme.equals("https", ignoreCase = true) }.getOrDefault(false)
+            syncBaseUrl.isNotBlank() && isAllowedAgentBackendUrl(syncBaseUrl)
         agentApiClient = if (configured) runCatching {
             AgentApiClient(syncBaseUrl, syncTokenStore)
         }.getOrNull() else null
@@ -781,7 +780,12 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     persist()
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
-                .onFailure { mainHandler.post {
+                .onFailure { error -> mainHandler.post {
+                    val statusCode = (error as? dev.atlas.coach.sync.agent.coach.AgentApiException)?.statusCode ?: 0
+                    android.util.Log.w(
+                        "ATLAS_AGENT",
+                        "V2 chat failed; error_type=${error.javaClass.simpleName}, http_status=$statusCode",
+                    )
                     agentStatus = AgentStatus.UNAVAILABLE
                     agentStatusMessage = "Agent indisponible — fonctions locales actives"
                     addLocalAgentReply(conversationId)
@@ -1092,6 +1096,15 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val uri = URI(value)
         (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) &&
             !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null
+    }.getOrDefault(false)
+
+    private fun isAllowedAgentBackendUrl(value: String): Boolean = isAllowedBackendUrl(value) && runCatching {
+        val uri = URI(value)
+        uri.scheme.equals("https", ignoreCase = true) || (
+            uri.scheme.equals("http", ignoreCase = true) &&
+                uri.host.equals("10.0.2.2", ignoreCase = true) &&
+                appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+            )
     }.getOrDefault(false)
 
     fun respond(choice: DirectiveChoice) {

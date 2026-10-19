@@ -162,7 +162,7 @@ class PolicyEngine:
         if not self.capabilities.get(capability, False):
             return PolicyDecision(False, f"capability désactivée : {capability}")
 
-        params = proposal.parameters.model_dump(mode="json")
+        params = proposal.parameters.model_dump(mode="json", exclude_none=True)
         current_time = now or datetime.now(timezone.utc)
         if action in {"focus.propose", "focus.plan"} and mandate.focus_window is not None:
             session_minutes = (

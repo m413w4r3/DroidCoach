@@ -19,6 +19,7 @@ from atlas_backend.models_v2 import MandateSummary, SharedContext
 from atlas_backend.openclaw_adapter import (
     FALLBACK_REPLY,
     OpenClawAgentAdapter,
+    _preserve_explicit_focus_minutes,
     parse_agent_output,
 )
 from atlas_backend.policy import PolicyEngine
@@ -146,6 +147,29 @@ def test_strict_output_failures_yield_no_proposals(content: str):
 def test_single_fenced_json_block_is_the_only_tolerated_extraction():
     output = parse_agent_output(f"Réponse\n```json\n{output_json()}\n```\nfin")
     assert output.proposals[0].action_type == "focus.propose"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Prépare-moi 25 minutes de travail pour réviser.",
+        "Prépare une session de travail de exactement 25 minutes.",
+    ],
+)
+def test_explicit_work_duration_is_preserved_when_model_uses_default(message):
+    output = _preserve_explicit_focus_minutes(parse_agent_output(output_json()), message)
+    assert output.proposals[0].parameters.focus_minutes == 25
+
+
+def test_ambiguous_or_unspecified_focus_duration_is_not_rewritten():
+    output = parse_agent_output(output_json())
+    ambiguous = _preserve_explicit_focus_minutes(
+        output,
+        "Prépare une session de travail de 25 minutes puis une autre session de travail de 30 minutes.",
+    )
+    unspecified = _preserve_explicit_focus_minutes(output, "Aide-moi à commencer mes révisions.")
+    assert ambiguous.proposals[0].parameters.focus_minutes == 10
+    assert unspecified.proposals[0].parameters.focus_minutes == 10
 
 
 def test_gateway_401_is_unavailable_without_leaking_credential():
@@ -296,6 +320,9 @@ def test_v2_chat_is_idempotent_validates_candidates_and_persists_inbox(tmp_path)
             "home.set_directive",
             "focus.propose",
         ]
+        directive_parameters = first.json()["proposals"][0]["parameters"]
+        assert "focus_proposal_id" not in directive_parameters
+        assert all(value is not None for proposal in first.json()["proposals"] for value in proposal["parameters"].values())
         assert all(item["state"] == "proposed" for item in first.json()["proposals"])
         assert all(item["conversation_id"].startswith("conv_") for item in first.json()["proposals"])
         assert agent.calls == 1

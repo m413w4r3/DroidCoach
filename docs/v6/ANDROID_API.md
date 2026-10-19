@@ -47,11 +47,17 @@ Les dix valeurs d'action ont chacune une branche fermée. Aucun Intent, commande
 
 Le journal `AgentEffectJournal` garde les effets, états terminaux, clés d'idempotence et horodatages, sans message complet ni jeton. Il est consultable dans le panneau « Journal des effets ».
 
-## Validation locale
+## Validation locale du lot D (historique)
 
 - `cd android && ./gradlew testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin` : succès; 125 tests JVM exécutés, 0 échec, lint et APK debug compilés, sources instrumentées compilées.
 - `cd android && ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.sync.agent.AgentContractsInstrumentationTest` : succès; 1 test instrumenté exécuté sur `emulator-5554` (AVD Android 17), 0 échec. Aucun appareil Pixel physique n'a été utilisé.
-- Le client réseau a un test JVM avec un serveur HTTP stub local pour vérifier le Bearer, le chat, le pull et l'ack. L'intégration au backend du lot C n'a pas été exécutée ici.
+- Le client réseau a un test JVM avec un serveur HTTP stub local pour vérifier le Bearer, le chat, le pull et l'ack.
+
+La recette de bout en bout du lot F, les résultats actuels des suites et le
+raccordement au backend OpenClaw réel sont consignés dans
+[RECETTE.md](RECETTE.md). Le passage réel a réussi sur AVD Android 17; la suite
+instrumentée complète reste partiellement en échec sur des assertions UI
+existantes, détaillées dans cette recette.
 
 Limite connue : `app_policy.adjust` reste refusée jusqu'à ce qu'Android dispose d'une mesure fiable de durée quotidienne. Aucun WorkManager n'est installé; le pull a lieu à l'ouverture Coach et à la demande.
 

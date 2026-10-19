@@ -122,9 +122,8 @@ Commande exécutée après l'implémentation :
 ```
 
 Cette commande exécute les tests backend V1 et V2 sans réseau externe; le test
-marqué `real_gateway` est exclu. Résultat final à reporter après la dernière
-exécution : **42 passed, 1 deselected**. La suite pytest complète donne
-**42 passed, 1 skipped**; les tests V1/V4 de `backend/tests/test_api.py` et
+marqué `real_gateway` est exclu. Résultat mock courant : **45 passed, 1 deselected**.
+La suite pytest complète donne **45 passed, 1 skipped**; les tests V1/V4 de `backend/tests/test_api.py` et
 `backend/tests/test_content_and_config.py` sont inclus. `ruff check backend`
 donne **All checks passed**. Mypy n'est pas installé sur cet environnement.
 
@@ -135,7 +134,7 @@ Le test `@pytest.mark.real_gateway` n'est exécuté qu'avec
 sur `127.0.0.1:18789` avec un contexte vide et un mandat de test limité. La
 sortie acceptée sans secret est conservée dans
 [lot-c-real-gateway.txt](logs/lot-c-real-gateway.txt). Résultat de la dernière
-exécution : **1 passed, 42 deselected**. Le test a confirmé au moins une
+exécution : **1 passed, 45 deselected**. Le test a confirmé au moins une
 proposition v2 valide et vérifié en mémoire que le jeton ne figure pas dans la
 réponse ni dans le journal produit.
 

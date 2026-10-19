@@ -523,7 +523,7 @@ def create_app(
                     "mandate_id": body.mandate_summary.id,
                     "mandate_version": body.mandate_summary.version,
                     "action_type": candidate.action_type,
-                    "parameters": candidate.parameters.model_dump(mode="json"),
+                    "parameters": candidate.parameters.model_dump(mode="json", exclude_none=True),
                     "reason": candidate.reason,
                 }
                 idem_json = json.dumps(candidate_material, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
@@ -539,7 +539,7 @@ def create_app(
                     "created_at": created_at.isoformat().replace("+00:00", "Z"),
                     "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
                     "action_type": candidate.action_type,
-                    "parameters": candidate.parameters.model_dump(mode="json"),
+                    "parameters": candidate.parameters.model_dump(mode="json", exclude_none=True),
                     "reason": candidate.reason,
                     "required_level": policy.required_level(candidate, body.mandate_summary),
                     "state": "proposed",
@@ -547,7 +547,7 @@ def create_app(
                 validated = V2_PROPOSAL_ADAPTER.validate_json(
                     json.dumps(proposal, ensure_ascii=False, separators=(",", ":"))
                 )
-                saved, _inserted = store.save_proposal(validated.model_dump(mode="json"))
+                saved, _inserted = store.save_proposal(validated.model_dump(mode="json", exclude_none=True))
                 proposals.append(saved)
                 if candidate.action_type == "focus.plan":
                     daily_plan_count += 1
