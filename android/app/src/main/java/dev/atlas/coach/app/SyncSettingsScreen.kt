@@ -31,7 +31,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.sync.SyncDataCategory
-import dev.atlas.coach.sync.SyncStatus
 
 @Composable
 fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
@@ -49,8 +48,20 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
         )
         Card(modifier = Modifier.fillMaxWidth().testTag("sync_status_card")) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(statusLabel(controller), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                Text(controller.syncStatusMessage, style = MaterialTheme.typography.bodySmall)
+                val status = syncStatusPresentation(
+                    enabled = syncEnabled,
+                    hasConsent = controller.selectedSyncCategories.isNotEmpty(),
+                    backendUrlConfigured = controller.syncBaseUrl.isNotBlank(),
+                    tokenConfigured = controller.syncTokenConfigured,
+                    inProgress = controller.syncInProgress,
+                    status = controller.syncStatus,
+                    pendingCount = controller.syncPendingCount,
+                    statusMessage = controller.syncStatusMessage,
+                    backendObservation = controller.agentHomeState.backendObservation,
+                    nowUtcMillis = System.currentTimeMillis(),
+                )
+                Text(status.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Text(status.detail, style = MaterialTheme.typography.bodySmall)
                 Text("File locale : ${controller.syncPendingCount} événement(s)", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -163,7 +174,6 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
         )
     }
 }
-
 @Composable
 private fun SyncCategoryRow(
     title: String,
@@ -181,25 +191,5 @@ private fun SyncCategoryRow(
             Text(title, color = MaterialTheme.colorScheme.onSurface)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-private fun statusLabel(controller: AtlasController): String {
-    if (controller.capabilities[AtlasController.CAP_SYNC] != true) return "Désactivé · LocalMock"
-    if (controller.selectedSyncCategories.isEmpty()) return "Aucune catégorie consentie"
-    if (controller.syncBaseUrl.isBlank()) return "Configuration du backend requise"
-    if (!controller.syncTokenConfigured) return "Authentification requise"
-    if (controller.syncInProgress) return "Synchronisation en cours"
-    if (controller.syncPendingCount > 0 && controller.syncStatus == SyncStatus.RETRY_SCHEDULED) {
-        return "Hors ligne · en attente ${controller.syncPendingCount}"
-    }
-    if (controller.syncPendingCount > 0) return "En attente ${controller.syncPendingCount}"
-    return when (controller.syncStatus) {
-        SyncStatus.SUCCESS -> "Synchronisé"
-        SyncStatus.AUTH_REQUIRED -> "Authentification requise"
-        SyncStatus.RETRY_SCHEDULED -> "Hors ligne · aucun événement en attente"
-        SyncStatus.CONTRACT_ERROR, SyncStatus.PROTOCOL_ERROR, SyncStatus.REJECTED -> "Erreur de synchronisation"
-        SyncStatus.NOTHING_TO_SYNC -> "Aucun événement à synchroniser"
-        SyncStatus.LOCAL_ONLY -> "Désactivé · LocalMock"
     }
 }

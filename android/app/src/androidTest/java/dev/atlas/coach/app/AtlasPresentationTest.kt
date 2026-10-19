@@ -1,6 +1,7 @@
 package dev.atlas.coach.app
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.view.KeyEvent
 import android.os.ParcelFileDescriptor
 import androidx.compose.runtime.CompositionLocalProvider
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
@@ -32,12 +34,20 @@ class AtlasPresentationTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    private fun isolatedContext(): Context {
+        val testPackageContext = InstrumentationRegistry.getInstrumentation().context
+        return object : ContextWrapper(testPackageContext) {
+            override fun getApplicationContext(): Context = this
+        }
+    }
+
     private fun setHome(fontScale: Float, capturePath: String? = null) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val stateContext = isolatedContext()
         lateinit var controller: AtlasController
         composeRule.runOnUiThread {
-            context.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
-            controller = AtlasController(context)
+            stateContext.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
+            controller = AtlasController(stateContext)
         }
         composeRule.setContent {
             val currentDensity = LocalDensity.current
@@ -99,10 +109,11 @@ class AtlasPresentationTest {
     @Test
     fun bottomNavigationAndBackFollowTheScreenHistory() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val stateContext = isolatedContext()
         lateinit var controller: AtlasController
         composeRule.runOnUiThread {
-            context.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
-            controller = AtlasController(context)
+            stateContext.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
+            controller = AtlasController(stateContext)
         }
         composeRule.setContent {
             AtlasTheme {
@@ -115,7 +126,7 @@ class AtlasPresentationTest {
         composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsNotSelected()
-        composeRule.onNodeWithText("Un pas à la fois").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_pomodoro_start").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsSelected()
         composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick()

@@ -1,0 +1,9 @@
+COMMAND: adb -s emulator-5554 shell am instrument -w -e class dev.atlas.coach.app.LotEUiInstrumentationTest#proposedFocusRequiresTapAndSupportsPauseResumeFinish dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+dev.atlas.coach.app.LotEUiInstrumentationTest:.
+
+Time: 2.645
+
+OK (1 test)
+
+

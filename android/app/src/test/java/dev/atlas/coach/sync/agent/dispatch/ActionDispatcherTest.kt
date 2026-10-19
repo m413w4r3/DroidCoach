@@ -6,15 +6,23 @@ import dev.atlas.coach.sync.agent.AgentFocusWindow
 import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.sync.agent.AgentMode
 import dev.atlas.coach.sync.agent.AgentVerificationContext
+import dev.atlas.coach.sync.agent.AgentHomeState
+import dev.atlas.coach.sync.agent.DirectiveProvenance
+import dev.atlas.coach.sync.agent.withRemoteDirective
 import dev.atlas.coach.sync.agent.LocalMandateStore
+import dev.atlas.coach.sync.agent.MandateStore
 import dev.atlas.coach.sync.agent.MandateVerifier
 import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.ProposedAction
+import dev.atlas.coach.sync.agent.dispatch.AgentEffectPhase
+import dev.atlas.coach.sync.agent.dispatch.AgentEffectReconciliation
+import dev.atlas.coach.sync.agent.dispatch.JsonAgentEffectJournal
 import dev.atlas.coach.sync.agent.inbox.AgentInboxRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -31,6 +39,102 @@ class ActionDispatcherTest {
     )
 
     @Test
+    fun pulledRemoteDirectiveSurvivesPreparedRevalidationAndIsPersisted() {
+        val proposal = ProposalV2(
+            schemaVersion = 2,
+            proposalId = "4ddfb73c-4eb7-4c57-9f10-d6e0bdb3c872",
+            idempotencyKey = "8858d813-72f0-408d-908e-6601511e2c1d",
+            conversationId = null,
+            mandateId = baseMandate.id,
+            mandateVersion = baseMandate.version,
+            contextVersion = "openclaw-test",
+            createdAtUtcMillis = now,
+            expiresAtUtcMillis = now + 60_000L,
+            actionType = "home.set_directive",
+            parameters = mapOf(
+                "title" to "Réviser les notes",
+                "body" to "Commencer par la première section.",
+                "primary_action" to "open_coach",
+            ),
+            reason = "Directive issue du Coach distant.",
+            requiredLevel = ProposalLevel.CONFIRM,
+        )
+        val inbox = AgentInboxRepository(MemoryStorage()) { now }
+        assertEquals(1, inbox.mergePulled(listOf(proposal), "remote-cursor").added)
+        val journal = InMemoryAgentEffectJournal()
+        val homeStorage = MemoryStorage()
+        val actions = RemoteDirectiveActions(homeStorage)
+        val mandate = baseMandate.copy(allowedActions = setOf("home.set_directive"))
+        val dispatcher = ActionDispatcher(
+            mandates = LocalMandateStore(mandate),
+            inbox = inbox,
+            verifier = verifier,
+            context = {
+                context().copy(
+                    lastActionAtUtcByType = journal.cooldownHistoryByActionType(),
+                )
+            },
+            actions = actions,
+            journal = journal,
+            nowUtcMillis = { now },
+        )
+
+        val result = dispatcher.accept(proposal.proposalId)
+
+        assertEquals(DispatchStatus.EXECUTED, result.status)
+        assertNotNull(actions.agentHomeState.directive)
+        val restored = AgentHomeState.fromJson(homeStorage.read())
+        assertEquals("Réviser les notes", restored.directive?.title)
+        assertEquals(DirectiveProvenance.REMOTE_AI, restored.directive?.provenance)
+        assertEquals(proposal.proposalId, restored.directive?.sourceProposalId)
+        assertEquals(ProposalState.EXECUTED, inbox.get(proposal.proposalId)?.proposal?.state)
+    }
+
+    @Test
+    fun onlySuccessfullyExecutedEffectsStartCooldown() {
+        val journal = InMemoryAgentEffectJournal()
+        val prepared = AgentEffectRecord(
+            proposalId = "6d953dd3-9545-4f8e-b77e-e0cf6b827322",
+            idempotencyKey = "e2f49d7a-22c1-4612-96af-d60632d9634a",
+            actionType = "home.set_directive",
+            state = ProposalState.ACCEPTED,
+            effect = "Acceptée localement; effet à réconcilier",
+            atUtcMillis = now,
+            phase = AgentEffectPhase.PREPARED,
+        )
+
+        journal.append(prepared)
+        assertTrue(journal.cooldownHistoryByActionType().isEmpty())
+
+        journal.append(prepared.copy(
+            proposalId = "9a7b8c55-c838-4847-9f6e-796ad33be1f4",
+            idempotencyKey = "f201d46c-1234-4f02-9b04-396ebad7af8e",
+            actionType = "home.reorder_cards",
+            state = ProposalState.PENDING_CONFIRMATION,
+            effect = "Reportée par l'utilisateur",
+            phase = AgentEffectPhase.NONE,
+        ))
+        assertTrue(journal.cooldownHistoryByActionType().isEmpty())
+
+        journal.append(prepared.copy(
+            proposalId = "8e4af0dd-caf5-4f8f-af80-cd542946e676",
+            idempotencyKey = "69532ab1-511f-4336-a8df-aac3aca29d8d",
+            actionType = "home.reorder_cards",
+            state = ProposalState.REJECTED,
+            effect = "Action refusée par la politique.",
+            phase = AgentEffectPhase.COMPLETE,
+        ))
+        assertTrue(journal.cooldownHistoryByActionType().isEmpty())
+
+        journal.append(prepared.copy(
+            state = ProposalState.EXECUTED,
+            effect = "Directive HOME enregistrée localement.",
+            phase = AgentEffectPhase.COMPLETE,
+        ))
+        assertEquals(mapOf("home.set_directive" to now), journal.cooldownHistoryByActionType())
+    }
+
+    @Test
     fun verifierRejectsRevokedExpiredReplayedUnknownAndOutOfBoundsProposals() {
         val valid = focusProposal()
         assertFalse(verifier.verify(valid, baseMandate.copy(revoked = true), context()).accepted)
@@ -44,6 +148,18 @@ class ActionDispatcherTest {
             valid.copy(parameters = mapOf("focus_minutes" to 181, "break_minutes" to 5, "cycles" to 1)),
             baseMandate, context(),
         ).accepted)
+    }
+
+    @Test
+    fun corruptEffectJournalIsArchivedBeforeAUsableEmptyJournalIsCreated() {
+        val storage = MemoryStorage("{broken")
+
+        val journal = JsonAgentEffectJournal(storage)
+
+        assertEquals("{broken", storage.quarantinedRaw)
+        assertEquals("agent-effects.quarantine", journal.quarantineInfo()?.location)
+        assertTrue(journal.entries().isEmpty())
+        assertTrue(storage.read()?.contains("\"records\"") == true)
     }
 
     @Test
@@ -156,6 +272,221 @@ class ActionDispatcherTest {
         assertEquals(1, actions.focusProposals)
     }
 
+    @Test
+    fun restartAfterLocalEffectBeforeFinalJournalReconcilesWithoutRepeatingEffect() {
+        val inboxStorage = MemoryStorage()
+        val journalStorage = MemoryStorage()
+        val inbox = AgentInboxRepository(inboxStorage) { now }
+        val proposal = focusProposal()
+        inbox.mergePulled(listOf(proposal), "cursor")
+        val durableLocalEffects = mutableSetOf<String>()
+        val actions = FakeActions(durableLocalEffects).apply { throwAfterEffect = true }
+        val dispatcher = dispatcher(inbox, JsonAgentEffectJournal(journalStorage), actions)
+
+        assertEquals(DispatchStatus.NEEDS_RECONCILIATION, dispatcher.accept(proposal.proposalId).status)
+        assertEquals(1, actions.focusProposals)
+        assertEquals(AgentEffectPhase.PREPARED, JsonAgentEffectJournal(journalStorage).findByProposalId(proposal.proposalId)?.phase)
+
+        val restoredInbox = AgentInboxRepository(inboxStorage) { now }
+        val restoredJournal = JsonAgentEffectJournal(journalStorage)
+        val restarted = dispatcher(restoredInbox, restoredJournal, FakeActions(durableLocalEffects))
+        assertEquals(DispatchStatus.EXECUTED, restarted.accept(proposal.proposalId).status)
+        assertEquals(1, actions.focusProposals)
+        assertEquals(ProposalState.EXECUTED, restoredInbox.get(proposal.proposalId)?.proposal?.state)
+        assertEquals(1, restoredInbox.pendingAcks().size)
+    }
+
+    @Test
+    fun restartBeforeLocalEffectRetriesOnlyAfterPortProvesEffectWasNotApplied() {
+        val inboxStorage = MemoryStorage()
+        val journalStorage = MemoryStorage()
+        val inbox = AgentInboxRepository(inboxStorage) { now }
+        val proposal = focusProposal()
+        inbox.mergePulled(listOf(proposal), "cursor")
+        val applied = mutableSetOf<String>()
+        val firstAttempt = FakeActions(applied).apply { throwBeforeEffect = true }
+
+        assertEquals(DispatchStatus.NEEDS_RECONCILIATION, dispatcher(inbox, JsonAgentEffectJournal(journalStorage), firstAttempt).accept(proposal.proposalId).status)
+
+        val restoredInbox = AgentInboxRepository(inboxStorage) { now }
+        val restartedActions = FakeActions(applied)
+        assertEquals(DispatchStatus.EXECUTED, dispatcher(
+            restoredInbox,
+            JsonAgentEffectJournal(journalStorage),
+            restartedActions,
+        ).accept(proposal.proposalId).status)
+        assertEquals(1, restartedActions.focusProposals)
+        assertEquals(1, applied.size)
+    }
+
+    @Test
+    fun interruptedAcceptedProposalIsRevalidatedAfterTtlBeforeAnyRetry() {
+        val inboxStorage = MemoryStorage()
+        val journalStorage = MemoryStorage()
+        val proposal = focusProposal()
+        val inbox = AgentInboxRepository(inboxStorage) { now }
+        inbox.mergePulled(listOf(proposal), "cursor")
+        val prepared = AgentEffectRecord(
+            proposalId = proposal.proposalId,
+            idempotencyKey = proposal.idempotencyKey,
+            actionType = proposal.actionType,
+            state = ProposalState.ACCEPTED,
+            effect = "Effet préparé",
+            atUtcMillis = now,
+            phase = AgentEffectPhase.PREPARED,
+        )
+        JsonAgentEffectJournal(journalStorage).append(prepared)
+        inbox.update(proposal.proposalId, ProposalState.ACCEPTED, "Effet préparé")
+        val afterExpiry = proposal.expiresAtUtcMillis + 1L
+        val restoredInbox = AgentInboxRepository(inboxStorage) { afterExpiry }
+        val actions = FakeActions()
+        val dispatcher = ActionDispatcher(
+            LocalMandateStore(baseMandate), restoredInbox, verifier,
+            context = { context().copy(nowUtcMillis = afterExpiry) },
+            actions = actions, journal = JsonAgentEffectJournal(journalStorage), nowUtcMillis = { afterExpiry },
+        )
+
+        assertEquals(DispatchStatus.REFUSED, dispatcher.reconcileInterrupted().single().status)
+        assertEquals(0, actions.focusProposals)
+        assertEquals(ProposalState.REJECTED, restoredInbox.get(proposal.proposalId)?.proposal?.state)
+        assertEquals(1, restoredInbox.pendingAcks().size)
+    }
+
+    @Test
+    fun committedJournalRepairsInboxAndRetainsAckUntilServerConfirmsIt() {
+        val inboxStorage = MemoryStorage(failOnWrite = 3)
+        val journalStorage = MemoryStorage()
+        val inbox = AgentInboxRepository(inboxStorage) { now }
+        val proposal = focusProposal()
+        inbox.mergePulled(listOf(proposal), "cursor")
+        val actions = FakeActions()
+
+        assertEquals(DispatchStatus.EXECUTED, dispatcher(inbox, JsonAgentEffectJournal(journalStorage), actions).accept(proposal.proposalId).status)
+        assertEquals(1, actions.focusProposals)
+
+        val restoredInbox = AgentInboxRepository(inboxStorage) { now }
+        val restoredJournal = JsonAgentEffectJournal(journalStorage)
+        dispatcher(restoredInbox, restoredJournal, actions).reconcileInterrupted()
+        assertEquals(ProposalState.EXECUTED, restoredInbox.get(proposal.proposalId)?.proposal?.state)
+        assertEquals(1, restoredInbox.pendingAcks().size)
+
+        val afterLostAckResponse = AgentInboxRepository(inboxStorage) { now }
+        assertEquals(1, afterLostAckResponse.pendingAcks().size)
+        afterLostAckResponse.markAcked(proposal.proposalId)
+        assertTrue(AgentInboxRepository(inboxStorage) { now }.pendingAcks().isEmpty())
+        assertEquals(1, actions.focusProposals)
+    }
+
+    @Test
+    fun mandateIsRevalidatedAfterDurableAcceptanceAndBeforeLocalEffect() {
+        val inbox = AgentInboxRepository(MemoryStorage()) { now }
+        val proposal = focusProposal()
+        inbox.mergePulled(listOf(proposal), "cursor")
+        val mandateStore = LocalMandateStore(baseMandate)
+        var checks = 0
+        val actions = FakeActions()
+        val dispatcher = ActionDispatcher(
+            mandateStore,
+            inbox,
+            verifier,
+            context = {
+                checks++
+                if (checks == 1) mandateStore.revoke()
+                context()
+            },
+            actions = actions,
+            journal = InMemoryAgentEffectJournal(),
+            nowUtcMillis = { now },
+        )
+
+        assertEquals(DispatchStatus.REFUSED, dispatcher.accept(proposal.proposalId).status)
+        assertEquals(0, actions.focusProposals)
+    }
+
+    @Test
+    fun consentQuotaAndTtlChangesBetweenAcceptanceAndEffectAreRechecked() {
+        val consentProposal = appPolicyProposal("com.example.reader")
+        val consentInbox = AgentInboxRepository(MemoryStorage()) { now }
+        consentInbox.mergePulled(listOf(consentProposal), "consent")
+        var consentChecks = 0
+        val consentActions = FakeActions()
+        val consentDispatcher = ActionDispatcher(
+            LocalMandateStore(baseMandate), consentInbox, verifier,
+            context = {
+                consentChecks++
+                context(observed = if (consentChecks == 1) setOf("com.example.reader") else emptySet())
+            },
+            actions = consentActions, journal = InMemoryAgentEffectJournal(), nowUtcMillis = { now },
+        )
+        assertEquals(DispatchStatus.REFUSED, consentDispatcher.accept(consentProposal.proposalId).status)
+        assertEquals(0, consentActions.appPolicyProposals)
+
+        val focus = focusProposal()
+        val ttlInbox = AgentInboxRepository(MemoryStorage()) { now }
+        ttlInbox.mergePulled(listOf(focus), "ttl")
+        var ttlChecks = 0
+        var clockNow = now
+        val ttlActions = FakeActions()
+        val ttlDispatcher = ActionDispatcher(
+            LocalMandateStore(baseMandate), ttlInbox, verifier,
+            context = {
+                ttlChecks++
+                if (ttlChecks == 2) clockNow = focus.expiresAtUtcMillis
+                context().copy(nowUtcMillis = clockNow)
+            },
+            actions = ttlActions, journal = InMemoryAgentEffectJournal(), nowUtcMillis = { clockNow },
+        )
+        assertEquals(DispatchStatus.REFUSED, ttlDispatcher.accept(focus.proposalId).status)
+        assertEquals(0, ttlActions.focusProposals)
+
+        val quotaInbox = AgentInboxRepository(MemoryStorage()) { now }
+        val quotaProposal = focusProposal()
+        quotaInbox.mergePulled(listOf(quotaProposal), "quota")
+        var quotaChecks = 0
+        val quotaActions = FakeActions()
+        val quotaDispatcher = ActionDispatcher(
+            LocalMandateStore(baseMandate), quotaInbox, verifier,
+            context = {
+                quotaChecks++
+                context().copy(changesToday = if (quotaChecks == 1) 0 else baseMandate.maxChangesPerDay)
+            },
+            actions = quotaActions, journal = InMemoryAgentEffectJournal(), nowUtcMillis = { now },
+        )
+        assertEquals(DispatchStatus.REFUSED, quotaDispatcher.accept(quotaProposal.proposalId).status)
+        assertEquals(0, quotaActions.focusProposals)
+    }
+
+    @Test
+    fun aFocusReferenceCancelledAfterAcceptanceIsRefusedBeforeEffect() {
+        val ref = "accepted-focus-ref"
+        val proposal = ProposalV2(
+            schemaVersion = 2, proposalId = UUID.randomUUID().toString(), idempotencyKey = UUID.randomUUID().toString(),
+            conversationId = null, mandateId = baseMandate.id, mandateVersion = baseMandate.version,
+            contextVersion = "test", createdAtUtcMillis = now, expiresAtUtcMillis = now + 60_000,
+            actionType = AgentActionType.FOCUS_START.wireValue,
+            parameters = mapOf("session_ref" to ref), reason = "Démarrer la session",
+            requiredLevel = ProposalLevel.CONFIRM,
+        )
+        val inbox = AgentInboxRepository(MemoryStorage()) { now }
+        inbox.mergePulled(listOf(proposal), "cancelled-reference")
+        var checks = 0
+        val actions = FakeActions()
+        val dispatcher = ActionDispatcher(
+            LocalMandateStore(baseMandate), inbox, verifier,
+            context = {
+                checks++
+                context(
+                    existingFocusIds = setOf(ref),
+                    cancelledFocusIds = if (checks == 1) emptySet() else setOf(ref),
+                )
+            },
+            actions = actions, journal = InMemoryAgentEffectJournal(), nowUtcMillis = { now },
+        )
+
+        assertEquals(DispatchStatus.REFUSED, dispatcher.accept(proposal.proposalId).status)
+        assertEquals(0, actions.focusStarts)
+    }
+
     private fun focusProposal() = ProposalV2(
         schemaVersion = 2, proposalId = UUID.randomUUID().toString(), idempotencyKey = UUID.randomUUID().toString(),
         conversationId = null, mandateId = baseMandate.id, mandateVersion = baseMandate.version,
@@ -189,24 +520,74 @@ class ActionDispatcherTest {
         cancelledFocusProposalIds = cancelledFocusIds,
     )
 
-    private class MemoryStorage : OutboxStorage {
-        private var raw: String? = null
+    private fun dispatcher(
+        inbox: AgentInboxRepository,
+        journal: dev.atlas.coach.sync.agent.dispatch.AgentEffectJournal,
+        actions: AgentActionPort,
+    ) = ActionDispatcher(
+        LocalMandateStore(baseMandate), inbox, verifier,
+        context = { context() }, actions = actions, journal = journal, nowUtcMillis = { now },
+    )
+
+    private class MemoryStorage(
+        private var raw: String? = null,
+        private val failOnWrite: Int? = null,
+    ) : OutboxStorage {
+        private var writes = 0
+        var quarantinedRaw: String? = null
         override fun read() = raw
-        override fun write(value: String) { raw = value }
+        override fun write(value: String) {
+            writes++
+            if (writes == failOnWrite) throw IllegalStateException("simulated persistence interruption")
+            raw = value
+        }
+        override fun quarantine(raw: String, category: String, reason: String): String? {
+            quarantinedRaw = raw
+            return "$category.quarantine"
+        }
     }
 
-    private class FakeActions : AgentActionPort {
+    private class FakeActions(private val appliedKeys: MutableSet<String> = mutableSetOf()) : AgentActionPort {
         var focusProposals = 0
+        var appPolicyProposals = 0
+        var focusStarts = 0
+        var throwBeforeEffect = false
+        var throwAfterEffect = false
         private fun applied() = AgentActionOutcome(true, "Action appliquée")
         override fun setHomeDirective(proposal: ProposalV2) = applied()
         override fun reorderHomeCards(proposal: ProposalV2) = applied()
-        override fun proposeFocus(proposal: ProposalV2): AgentActionOutcome { focusProposals++; return applied() }
+        override fun proposeFocus(proposal: ProposalV2): AgentActionOutcome {
+            focusProposals++
+            if (throwBeforeEffect) {
+                throwBeforeEffect = false
+                throw IllegalStateException("simulated interruption before effect")
+            }
+            appliedKeys += proposal.idempotencyKey
+            if (throwAfterEffect) {
+                throwAfterEffect = false
+                throw IllegalStateException("simulated interruption after effect")
+            }
+            return applied()
+        }
         override fun planFocus(proposal: ProposalV2) = applied()
-        override fun startFocus(proposal: ProposalV2) = applied()
+        override fun startFocus(proposal: ProposalV2): AgentActionOutcome { focusStarts++; return applied() }
         override fun pauseFocus(proposal: ProposalV2) = applied()
         override fun suggestHabit(proposal: ProposalV2) = applied()
-        override fun proposeAppPolicy(proposal: ProposalV2) = applied()
+        override fun proposeAppPolicy(proposal: ProposalV2): AgentActionOutcome { appPolicyProposals++; return applied() }
         override fun adjustAppPolicy(proposal: ProposalV2) = applied()
         override fun recommendContent(proposal: ProposalV2) = applied()
+        override fun reconcile(proposal: ProposalV2, idempotencyKey: String) =
+            if (idempotencyKey in appliedKeys) AgentEffectReconciliation.APPLIED else AgentEffectReconciliation.NOT_APPLIED
+    }
+
+    private class RemoteDirectiveActions(private val homeStorage: OutboxStorage) : AgentActionPort by FakeActions() {
+        var agentHomeState = AgentHomeState()
+            private set
+
+        override fun setHomeDirective(proposal: ProposalV2): AgentActionOutcome {
+            agentHomeState = agentHomeState.withRemoteDirective(proposal)
+            homeStorage.write(agentHomeState.toJson().toString())
+            return AgentActionOutcome(true, "Directive HOME enregistrée localement.")
+        }
     }
 }

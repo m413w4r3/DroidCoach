@@ -1,0 +1,11 @@
+COMMAND: adb -s emulator-5554 shell am instrument -w -e class dev.atlas.coach.app.V61PortraitCaptureTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+dev.atlas.coach.app.V61PortraitCaptureTest:.
+
+Time: 2.661
+
+OK (1 test)
+
+
+
+HARNESS_EXIT=0

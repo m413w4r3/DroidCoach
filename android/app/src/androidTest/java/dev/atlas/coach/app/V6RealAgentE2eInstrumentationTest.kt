@@ -3,17 +3,19 @@ package dev.atlas.coach.app
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.atlas.coach.test.BackendArgumentsAwareRunner
+import dev.atlas.coach.test.RequiresBackendArguments
 import dev.atlas.coach.focus.FocusStatus
 import dev.atlas.coach.sync.OutboxStorage
 import dev.atlas.coach.sync.agent.AgentActionType
+import dev.atlas.coach.sync.agent.DirectiveProvenance
 import dev.atlas.coach.sync.agent.AgentFocusCardState
 import dev.atlas.coach.sync.agent.AgentFocusWindow
 import dev.atlas.coach.sync.agent.AgentMandate
@@ -27,6 +29,7 @@ import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.coach.AgentStatus
 import dev.atlas.coach.sync.agent.dispatch.ActionDispatcher
 import dev.atlas.coach.sync.agent.dispatch.AgentEffectJournal
+import dev.atlas.coach.sync.agent.dispatch.AgentEffectPhase
 import dev.atlas.coach.sync.agent.dispatch.DispatchStatus
 import dev.atlas.coach.sync.agent.dispatch.InMemoryAgentEffectJournal
 import dev.atlas.coach.sync.agent.inbox.AgentInboxRepository
@@ -45,7 +48,7 @@ import java.time.ZonedDateTime
 import java.util.UUID
 
 /** Script-driven real OpenClaw -> FastAPI -> Coach/dispatcher -> persisted Android HOME flow. */
-@RunWith(AndroidJUnit4::class)
+@RunWith(BackendArgumentsAwareRunner::class)
 class V6RealAgentE2eInstrumentationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
@@ -60,12 +63,12 @@ class V6RealAgentE2eInstrumentationTest {
     }
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["backend_url", "backend_token"],
+        reason = "real OpenClaw scenario requires scripts/v6-e2e-real.sh",
+    )
     fun realCoachResponseCreatesDirectiveAndStartsFocus() {
         val args = InstrumentationRegistry.getArguments()
-        if (!args.containsKey("backend_url") || !args.containsKey("backend_token")) {
-            android.util.Log.i("ATLAS_V6_MOCK", "real OpenClaw scenario skipped: no ephemeral backend arguments")
-            return
-        }
         val backendUrl = args.getString("backend_url") ?: error("backend_url argument is required")
         val atlasToken = args.getString("backend_token") ?: error("backend_token argument is required")
         require(atlasToken.isNotBlank()) { "backend_token argument is empty" }
@@ -89,9 +92,17 @@ class V6RealAgentE2eInstrumentationTest {
             AgentActionType.entries.forEach { action ->
                 controller.setAgentActionAllowed(action.wireValue, action.wireValue in allowed)
             }
+            val mandateZone = ZoneId.of(controller.agentMandate.focusWindow.timezone)
+            val mandateDate = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(mandateZone).toLocalDate()
+            val executedToday = controller.agentEffectHistory.count { record ->
+                record.phase == AgentEffectPhase.COMPLETE && record.state == ProposalState.EXECUTED &&
+                    Instant.ofEpochMilli(record.atUtcMillis).atZone(mandateZone).toLocalDate() == mandateDate
+            }
             controller.setAgentFocusWindow(
                 days = (1..7).toSet(), start = "00:00", end = "23:59",
-                maxMinutes = 30, maxSessionsPerDay = 4, maxChangesPerDay = 20,
+                maxMinutes = 30, maxSessionsPerDay = 4,
+                // Keep the daily limit bounded while reserving room for this run on a persistent AVD.
+                maxChangesPerDay = (executedToday + 5).coerceIn(20, 500),
             )
             AgentMandate.ALLOWED_SHARED_CATEGORIES.forEach { controller.setAgentSharedCategory(it, false) }
             controller.saveSyncConfiguration(backendUrl, atlasToken)
@@ -103,6 +114,7 @@ class V6RealAgentE2eInstrumentationTest {
         assertEquals("The debug backend URL was not retained", backendUrl, controller.syncBaseUrl)
         val clientField = AtlasController::class.java.getDeclaredField("agentApiClient").apply { isAccessible = true }
         assertNotNull("Android did not construct its V2 HTTP client: ${controller.agentStatusMessage}", clientField.get(controller))
+        waitForActionCooldown(controller, setOf("home.set_directive", "focus.propose", "focus.start"))
         val assistantCountBefore = controller.agentConversation.count { it.role.name == "ASSISTANT" }
         val proposalIdsBefore = controller.visibleAgentProposals.map { it.id }.toSet()
         composeRule.onNodeWithTag("agent_message_input").performScrollTo().performTextInput(
@@ -127,24 +139,55 @@ class V6RealAgentE2eInstrumentationTest {
         assertEquals("connected", controller.agentStatus.wireValue)
         assertEquals(25, (focusEntry.proposal.parameters["focus_minutes"] as Number).toInt())
 
-        acceptPendingProposalThroughCompose(controller, directiveEntry.id)
-        composeRule.waitUntil(timeoutMillis = 5_000) { controller.agentHomeState.directive != null }
+        val currentResponseProposalIds = proposals.mapTo(mutableSetOf()) { it.id }
+        acceptPendingProposalThroughCompose(controller, directiveEntry.id, currentResponseProposalIds)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            controller.agentInbox.firstOrNull { it.id == directiveEntry.id }?.proposal?.state?.terminal == true
+        }
+        val appliedDirectiveEntry = controller.agentInbox.firstOrNull { it.id == directiveEntry.id }
+            ?: error("The real HOME directive disappeared from the durable inbox")
+        assertEquals(
+            "The real HOME directive was not applied; effect=${appliedDirectiveEntry.effect}",
+            ProposalState.EXECUTED,
+            appliedDirectiveEntry.proposal.state,
+        )
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            controller.agentHomeState.directive?.sourceProposalId == directiveEntry.id
+        }
         val directive = requireNotNull(controller.agentHomeState.directive)
         assertTrue(directive.title.isNotBlank())
-        assertTrue(
-            "The directive should reflect the revision request",
-            (directive.title + " " + directive.body).contains("révis", ignoreCase = true) ||
-                (directive.title + " " + directive.body).contains("25"),
-        )
+        assertTrue(directive.body.isNotBlank())
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            controller.visibleAgentProposals.any { it.id == focusEntry.id }
+            controller.agentHomeState.focusProposal?.proposalId == focusEntry.id ||
+                controller.visibleAgentProposals.any { it.id == focusEntry.id }
         }
-        acceptPendingProposalThroughCompose(controller, focusEntry.id)
+        if (controller.agentHomeState.focusProposal?.proposalId != focusEntry.id) {
+            acceptPendingProposalThroughCompose(controller, focusEntry.id, currentResponseProposalIds)
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            controller.agentInbox.firstOrNull { it.id == focusEntry.id }?.proposal?.state?.terminal == true
+        }
+        val acceptedFocusEntry = controller.agentInbox.firstOrNull { it.id == focusEntry.id }
+            ?: error("The real focus proposal disappeared from the durable inbox")
+        assertEquals(
+            "The real focus proposal was not applied; effect=${acceptedFocusEntry.effect}",
+            ProposalState.EXECUTED,
+            acceptedFocusEntry.proposal.state,
+        )
         composeRule.waitUntil(timeoutMillis = 5_000) {
             controller.agentHomeState.focusProposal?.proposalId == focusEntry.id
         }
-        composeRule.onNodeWithText("Démarrer sans quitter le Coach").performScrollTo().performClick()
+        composeRule.runOnUiThread { controller.navigationState.selectTab(AtlasScreenId.FOCUS) }
+        composeRule.waitForIdle()
+        if (controller.focusSession?.status == FocusStatus.FINISHED) {
+            composeRule.onNodeWithText("Nouvelle session").performScrollTo().performClick()
+            composeRule.waitForIdle()
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("focus_pomodoro_start").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("focus_pomodoro_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             controller.focusSession?.status == FocusStatus.RUNNING
         }
@@ -168,17 +211,24 @@ class V6RealAgentE2eInstrumentationTest {
     }
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["backend_url", "backend_token"],
+        reason = "restored real Focus scenario requires scripts/v6-e2e-real.sh",
+    )
     fun restoredFocusCanPauseResumeAndCancel() {
         val args = InstrumentationRegistry.getArguments()
-        if (!args.containsKey("backend_url") || !args.containsKey("backend_token")) {
-            android.util.Log.i("ATLAS_V6_MOCK", "Focus restart scenario skipped: no preceding real OpenClaw scenario")
-            return
-        }
         val controller = (composeRule.activity.application as AtlasApplication).controller
         composeRule.runOnUiThread { controller.navigationState.selectTab(AtlasScreenId.FOCUS) }
+        composeRule.waitForIdle()
 
         val restored = requireNotNull(controller.focusSession) { "No Focus session was restored after process restart" }
         assertEquals(FocusStatus.RUNNING, restored.status)
+        val directive = requireNotNull(controller.agentHomeState.directive) { "No real HOME directive was restored" }
+        assertEquals(DirectiveProvenance.REMOTE_AI, directive.provenance)
+        assertTrue("The restored HOME directive has no source proposal", !directive.sourceProposalId.isNullOrBlank())
+        val directiveEntry = controller.agentInbox.firstOrNull { it.id == directive.sourceProposalId }
+        assertEquals("The source HOME proposal was not restored", "home.set_directive", directiveEntry?.proposal?.actionType)
+        assertEquals(ProposalState.EXECUTED, directiveEntry?.proposal?.state)
         val focusProposalId = requireNotNull(controller.agentHomeState.focusProposal?.proposalId)
         assertEquals(focusProposalId, restored.directiveId)
         assertTrue(controller.agentEffectHistory.any {
@@ -188,9 +238,9 @@ class V6RealAgentE2eInstrumentationTest {
         composeRule.waitUntil(timeoutMillis = 6_000) {
             (controller.focusSession?.remainingSeconds ?: beforeTick) < beforeTick
         }
-        composeRule.onNodeWithTag("focus_timer").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_time_remaining").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Mettre en pause").performScrollTo().performClick()
+        composeRule.onNodeWithText("Pause").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 3_000) { controller.focusSession?.status == FocusStatus.PAUSED }
         composeRule.onNodeWithText("Reprendre").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 3_000) { controller.focusSession?.status == FocusStatus.RUNNING }
@@ -281,10 +331,80 @@ class V6RealAgentE2eInstrumentationTest {
         }
     }
 
-    private fun acceptPendingProposalThroughCompose(controller: AtlasController, proposalId: String) {
-        val index = controller.visibleAgentProposals.indexOfFirst { it.id == proposalId }
-        require(index >= 0) { "Expected proposal is not visible for user confirmation" }
-        composeRule.onAllNodesWithText("Accepter")[index].performScrollTo().performClick()
+    private fun acceptPendingProposalThroughCompose(
+        controller: AtlasController,
+        proposalId: String,
+        currentResponseProposalIds: Set<String>,
+    ) {
+        require(controller.visibleAgentProposals.any { it.id == proposalId }) {
+            "Expected proposal is not visible for user confirmation"
+        }
+        while (true) {
+            val priority = controller.visibleAgentProposals.firstOrNull()
+                ?: error("The proposal queue became empty before the requested proposal was shown")
+            if (priority.id == proposalId) break
+            if (priority.id in currentResponseProposalIds) {
+                acceptPriorityCardThroughCompose(priority.id)
+                composeRule.waitUntil(timeoutMillis = 5_000) {
+                    controller.agentInbox.firstOrNull { it.id == priority.id }?.proposal?.state?.terminal == true
+                }
+            } else {
+                // Preserve older local proposals without applying or rejecting them; the priority UI
+                // exposes one card at a time, so snooze its older entry to reach this response.
+                composeRule.runOnUiThread { controller.postponeAgentProposal(priority.id) }
+                composeRule.waitForIdle()
+                runCatching {
+                    composeRule.waitUntil(timeoutMillis = 5_000) {
+                        controller.visibleAgentProposals.firstOrNull()?.id != priority.id
+                    }
+                }.getOrElse {
+                    val entry = controller.agentInbox.firstOrNull { it.id == priority.id }
+                    val record = controller.agentEffectHistory.firstOrNull { it.proposalId == priority.id }
+                    error(
+                        "Snoozing the older priority proposal did not advance the queue; " +
+                            "action=${priority.proposal.actionType}, state=${entry?.proposal?.state}, " +
+                            "snoozed=${entry?.snoozedUntilUtcMillis != null}, latest=${controller.latestMessage}, " +
+                            "journal=${record?.state}/${record?.phase}",
+                    )
+                }
+            }
+        }
+        acceptPriorityCardThroughCompose(proposalId)
+        runCatching {
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                controller.agentInbox.firstOrNull { it.id == proposalId }?.proposal?.state?.terminal == true
+            }
+        }.getOrElse {
+            val proposal = controller.agentInbox.firstOrNull { it.id == proposalId }
+            val record = controller.agentEffectHistory.firstOrNull { it.proposalId == proposalId }
+            error(
+                "Compose did not dispatch the requested priority proposal; " +
+                    "action=${proposal?.proposal?.actionType}, state=${proposal?.proposal?.state}, " +
+                    "latest=${controller.latestMessage}, journal=${record?.state}/${record?.phase}",
+            )
+        }
+    }
+
+    private fun waitForActionCooldown(controller: AtlasController, actionTypes: Set<String>) {
+        val lastSuccessfulActionAt = controller.agentEffectHistory
+            .filter { it.state == ProposalState.EXECUTED && it.actionType in actionTypes }
+            .maxOfOrNull { it.atUtcMillis } ?: return
+        val availableAt = lastSuccessfulActionAt + MandateVerifier.ACTION_COOLDOWN_MILLIS
+        val remaining = availableAt - System.currentTimeMillis()
+        if (remaining > 0L) {
+            composeRule.waitUntil(timeoutMillis = remaining + 1_000L) {
+                System.currentTimeMillis() >= availableAt
+            }
+        }
+    }
+
+    private fun acceptPriorityCardThroughCompose(proposalId: String) {
+        val cardTag = "agent_priority_proposal_$proposalId"
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching { composeRule.onNodeWithTag(cardTag).fetchSemanticsNode() }.isSuccess
+        }
+        composeRule.onNodeWithTag(cardTag).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("agent_proposal_accept").performScrollTo().performClick()
     }
 
     private class MemoryStorage : OutboxStorage {

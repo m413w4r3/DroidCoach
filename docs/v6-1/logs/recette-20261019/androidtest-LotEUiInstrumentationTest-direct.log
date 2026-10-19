@@ -1,0 +1,11 @@
+COMMAND: adb -s emulator-5554 shell am instrument -w -e class dev.atlas.coach.app.LotEUiInstrumentationTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+dev.atlas.coach.app.LotEUiInstrumentationTest:.....
+
+Time: 9.174
+
+OK (5 tests)
+
+
+
+HARNESS_EXIT=0

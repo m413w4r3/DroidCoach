@@ -44,4 +44,15 @@ class AtlasNavigationStateTest {
         assertTrue(navigation.canGoBack)
         assertEquals(AtlasScreenId.HOME, navigation.back())
     }
+
+    @Test
+    fun launcherCoachShortcutSelectsTheCoachDestinationDirectly() {
+        val navigation = AtlasNavigationState()
+
+        navigation.openCoachFromLauncher()
+
+        assertEquals(AtlasScreenId.COACH, navigation.current)
+        assertTrue(navigation.canGoBack)
+        assertEquals(AtlasScreenId.HOME, navigation.back())
+    }
 }

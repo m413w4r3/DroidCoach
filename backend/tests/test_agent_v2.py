@@ -19,6 +19,7 @@ from atlas_backend.models_v2 import MandateSummary, SharedContext
 from atlas_backend.openclaw_adapter import (
     FALLBACK_REPLY,
     OpenClawAgentAdapter,
+    _normalize_explicit_focus_constraints,
     _preserve_explicit_focus_minutes,
     parse_agent_output,
 )
@@ -168,8 +169,49 @@ def test_ambiguous_or_unspecified_focus_duration_is_not_rewritten():
         "Prépare une session de travail de 25 minutes puis une autre session de travail de 30 minutes.",
     )
     unspecified = _preserve_explicit_focus_minutes(output, "Aide-moi à commencer mes révisions.")
-    assert ambiguous.proposals[0].parameters.focus_minutes == 10
+    assert ambiguous.proposals == []
+    assert "Plusieurs contraintes" in ambiguous.reply
     assert unspecified.proposals[0].parameters.focus_minutes == 10
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Prépare un focus de 25 minutes, une pause de 5 minutes et 4 cycles.", {"focus_minutes": 25, "break_minutes": 5, "cycles": 4}),
+        ("Planifie 1 h 30 de travail et 15 min de pause sur 2 cycles.", {"focus_minutes": 90, "break_minutes": 15, "cycles": 2}),
+        ("Je veux 25 min de travail et 0 minute de pause.", {"focus_minutes": 25, "break_minutes": 0}),
+        ("Planifie une heure et 15 minutes de travail et 5 min de pause.", {"focus_minutes": 75, "break_minutes": 5}),
+        ("Prépare une session de vingt-cinq minutes de travail, une pause de cinq minutes et quatre cycles.", {"focus_minutes": 25, "break_minutes": 5, "cycles": 4}),
+    ],
+)
+def test_french_work_break_and_cycle_constraints_are_normalized(message, expected):
+    result = _normalize_explicit_focus_constraints(parse_agent_output(output_json()), message)
+    assert result.trace.status == "corrected"
+    parameters = result.output.proposals[0].parameters
+    for name, value in expected.items():
+        assert getattr(parameters, name) == value
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Prépare deux sessions de travail de 25 minutes puis 30 minutes.",
+        "Focus de 25 minutes, puis une session de 30 minutes.",
+        "Travail 25 minutes avec une pause de 5 puis une pause de 10 minutes.",
+        "Prépare 200 minutes de travail.",
+        "Prépare un focus de 25 minutes sur 9 cycles.",
+        "Prépare un focus de 25 minutes au total.",
+        "Prépare une session d'environ 25 minutes.",
+        "Prépare une session de travail d'une heure et demie.",
+        "Prépare un focus d'un quart d'heure.",
+        "Prépare un focus de 25 minutes avec une pause de 30 secondes.",
+    ],
+)
+def test_ambiguous_or_out_of_range_constraints_remove_focus_proposal(message):
+    result = _normalize_explicit_focus_constraints(parse_agent_output(output_json()), message)
+    assert result.trace.status == "clarification"
+    assert result.output.proposals == []
+    assert "Précise" in result.output.reply
 
 
 def test_gateway_401_is_unavailable_without_leaking_credential():

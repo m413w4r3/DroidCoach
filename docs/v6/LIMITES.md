@@ -18,10 +18,14 @@
   surveillance de saisie, kiosk, installation silencieuse, root ou Device
   Owner. La sortie vers le launcher et la pause d'urgence restent locales.
 - **Le modèle peut ignorer une consigne.** Pendant la recette réelle, OpenClaw a
-  proposé 10 minutes malgré la demande de 25. Le backend recopie une unique
-  durée de travail explicite (1–180 min) dans `focus.propose` avant policy; si
-  la formulation est ambiguë, il ne la réécrit pas. L'interface demande encore
-  la confirmation utilisateur.
+  proposé 10 minutes malgré la demande de 25. Le backend recopie les durées de
+  travail et de pause, ainsi que les cycles explicitement formulés en chiffres,
+  lorsque chacun possède une interprétation unique et respecte les bornes du
+  contrat. Une formulation ambiguë ou hors limites retire la proposition Focus
+  et demande une précision. Les cardinaux français usuels en toutes lettres sont
+  pris en charge; secondes, quarts et demi-heures demandent une précision plutôt
+  que conversion implicite. La trace journalise seulement le résultat, les
+  champs corrigés et un motif contrôlé, jamais le message utilisateur.
 - **Aucune garantie sur une génération hostile.** La sortie est analysée en
   JSON strict, limitée à cinq actions typées et revalidée par deux policies,
   mais la recette réelle n'est pas un audit adversarial complet du modèle.

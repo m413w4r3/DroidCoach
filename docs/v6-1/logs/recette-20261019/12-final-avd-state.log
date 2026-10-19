@@ -1,0 +1,8 @@
+COMMANDS: adb -s emulator-5554 shell wm size reset; settings put system font_scale 1.0; settings put system accelerometer_rotation 1; settings put system user_rotation 0; restore HOME Pixel Launcher
+Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }
+Warning: Activity not started, intent has been delivered to currently running top-most instance.
+HOME=com.google.android.apps.nexuslauncher
+fontScale=1.0
+accelerometer_rotation=1
+user_rotation=0
+PASS final restoration verified.

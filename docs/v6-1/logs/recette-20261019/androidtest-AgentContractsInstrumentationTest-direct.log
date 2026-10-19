@@ -1,0 +1,11 @@
+COMMAND: adb -s emulator-5554 shell am instrument -w -e class dev.atlas.coach.sync.agent.AgentContractsInstrumentationTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+dev.atlas.coach.sync.agent.AgentContractsInstrumentationTest:.
+
+Time: 0.024
+
+OK (1 test)
+
+
+
+HARNESS_EXIT=0

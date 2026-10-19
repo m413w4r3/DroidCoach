@@ -18,6 +18,26 @@ import java.util.UUID
 
 class AgentApiClientTest {
     @Test
+    fun executedAckSendsAcceptedTransitionBeforeEffect() {
+        val requests = withAckResponses(listOf(200, 204)) { client ->
+            client.acknowledgeExecution("proposal-1", "Directive applied", 1_800_000_123_000L)
+        }
+
+        assertEquals(listOf("accepted", "executed"), requests.map { JSONObject(it.body).getString("state") })
+        assertEquals(JSONObject.NULL, JSONObject(requests[0].body).get("effect"))
+        assertEquals("Directive applied", JSONObject(requests[1].body).getString("effect"))
+    }
+
+    @Test
+    fun executedAckResumesAfterAcceptanceWasAlreadyRecorded() {
+        val requests = withAckResponses(listOf(409, 204)) { client ->
+            client.acknowledgeExecution("proposal-1", "Directive applied", 1_800_000_123_000L)
+        }
+
+        assertEquals(listOf("accepted", "executed"), requests.map { JSONObject(it.body).getString("state") })
+    }
+
+    @Test
     fun chatInboxAndAckUseExistingBearerAndV2ContractOverHttpStub() {
         val proposal = ProposalV2(
             schemaVersion = 2,
@@ -107,6 +127,53 @@ class AgentApiClientTest {
             assertTrue(requests[2].requestLine.startsWith("POST /v2/agent/proposals/"))
             assertEquals("executed", JSONObject(requests[2].body).getString("state"))
         }
+    }
+
+    private fun withAckResponses(statuses: List<Int>, action: (AgentApiClient) -> Unit): List<StubRequest> {
+        val requests = Collections.synchronizedList(mutableListOf<StubRequest>())
+        ServerSocket(0).use { server ->
+            server.soTimeout = 8_000
+            val worker = Thread {
+                statuses.forEach { status ->
+                    server.accept().use { socket ->
+                        socket.soTimeout = 8_000
+                        val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.ISO_8859_1))
+                        val requestLine = reader.readLine().orEmpty()
+                        val headers = mutableMapOf<String, String>()
+                        while (true) {
+                            val line = reader.readLine() ?: break
+                            if (line.isEmpty()) break
+                            val split = line.indexOf(':')
+                            if (split > 0) headers[line.substring(0, split).lowercase()] = line.substring(split + 1).trim()
+                        }
+                        val length = headers["content-length"]?.toIntOrNull() ?: 0
+                        val bodyChars = CharArray(length)
+                        var read = 0
+                        while (read < length) {
+                            val count = reader.read(bodyChars, read, length - read)
+                            if (count < 0) break
+                            read += count
+                        }
+                        requests += StubRequest(requestLine, headers["authorization"], String(bodyChars, 0, read))
+                        val reason = if (status in 200..299) "OK" else "Conflict"
+                        val body = if (status in 200..299) "" else "{}"
+                        val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                        val output = socket.getOutputStream()
+                        output.write("HTTP/1.1 $status $reason\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.ISO_8859_1))
+                        output.write(bytes)
+                        output.flush()
+                    }
+                }
+            }.apply { isDaemon = true; start() }
+
+            action(AgentApiClient(
+                "http://127.0.0.1:${server.localPort}",
+                BearerTokenProvider { "test-token" },
+            ))
+            worker.join(8_000)
+            assertTrue("Ack stub did not finish", !worker.isAlive)
+        }
+        return requests.toList()
     }
 
     private data class StubRequest(val requestLine: String, val authorization: String?, val body: String)

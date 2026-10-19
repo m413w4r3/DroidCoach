@@ -568,7 +568,7 @@ class MandateVerifier {
 
     companion object {
         private const val CLOCK_SKEW_MILLIS = 5 * 60 * 1_000L
-        private const val ACTION_COOLDOWN_MILLIS = 30_000L
+        internal const val ACTION_COOLDOWN_MILLIS = 30_000L
         private const val SEVEN_DAYS_MILLIS = 7L * 24L * 60L * 60L * 1_000L
         private const val DAY_MILLIS = 24L * 60L * 60L * 1_000L
         val PREAUTHORIZED_ACTIONS = setOf(

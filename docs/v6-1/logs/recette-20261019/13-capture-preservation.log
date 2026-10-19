@@ -1,0 +1,1 @@
+COMMAND: compare SHA-256 for historical capture files before/after dedicated E2E scripts\nPASS docs/v4/captures/H2-synchronized.png\nPASS docs/v4/captures/H2-offline.png\nPASS docs/v6/captures/v6-openclaw-home.png\nPASS docs/v6/captures/v6-openclaw-home.xml\n

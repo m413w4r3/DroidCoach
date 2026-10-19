@@ -6,6 +6,7 @@
 package dev.atlas.coach.app
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -42,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -135,6 +138,7 @@ private fun LauncherHomeContent(
     val catalog = remember(context) { AndroidLauncherCatalog(context) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var refreshToken by remember { mutableIntStateOf(0) }
     var apps by remember { mutableStateOf<List<LauncherAppModel>>(emptyList()) }
@@ -193,9 +197,11 @@ private fun LauncherHomeContent(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
             .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+            modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds().verticalScroll(rememberScrollState())
+                .testTag("launcher_home_scroll_region")
                 .padding(top = 18.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -245,24 +251,20 @@ private fun LauncherHomeContent(
                             .replaceFirstChar { it.uppercase(Locale.FRANCE) },
                         style = MaterialTheme.typography.bodyLarge,
                     )
-                    TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = { drawerOpen = true }) {
+                    TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_open_drawer"), onClick = { drawerOpen = true }) {
                         Text("Applications et recherche")
                     }
                 }
 
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (density.fontScale >= 1.6f) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text("Prochaine étape", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                                Text(agentState.agentStatus.homeStatusLabel(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        } else {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Prochaine étape", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                                Text(agentState.agentStatus.homeStatusLabel(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
+                        Text("Prochaine étape", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            agentState.directiveStatusLabel(),
+                            modifier = Modifier.testTag("launcher_directive_status"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         TextButton(
                             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
                                 .semantics {
@@ -288,7 +290,7 @@ private fun LauncherHomeContent(
                             )
                         }
                         Button(
-                            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
+                            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("launcher_directive_cta"),
                             onClick = {
                                 when (agentState.directive.primaryAction) {
                                     HomePrimaryAction.START_FOCUS -> openFocus()
@@ -303,14 +305,23 @@ private fun LauncherHomeContent(
                     }
                 }
 
+                agentState.focusCard?.let { card ->
+                    HomeAgentCardView(card) { openHomeCard(card.action, openFocus, openCoach, openLibrary) }
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Applications favorites", style = MaterialTheme.typography.titleMedium)
                     if (pinnedApps.isEmpty()) {
-                        Text("Aucun favori. Ouvrez le tiroir et épinglez les applications que vous utilisez.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Aucun favori.",
+                            modifier = Modifier.testTag("launcher_favorites_empty"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     } else {
                         pinnedApps.forEach { app ->
                             TextButton(
-                                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp)
+                                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_favorite_${app.appPackage}")
                                     .semantics {
                                         contentDescription = "Ouvrir l'application favorite ${app.appLabel}"
                                         customActions = listOf(CustomAccessibilityAction("Retirer ${app.appLabel} des favoris") {
@@ -325,42 +336,43 @@ private fun LauncherHomeContent(
                         }
                     }
                 }
-
-                agentState.focusCard?.let { card ->
-                    HomeAgentCardView(card) { openHomeCard(card.action, openFocus, openCoach, openLibrary) }
-                }
-                agentState.contentCard?.let { card ->
-                    HomeAgentCardView(card) { openHomeCard(card.action, openFocus, openCoach, openLibrary) }
-                }
             }
             launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
 
+        val compactFooter = density.fontScale >= 1.5f ||
+            configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
+            configuration.screenHeightDp < 620
         Column(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).testTag("launcher_fixed_footer"),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Button(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp)
+                    .testTag("launcher_emergency_pause")
                     .semantics { contentDescription = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes" },
                 onClick = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
             ) {
-                Text(if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Pause d'urgence · 30 min")
+                Text(
+                    text = when {
+                        controller.isEmergencyPaused && compactFooter -> "Fin de pause"
+                        controller.isEmergencyPaused -> "Terminer la pause d'urgence"
+                        compactFooter -> "Pause · 30 min"
+                        else -> "Pause d'urgence · 30 min"
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp),
-                    onClick = openPreviousLauncher,
-                ) { Text("Launcher précédent") }
-                TextButton(
-                    modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp),
-                    onClick = openHomeSettings,
-                ) { Text("Réglages HOME") }
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag("launcher_compact_footer"),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                val footerLabelStyle = if (compactFooter) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge
+                CompactHomeAction("Launcher", "Ouvrir le launcher précédent", footerLabelStyle, Modifier.weight(1f).testTag("launcher_previous_launcher"), openPreviousLauncher)
+                CompactHomeAction("Réglages", "Ouvrir les réglages HOME", footerLabelStyle, Modifier.weight(1f).testTag("launcher_home_settings"), openHomeSettings)
+                CompactHomeAction("Coach", "Ouvrir le Coach", footerLabelStyle, Modifier.weight(1f).testTag("launcher_open_coach"), openCoach)
             }
-            TextButton(
-                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
-                onClick = openCoach,
-            ) { Text("Coach") }
         }
     }
 
@@ -386,8 +398,19 @@ private fun HomeAgentCardView(card: HomeAgentCard, onAction: () -> Unit) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleSmall)
             Text(card.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            TextButton(modifier = Modifier.sizeIn(minHeight = 44.dp), onClick = onAction) { Text(card.actionLabel) }
+            TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_focus_card_action"), onClick = onAction) { Text(card.actionLabel) }
         }
+    }
+}
+
+@Composable
+private fun CompactHomeAction(label: String, description: String, labelStyle: androidx.compose.ui.text.TextStyle, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    TextButton(
+        modifier = modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics { contentDescription = description },
+        onClick = onClick,
+    ) {
+        Text(label, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -402,12 +425,6 @@ private fun openHomeCard(
         HomeCardAction.OPEN_COACH -> openCoach()
         HomeCardAction.OPEN_LIBRARY -> openLibrary()
     }
-}
-
-private fun HomeAgentStatus.homeStatusLabel(): String = when (this) {
-    HomeAgentStatus.CONNECTED -> "Connecté"
-    HomeAgentStatus.UNAVAILABLE -> "Agent indisponible"
-    HomeAgentStatus.LOCAL_ONLY -> "Mode local · hors ligne"
 }
 
 private fun HomePrimaryAction.homeActionLabel(): String = when (this) {

@@ -137,10 +137,7 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Pause coach").performScrollTo().performClick()
         composeRule.onNodeWithText("Le coach est en pause. Vous pouvez le réactiver quand vous le souhaitez.").performScrollTo().assertIsDisplayed()
         openCoach()
-        composeRule.onNodeWithText("Discuter").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Alternative").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Reporter").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Pause").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("agent_message_input").performScrollTo().assertIsDisplayed()
         openHome()
         openLibrary()
         composeRule.onNodeWithText("Recherches génériques").performScrollTo().assertIsDisplayed()
@@ -242,7 +239,7 @@ class AtlasLaunchTest {
     @Test
     fun reefPomodoroSetupStartsAnAtlasSessionWithCycleState() {
         openFocus()
-        composeRule.onNodeWithText("Démarrer le Pomodoro").performScrollTo().performClick()
+        composeRule.onNodeWithTag("focus_pomodoro_start").performScrollTo().performClick()
         composeRule.onNodeWithText("Pomodoro démarré · 25 min de concentration, pause courte de 5 min", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Cycle 1 / 4").assertIsDisplayed()
     }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.focus.ReefPomodoroConfig
 
@@ -45,7 +46,7 @@ internal fun ReefPomodoroSetup(
         Text("Session proposée", style = MaterialTheme.typography.titleMedium)
         Text("$focus min de concentration · pause $shortBreak min · $totalCycles cycles")
         Button(
-            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("focus_pomodoro_start"),
             onClick = { onStart(currentPomodoroConfig(focus, shortBreak, longBreak, longBreakEvery, totalCycles, continuous)) },
         ) { Text("Démarrer") }
         TextButton(

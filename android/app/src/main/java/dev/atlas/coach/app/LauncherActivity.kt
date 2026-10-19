@@ -92,17 +92,22 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private fun openCoach() {
-        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        controller.navigationState.openCoachFromLauncher()
+        openMainActivity()
     }
 
     private fun openFocus() {
         controller.navigationState.selectTab(AtlasScreenId.FOCUS)
-        openCoach()
+        openMainActivity()
     }
 
     private fun openLibrary() {
-        controller.navigationState.navigate(AtlasScreenId.LIBRARY)
-        openCoach()
+        controller.navigationState.selectTab(AtlasScreenId.LIBRARY)
+        openMainActivity()
+    }
+
+    private fun openMainActivity() {
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     private fun openSavedSystemLauncher() {

@@ -58,6 +58,12 @@ le retour au launcher d'origine.
 - Révoquer empêche les prochains envois/effets; cela ne peut pas annuler une
   requête déjà transmise au Gateway ni retirer des données déjà reçues par un
   serveur distant.
+- Le client écrit une entrée `PREPARED` durable avant chaque branche d'effet,
+  puis `COMPLETE` avant de rendre l'acquittement serveur éligible. Après crash,
+  un effet préparé n'est jamais rejoué si son résultat est inconnu : le port
+  d'action doit confirmer `APPLIED` ou `NOT_APPLIED`. Le port actuel par défaut
+  retourne `UNKNOWN`, ce qui privilégie l'absence de doublon mais peut demander
+  une réconciliation par l'hôte.
 - Le serveur accepte seulement un Bearer ATLAS sur ses API; le jeton Gateway
   reste dans le backend. Ni l'un ni l'autre ne sont écrits dans les logs de
   recette ou les captures.

@@ -7,12 +7,23 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.ui.AtlasTheme
@@ -23,6 +34,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.UUID
+import dev.atlas.coach.sync.agent.AgentActionType
+import dev.atlas.coach.sync.agent.ProposalLevel
+import dev.atlas.coach.sync.agent.ProposalV2
+import dev.atlas.coach.sync.agent.dispatch.AgentEffectReconciliation
 import android.os.ParcelFileDescriptor
 
 @RunWith(AndroidJUnit4::class)
@@ -71,7 +87,9 @@ class LotEUiInstrumentationTest {
         }
 
         composeRule.onNodeWithText("Prochaine étape").assertIsDisplayed()
-        composeRule.onNodeWithText("Mode local · hors ligne").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_directive_status").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_focus_card_action").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Suggestion de contenu").assertCountEquals(0)
         composeRule.waitForIdle()
         shell("screencap -p /sdcard/v6-home-dark.png")
 
@@ -100,13 +118,106 @@ class LotEUiInstrumentationTest {
         }
 
         composeRule.onNodeWithText("Session proposée").assertIsDisplayed()
-        composeRule.onNodeWithText("25 min de focus · 5 min de pause · 2 cycle(s)").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_task_title").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_duration_value").assertTextEquals("25")
         assertEquals(null, controller.focusSession)
-        composeRule.onNodeWithText("Démarrer").performClick()
-        composeRule.onNodeWithText("Session en cours").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_advanced_settings").performClick()
+        composeRule.onNodeWithTag("focus_advanced_sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_advanced_done").performClick()
+        composeRule.onNodeWithTag("focus_task_title").performTextReplacement("Lecture de test")
+        composeRule.onNodeWithTag("focus_duration_minus").performClick()
+        composeRule.onNodeWithTag("focus_pomodoro_start").performClick()
+        assertEquals("Lecture de test", controller.focusSession?.taskTitle)
+        assertEquals(24L * 60L, controller.focusSession?.workSeconds)
+        composeRule.onNodeWithTag("focus_phase").assertIsDisplayed()
         composeRule.onNodeWithText("Pause").assertIsDisplayed()
         composeRule.onNodeWithText("Annuler").assertIsDisplayed()
         composeRule.onNodeWithText("Terminer").assertIsDisplayed()
+    }
+
+    @Test
+    fun coachConversationLinksToThreeSeparateAdvancedScreens() {
+        resetIsolatedState()
+        val controller = AtlasController(isolatedContext)
+        controller.navigationState.replace(AtlasScreenId.COACH)
+        val currentRoute = mutableStateOf(AtlasScreenId.COACH)
+        composeRule.setContent {
+            AtlasTheme(AtlasThemePreference.DARK) {
+                androidx.compose.foundation.layout.Column(
+                    modifier = androidx.compose.ui.Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                ) {
+                    when (currentRoute.value) {
+                        AtlasScreenId.AGENT_SETTINGS -> AgentSettingsScreen(controller)
+                        AtlasScreenId.AGENT_SHARING -> AgentSharingScreen(controller)
+                        AtlasScreenId.AGENT_EFFECTS -> AgentEffectsScreen(controller)
+                        else -> AgentCoachScreen(controller = controller, pullOnOpen = false)
+                    }
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("Conversation").assertIsDisplayed()
+        composeRule.onNodeWithText("Proposition prioritaire").assertIsDisplayed()
+        composeRule.onNodeWithTag("agent_settings_link").performScrollTo().performClick()
+        assertEquals(AtlasScreenId.AGENT_SETTINGS, controller.navigationState.current)
+        composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
+        composeRule.onNodeWithText("Mandat du Coach").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Données partagées avec le coach").assertCountEquals(0)
+
+        composeRule.runOnUiThread {
+            controller.navigationState.replace(AtlasScreenId.COACH)
+            currentRoute.value = AtlasScreenId.COACH
+        }
+        composeRule.onNodeWithTag("agent_sharing_link").performScrollTo().performClick()
+        assertEquals(AtlasScreenId.AGENT_SHARING, controller.navigationState.current)
+        composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
+        composeRule.onNodeWithText("Données partagées avec le coach").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Mandat et autonomie").assertCountEquals(0)
+
+        composeRule.runOnUiThread {
+            controller.navigationState.replace(AtlasScreenId.COACH)
+            currentRoute.value = AtlasScreenId.COACH
+        }
+        composeRule.onNodeWithTag("agent_effects_link").performScrollTo().performClick()
+        assertEquals(AtlasScreenId.AGENT_EFFECTS, controller.navigationState.current)
+        composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
+        composeRule.onNodeWithTag("agent_effect_history_screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun recreatingControllerRestoresRemoteDirectiveProvenanceAndAppliedEffectMarker() {
+        resetIsolatedState()
+        val firstController = AtlasController(isolatedContext)
+        val now = System.currentTimeMillis()
+        val proposal = ProposalV2(
+            schemaVersion = 2,
+            proposalId = UUID.randomUUID().toString(),
+            idempotencyKey = UUID.randomUUID().toString(),
+            conversationId = null,
+            mandateId = firstController.agentMandate.id,
+            mandateVersion = firstController.agentMandate.version,
+            contextVersion = "lot-e-restart-test",
+            createdAtUtcMillis = now,
+            expiresAtUtcMillis = now + 600_000L,
+            actionType = AgentActionType.HOME_SET_DIRECTIVE.wireValue,
+            parameters = mapOf(
+                "title" to "Directive durable",
+                "body" to "Une étape locale persistée.",
+                "primary_action" to "open_coach",
+            ),
+            reason = "Vérifier la persistance après reconstruction du contrôleur.",
+            requiredLevel = ProposalLevel.CONFIRM,
+        )
+        firstController.setHomeDirective(proposal)
+
+        val restartedController = AtlasController(isolatedContext)
+
+        assertEquals("Directive durable", restartedController.agentHomeState.directive?.title)
+        assertEquals(proposal.proposalId, restartedController.agentHomeState.directive?.sourceProposalId)
+        assertEquals(
+            AgentEffectReconciliation.APPLIED,
+            restartedController.reconcile(proposal, proposal.idempotencyKey),
+        )
     }
 
     @Test
@@ -137,9 +248,9 @@ class LotEUiInstrumentationTest {
         }
 
         composeRule.onNodeWithContentDescription("Activer la pause d'urgence hors ligne pendant 30 minutes").assertIsDisplayed()
-        composeRule.onNodeWithText("Launcher précédent").assertIsDisplayed()
-        composeRule.onNodeWithText("Réglages HOME").assertIsDisplayed()
-        composeRule.onNodeWithText("Coach").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_home_settings").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     }
 
     private fun resetIsolatedState() {

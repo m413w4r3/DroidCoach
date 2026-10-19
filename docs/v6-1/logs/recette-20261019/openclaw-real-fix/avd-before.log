@@ -1,0 +1,6 @@
+avd=Pixel_9_Pro_XL_2
+serial=device
+font_scale=1.0
+auto_rotation=1
+user_rotation=0
+home_role=com.google.android.apps.nexuslauncher

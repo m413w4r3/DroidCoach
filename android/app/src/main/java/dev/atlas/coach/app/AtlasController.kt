@@ -115,8 +115,11 @@ import dev.atlas.coach.sync.agent.dispatch.ActionDispatcher
 import dev.atlas.coach.sync.agent.dispatch.AgentActionOutcome
 import dev.atlas.coach.sync.agent.dispatch.AgentActionPort
 import dev.atlas.coach.sync.agent.dispatch.AgentEffectRecord
+import dev.atlas.coach.sync.agent.dispatch.AgentEffectReconciliation
 import dev.atlas.coach.sync.agent.dispatch.AgentEffectJournal
 import dev.atlas.coach.sync.agent.dispatch.JsonAgentEffectJournal
+import dev.atlas.coach.sync.agent.dispatch.cooldownHistoryByActionType
+import dev.atlas.coach.sync.agent.withRemoteDirective
 import dev.atlas.coach.sync.agent.coach.AgentApiClient
 import dev.atlas.coach.sync.agent.coach.AgentApiException
 import dev.atlas.coach.sync.agent.coach.AgentConversationMessage
@@ -268,6 +271,8 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         FileOutboxStorage(File(appContext.filesDir, "atlas_agent_effects_v1.json")),
     )
     private var agentHomeStateSnapshot by mutableStateOf(AgentHomeState.fromJson(restored["agentHomeState"] as? String))
+    private val appliedLocalAgentEffectKeys = restored["appliedLocalAgentEffectKeys"].asList()
+        .filterIsInstance<String>().toMutableSet()
     private var agentConversationSnapshot by mutableStateOf(
         restored["agentConversation"].asList().mapNotNull { it.asMap()?.let { values -> runCatching { AgentConversationMessage.fromMap(values) }.getOrNull() } }.takeLast(80),
     )
@@ -359,6 +364,11 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         refreshSyncRuntime()
         refreshAgentApiRuntime()
         pruneExpiredAgentInbox()
+        reconcilePersistedBackendObservation()
+        val interruptedEffects = agentDispatcher.reconcileInterrupted()
+        if (interruptedEffects.any { it.status == dev.atlas.coach.sync.agent.dispatch.DispatchStatus.NEEDS_RECONCILIATION }) {
+            latestMessage = "Un effet local reste en attente de réconciliation; aucune répétition incertaine n'a été lancée."
+        }
         when {
             recoveryReason != null && persistenceAllowed -> persist()
             recoveryReason != null -> touch()
@@ -392,7 +402,15 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     val isEmergencyPaused: Boolean get() = policy.pauseUntil?.let { it > clock.nowMillis() } == true
     val quietHoursEnabled: Boolean get() = policy.quietHours != null
     val agentMandate: AgentMandate get() = agentMandateStore.current()
-    val agentHomeState: AgentHomeState get() = agentHomeStateSnapshot
+    val agentHomeState: AgentHomeState get() {
+        val homeObservation = agentHomeStateSnapshot.backendObservation
+        val inboxObservation = agentInboxRepository.backendObservation()
+        val homeChecked = homeObservation.checkedAtUtcMillis ?: -1L
+        val inboxChecked = inboxObservation.checkedAtUtcMillis ?: -1L
+        return if (inboxChecked > homeChecked) {
+            agentHomeStateSnapshot.copy(backendObservation = inboxObservation)
+        } else agentHomeStateSnapshot
+    }
     val agentConversation: List<AgentConversationMessage> get() = agentConversationSnapshot
     val agentInbox: List<AgentInboxEntry> get() = agentInboxRepository.all()
     val visibleAgentProposals: List<AgentInboxEntry> get() = agentInboxRepository.visible()
@@ -612,6 +630,17 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
         mainHandler.post {
             if (generation != syncGeneration.get()) return@post
+            if (remoteBackend != null) {
+                when (result.status) {
+                    SyncStatus.SUCCESS -> recordBackendContactSucceeded()
+                    SyncStatus.AUTH_REQUIRED, SyncStatus.CONTRACT_ERROR -> if (syncTokenConfigured) {
+                        recordBackendContactSucceeded()
+                    }
+                    SyncStatus.RETRY_SCHEDULED, SyncStatus.PROTOCOL_ERROR, SyncStatus.REJECTED ->
+                        recordBackendContactFailed()
+                    SyncStatus.LOCAL_ONLY, SyncStatus.NOTHING_TO_SYNC -> Unit
+                }
+            }
             syncInProgress = false
             syncStatus = result.status
             syncPendingCount = syncOutbox.size()
@@ -719,6 +748,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             runCatching { client.pullInbox(agentInboxRepository.cursor()) }
                 .onSuccess { response -> mainHandler.post {
                     agentInboxRepository.mergePulled(response.proposals, response.cursor)
+                    recordBackendContactSucceeded(inboxAlreadyMarked = true)
                     agentStatus = AgentStatus.CONNECTED
                     agentStatusMessage = "Agent connecté"
                     dispatchPreauthorizedInbox()
@@ -726,6 +756,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
                 .onFailure { mainHandler.post {
+                    recordBackendContactFailed()
                     agentStatus = AgentStatus.UNAVAILABLE
                     agentStatusMessage = "Agent indisponible — fonctions locales actives"
                     touch()
@@ -768,6 +799,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     agentStatusMessage = if (response.status == AgentStatus.CONNECTED) "Agent connecté"
                         else "Agent indisponible — fonctions locales actives"
                     agentInboxRepository.mergePulled(response.proposals, null)
+                    recordBackendContactSucceeded(inboxAlreadyMarked = true)
                     addAgentConversationMessage(AgentConversationMessage(
                         role = AgentMessageRole.ASSISTANT,
                         text = response.reply,
@@ -788,6 +820,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     )
                     agentStatus = AgentStatus.UNAVAILABLE
                     agentStatusMessage = "Agent indisponible — fonctions locales actives"
+                    recordBackendContactFailed()
                     addLocalAgentReply(conversationId)
                     persist()
                 } }
@@ -844,15 +877,44 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
     }
 
+    private fun reconcilePersistedBackendObservation() {
+        val homeObservation = agentHomeStateSnapshot.backendObservation
+        val inboxObservation = agentInboxRepository.backendObservation()
+        val homeChecked = homeObservation.checkedAtUtcMillis ?: -1L
+        val inboxChecked = inboxObservation.checkedAtUtcMillis ?: -1L
+        if (inboxChecked > homeChecked) {
+            agentHomeStateSnapshot = agentHomeStateSnapshot.copy(backendObservation = inboxObservation)
+        }
+    }
+
+    private fun recordBackendContactSucceeded(
+        atUtcMillis: Long = clock.nowMillis(),
+        inboxAlreadyMarked: Boolean = false,
+    ) {
+        if (!inboxAlreadyMarked) runCatching { agentInboxRepository.markBackendContactSucceeded(atUtcMillis) }
+        agentHomeStateSnapshot = agentHomeStateSnapshot.withBackendContactSucceeded(atUtcMillis)
+        persist()
+    }
+
+    private fun recordBackendContactFailed(atUtcMillis: Long = clock.nowMillis()) {
+        runCatching { agentInboxRepository.markBackendUnavailable(atUtcMillis) }
+        agentHomeStateSnapshot = agentHomeStateSnapshot.withBackendContactFailed(atUtcMillis)
+        persist()
+    }
+
     private fun sendPendingAgentAcks(client: AgentApiClient) {
         agentInboxRepository.pendingAcks().forEach { entry ->
             try {
-                client.acknowledge(
-                    entry.id,
-                    entry.proposal.state.wireValue,
-                    entry.effect,
-                    clock.nowMillis(),
-                )
+                if (entry.proposal.state == ProposalState.EXECUTED) {
+                    client.acknowledgeExecution(entry.id, entry.effect, clock.nowMillis())
+                } else {
+                    client.acknowledge(
+                        entry.id,
+                        entry.proposal.state.wireValue,
+                        entry.effect,
+                        clock.nowMillis(),
+                    )
+                }
                 agentInboxRepository.markAcked(entry.id)
             } catch (_: Exception) {
                 // Ack remains durable and is retried on the next Coach open or explicit pull.
@@ -894,7 +956,34 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         persist()
     }
 
-    fun startAgentProposedFocus(sessionProposalId: String) {
+    fun startAgentProposedFocus(
+        sessionProposalId: String,
+        taskTitle: String? = null,
+        config: ReefPomodoroConfig? = null,
+    ) {
+        val chosenTask = taskTitle?.trim()?.takeIf { it.isNotEmpty() }
+        if (taskTitle != null && (chosenTask == null || chosenTask.length > FocusPlan.MAX_TASK_TITLE_LENGTH)) {
+            latestMessage = "Le titre de tâche doit contenir entre 1 et ${FocusPlan.MAX_TASK_TITLE_LENGTH} caractères."
+            touch()
+            return
+        }
+        if (chosenTask != null || config != null) {
+            val card = agentHomeStateSnapshot.focusProposal?.takeIf { it.proposalId == sessionProposalId } ?: run {
+                latestMessage = "La session proposée n'est plus disponible."
+                touch()
+                return
+            }
+            agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card.copy(
+                label = chosenTask ?: card.label,
+                focusMinutes = config?.focusMinutes ?: card.focusMinutes,
+                breakMinutes = config?.shortBreakMinutes ?: card.breakMinutes,
+                cycles = config?.totalWorkCycles ?: card.cycles,
+                longBreakMinutes = config?.longBreakMinutes ?: card.longBreakMinutes,
+                longBreakEveryCycles = config?.cycles ?: card.longBreakEveryCycles,
+                continuous = config?.continuous ?: card.continuous,
+            ))
+            persist()
+        }
         val mandate = agentMandateStore.current()
         val now = clock.nowMillis()
         val start = ProposalV2(
@@ -1082,8 +1171,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             vitalPackages = protected + policy.vitalPackageNames,
             changesToday = journal.count { it.state == ProposalState.EXECUTED },
             focusSessionsToday = focusCount,
-            lastActionAtUtcByType = agentEffectJournal.entries().groupBy { it.actionType }
-                .mapValues { (_, entries) -> entries.maxOf { it.atUtcMillis } },
+            lastActionAtUtcByType = agentEffectJournal.cooldownHistoryByActionType(),
             existingFocusProposalIds = card?.takeIf { it.state != AgentFocusCardState.CANCELLED }?.let { setOf(it.proposalId) }.orEmpty(),
             cancelledFocusProposalIds = agentHomeStateSnapshot.cancelledFocusProposalIds +
                 card?.takeIf { it.state == AgentFocusCardState.CANCELLED }?.let { setOf(it.proposalId) }.orEmpty(),
@@ -1143,12 +1231,8 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     override fun setHomeDirective(proposal: ProposalV2): AgentActionOutcome {
-        agentHomeStateSnapshot = agentHomeStateSnapshot.copy(directive = AgentHomeDirective(
-            title = proposal.parameters.getValue("title") as String,
-            body = proposal.parameters.getValue("body") as String,
-            primaryAction = proposal.parameters.getValue("primary_action") as String,
-            focusProposalId = proposal.parameters["focus_proposal_id"] as? String,
-        ))
+        agentHomeStateSnapshot = agentHomeStateSnapshot.withRemoteDirective(proposal)
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Directive HOME enregistrée localement.")
     }
@@ -1157,6 +1241,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val requested = (proposal.parameters["order"] as List<*>).filterIsInstance<String>()
         val completed = requested + AgentHomeState.DEFAULT_CARD_ORDER.filterNot(requested::contains)
         agentHomeStateSnapshot = agentHomeStateSnapshot.copy(cardOrder = completed)
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Ordre des cartes HOME enregistré; les autres cartes restent visibles.")
     }
@@ -1173,8 +1258,11 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             focusMinutes = (proposal.parameters["focus_minutes"] as Number).toInt(),
             breakMinutes = (proposal.parameters["break_minutes"] as Number).toInt(),
             cycles = (proposal.parameters["cycles"] as Number).toInt(),
+            longBreakMinutes = 15,
+            longBreakEveryCycles = minOf(4, (proposal.parameters["cycles"] as Number).toInt()),
         )
         agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card)
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Session proposée enregistrée localement.")
     }
@@ -1215,8 +1303,11 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             state = AgentFocusCardState.PLANNED,
             startAtUtcMillis = startAt.toInstant().toEpochMilli(),
             routineId = routine.id,
+            longBreakMinutes = 15,
+            longBreakEveryCycles = minOf(4, (proposal.parameters.getValue("cycles") as Number).toInt()),
         )
         agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card)
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Session planifiée avec une alarme inexacte; le démarrage demandera une confirmation.")
     }
@@ -1235,13 +1326,17 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             presetId = "agent-${card.proposalId}",
             workSeconds = card.focusMinutes * 60L,
             shortBreakSeconds = card.breakMinutes.coerceAtLeast(1) * 60L,
-            longBreakSeconds = 15 * 60L,
+            longBreakSeconds = card.longBreakMinutes * 60L,
+            longBreakEveryCycles = card.longBreakEveryCycles,
             totalWorkCycles = card.cycles,
+            continuous = card.continuous,
+            taskTitle = card.label,
         )
         val started = focusEngine.start(plan, card.proposalId)
         focusSnapshot = started
         if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) phaseAlarms.schedule(started)
         agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card.copy(state = AgentFocusCardState.RUNNING))
+        recordAppliedLocalEffect(proposal)
         enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS)
         persist()
         return AgentActionOutcome(true, "Focus démarré localement sans ouvrir d'activité.")
@@ -1258,6 +1353,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         agentHomeStateSnapshot.focusProposal?.takeIf { it.proposalId == ref }?.let { card ->
             agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card.copy(state = AgentFocusCardState.PAUSED))
         }
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Session Focus mise en pause.")
     }
@@ -1266,6 +1362,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val name = proposal.parameters.getValue("name") as String
         val schedule = proposal.parameters.getValue("schedule") as String
         agentSuggestionsSnapshot = (agentSuggestionsSnapshot + "Habitude proposée : $name · $schedule").takeLast(100)
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Suggestion d'habitude enregistrée; aucune habitude n'a été créée sans confirmation.")
     }
@@ -1275,6 +1372,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val minutes = proposal.parameters.getValue("daily_limit_minutes") as Number
         agentSuggestionsSnapshot = (agentSuggestionsSnapshot +
             "Politique proposée pour $packageRef : ${minutes.toInt()} min/jour · aucune règle modifiée.").takeLast(100)
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Politique suggérée localement; elle n'est pas encore appliquée.")
     }
@@ -1295,8 +1393,33 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             return AgentActionOutcome(false, "URL refusée par la liste de domaines autorisés.")
         }
         agentHomeStateSnapshot = agentHomeStateSnapshot.copy(contentRecommendation = AgentContentCard(contentId, url, title))
+        recordAppliedLocalEffect(proposal)
         persist()
         return AgentActionOutcome(true, "Contenu recommandé sur HOME; son ouverture reste manuelle.")
+    }
+
+    override fun reconcile(proposal: ProposalV2, idempotencyKey: String): AgentEffectReconciliation {
+        if (proposal.idempotencyKey != idempotencyKey) return AgentEffectReconciliation.UNKNOWN
+        if (idempotencyKey in appliedLocalAgentEffectKeys) return AgentEffectReconciliation.APPLIED
+        return when (AgentActionType.parse(proposal.actionType)) {
+            AgentActionType.HOME_SET_DIRECTIVE,
+            AgentActionType.HOME_REORDER_CARDS,
+            AgentActionType.HABIT_SUGGEST,
+            AgentActionType.APP_POLICY_PROPOSE,
+            AgentActionType.APP_POLICY_ADJUST,
+            AgentActionType.CONTENT_RECOMMEND -> AgentEffectReconciliation.NOT_APPLIED
+            // Focus also schedules or cancels Android alarms; absence of the durable marker
+            // cannot prove whether that platform side effect was observed before a crash.
+            AgentActionType.FOCUS_PROPOSE,
+            AgentActionType.FOCUS_PLAN,
+            AgentActionType.FOCUS_START,
+            AgentActionType.FOCUS_PAUSE,
+            null -> AgentEffectReconciliation.UNKNOWN
+        }
+    }
+
+    private fun recordAppliedLocalEffect(proposal: ProposalV2) {
+        appliedLocalAgentEffectKeys += proposal.idempotencyKey
     }
 
     fun resumeCoach() {
@@ -1360,6 +1483,30 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             "Pomodoro démarré · ${config.focusMinutes} min de concentration, " +
                 "pause courte de ${config.shortBreakMinutes} min · " +
                 "${plan.totalWorkCycles} cycles de travail au total."
+        }
+        persist()
+    }
+
+    fun startFocus(config: ReefPomodoroConfig, taskTitle: String) {
+        val normalizedTitle = taskTitle.trim()
+        if (normalizedTitle.isEmpty() || normalizedTitle.length > FocusPlan.MAX_TASK_TITLE_LENGTH) {
+            latestMessage = "Le titre de tâche doit contenir entre 1 et ${FocusPlan.MAX_TASK_TITLE_LENGTH} caractères."
+            touch()
+            return
+        }
+        if (capabilities[CAP_FOCUS] != true) {
+            latestMessage = "Le focus est désactivé dans les paramètres."
+            touch()
+            return
+        }
+        val plan = config.toPomodoroConfig().toFocusPlan(
+            "pomodoro-${config.focusMinutes}-${config.shortBreakMinutes}-${config.longBreakMinutes}-${config.cycles}",
+        ).copy(taskTitle = normalizedTitle)
+        startFocus(plan)
+        latestMessage = if (config.continuous) {
+            "Pomodoro démarré · $normalizedTitle · ${config.focusMinutes} min par cycle, mode continu."
+        } else {
+            "Pomodoro démarré · $normalizedTitle · ${config.focusMinutes} min par cycle · ${plan.totalWorkCycles} cycles."
         }
         persist()
     }
@@ -2064,6 +2211,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             "agentConversation" to agentConversationSnapshot.map(AgentConversationMessage::toMap),
             "agentConversationId" to agentConversationId,
             "agentSuggestions" to agentSuggestionsSnapshot,
+            "appliedLocalAgentEffectKeys" to appliedLocalAgentEffectKeys.toList(),
         )
     }
 

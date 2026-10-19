@@ -1,0 +1,4 @@
+proposal_ack_status_200=4
+proposal_ack_status_404=95
+current_run_ack_200_count_at_least=4
+current_run_ack_409_count=0

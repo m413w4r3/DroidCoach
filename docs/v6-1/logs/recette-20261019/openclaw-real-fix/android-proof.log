@@ -1,0 +1,7 @@
+--------- beginning of main
+10-19 19:43:43.320 14764 14779 I ATLAS_V6_REAL: agent=connected proposals=2 home_title=Faire un rappel actif focus_minutes=25 focus=RUNNING effect_journal=recorded
+10-19 19:44:22.435 15422 15439 I ATLAS_V6_REAL: agent=connected proposals=2 home_title=Réviser avec trois questions focus_minutes=25 focus=RUNNING effect_journal=recorded
+10-19 19:44:32.925 15709 15725 I ATLAS_V6_REAL: restart=restored timer=local pause=passed resume=passed cancel=passed
+10-19 19:51:09.068 19887 19904 I ATLAS_V6_REAL: agent=connected proposals=2 home_title=Cartographier une leçon de mémoire focus_minutes=25 focus=RUNNING effect_journal=recorded
+10-19 19:51:19.079 20182 20198 I ATLAS_V6_REAL: restart=restored timer=local pause=passed resume=passed cancel=passed
+10-19 19:54:54.737 22350 22366 I ATLAS_V6_REAL: agent=connected proposals=2 home_title=Expliquer une notion par écrit focus_minutes=25 focus=RUNNING effect_journal=recorded

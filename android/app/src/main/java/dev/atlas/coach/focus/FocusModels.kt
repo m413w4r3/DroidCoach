@@ -38,6 +38,7 @@ data class FocusPlan(
     val longBreakEveryCycles: Int = 4,
     val totalWorkCycles: Int = 4,
     val continuous: Boolean = false,
+    val taskTitle: String? = null,
 ) {
     init {
         require(presetId.isNotBlank()) { "presetId must not be blank" }
@@ -48,6 +49,7 @@ data class FocusPlan(
         }
         require(longBreakEveryCycles > 0) { "longBreakEveryCycles must be positive" }
         require(totalWorkCycles > 0) { "totalWorkCycles must be positive" }
+        require(taskTitle == null || taskTitle.length <= MAX_TASK_TITLE_LENGTH) { "taskTitle is too long" }
     }
 
     fun scaled(factor: Double): FocusPlan {
@@ -62,6 +64,8 @@ data class FocusPlan(
     }
 
     companion object {
+        const val MAX_TASK_TITLE_LENGTH = 120
+
         fun fromPreset(preset: FocusPreset): FocusPlan = FocusPlan(
             presetId = preset.presetId,
             workSeconds = preset.workSeconds,
@@ -97,6 +101,7 @@ data class FocusSession(
     /** For legacy maps without these fields, fromMap migrates to an unbounded continuous session. */
     val totalWorkCycles: Int = Int.MAX_VALUE,
     val continuous: Boolean = true,
+    val taskTitle: String? = null,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "id" to id,
@@ -115,6 +120,7 @@ data class FocusSession(
         "longBreakEveryCycles" to longBreakEveryCycles,
         "totalWorkCycles" to totalWorkCycles,
         "continuous" to continuous,
+        "taskTitle" to taskTitle,
     )
 
     fun toPlan(): FocusPlan = FocusPlan(
@@ -125,6 +131,7 @@ data class FocusSession(
         longBreakEveryCycles = longBreakEveryCycles,
         totalWorkCycles = totalWorkCycles,
         continuous = continuous,
+        taskTitle = taskTitle,
     )
 
     companion object {
@@ -168,6 +175,7 @@ data class FocusSession(
                 remainingMillis = remainingMillis,
                 totalWorkCycles = totalWorkCycles,
                 continuous = continuous,
+                taskTitle = values["taskTitle"] as? String,
             )
             require(id.isNotBlank() && presetId.isNotBlank()) { "Focus IDs must not be blank" }
             require(session.createdAtUtcMillis >= 0L && session.updatedAtUtcMillis >= 0L) { "Invalid focus timestamps" }

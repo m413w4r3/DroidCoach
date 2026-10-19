@@ -74,3 +74,21 @@
 - Lot F : l'exception cleartext reste limitée au build debug et à l'hôte AVD `10.0.2.2`; un appareil réel doit utiliser HTTPS. Le script de recette refuse un AVD absent, ne fait pas `pm clear`, et n'installe/reprend le package ATLAS que s'il a posé son marqueur de test.
 - Lot F : `LauncherActivity` reçoit temporairement le rôle HOME seulement pour la capture réelle; le script mémorise puis restaure le titulaire précédent, ici le launcher Android.
 - Lot F : quand une demande contient une unique durée de travail explicite de 1 à 180 minutes, le backend recopie cette valeur dans `focus.propose.focus_minutes` après la sortie du modèle. Plusieurs durées de travail explicites restent ambiguës et ne sont pas réécrites.
+- Lot C : l’observation backend HOME reste fraîche cinq minutes; après ce TTL, l’état devient `UNVERIFIED`. Provenance de directive, disponibilité backend et dernier succès sont des champs persistés distincts. Les JSON d’inbox/journal corrompus sont archivés avant recréation; si l’archive échoue, l’état d’origine reste en lecture seule. Le journal effet ne supprime plus ses tombstones pour respecter l’idempotence; à 500 entrées, il bloque les nouveaux dispatchs.
+
+## V6.1 — Lot E UX (2026-10-19)
+
+- HOME affiche la provenance de la directive, l’état backend et la date/heure du dernier contact réussi; le statut reste explicite même pour une directive locale. Une observation distante périmée ne redevient pas « en ligne ».
+- HOME montre la directive puis au plus une carte Focus, en donnant la priorité à la session active; la recommandation de contenu reste dans la bibliothèque. Les favoris sans élément sont ramenés à une ligne.
+- Le pied HOME garde la pause d’urgence fixe et les actions Launcher précédent, Réglages et Coach dans des cibles d’au moins 48 dp; leurs libellés deviennent courts en paysage ou quand le texte est agrandi, tandis que le contenu reste défilable au-dessus.
+- Le bouton Coach du launcher sélectionne explicitement la destination Coach. Focus et Bibliothèque sélectionnent chacune leur route sans être redirigées vers Coach.
+- Le parcours Coach présente conversation puis proposition et ses quatre décisions. Mandat, partage de données et journal d’effets sont trois destinations séparées; seuls des libellés lisibles sont affichés.
+- La tâche Pomodoro part du titre de directive et reste modifiable. Toute la configuration modifiée, y compris pauses, cycles et mode continu, est appliquée à la session locale après Démarrer. Les champs facultatifs ajoutés aux propositions Focus sont rétrocompatibles avec les anciennes données (`15 min`, cadence `4`, mode continu désactivé).
+- Les réglages avancés Pomodoro utilisent une `ModalBottomSheet`; la session synthétique de 20 secondes reste dans Diagnostic avancé, hors du parcours Focus quotidien.
+- Aucune nouvelle source OSS n’est adaptée et aucune dépendance n’est ajoutée pour Lot E; l’interface utilise les composants Material 3 / AndroidX déjà présents.
+
+## V6.1 — E2 corrections ciblées (2026-10-19)
+
+- En paysage, avec texte agrandi ou sous une hauteur d’écran de 620 dp, la pause d’urgence reste une action pleine largeur distincte et les trois accès secondaires restent sur une seule rangée compacte. Chaque cible reste au moins 48 dp; la zone de contenu est bornée et séparée du pied par 8 dp. Ce choix maintient les accès persistants sans recouvrir le CTA.
+- Le badge Sync est dérivé des contrôles de consentement/configuration, de l’état transport et de l’observation backend Lot C (TTL de cinq minutes). Sans URL ou jeton, il annonce la configuration requise et précise que la file reste locale; une observation périmée devient « contact à vérifier », jamais « joignable ».
+- Les propositions conservent leurs IDs d’action. L’éditeur traduit `open_coach` et `focus.start` en libellés français et reconvertit une valeur modifiée en ID avant sauvegarde; aucun changement de contrat n’est introduit.

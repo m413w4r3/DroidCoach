@@ -1,0 +1,10 @@
+COMMAND: adb -s emulator-5554 shell am force-stop dev.atlas.coach
+COMMAND: adb -s emulator-5554 shell am start -n dev.atlas.coach/.app.LauncherActivity
+COMMAND: adb -s emulator-5554 shell am start -a android.intent.action.MAIN -c android.intent.category.HOME
+COMMAND: adb -s emulator-5554 shell dumpsys activity activities | rg 'mResumedActivity|topResumedActivity' | tail -n 2
+Starting: Intent { cmp=dev.atlas.coach/.app.LauncherActivity }
+ATLAS process after relaunch: 11149
+State assertion: directive/provenance/focus restoration NOT TESTED; real proposal application failed before force-stop stage.
+Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }
+Warning: Activity not started, its current task has been brought to the front
+      topResumedActivity=ActivityRecord{246848441 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t2}

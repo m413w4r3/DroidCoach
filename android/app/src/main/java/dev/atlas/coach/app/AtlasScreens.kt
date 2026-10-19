@@ -182,88 +182,42 @@ internal fun ShortcutButton(label: String, modifier: Modifier = Modifier, onClic
 
 @Composable
 internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int, onChooseHabit: () -> Unit) {
-    val activeSession = controller.focusSession
     val proposal = controller.agentHomeState.focusProposal?.takeIf {
         (it.state == AgentFocusCardState.PROPOSED || it.state == AgentFocusCardState.PLANNED) &&
             it.proposalId !in controller.agentHomeState.cancelledFocusProposalIds
     }
-    if (proposal != null && (activeSession == null || activeSession.status == FocusStatus.CANCELLED) &&
-        controller.capabilities[AtlasController.CAP_FOCUS] == true
-    ) {
-        FocusSessionScreen(
-            controller = controller,
-            proposedSession = ProposedFocusSession(
-                focusMinutes = proposal.focusMinutes,
-                breakMinutes = proposal.breakMinutes,
-                cycles = proposal.cycles,
-                label = proposal.label.take(60),
-                reason = "Session préparée par le coach. Vous pouvez la corriger avant de démarrer.",
-            ),
-            onStartProposed = { controller.startAgentProposedFocus(proposal.proposalId) },
-            onChooseHabit = onChooseHabit,
+    val proposed = proposal?.takeIf {
+        controller.focusSession?.status !in setOf(FocusStatus.RUNNING, FocusStatus.PAUSED) &&
+            controller.capabilities[AtlasController.CAP_FOCUS] == true
+    }?.let {
+        ProposedFocusSession(
+            focusMinutes = it.focusMinutes,
+            breakMinutes = it.breakMinutes,
+            cycles = it.cycles,
+            label = it.label.take(60),
+            reason = "Session préparée par le Coach. Modifiez la tâche et les réglages avant de démarrer.",
+            longBreakMinutes = it.longBreakMinutes,
+            longBreakEveryCycles = it.longBreakEveryCycles,
+            continuous = it.continuous,
         )
-        return
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Un pas à la fois", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Text(
-            if (controller.capabilities[AtlasController.CAP_FOCUS_NOTIFICATIONS] == true) {
-                "Compte à rebours local avec alarmes Android inexactes et notifications facultatives."
-            } else {
-                "Compte à rebours local. Les alertes hors écran sont désactivées dans les paramètres."
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = controller::navigateToFocusStats) { Text("Statistiques de focus") }
-        val session = controller.focusSession
-        if (session == null || session.status == FocusStatus.CANCELLED) {
-            if (controller.capabilities[AtlasController.CAP_FOCUS] != true) {
-                Text("Focus désactivé dans les paramètres.")
-                return@Column
-            }
-            Text("Choisissez votre rythme", style = MaterialTheme.typography.titleMedium)
-            Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTagModifier("focus_25"), onClick = { controller.startFocus(FocusPreset.POMODORO_25_5) }) { Text("Commencer · 25 min / pause 5 min") }
-            OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTagModifier("focus_10"), onClick = { controller.startFocus(FocusPreset.VARIANT_10_2) }) { Text("Commencer · 10 min / pause 2 min") }
-            OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTagModifier("focus_demo"), onClick = controller::startDemoFocus) { Text("Mode démo · 20 secondes") }
-            ReefPomodoroSetup(onStart = controller::startFocus)
-        } else if (session.status == FocusStatus.FINISHED) {
-            Text("Session terminée", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-            Text(if (session.continuous) "Mode continu · ${session.completedWorkCycles} cycles terminés" else "Cycle ${session.completedWorkCycles} / ${session.totalWorkCycles}")
-            Text("Session liée à : ${controller.directiveTitle(session.directiveId)}")
-            if (controller.capabilities[AtlasController.CAP_HABITS] == true && controller.activeHabits.isNotEmpty() && controller.canLinkCompletedFocusToHabit) {
-                OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = onChooseHabit) { Text("Relier à une habitude…") }
-            } else if (controller.focusSession?.continuous == true || (controller.focusSession?.completedWorkCycles ?: 0) < (controller.focusSession?.totalWorkCycles ?: 0)) {
-                Text("Le lien à une habitude est proposé après tous les cycles d'un plan fini.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (controller.capabilities[AtlasController.CAP_FOCUS] == true) {
-                Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { controller.startFocus(FocusPreset.VARIANT_10_2) }) { Text("Nouvelle session · 10 min / pause 2 min") }
-            } else {
-                Text("Focus désactivé dans les paramètres.")
-            }
+        if (controller.capabilities[AtlasController.CAP_FOCUS] != true) {
+            Text("Focus désactivé dans les paramètres.")
         } else {
-            Text("${session.phase.focusPhaseLabel()} · ${session.status.focusStatusLabel()}", style = MaterialTheme.typography.titleMedium)
-            val timerState = session.toReefTimerState()
-            if (timerState.isPomodoroMode && session.status != FocusStatus.FINISHED) {
-                Text(
-                    if (session.continuous) "Cycle ${timerState.currentCycle} · mode continu"
-                    else "Cycle ${session.completedWorkCycles + 1} / ${session.totalWorkCycles}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(formatSeconds(session.remainingSeconds), fontSize = 64.sp, fontWeight = FontWeight.Light, letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth().testTagModifier("focus_timer"), textAlign = TextAlign.Center)
-            Text("Session liée à : ${controller.directiveTitle(session.directiveId)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (controller.capabilities[AtlasController.CAP_FOCUS] == true) {
-                Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp), onClick = controller::toggleFocusPause) {
-                    Text(if (session.status == FocusStatus.RUNNING) "Mettre en pause" else "Reprendre")
-                }
-            } else {
-                Text("Focus désactivé. La session est en pause.")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = controller::cancelFocus) { Text("Annuler") }
-                OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = controller::finishFocus) { Text("Terminer") }
-            }
+            FocusSessionScreen(
+                controller = controller,
+                proposedSession = proposed,
+                onStartProposed = proposal?.let { card ->
+                    { taskTitle, config -> controller.startAgentProposedFocus(card.proposalId, taskTitle, config) }
+                },
+                onChooseHabit = onChooseHabit,
+            )
         }
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTagModifier("focus_statistics"),
+            onClick = controller::navigateToFocusStats,
+        ) { Text("Statistiques de focus") }
     }
 }
 
@@ -470,6 +424,20 @@ internal fun LibraryScreen(controller: AtlasController, @Suppress("UNUSED_PARAME
         }
         Text("Les ouvertures passent par ACTION_VIEW et le sélecteur Android. Aucun historique de lecture n'est collecté.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { showAddLink = true }) { Text("Ajouter un lien vidéo précis") }
+        controller.agentHomeState.contentRecommendation?.let { recommendation ->
+            Card(modifier = Modifier.fillMaxWidth().testTag("library_coach_recommendation")) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Suggestion du Coach", style = MaterialTheme.typography.titleMedium)
+                    Text(recommendation.title, style = MaterialTheme.typography.bodyLarge)
+                    Text("La suggestion reste dans la bibliothèque; son ouverture demande votre action.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val savedItem = recommendation.contentId?.let { id -> controller.contentItems.firstOrNull { it.id == id } }
+                    if (savedItem != null) {
+                        TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = { open(savedItem) }) { Text("Ouvrir") }
+                    }
+                    recommendation.url?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2) }
+                }
+            }
+        }
         Text("Liens vidéo sélectionnés", style = MaterialTheme.typography.titleMedium)
         val links = controller.contentItems.filter { it.kind == ContentKind.VIDEO_LINK }
         if (links.isEmpty()) Text("Aucun lien vidéo ajouté.")
@@ -548,8 +516,8 @@ internal fun LibraryScreen(controller: AtlasController, @Suppress("UNUSED_PARAME
 }
 
 @Composable
-internal fun CoachScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
-    AgentCoachScreen(controller)
+internal fun CoachScreen(controller: AtlasController, revision: Int) {
+    AgentCoachScreen(controller, revision = revision)
 }
 
 @Composable
@@ -558,7 +526,10 @@ internal fun MoreScreen(controller: AtlasController) {
         Text("Autres espaces", style = MaterialTheme.typography.headlineSmall)
         AtlasSection("Bibliothèque et journal") {
             AtlasSecondaryButton("Bibliothèque", onClick = { controller.navigationState.navigate(AtlasScreenId.LIBRARY) })
-            AtlasSecondaryButton("Coach et journal", onClick = { controller.navigationState.navigate(AtlasScreenId.COACH) })
+            AtlasSecondaryButton("Coach", onClick = { controller.navigationState.navigate(AtlasScreenId.COACH) })
+            AtlasSecondaryButton("Mandat du Coach", onClick = { controller.navigationState.navigate(AtlasScreenId.AGENT_SETTINGS) })
+            AtlasSecondaryButton("Données partagées", onClick = { controller.navigationState.navigate(AtlasScreenId.AGENT_SHARING) })
+            AtlasSecondaryButton("Journal des effets", onClick = { controller.navigationState.navigate(AtlasScreenId.AGENT_EFFECTS) })
             if (controller.capabilities[AtlasController.CAP_FOCUS_ROUTINES] == true) {
                 AtlasSecondaryButton("Routines de focus", onClick = { controller.navigationState.navigate(AtlasScreenId.ROUTINES) })
             }
@@ -686,6 +657,11 @@ internal fun DiagnosticsScreen(controller: AtlasController) {
         }
         AtlasSection("Mode de démonstration") {
             AtlasStatus("Événements synthétiques uniquement", AtlasStatusKind.SIMULATED)
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTagModifier("focus_demo_start"),
+                enabled = controller.capabilities[AtlasController.CAP_FOCUS] == true,
+                onClick = controller::startDemoFocus,
+            ) { Text("Démarrer Focus · 20 secondes") }
             CapabilityRow("Simulateur de règles", controller, AtlasController.CAP_SIMULATED_RULES)
             AtlasSecondaryButton("Ouvrir le simulateur de friction", enabled = controller.capabilities[AtlasController.CAP_SIMULATED_RULES] == true,
                 onClick = { controller.navigationState.navigate(AtlasScreenId.SIMULATOR) })

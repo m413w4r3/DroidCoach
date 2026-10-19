@@ -34,3 +34,5 @@ internal class AtlasNavigationState(initialRoute: String = AtlasScreenId.HOME) {
         return current
     }
 }
+
+internal fun AtlasNavigationState.openCoachFromLauncher() = selectTab(AtlasScreenId.COACH)

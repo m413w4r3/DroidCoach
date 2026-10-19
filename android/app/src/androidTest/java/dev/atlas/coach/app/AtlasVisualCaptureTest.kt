@@ -16,7 +16,9 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -196,13 +198,15 @@ class AtlasVisualCaptureTest {
         val fontScale = mutableStateOf(1f)
         show(controller, screen, night, fontScale)
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Ouvrir le tiroir d'applications").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("launcher_open_drawer").fetchSemanticsNodes().isNotEmpty()
         }
         capture("G-launcher-home.png")
-        composeRule.onNodeWithText("Ouvrir le tiroir d'applications").performScrollTo().performClick()
+        composeRule.onNodeWithTag("launcher_open_drawer").performScrollTo().performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Épingler").fetchSemanticsNodes().isNotEmpty() ||
+            composeRule.onAllNodesWithTag("launcher_search").fetchSemanticsNodes().isNotEmpty() &&
+                (composeRule.onAllNodesWithText("Épingler").fetchSemanticsNodes().isNotEmpty() ||
                 composeRule.onAllNodesWithText("Aucune application avec un raccourci d'accueil n'est visible.").fetchSemanticsNodes().isNotEmpty()
+                )
         }
         if (composeRule.onAllNodesWithText("Épingler").fetchSemanticsNodes().isNotEmpty()) {
             composeRule.onAllNodesWithText("Épingler")[0].performScrollTo().performClick()

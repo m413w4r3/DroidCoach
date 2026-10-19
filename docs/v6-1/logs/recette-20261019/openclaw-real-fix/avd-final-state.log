@@ -1,0 +1,8 @@
+boot_completed=1
+font_scale=1.0
+accelerometer_rotation=1
+user_rotation=0
+home_activity=com.google.android.apps.nexuslauncher/.NexusLauncherActivity
+home_role_holder=com.google.android.apps.nexuslauncher
+wm_size=Physical size: 1344x2992
+PASS: Pixel Launcher, fontScale 1.0, automatic rotation restored.

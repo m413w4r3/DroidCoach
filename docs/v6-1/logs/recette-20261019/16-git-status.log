@@ -1,0 +1,52 @@
+COMMAND: git status --short --branch
+## feat/atlas-v6-1-stabilisation
+ M android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/app/AtlasPresentationTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/app/AtlasVisualCaptureTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/app/LauncherPresentationTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/app/LotEUiInstrumentationTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/app/V6RealAgentE2eInstrumentationTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/sync/RemoteBackendE2eInstrumentationTest.kt
+ M android/app/src/androidTest/java/dev/atlas/coach/sync/SyncSettingsScreenCaptureTest.kt
+ M android/app/src/main/java/dev/atlas/coach/app/AgentCoachScreen.kt
+ M android/app/src/main/java/dev/atlas/coach/app/AtlasApp.kt
+ M android/app/src/main/java/dev/atlas/coach/app/AtlasController.kt
+ M android/app/src/main/java/dev/atlas/coach/app/AtlasNavigationState.kt
+ M android/app/src/main/java/dev/atlas/coach/app/AtlasScreenId.kt
+ M android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt
+ M android/app/src/main/java/dev/atlas/coach/app/FocusRoutinesScreen.kt
+ M android/app/src/main/java/dev/atlas/coach/app/HomeAgentState.kt
+ M android/app/src/main/java/dev/atlas/coach/app/LauncherActivity.kt
+ M android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt
+ M android/app/src/main/java/dev/atlas/coach/app/ReefPomodoroSetup.kt
+ M android/app/src/main/java/dev/atlas/coach/app/SyncSettingsScreen.kt
+ M android/app/src/main/java/dev/atlas/coach/app/ui/AtlasTheme.kt
+ M android/app/src/main/java/dev/atlas/coach/focus/FocusEngine.kt
+ M android/app/src/main/java/dev/atlas/coach/focus/FocusModels.kt
+ M android/app/src/main/java/dev/atlas/coach/sync/EventOutbox.kt
+ M android/app/src/main/java/dev/atlas/coach/sync/agent/AgentHomeState.kt
+ M android/app/src/main/java/dev/atlas/coach/sync/agent/dispatch/ActionDispatcher.kt
+ M android/app/src/main/java/dev/atlas/coach/sync/agent/inbox/AgentInboxRepository.kt
+ M android/app/src/test/java/dev/atlas/coach/app/AtlasNavigationStateTest.kt
+ M android/app/src/test/java/dev/atlas/coach/app/HomeAgentStateTest.kt
+ M android/app/src/test/java/dev/atlas/coach/sync/agent/dispatch/ActionDispatcherTest.kt
+ M android/app/src/test/java/dev/atlas/coach/sync/agent/inbox/AgentInboxRepositoryTest.kt
+ M backend/atlas_backend/openclaw_adapter.py
+ M backend/tests/test_agent_v2.py
+ M docs/DECISIONS_AUTOMATIQUES.md
+ M docs/v6/HOME_STATE_API.md
+ M docs/v6/LIMITES.md
+ M docs/v6/SECURITE_ET_MANDAT.md
+?? android/app/src/androidTest/java/dev/atlas/coach/app/HomeLandscapeFooterInstrumentationTest.kt
+?? android/app/src/androidTest/java/dev/atlas/coach/app/V61LandscapeCaptureTest.kt
+?? android/app/src/androidTest/java/dev/atlas/coach/app/V61PortraitCaptureTest.kt
+?? android/app/src/androidTest/java/dev/atlas/coach/test/
+?? android/app/src/main/java/dev/atlas/coach/app/PomodoroSessionSetup.kt
+?? android/app/src/main/java/dev/atlas/coach/app/SyncStatusPresentation.kt
+?? android/app/src/test/java/dev/atlas/coach/app/ProposalActionLabelsTest.kt
+?? android/app/src/test/java/dev/atlas/coach/app/SyncStatusPresentationTest.kt
+?? docs/v6-1/
+
+COMMAND: git rev-parse --abbrev-ref HEAD && git rev-parse --short HEAD
+feat/atlas-v6-1-stabilisation
+21b6018

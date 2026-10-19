@@ -5,6 +5,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
@@ -25,6 +27,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 private val AtlasTypography = Typography(
     headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold),
@@ -62,7 +66,9 @@ fun AtlasTheme(
         }
     }
     val view = LocalView.current
-    val indication = if (preference == AtlasThemePreference.AMOLED) NoAnimationIndication else LocalIndication.current
+    val indication = if (preference == AtlasThemePreference.AMOLED) {
+        StaticPressIndication(Color(palette.onSurface).copy(alpha = 0.14f))
+    } else LocalIndication.current
     val scheme = if (dark) darkColorScheme(
         primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
         primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
@@ -116,15 +122,37 @@ fun AtlasTheme(
     }
 }
 
-/** Suppresses animated press ripples for AMOLED; the app currently defines no screen transitions. */
-private object NoAnimationIndication : IndicationNodeFactory {
-    override fun create(interactionSource: InteractionSource): DelegatableNode = object : Modifier.Node(), DrawModifierNode {
-        override fun ContentDrawScope.draw() = drawContent()
+/** Static pressed overlay for AMOLED: tactile feedback without a ripple animation. */
+internal class StaticPressIndication(private val pressedColor: Color) : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode = StaticPressNode(interactionSource, pressedColor)
+
+    override fun equals(other: Any?): Boolean = other is StaticPressIndication && other.pressedColor == pressedColor
+
+    override fun hashCode(): Int = pressedColor.hashCode()
+}
+
+private class StaticPressNode(
+    private val interactionSource: InteractionSource,
+    private val pressedColor: Color,
+) : Modifier.Node(), DrawModifierNode {
+    private var pressed = false
+
+    override fun onAttach() {
+        coroutineScope.launch {
+            interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is PressInteraction.Press -> pressed = true
+                    is PressInteraction.Release, is PressInteraction.Cancel -> pressed = false
+                }
+                invalidateDraw()
+            }
+        }
     }
 
-    override fun equals(other: Any?): Boolean = other === this
-
-    override fun hashCode(): Int = System.identityHashCode(this)
+    override fun ContentDrawScope.draw() {
+        drawContent()
+        if (pressed) drawRect(pressedColor)
+    }
 }
 
 private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {

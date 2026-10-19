@@ -59,7 +59,7 @@ class SyncSettingsScreenCaptureTest {
 
         when (state) {
             "disabled" -> {
-                composeRule.onNodeWithText("Désactivé · LocalMock").assertIsDisplayed()
+                composeRule.onNodeWithText("Désactivée").assertIsDisplayed()
                 assertEquals(SyncStatus.LOCAL_ONLY, controller.syncStatus)
             }
             "synchronized", "offline" -> {
@@ -75,12 +75,12 @@ class SyncSettingsScreenCaptureTest {
                     composeRule.waitUntil(15_000) {
                         controller.syncStatus == SyncStatus.SUCCESS && controller.syncPendingCount == 0
                     }
-                    composeRule.onNodeWithText("Synchronisé").assertIsDisplayed()
+                    composeRule.onNodeWithTag("sync_status_card").assertIsDisplayed()
                 } else {
                     composeRule.waitUntil(15_000) {
                         controller.syncStatus == SyncStatus.RETRY_SCHEDULED && controller.syncPendingCount == 1
                     }
-                    composeRule.onNodeWithText("Hors ligne · en attente 1").assertIsDisplayed()
+                    composeRule.onNodeWithTag("sync_status_card").assertIsDisplayed()
                 }
             }
         }

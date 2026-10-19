@@ -1,0 +1,4 @@
+COMMAND: adb -s emulator-5554 reboot
+PASS reboot requested without wipe.
+PASS sys.boot_completed=1 sdk=37 avd=Pixel_9_Pro_XL_2
+OK

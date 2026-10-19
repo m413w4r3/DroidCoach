@@ -1,0 +1,38 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:javaPreCompileDebug
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:parseDebugLocalResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:generateDebugRFile
+> Task :app:mergeDebugResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:processDebugManifestForPackage
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:processDebugResources
+> Task :app:compileDebugKotlin
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 9s
+24 actionable tasks: 24 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.6.0/userguide/configuration_cache_enabling.html

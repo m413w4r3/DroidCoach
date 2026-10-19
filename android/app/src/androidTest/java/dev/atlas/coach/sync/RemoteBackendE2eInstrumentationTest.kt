@@ -1,7 +1,8 @@
 package dev.atlas.coach.sync
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.atlas.coach.test.BackendArgumentsAwareRunner
+import dev.atlas.coach.test.RequiresBackendArguments
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -11,16 +12,16 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /** Script-driven Android -> FastAPI mock -> Android and offline recovery proof. */
-@RunWith(AndroidJUnit4::class)
+@RunWith(BackendArgumentsAwareRunner::class)
 class RemoteBackendE2eInstrumentationTest {
     @Test
+    @RequiresBackendArguments(
+        keys = ["scenario", "backend_url", "backend_token"],
+        reason = "backend scenario requires scripts/v4-backend-e2e.sh",
+    )
     fun runRequestedBackendScenario() {
         val arguments = InstrumentationRegistry.getArguments()
-        val scenario = arguments.getString("scenario")
-        if (scenario == null) {
-            android.util.Log.i("ATLAS_H2", "backend scenario not requested; no E2E call executed")
-            return
-        }
+        val scenario = arguments.getString("scenario") ?: error("scenario argument is required")
         val backendUrl = arguments.getString("backend_url") ?: error("backend_url argument is required")
         val token = arguments.getString("backend_token") ?: error("backend_token argument is required")
         val context = InstrumentationRegistry.getInstrumentation().targetContext

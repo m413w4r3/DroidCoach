@@ -1,0 +1,76 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:javaPreCompileDebug
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:generateDebugRFile
+> Task :app:mergeDebugResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:extractProguardFiles
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:generateDebugGlobalSynthetics
+> Task :app:desugarDebugFileDependencies
+> Task :app:mergeDebugJniLibFolders
+> Task :app:checkDebugDuplicateClasses
+> Task :app:mergeDebugNativeLibs
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeLibDexDebug
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
+
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:processDebugResources
+> Task :app:mergeExtDexDebug
+> Task :app:compileDebugKotlin
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:generateDebugLintReportModel
+> Task :app:generateDebugAndroidTestLintModel
+> Task :app:generateDebugUnitTestLintModel
+> Task :app:mergeDebugJavaResource
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+
+> Task :app:dexBuilderDebug
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+> Task :app:lintAnalyzeDebugAndroidTest
+> Task :app:lintAnalyzeDebugUnitTest
+> Task :app:lintAnalyzeDebug
+
+> Task :app:lintReportDebug
+Wrote HTML report to file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.html
+Wrote SARIF report to file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.sarif
+
+> Task :app:lintDebug
+
+BUILD SUCCESSFUL in 1m 13s
+51 actionable tasks: 51 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.6.0/userguide/configuration_cache_enabling.html

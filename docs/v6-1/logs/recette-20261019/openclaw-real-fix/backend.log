@@ -1,0 +1,111 @@
+INFO:     Started server process [3277323]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:56937 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55858 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55874 - "GET /v2/agent/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "GET /v2/agent/inbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/aea6f33d-32bc-461e-ad7f-8f5aceae0751/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/54abd434-af24-4f30-97d7-41cb2331321b/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e9c93ee8-6086-4a42-ac89-7ed7acdf0e99/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/76fd122a-fbaf-40db-8e8d-7156bf019373/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/28878f70-8c3e-430a-a695-1c5942411fd8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/07c7f0a7-9e75-44f9-ac14-29f497cd4fe1/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e0096f32-65d8-4217-b69e-18be95d3aa0f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/df76b413-bf59-47af-a9c6-4c58698ac8b6/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/8fdf57b5-69bd-4fe7-9afb-45126887367a/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/a389402f-3079-421a-bcdd-5d6948fe4205/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e3354779-49fe-45bd-9807-407414f123ee/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/b0b2cd61-41d4-45dd-a790-af6e28ce510f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c28d8736-cfd5-4904-b97f-38d8c2eb0c3d/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/2dd23d95-2715-4494-9b28-6c7cecc2cafa/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/9c066d12-6c6c-4160-92d7-4bfafd5ca475/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6526ccc9-e9e5-493c-944b-147bfbcf9af7/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c520c1f8-b3ff-44f6-ae69-6bff9330fa43/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c9c8810b-5e72-4412-87fa-9a6fe5b376e8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/27f7367b-2c85-4a2d-9a4b-8e54ef1c3977/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/aea6f33d-32bc-461e-ad7f-8f5aceae0751/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/54abd434-af24-4f30-97d7-41cb2331321b/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e9c93ee8-6086-4a42-ac89-7ed7acdf0e99/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/76fd122a-fbaf-40db-8e8d-7156bf019373/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/28878f70-8c3e-430a-a695-1c5942411fd8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/07c7f0a7-9e75-44f9-ac14-29f497cd4fe1/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e0096f32-65d8-4217-b69e-18be95d3aa0f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/df76b413-bf59-47af-a9c6-4c58698ac8b6/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/8fdf57b5-69bd-4fe7-9afb-45126887367a/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/a389402f-3079-421a-bcdd-5d6948fe4205/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e3354779-49fe-45bd-9807-407414f123ee/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/b0b2cd61-41d4-45dd-a790-af6e28ce510f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c28d8736-cfd5-4904-b97f-38d8c2eb0c3d/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/2dd23d95-2715-4494-9b28-6c7cecc2cafa/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/9c066d12-6c6c-4160-92d7-4bfafd5ca475/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6526ccc9-e9e5-493c-944b-147bfbcf9af7/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c520c1f8-b3ff-44f6-ae69-6bff9330fa43/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c9c8810b-5e72-4412-87fa-9a6fe5b376e8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/27f7367b-2c85-4a2d-9a4b-8e54ef1c3977/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/aea6f33d-32bc-461e-ad7f-8f5aceae0751/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/54abd434-af24-4f30-97d7-41cb2331321b/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e9c93ee8-6086-4a42-ac89-7ed7acdf0e99/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/76fd122a-fbaf-40db-8e8d-7156bf019373/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/28878f70-8c3e-430a-a695-1c5942411fd8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/07c7f0a7-9e75-44f9-ac14-29f497cd4fe1/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e0096f32-65d8-4217-b69e-18be95d3aa0f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/df76b413-bf59-47af-a9c6-4c58698ac8b6/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/8fdf57b5-69bd-4fe7-9afb-45126887367a/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/a389402f-3079-421a-bcdd-5d6948fe4205/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e3354779-49fe-45bd-9807-407414f123ee/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/b0b2cd61-41d4-45dd-a790-af6e28ce510f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c28d8736-cfd5-4904-b97f-38d8c2eb0c3d/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/2dd23d95-2715-4494-9b28-6c7cecc2cafa/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/9c066d12-6c6c-4160-92d7-4bfafd5ca475/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6526ccc9-e9e5-493c-944b-147bfbcf9af7/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c520c1f8-b3ff-44f6-ae69-6bff9330fa43/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c9c8810b-5e72-4412-87fa-9a6fe5b376e8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/27f7367b-2c85-4a2d-9a4b-8e54ef1c3977/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6766924a-0ef8-41b6-b7b8-e56a1eafaf86/ack HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6766924a-0ef8-41b6-b7b8-e56a1eafaf86/ack HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/aea6f33d-32bc-461e-ad7f-8f5aceae0751/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/54abd434-af24-4f30-97d7-41cb2331321b/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e9c93ee8-6086-4a42-ac89-7ed7acdf0e99/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/76fd122a-fbaf-40db-8e8d-7156bf019373/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/28878f70-8c3e-430a-a695-1c5942411fd8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/07c7f0a7-9e75-44f9-ac14-29f497cd4fe1/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e0096f32-65d8-4217-b69e-18be95d3aa0f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/df76b413-bf59-47af-a9c6-4c58698ac8b6/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/8fdf57b5-69bd-4fe7-9afb-45126887367a/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/a389402f-3079-421a-bcdd-5d6948fe4205/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e3354779-49fe-45bd-9807-407414f123ee/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/b0b2cd61-41d4-45dd-a790-af6e28ce510f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c28d8736-cfd5-4904-b97f-38d8c2eb0c3d/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/2dd23d95-2715-4494-9b28-6c7cecc2cafa/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/9c066d12-6c6c-4160-92d7-4bfafd5ca475/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6526ccc9-e9e5-493c-944b-147bfbcf9af7/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c520c1f8-b3ff-44f6-ae69-6bff9330fa43/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c9c8810b-5e72-4412-87fa-9a6fe5b376e8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/27f7367b-2c85-4a2d-9a4b-8e54ef1c3977/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/7500422c-fc85-4630-9fc3-27d96efc31a2/ack HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/7500422c-fc85-4630-9fc3-27d96efc31a2/ack HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/aea6f33d-32bc-461e-ad7f-8f5aceae0751/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/54abd434-af24-4f30-97d7-41cb2331321b/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e9c93ee8-6086-4a42-ac89-7ed7acdf0e99/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/76fd122a-fbaf-40db-8e8d-7156bf019373/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/28878f70-8c3e-430a-a695-1c5942411fd8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/07c7f0a7-9e75-44f9-ac14-29f497cd4fe1/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e0096f32-65d8-4217-b69e-18be95d3aa0f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/df76b413-bf59-47af-a9c6-4c58698ac8b6/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/8fdf57b5-69bd-4fe7-9afb-45126887367a/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/a389402f-3079-421a-bcdd-5d6948fe4205/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/e3354779-49fe-45bd-9807-407414f123ee/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/b0b2cd61-41d4-45dd-a790-af6e28ce510f/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c28d8736-cfd5-4904-b97f-38d8c2eb0c3d/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/2dd23d95-2715-4494-9b28-6c7cecc2cafa/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/9c066d12-6c6c-4160-92d7-4bfafd5ca475/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/6526ccc9-e9e5-493c-944b-147bfbcf9af7/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c520c1f8-b3ff-44f6-ae69-6bff9330fa43/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/c9c8810b-5e72-4412-87fa-9a6fe5b376e8/ack HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55886 - "POST /v2/agent/proposals/27f7367b-2c85-4a2d-9a4b-8e54ef1c3977/ack HTTP/1.1" 404 Not Found
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3277323]

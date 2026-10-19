@@ -1,6 +1,8 @@
 package dev.atlas.coach.sync.agent.inbox
 
 import dev.atlas.coach.sync.OutboxStorage
+import dev.atlas.coach.sync.StoredStateQuarantine
+import dev.atlas.coach.sync.agent.AgentBackendObservation
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.ProposalV2
 import org.json.JSONArray
@@ -15,7 +17,7 @@ data class AgentInboxEntry(
     val id: String get() = proposal.proposalId
 }
 
-data class AgentInboxPullResult(val added: Int, val expired: Int, val cursor: String?)
+data class AgentInboxPullResult(val added: Int, val expired: Int, val cursor: String?, val deferredForCapacity: Int = 0)
 
 /** Durable, bounded proposal inbox. Both proposal IDs and idempotency keys are de-duplicated. */
 class AgentInboxRepository(
@@ -24,13 +26,37 @@ class AgentInboxRepository(
 ) {
     private val entries = linkedMapOf<String, AgentInboxEntry>()
     private var cursor: String? = null
+    private var backendObservation = AgentBackendObservation()
+    private var quarantine: StoredStateQuarantine? = null
+    private var writesBlocked = false
 
     init { restore(storage.read()) }
 
     @Synchronized
+    fun quarantineInfo(): StoredStateQuarantine? = quarantine
+
+    @Synchronized
+    fun backendObservation(): AgentBackendObservation = backendObservation
+
+    @Synchronized
+    fun markBackendContactSucceeded(atUtcMillis: Long = nowUtcMillis()) {
+        ensureWritable()
+        backendObservation = AgentBackendObservation(
+            state = dev.atlas.coach.sync.agent.AgentBackendState.REACHABLE,
+            checkedAtUtcMillis = atUtcMillis,
+            lastSuccessfulContactAtUtcMillis = atUtcMillis,
+        )
+        persist()
+    }
+
+    @Synchronized
     fun mergePulled(proposals: List<ProposalV2>, nextCursor: String?): AgentInboxPullResult {
+        ensureWritable()
         var added = 0
         var expired = 0
+        var deferredForCapacity = 0
+        expireStale()
+        prune()
         proposals.forEach { proposal ->
             if (proposal.state != ProposalState.PROPOSED) return@forEach
             if (proposal.expiresAtUtcMillis <= nowUtcMillis()) {
@@ -41,20 +67,36 @@ class AgentInboxRepository(
                 it.proposal.proposalId == proposal.proposalId ||
                     it.proposal.idempotencyKey == proposal.idempotencyKey
             }
-            if (!duplicate) {
+            if (!duplicate && !makeRoomForOne()) {
+                deferredForCapacity++
+            } else if (!duplicate) {
                 entries[proposal.proposalId] = AgentInboxEntry(proposal)
                 added++
             }
         }
-        cursor = nextCursor?.takeIf { it.isNotBlank() } ?: cursor
+        if (deferredForCapacity == 0) cursor = nextCursor?.takeIf { it.isNotBlank() } ?: cursor
+        markBackendContactSucceeded(nowUtcMillis())
         prune()
+        return AgentInboxPullResult(added, expired, cursor, deferredForCapacity)
+    }
+
+    @Synchronized
+    fun markBackendUnavailable(atUtcMillis: Long = nowUtcMillis()) {
+        ensureWritable()
+        backendObservation = backendObservation.copy(
+            state = dev.atlas.coach.sync.agent.AgentBackendState.UNAVAILABLE,
+            checkedAtUtcMillis = atUtcMillis,
+        )
         persist()
-        return AgentInboxPullResult(added, expired, cursor)
     }
 
     @Synchronized
     fun insertLocal(proposal: ProposalV2, ackPending: Boolean = false): AgentInboxEntry? {
+        ensureWritable()
         if (proposal.state != ProposalState.PROPOSED || proposal.expiresAtUtcMillis <= nowUtcMillis()) return null
+        expireStale()
+        prune()
+        if (!makeRoomForOne()) return null
         if (entries.values.any { it.proposal.proposalId == proposal.proposalId || it.proposal.idempotencyKey == proposal.idempotencyKey }) {
             return null
         }
@@ -89,6 +131,7 @@ class AgentInboxRepository(
 
     @Synchronized
     fun update(proposalId: String, state: ProposalState, effect: String? = null): AgentInboxEntry? {
+        ensureWritable()
         val old = entries[proposalId] ?: return null
         require(allowedTransition(old.proposal.state, state)) { "Invalid proposal state transition" }
         val updated = old.copy(proposal = old.proposal.withState(state), snoozedUntilUtcMillis = null, effect = effect)
@@ -99,8 +142,11 @@ class AgentInboxRepository(
 
     @Synchronized
     fun replace(proposal: ProposalV2): Boolean {
+        ensureWritable()
         val old = entries[proposal.proposalId] ?: return false
-        if (old.proposal.state.terminal || old.proposal.idempotencyKey != proposal.idempotencyKey) return false
+        if (old.proposal.state.terminal || old.proposal.state == ProposalState.ACCEPTED ||
+            old.proposal.idempotencyKey != proposal.idempotencyKey
+        ) return false
         entries[proposal.proposalId] = old.copy(proposal = proposal.withState(ProposalState.PENDING_CONFIRMATION))
         persist()
         return true
@@ -108,6 +154,7 @@ class AgentInboxRepository(
 
     @Synchronized
     fun postpone(proposalId: String, untilUtcMillis: Long): AgentInboxEntry? {
+        ensureWritable()
         val old = entries[proposalId] ?: return null
         if (old.proposal.state !in setOf(ProposalState.PROPOSED, ProposalState.PENDING_CONFIRMATION)) return null
         val updated = old.copy(
@@ -120,14 +167,19 @@ class AgentInboxRepository(
     }
 
     @Synchronized
-    fun pendingAcks(): List<AgentInboxEntry> = entries.values.filter {
-        it.ackPending && it.proposal.state in setOf(
-            ProposalState.EXECUTED, ProposalState.REJECTED, ProposalState.EXPIRED, ProposalState.CANCELLED,
-        )
+    fun pendingAcks(): List<AgentInboxEntry> {
+        ensureWritable()
+        expireStale()
+        return entries.values.filter {
+            it.ackPending && it.proposal.state in setOf(
+                ProposalState.EXECUTED, ProposalState.REJECTED, ProposalState.EXPIRED, ProposalState.CANCELLED,
+            )
+        }
     }
 
     @Synchronized
     fun markAcked(proposalId: String) {
+        ensureWritable()
         entries[proposalId]?.let { entries[proposalId] = it.copy(ackPending = false); persist() }
     }
 
@@ -138,7 +190,9 @@ class AgentInboxRepository(
         var changed = false
         val now = nowUtcMillis()
         entries.replaceAll { _, entry ->
-            if (!entry.proposal.state.terminal && entry.proposal.expiresAtUtcMillis <= now) {
+            if (entry.proposal.state in setOf(ProposalState.PROPOSED, ProposalState.PENDING_CONFIRMATION) &&
+                entry.proposal.expiresAtUtcMillis <= now
+            ) {
                 changed = true
                 entry.copy(proposal = entry.proposal.withState(ProposalState.EXPIRED), effect = "TTL expiré")
             } else entry
@@ -149,31 +203,46 @@ class AgentInboxRepository(
     private fun prune() {
         expireStale()
         if (entries.size > MAX_ENTRIES) {
-            val removable = entries.values.filter { it.proposal.state.terminal }
+            val removable = entries.values.filter { it.proposal.state.terminal && !it.ackPending }
                 .sortedBy { it.proposal.expiresAtUtcMillis }
             removable.take(entries.size - MAX_ENTRIES).forEach { entries.remove(it.id) }
         }
     }
 
+    private fun makeRoomForOne(): Boolean {
+        if (entries.size < MAX_ENTRIES) return true
+        val removable = entries.values.filter { it.proposal.state.terminal && !it.ackPending }
+            .sortedBy { it.proposal.expiresAtUtcMillis }
+        removable.take(entries.size - MAX_ENTRIES + 1).forEach { entries.remove(it.id) }
+        return entries.size < MAX_ENTRIES
+    }
+
     private fun persist() {
+        ensureWritable()
         storage.write(JSONObject()
             .put("schema_version", SCHEMA_VERSION)
             .put("cursor", cursor ?: JSONObject.NULL)
+            .put("backend_observation", backendObservation.toJson())
             .put("entries", JSONArray().also { array -> entries.values.forEach { array.put(it.toJson()) } })
             .toString())
     }
 
     private fun restore(raw: String?) {
         if (raw.isNullOrBlank()) return
-        runCatching {
+        val restoreResult = runCatching {
             val root = JSONObject(raw)
-            require(root.getInt("schema_version") == SCHEMA_VERSION)
+            require(root.getInt("schema_version") in 1..SCHEMA_VERSION)
             val storedCursor = root.get("cursor")
             cursor = if (storedCursor == JSONObject.NULL) null else storedCursor as? String
+            root.optJSONObject("backend_observation")?.let {
+                backendObservation = AgentBackendObservation.fromJson(it)
+            }
             val array = root.getJSONArray("entries")
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
                 val proposal = ProposalV2.parse(item.getJSONObject("proposal").toString())
+                require(proposal.proposalId !in entries)
+                require(entries.values.none { it.proposal.idempotencyKey == proposal.idempotencyKey })
                 entries[proposal.proposalId] = AgentInboxEntry(
                     proposal = proposal,
                     snoozedUntilUtcMillis = item.optLong("snoozed_until", 0L).takeIf { it > 0L },
@@ -181,11 +250,32 @@ class AgentInboxRepository(
                     effect = item.optString("effect").takeIf { it.isNotBlank() },
                 )
             }
-            prune()
-        }.onFailure {
+        }
+        restoreResult.onFailure { error ->
             entries.clear()
             cursor = null
+            backendObservation = AgentBackendObservation()
+            val reason = "${error.javaClass.simpleName}: invalid inbox JSON or schema"
+            val location = runCatching { storage.quarantine(raw, "agent-inbox", reason) }.getOrNull()
+            quarantine = StoredStateQuarantine("agent-inbox", reason, location, nowUtcMillis())
+            if (location == null) {
+                writesBlocked = true
+            } else {
+                runCatching { storage.write(serialize()) }.onFailure { writesBlocked = true }
+            }
         }
+        if (restoreResult.isSuccess) prune()
+    }
+
+    private fun serialize(): String = JSONObject()
+        .put("schema_version", SCHEMA_VERSION)
+        .put("cursor", cursor ?: JSONObject.NULL)
+        .put("backend_observation", backendObservation.toJson())
+        .put("entries", JSONArray().also { array -> entries.values.forEach { array.put(it.toJson()) } })
+        .toString()
+
+    private fun ensureWritable() {
+        check(!writesBlocked) { "Agent inbox state is quarantined and read-only." }
     }
 
     private fun AgentInboxEntry.toJson() = JSONObject()
@@ -202,6 +292,6 @@ class AgentInboxRepository(
 
     companion object {
         const val MAX_ENTRIES = 250
-        private const val SCHEMA_VERSION = 1
+        private const val SCHEMA_VERSION = 2
     }
 }

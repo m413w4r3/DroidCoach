@@ -1,0 +1,2 @@
+COMMAND: scan trailing spaces/tabs in docs/v6-1/RECETTE.md
+PASS: no trailing spaces or tabs

@@ -14,6 +14,9 @@ RUNNER="dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner"
 TOKEN_FILE="${OPENCLAW_GATEWAY_TOKEN_FILE:-$HOME/.config/atlas/openclaw-gateway-token}"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 OUTPUT_DIR="${ATLAS_V6_E2E_OUTPUT_DIR:-$ROOT/docs/v6/logs/v6-e2e-real-$RUN_ID}"
+if [[ "$OUTPUT_DIR" != /* ]]; then
+  OUTPUT_DIR="$ROOT/$OUTPUT_DIR"
+fi
 CAPTURE_DIR="$ROOT/docs/v6/captures"
 INSTALL_MARKER="$HOME/.cache/atlas/v6-e2e-owned-install"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/atlas-v6-e2e.XXXXXX")"

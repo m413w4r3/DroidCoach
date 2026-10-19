@@ -103,6 +103,9 @@ fun AtlasApp(
     }
     val screenTitle = when (controller.navigationState.current) {
         AtlasScreenId.HOME -> "Tableau de bord"
+        AtlasScreenId.AGENT_SETTINGS -> "Mandat du Coach"
+        AtlasScreenId.AGENT_SHARING -> "Données partagées"
+        AtlasScreenId.AGENT_EFFECTS -> "Journal des effets"
         AtlasScreenId.DIAGNOSTICS -> "Diagnostic avancé"
         AtlasScreenId.SYNC_SETTINGS -> "Partage backend"
         else -> controller.navigationState.current
@@ -130,6 +133,9 @@ fun AtlasApp(
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)
             AtlasScreenId.COACH -> CoachScreen(controller, revision)
+            AtlasScreenId.AGENT_SETTINGS -> AgentSettingsScreen(controller)
+            AtlasScreenId.AGENT_SHARING -> AgentSharingScreen(controller)
+            AtlasScreenId.AGENT_EFFECTS -> AgentEffectsScreen(controller)
             AtlasScreenId.MORE -> MoreScreen(controller)
             AtlasScreenId.SETTINGS -> SettingsScreen(
                 controller = controller,

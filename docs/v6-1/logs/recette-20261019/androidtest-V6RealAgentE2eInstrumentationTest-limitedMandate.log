@@ -1,0 +1,9 @@
+COMMAND: adb -s emulator-5554 shell am instrument -w -e class dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest#limitedMandatePreauthorizesFocusPlanOnAndroid dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest:.
+
+Time: 1.457
+
+OK (1 test)
+
+

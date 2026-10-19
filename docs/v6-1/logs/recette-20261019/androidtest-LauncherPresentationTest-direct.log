@@ -1,0 +1,11 @@
+COMMAND: adb -s emulator-5554 shell am instrument -w -e class dev.atlas.coach.app.LauncherPresentationTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+dev.atlas.coach.app.LauncherPresentationTest:..
+
+Time: 3.194
+
+OK (2 tests)
+
+
+
+HARNESS_EXIT=0

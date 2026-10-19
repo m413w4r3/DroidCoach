@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,9 @@ data class ProposedFocusSession(
     val cycles: Int,
     val label: String? = null,
     val reason: String,
+    val longBreakMinutes: Int = 15,
+    val longBreakEveryCycles: Int = 4,
+    val continuous: Boolean = false,
 ) {
     init {
         require(focusMinutes in 1..180)
@@ -54,6 +58,8 @@ data class ProposedFocusSession(
         require(cycles in 1..8)
         require(label == null || label.length <= 60)
         require(reason.length <= 240)
+        require(longBreakMinutes in 1..120)
+        require(longBreakEveryCycles in 1..12)
     }
 
     /** Maps the v2 proposal to the local timer. Zero-minute breaks become a one-second transition. */
@@ -61,25 +67,26 @@ data class ProposedFocusSession(
         presetId = "agent-proposed-$focusMinutes-$breakMinutes-$cycles",
         workSeconds = focusMinutes * 60L,
         shortBreakSeconds = if (breakMinutes == 0) 1L else breakMinutes * 60L,
-        longBreakSeconds = if (breakMinutes == 0) 1L else maxOf(15, breakMinutes) * 60L,
-        longBreakEveryCycles = minOf(4, cycles),
+        longBreakSeconds = longBreakMinutes * 60L,
+        longBreakEveryCycles = longBreakEveryCycles,
         totalWorkCycles = cycles,
-        continuous = false,
+        continuous = continuous,
     )
 
     fun toEditableConfig(): ReefPomodoroConfig = ReefPomodoroConfig(
         focusMinutes = focusMinutes,
         shortBreakMinutes = breakMinutes.coerceAtLeast(1),
-        longBreakMinutes = maxOf(15, breakMinutes.coerceAtLeast(1)),
-        cycles = minOf(4, cycles),
+        longBreakMinutes = longBreakMinutes,
+        cycles = longBreakEveryCycles,
         totalWorkCycles = cycles,
+        continuous = continuous,
     )
 
     fun estimatedDurationSeconds(): Long {
-        val longBreakEvery = minOf(4, cycles)
+        val longBreakEvery = longBreakEveryCycles
         val breakSeconds = (1 until cycles).sumOf { completedCycles ->
             if (breakMinutes == 0) 1L
-            else if (completedCycles % longBreakEvery == 0) maxOf(15, breakMinutes) * 60L
+            else if (completedCycles % longBreakEvery == 0) longBreakMinutes * 60L
             else breakMinutes * 60L
         }
         return focusMinutes * 60L * cycles + breakSeconds
@@ -91,12 +98,11 @@ data class ProposedFocusSession(
 fun FocusSessionScreen(
     controller: AtlasController,
     proposedSession: ProposedFocusSession? = null,
-    onStartProposed: (() -> Unit)? = null,
+    onStartProposed: ((taskTitle: String, config: ReefPomodoroConfig) -> Unit)? = null,
     onChooseHabit: () -> Unit = {},
 ) {
     val session = controller.focusSession?.takeUnless { it.status == FocusStatus.CANCELLED }
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
-    var customizeProposal by remember { mutableStateOf(false) }
     var showManualSetup by remember { mutableStateOf(false) }
 
     LaunchedEffect(session?.status) {
@@ -110,16 +116,23 @@ fun FocusSessionScreen(
         when {
             session?.status == FocusStatus.RUNNING || session?.status == FocusStatus.PAUSED -> {
                 val activeSession = session ?: return@Column
-                Text("Session en cours", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Text("Session liée à : ${controller.directiveTitle(activeSession.directiveId)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(activeSession.phase.focusLabel() + if (activeSession.status == FocusStatus.PAUSED) " · en pause" else " · en cours")
+                Text("${activeSession.taskTitle ?: controller.directiveTitle(activeSession.directiveId)}", modifier = Modifier.testTag("focus_active_task"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text("${activeSession.workSeconds / 60} min de concentration · " +
+                    if (activeSession.continuous) "mode continu" else "${activeSession.totalWorkCycles} cycles",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     formatFocusCountdown(activeSession.remainingSeconds),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("focus_time_remaining"),
                     textAlign = TextAlign.Center,
                     fontSize = 56.sp,
                     fontWeight = FontWeight.Light,
                 )
+                Text(activeSession.phase.focusLabel() + if (activeSession.status == FocusStatus.PAUSED) " · en pause" else " · en cours", modifier = Modifier.testTag("focus_phase"))
+                if (activeSession.continuous) {
+                    Text("Cycle ${activeSession.completedWorkCycles + 1} · mode continu", modifier = Modifier.testTag("focus_cycles"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Cycle ${activeSession.completedWorkCycles + 1} / ${activeSession.totalWorkCycles}", modifier = Modifier.testTag("focus_cycles"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 val endMillis = approximateFocusEndMillis(activeSession, now.toInstant().toEpochMilli())
                 Text(
                     if (activeSession.continuous) {
@@ -145,12 +158,26 @@ fun FocusSessionScreen(
                     OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = controller::finishFocus) { Text("Terminer") }
                 }
             }
+            session?.status == FocusStatus.FINISHED && showManualSetup &&
+                proposedSession != null && onStartProposed != null -> {
+                Text("Session proposée", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(proposedSession.reason, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PomodoroSessionSetup(
+                    initialTaskTitle = controller.directive.title,
+                    initialConfig = proposedSession.toEditableConfig(),
+                    onStart = { taskTitle, config -> onStartProposed(taskTitle, config) },
+                )
+            }
             session?.status == FocusStatus.FINISHED && showManualSetup -> {
                 Text("Préparer une nouvelle session", style = MaterialTheme.typography.headlineSmall)
-                ReefPomodoroSetup(onStart = controller::startFocus)
+                PomodoroSessionSetup(
+                    initialTaskTitle = controller.directive.title,
+                    onStart = { taskTitle, config -> controller.startFocus(config, taskTitle) },
+                )
             }
             session?.status == FocusStatus.FINISHED -> {
                 Text("Session terminée", style = MaterialTheme.typography.headlineSmall)
+                Text(session.taskTitle ?: controller.directiveTitle(session.directiveId))
                 Text("${session.completedWorkCycles} cycle(s) de travail terminés.")
                 if (controller.capabilities[AtlasController.CAP_HABITS] == true && controller.activeHabits.isNotEmpty() && controller.canLinkCompletedFocusToHabit) {
                     OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = onChooseHabit) {
@@ -163,40 +190,21 @@ fun FocusSessionScreen(
             }
             proposedSession != null -> {
                 Text("Session proposée", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                proposedSession.label?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
-                Text("${proposedSession.focusMinutes} min de focus · ${proposedSession.breakMinutes} min de pause · ${proposedSession.cycles} cycle(s)")
                 Text(proposedSession.reason, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (proposedSession.breakMinutes == 0 && proposedSession.cycles > 1) {
-                    Text(
-                        "Le minuteur actuel impose une transition de 1 seconde entre des cycles sans pause.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    "Heure de fin prévue approximative · ${formatFocusEnd(now.plusSeconds(proposedSession.estimatedDurationSeconds()).toInstant().toEpochMilli())}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                PomodoroSessionSetup(
+                    initialTaskTitle = controller.directive.title,
+                    initialConfig = proposedSession.toEditableConfig(),
+                    onStart = { taskTitle, config ->
+                        if (onStartProposed != null) onStartProposed(taskTitle, config)
+                        else controller.startFocus(config, taskTitle)
+                    },
                 )
-                Text("Notifications : ${focusNotificationStatus(controller)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(
-                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
-                    onClick = { onStartProposed?.invoke() ?: controller.startFocus(proposedSession.toFocusPlan()) },
-                ) { Text("Démarrer") }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
-                    onClick = { customizeProposal = !customizeProposal },
-                ) { Text(if (customizeProposal) "Masquer les réglages" else "Personnaliser") }
-                if (customizeProposal) {
-                    ReefPomodoroSetup(
-                        onStart = controller::startFocus,
-                        initialConfig = proposedSession.toEditableConfig(),
-                        expandedInitially = true,
-                    )
-                }
             }
             else -> {
-                Text("Préparer un focus", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                ReefPomodoroSetup(onStart = controller::startFocus)
+                PomodoroSessionSetup(
+                    initialTaskTitle = controller.directive.title,
+                    onStart = { taskTitle, config -> controller.startFocus(config, taskTitle) },
+                )
             }
         }
     }

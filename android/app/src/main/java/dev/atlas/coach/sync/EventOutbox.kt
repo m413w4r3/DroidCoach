@@ -17,7 +17,17 @@ data class QueuedEvent(
 interface OutboxStorage {
     fun read(): String?
     fun write(value: String)
+
+    /** Preserve unreadable state before a repository is allowed to replace it. */
+    fun quarantine(raw: String, category: String, reason: String): String? = null
 }
+
+data class StoredStateQuarantine(
+    val category: String,
+    val reason: String,
+    val location: String?,
+    val detectedAtUtcMillis: Long,
+)
 
 interface EventOutbox {
     fun enqueue(event: SyncEvent, consent: SyncConsent): Boolean
@@ -36,9 +46,32 @@ class FileOutboxStorage(private val file: File) : OutboxStorage {
     override fun read(): String? = if (file.isFile) file.readText(StandardCharsets.UTF_8) else null
 
     @Synchronized
+    override fun quarantine(raw: String, category: String, reason: String): String {
+        val safeCategory = category.replace(Regex("[^A-Za-z0-9_-]"), "_").take(40).ifBlank { "state" }
+        var destination: File
+        do {
+            destination = File(
+                file.parentFile ?: File("."),
+                "${file.name}.quarantine-$safeCategory-${System.currentTimeMillis()}-${java.util.UUID.randomUUID()}.json",
+            )
+        } while (destination.exists())
+        writeAtomically(destination, raw)
+        val metadata = JSONObject()
+            .put("category", safeCategory)
+            .put("reason", reason.take(160))
+            .put("detected_at_utc_ms", System.currentTimeMillis())
+        writeAtomically(File(destination.parentFile ?: File("."), "${destination.name}.meta.json"), metadata.toString())
+        return destination.absolutePath
+    }
+
+    @Synchronized
     override fun write(value: String) {
-        file.parentFile?.mkdirs()
-        val temporary = File(file.parentFile ?: File("."), "${file.name}.tmp")
+        writeAtomically(file, value)
+    }
+
+    private fun writeAtomically(target: File, value: String) {
+        target.parentFile?.mkdirs()
+        val temporary = File(target.parentFile ?: File("."), "${target.name}.tmp")
         FileOutputStream(temporary).use { stream ->
             stream.write(value.toByteArray(StandardCharsets.UTF_8))
             stream.fd.sync()
@@ -46,12 +79,12 @@ class FileOutboxStorage(private val file: File) : OutboxStorage {
         try {
             Files.move(
                 temporary.toPath(),
-                file.toPath(),
+                target.toPath(),
                 StandardCopyOption.ATOMIC_MOVE,
                 StandardCopyOption.REPLACE_EXISTING,
             )
         } catch (_: Exception) {
-            Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
 }

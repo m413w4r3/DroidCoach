@@ -47,6 +47,7 @@ class FocusEngine(
             longBreakEveryCycles = plan.longBreakEveryCycles,
             totalWorkCycles = plan.totalWorkCycles,
             continuous = plan.continuous,
+            taskTitle = plan.taskTitle,
         ).also { session = it }
     }
 

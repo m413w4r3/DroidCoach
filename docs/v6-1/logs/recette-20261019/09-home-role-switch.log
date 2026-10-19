@@ -1,0 +1,13 @@
+COMMAND: adb -s emulator-5554 shell cmd role add-role-holder --user 0 android.app.role.HOME dev.atlas.coach
+COMMAND: adb -s emulator-5554 shell am start -a android.intent.action.MAIN -c android.intent.category.HOME
+COMMAND: adb -s emulator-5554 shell cmd role remove-role-holder --user 0 android.app.role.HOME dev.atlas.coach
+COMMAND: adb -s emulator-5554 shell cmd role add-role-holder --user 0 android.app.role.HOME com.google.android.apps.nexuslauncher
+COMMAND: adb -s emulator-5554 shell am start -a android.intent.action.MAIN -c android.intent.category.HOME
+HOME after Pixel Launcher→ATLAS: dev.atlas.coach
+Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }
+PASS Pixel Launcher→ATLAS HOME launch.
+HOME after ATLAS→Pixel Launcher: com.google.android.apps.nexuslauncher
+Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }
+Warning: Activity not started, its current task has been brought to the front
+PASS ATLAS→Pixel Launcher HOME launch.
+PASS final HOME restoration: com.google.android.apps.nexuslauncher

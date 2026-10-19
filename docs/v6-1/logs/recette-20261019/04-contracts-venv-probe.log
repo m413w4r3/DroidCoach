@@ -1,0 +1,8 @@
+COMMAND: backend/.venv/bin/python -c "import jsonschema"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'jsonschema'
+EXIT=1
+
+COMMAND: python3 -c ... Draft202012Validator.check_schema on contracts/*.json
+PASS: 4 JSON Schema Draft 2020-12 documents

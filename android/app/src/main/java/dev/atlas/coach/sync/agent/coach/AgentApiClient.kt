@@ -114,6 +114,18 @@ class AgentApiClient(
         request("POST", "/v2/agent/proposals/$pathId/ack", body)
     }
 
+    /** The backend requires the accepted transition before an executed acknowledgement. */
+    fun acknowledgeExecution(proposalId: String, effect: String?, atUtcMillis: Long) {
+        try {
+            acknowledge(proposalId, "accepted", null, atUtcMillis)
+        } catch (error: AgentApiException) {
+            // A retry may find that a prior call already advanced the proposal to executed.
+            // The terminal acknowledgement below is idempotent and confirms the resulting state.
+            if (error.statusCode != 409) throw error
+        }
+        acknowledge(proposalId, "executed", effect, atUtcMillis)
+    }
+
     private fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
         val token = tokenProvider.token()?.trim()?.takeIf { it.isNotEmpty() }
             ?: throw AgentApiException("Bearer token is not configured", 401)
