@@ -232,6 +232,7 @@ data class HabitHistory(
 interface HabitRepository {
     fun list(): List<Habit>
     fun add(name: String, schedule: HabitSchedule): Habit
+    fun update(habit: Habit): Habit = throw UnsupportedOperationException("Ce repository ne permet pas de modifier les habitudes.")
     fun checkIn(habitId: String, date: LocalDate): HabitCheckIn
     fun undoCheckIn(habitId: String, date: LocalDate): Boolean
     fun setReminder(habitId: String, reminder: HabitReminder?): Habit =
@@ -265,6 +266,20 @@ class InMemoryHabitRepository(
         val createdAt = clock.nowUtcMillis()
         val createdOn = java.time.Instant.ofEpochMilli(createdAt).atZone(zoneProvider()).toLocalDate().toEpochDay()
         return Habit(id, normalizedName, schedule, createdAt, createdOnEpochDay = createdOn).also { habits[id] = it }
+    }
+
+    @Synchronized
+    override fun update(habit: Habit): Habit {
+        val existing = habits[habit.id] ?: throw IllegalArgumentException("Habitude inconnue : ${habit.id}")
+        require(existing.archivedAtUtcMillis == null) { "Cette habitude est archivée." }
+        val normalizedName = habit.name.trim()
+        require(normalizedName.isNotEmpty()) { "Le nom de l'habitude est obligatoire." }
+        return habit.copy(
+            name = normalizedName,
+            createdAtUtcMillis = existing.createdAtUtcMillis,
+            createdOnEpochDay = existing.createdOnEpochDay,
+            archivedAtUtcMillis = null,
+        ).also { habits[habit.id] = it }
     }
 
     @Synchronized

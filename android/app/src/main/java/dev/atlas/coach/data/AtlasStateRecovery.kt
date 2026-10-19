@@ -8,6 +8,7 @@ import dev.atlas.coach.coach.MockCoachRepository
 import dev.atlas.coach.content.ContentCatalog
 import dev.atlas.coach.focus.Clock
 import dev.atlas.coach.focus.FocusEngine
+import dev.atlas.coach.focus.FocusJournalLink
 import dev.atlas.coach.focus.FocusSession
 import dev.atlas.coach.habits.HabitLinkPolicy
 import dev.atlas.coach.habits.InMemoryHabitRepository
@@ -51,6 +52,15 @@ object AtlasStateRecovery {
                 values
             } ?: throw IllegalArgumentException("focusRoutines must be a list")
             routines.take(100)
+        }
+        recoverSection(safe, invalid, "focusJournalLinks", emptyList<Map<String, Any?>>()) { raw ->
+            val links = (raw as? List<*>)?.map { entry ->
+                val values = entry.asStringMap()
+                FocusJournalLink.fromMap(values)
+                values
+            } ?: throw IllegalArgumentException("focusJournalLinks must be a list")
+            require(links.map { it["sessionId"] }.distinct().size == links.size) { "focus journal links must be unique by session" }
+            links.take(100)
         }
 
         val habits = recoverSection(safe, invalid, "habits", emptyList<Map<String, Any?>>()) { raw ->
@@ -97,7 +107,9 @@ object AtlasStateRecovery {
         fallback: T? = null,
         validate: (Any) -> T,
     ): T? {
-        val raw = state[key] ?: return fallback
+        val raw = state[key] ?: return fallback.also { value ->
+            if (value != null) state[key] = value
+        }
         return try {
             validate(raw as Any)
         } catch (_: Exception) {

@@ -11,6 +11,9 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import dev.atlas.coach.data.AndroidStateBackend
+import dev.atlas.coach.data.LocalStateStore
+import dev.atlas.coach.data.StateReadResult
 import org.json.JSONObject
 import dev.atlas.coach.habits.HabitReminder
 import dev.atlas.coach.habits.HabitReminderScheduler
@@ -63,7 +66,12 @@ class AndroidHabitReminderScheduler(context: Context) : HabitReminderScheduler {
 
     /** Called at boot and after wall-clock/time-zone changes. */
     fun rescheduleAll() {
-        preferences.getStringSet(KEY_IDS, emptySet()).orEmpty().toList().forEach { habitId ->
+        val ids = preferences.getStringSet(KEY_IDS, emptySet()).orEmpty().toList()
+        if (!habitReminderCapabilityEnabled(appContext)) {
+            ids.forEach(::cancel)
+            return
+        }
+        ids.forEach { habitId ->
             read(habitId)?.let { (name, reminder) -> schedule(habitId, name, reminder, ZoneId.systemDefault()) }
         }
     }
@@ -147,6 +155,10 @@ class HabitReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != AndroidHabitReminderScheduler.ACTION_DELIVER_REMINDER) return
         val habitId = intent.getStringExtra(AndroidHabitReminderScheduler.EXTRA_HABIT_ID) ?: return
+        if (!habitReminderCapabilityEnabled(context)) {
+            AndroidHabitReminderScheduler(context).cancel(habitId)
+            return
+        }
         val habitName = intent.getStringExtra(AndroidHabitReminderScheduler.EXTRA_HABIT_NAME).orEmpty()
         val zone = runCatching {
             ZoneId.of(intent.getStringExtra(AndroidHabitReminderScheduler.EXTRA_ZONE) ?: ZoneId.systemDefault().id)
@@ -204,4 +216,11 @@ class HabitReminderRescheduleReceiver : BroadcastReceiver() {
             AndroidHabitReminderScheduler(context.applicationContext).rescheduleAll()
         }
     }
+}
+
+private fun habitReminderCapabilityEnabled(context: Context): Boolean {
+    val loaded = LocalStateStore(AndroidStateBackend(context.applicationContext)).readDocument() as? StateReadResult.Loaded
+        ?: return false
+    val capabilities = loaded.state["capabilities"] as? Map<*, *> ?: return false
+    return capabilities["habitReminders"] == true
 }

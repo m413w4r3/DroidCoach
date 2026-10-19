@@ -2,10 +2,12 @@ package dev.atlas.coach.usage
 
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.telecom.TelecomManager
 import android.util.Log
 import dev.atlas.coach.rules.FrictionPresentationResult
 import dev.atlas.coach.rules.Intervention
@@ -14,8 +16,8 @@ import dev.atlas.coach.rules.RuleEvaluator
 import dev.atlas.coach.usage.android.AndroidFrictionPresenter
 import dev.atlas.coach.usage.android.AndroidProtectedPackages
 import dev.atlas.coach.usage.android.AndroidUsageAccessStatus
-import dev.atlas.coach.usage.android.AndroidUsageStatsEventSource
 import dev.atlas.coach.usage.android.SharedPreferencesUsageStores
+import dev.atlas.coach.app.AtlasController
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.time.ZoneId
@@ -34,11 +36,6 @@ class UsageFixtureInstrumentationTest {
     fun actualAppOpsDenialStopsBeforeQueryingUsageStats() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val access = AndroidUsageAccessStatus(context)
-        if (access.isAllowed()) {
-            Log.i(TAG, "AppOps is granted; denied-path assertion skipped in this AVD state")
-            return
-        }
-
         val stores = SharedPreferencesUsageStores(context)
         var queried = 0
         val source = object : UsageEventSource {
@@ -59,27 +56,43 @@ class UsageFixtureInstrumentationTest {
             frictionPresenter = { FrictionPresentationResult.UNAVAILABLE },
         )
         val now = System.currentTimeMillis()
-        observer.acceptConsent(ObservationConsent.grant(ObservationPurpose.GENTLE_FRICTION, setOf(FIXTURE_PACKAGE), now), now)
-
-        assertEquals(UsagePollStatus.PERMISSION_REQUIRED, observer.poll(now + 1_000L).status)
-        assertEquals(0, queried)
-        assertTrue(stores.allRecords().isEmpty())
         observer.revokeConsent()
+        observer.acceptConsent(ObservationConsent.grant(ObservationPurpose.GENTLE_FRICTION, setOf(FIXTURE_PACKAGE), now), now)
+        try {
+            // A prior Settings grant may be stored at UID scope on Android 17.
+            // Override that scope too so this isolated denial check stays hermetic.
+            shell("appops set --uid ${context.packageName} GET_USAGE_STATS ignore")
+            assertTrue("GET_USAGE_STATS should be denied for this isolated check", !access.isAllowed())
+            assertEquals(UsagePollStatus.PERMISSION_REQUIRED, observer.poll(now + 1_000L).status)
+            assertEquals(0, queried)
+            assertTrue(stores.allRecords().isEmpty())
+            Log.i(TAG, "denied_usage_access status=PERMISSION_REQUIRED queries=$queried records=0")
+        } finally {
+            observer.revokeConsent()
+            shell("appops set --uid ${context.packageName} GET_USAGE_STATS default")
+            shell("appops set ${context.packageName} GET_USAGE_STATS allow")
+        }
     }
 
     @Test
     fun notificationPresenterReportsMissingManifestPermissionInsteadOfPosting() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val result = AndroidFrictionPresenter(context).present(
+        val deniedContext = object : ContextWrapper(context) {
+            override fun checkSelfPermission(permission: String): Int = PackageManager.PERMISSION_DENIED
+        }
+        val result = AndroidFrictionPresenter(deniedContext).present(
             Intervention("instrumentation", "event", FIXTURE_PACKAGE, "rule", System.currentTimeMillis(), 0L),
         )
         assertEquals(FrictionPresentationResult.PERMISSION_REQUIRED, result)
+        Log.i(TAG, "friction_notification_denied status=PERMISSION_REQUIRED")
     }
 
     @Test
     fun fourRealFixtureOpensReachTheRuleAfterReturningToAtlas() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
+        Log.i(TAG, "POST_NOTIFICATIONS granted for the isolated AVD integration run")
         if (!AndroidUsageAccessStatus(context).isAllowed()) {
             Log.w(TAG, "BLOCKED: GET_USAGE_STATS is not allowed; four real fixture launches were not queried")
             return
@@ -89,110 +102,109 @@ class UsageFixtureInstrumentationTest {
             return
         }
 
-        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val source = AndroidUsageStatsEventSource(manager)
-        val stores = SharedPreferencesUsageStores(context)
-        val rules = RuleEvaluator(ZoneId.systemDefault())
-        var presented = 0
-        val allowlist = setOf(FIXTURE_PACKAGE)
-        val observer = UsageObserver(
-            eventSource = source,
-            accessStatus = AndroidUsageAccessStatus(context),
-            consentStore = stores,
-            cursorStore = stores,
-            stateStore = stores,
-            recordStore = stores,
-            ruleEvaluator = rules,
-            policyProvider = {
-                LocalPolicy(openThreshold = 4, allowlistedPackageNames = allowlist)
-            },
-            frictionPresenter = {
-                presented++
-                FrictionPresentationResult.POSTED
-            },
-            platformProtectedPackages = {
-                currentHomePackage(context)?.let(::setOf).orEmpty() + context.packageName
-            },
-        )
+        context.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
+        val controller = AtlasController(context)
+        controller.revokeUsageObservation()
+        val dialerPackage = context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
+        assertTrue("Fixture must appear in the launched-app picker", controller.selectableUsageApps.any { it.packageName == FIXTURE_PACKAGE })
+        assertTrue("ATLAS must remove its default dialer from the app picker", dialerPackage !in controller.selectableUsageApps.map { it.packageName })
+        assertTrue("Explicit consent for the fixture allowlist was rejected", controller.activateUsageObservation(setOf(FIXTURE_PACKAGE)))
+        assertTrue(controller.usageConsentActive)
+        assertEquals(setOf(FIXTURE_PACKAGE), controller.selectedUsagePackages)
 
-        observer.revokeConsent()
-        val consentTime = System.currentTimeMillis()
-        observer.acceptConsent(
-            ObservationConsent.grant(ObservationPurpose.GENTLE_FRICTION, allowlist, consentTime),
-            consentTime,
-        )
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        notificationManager.cancelAll()
+        val outsideAllowlist = controller.selectableUsageApps.firstOrNull { it.packageName != FIXTURE_PACKAGE }
+        val outsideComponent = outsideAllowlist?.let { context.packageManager.getLaunchIntentForPackage(it.packageName)?.component }
+        val outsidePackageName = outsideAllowlist?.packageName ?: "com.android.settings"
+        if (outsideAllowlist != null && outsideComponent != null) {
+            shell("am start -W -n ${outsideComponent.flattenToShortString()}")
+            SystemClock.sleep(300)
+            shell("am force-stop ${outsideAllowlist.packageName}")
+            shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
+            SystemClock.sleep(200)
+            Log.i(TAG, "outside_allowlist_launch=${outsideAllowlist.packageName}")
+        } else {
+            shell("am start -W -a android.settings.SETTINGS")
+            SystemClock.sleep(300)
+            shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
+            SystemClock.sleep(200)
+            Log.i(TAG, "outside_allowlist_launch=$outsidePackageName (platform app fallback)")
+        }
+
+        if (!dialerPackage.isNullOrBlank()) {
+            shell("am start -a android.intent.action.DIAL")
+            SystemClock.sleep(300)
+            shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
+            SystemClock.sleep(200)
+        }
 
         var fourthLaunchAt = 0L
         repeat(4) { index ->
             shell("am force-stop $FIXTURE_PACKAGE")
             shell("am start -W -n $FIXTURE_PACKAGE/$FIXTURE_ACTIVITY")
             if (index == 3) fourthLaunchAt = SystemClock.elapsedRealtime()
-            SystemClock.sleep(1_200)
+            SystemClock.sleep(500)
             shell("am force-stop $FIXTURE_PACKAGE")
             shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
-            SystemClock.sleep(400)
+            SystemClock.sleep(200)
         }
 
-        // This is the app-visible poll point: no claim of interception while ATLAS is backgrounded.
+        // Returning to ATLAS starts the visible Activity poll loop; background observation is not claimed.
         shell("am start -n ${context.packageName}/dev.atlas.coach.app.MainActivity")
-        val result = observer.poll(System.currentTimeMillis())
+        val deadline = SystemClock.elapsedRealtime() + 8_000L
+        while (controller.usageHistoryCount < 4 && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(250)
         val detectionLatency = SystemClock.elapsedRealtime() - fourthLaunchAt
         Log.i(TAG, "fixture_open_to_visible_poll_latency_ms=$detectionLatency")
-        assertEquals(UsagePollStatus.PROCESSED, result.status)
-        assertEquals(4, result.acceptedEvents.count { it.packageName == FIXTURE_PACKAGE })
-        assertEquals(1, result.interventions.size)
-        assertEquals(1, presented)
+        assertEquals(4, controller.usageHistoryCount)
+        assertTrue(controller.usageConsentActive)
+        Log.i(TAG, "fixture_records=${controller.usageHistoryCount} consent=${controller.usageConsentActive} interventions=${controller.interventions.size}")
 
-        val realPresenter = AndroidFrictionPresenter(context)
-        assertEquals(
-            FrictionPresentationResult.PERMISSION_REQUIRED,
-            realPresenter.present(result.interventions.single()),
-        )
+        val records = SharedPreferencesUsageStores(context).allRecords()
+        assertEquals(4, records.count { it.packageName == FIXTURE_PACKAGE })
+        assertTrue("An app outside the explicit allowlist was recorded", records.none { it.packageName == outsidePackageName })
+        if (!dialerPackage.isNullOrBlank()) assertTrue(records.none { it.packageName == dialerPackage })
 
-        // Settings is deliberately excluded even though it produced a real UsageStats foreground event.
-        shell("am start -a android.settings.SETTINGS")
-        SystemClock.sleep(500)
+        val hasFrictionNotification = notificationManager.activeNotifications.any {
+            it.notification.extras?.getString(android.app.Notification.EXTRA_TITLE) == "Une pause ?"
+        }
+        Log.i(TAG, "friction_notification_active=$hasFrictionNotification")
+        assertTrue("Four fixture opens did not post a friction notification", hasFrictionNotification)
         shell("am start -n ${context.packageName}/dev.atlas.coach.app.MainActivity")
-        val protectedPoll = observerAfterFirstPoll(context, source, stores, rules, allowlist)
-            .poll(System.currentTimeMillis())
-        assertTrue(protectedPoll.acceptedEvents.none { it.packageName == "com.android.settings" })
-        assertEquals(4, stores.allRecords().size)
+        SystemClock.sleep(500)
+        shell("cmd statusbar expand-notifications")
+        SystemClock.sleep(1_200)
+        shell("screencap -p /sdcard/H1-friction-notification.png")
+        shell("cmd statusbar collapse")
+        SystemClock.sleep(300)
+        val friction = notificationManager.activeNotifications.first {
+            it.notification.extras?.getString(android.app.Notification.EXTRA_TITLE) == "Une pause ?"
+        }.notification
+        val intentionAction = friction.actions?.firstOrNull { it.title.toString().contains("intention", ignoreCase = true) }
+        assertTrue("Friction notification has no action that opens IntentionActivity", intentionAction != null)
+        intentionAction!!.actionIntent.send()
+        instrumentation.waitForIdleSync()
+        SystemClock.sleep(300)
+        val intentionVisible = shell("dumpsys activity activities").contains("IntentionActivity")
+        Log.i(TAG, "intention_activity_visible=$intentionVisible")
+        assertTrue(intentionVisible)
+        shell("screencap -p /sdcard/H1-friction-intention.png")
 
-        observer.revokeConsent()
-        assertEquals(ObservationConsent.REVOKED, stores.currentConsent())
-        assertTrue(stores.allRecords().isEmpty())
-        assertNull(stores.currentCursor())
+        controller.revokeUsageObservation()
+        Log.i(TAG, "revoke_status=${SharedPreferencesUsageStores(context).currentConsent().enabled} history=${controller.usageHistoryCount}")
+        assertEquals(ObservationConsent.REVOKED, SharedPreferencesUsageStores(context).currentConsent())
+        assertEquals(0, controller.usageHistoryCount)
+        controller.pollUsageObservation()
+        assertEquals("Revoked observation continued collecting", 0, controller.usageHistoryCount)
+        val restoredController = AtlasController(context)
+        restoredController.pollUsageObservation()
+        assertEquals("Revoked observation resumed after controller recreation", 0, restoredController.usageHistoryCount)
+        Log.i(TAG, "revocation_verified persisted=true polls_after_revoke=2 history=0")
     }
-
-    private fun observerAfterFirstPoll(
-        context: Context,
-        source: AndroidUsageStatsEventSource,
-        stores: SharedPreferencesUsageStores,
-        rules: RuleEvaluator,
-        allowlist: Set<String>,
-    ) = UsageObserver(
-        eventSource = source,
-        accessStatus = AndroidUsageAccessStatus(context),
-        consentStore = stores,
-        cursorStore = stores,
-        stateStore = stores,
-        recordStore = stores,
-        ruleEvaluator = rules,
-        policyProvider = { LocalPolicy(openThreshold = 4, allowlistedPackageNames = allowlist) },
-        frictionPresenter = { FrictionPresentationResult.POSTED },
-        platformProtectedPackages = {
-            currentHomePackage(context)?.let(::setOf).orEmpty() + context.packageName
-        },
-    )
 
     private fun isFixtureInstalled(context: Context): Boolean = runCatching {
         context.packageManager.getApplicationInfo(FIXTURE_PACKAGE, 0)
     }.isSuccess
-
-    private fun currentHomePackage(context: Context): String? = context.packageManager.resolveActivity(
-        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
-        PackageManager.MATCH_DEFAULT_ONLY,
-    )?.activityInfo?.packageName
 
     private fun shell(command: String): String {
         val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)

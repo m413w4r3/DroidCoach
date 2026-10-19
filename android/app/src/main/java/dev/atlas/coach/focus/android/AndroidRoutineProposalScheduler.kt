@@ -60,11 +60,13 @@ class AndroidRoutineProposalScheduler(context: Context) : RoutineProposalSchedul
     internal fun rescheduleFromStoredState() {
         val store = LocalStateStore(AndroidStateBackend(appContext))
         val loaded = store.readDocument() as? StateReadResult.Loaded ?: return
+        val capabilities = loaded.state["capabilities"].asStringMap().orEmpty()
+        val routinesEnabled = capabilities["focusRoutines"] == true
         val routines = loaded.state["focusRoutines"].asRoutineMaps().mapNotNull {
             runCatching { FocusRoutine.fromMap(it) }.getOrNull()
         }
         routines.forEach { routine ->
-            if (routine.isEnabled) schedule(routine, ZonedDateTime.now(), ZoneId.systemDefault())
+            if (routinesEnabled && routine.isEnabled) schedule(routine, ZonedDateTime.now(), ZoneId.systemDefault())
             else cancel(routine.id)
         }
     }
@@ -88,6 +90,7 @@ class FocusRoutineProposalReceiver : android.content.BroadcastReceiver() {
         val routineId = intent.getStringExtra(AndroidRoutineProposalScheduler.EXTRA_ROUTINE_ID) ?: return
         val store = LocalStateStore(AndroidStateBackend(context))
         val loaded = store.readDocument() as? StateReadResult.Loaded ?: return
+        if (loaded.state["capabilities"].asStringMap()?.get("focusRoutines") != true) return
         val routine = loaded.state["focusRoutines"].asRoutineMaps().asSequence().mapNotNull {
             runCatching { FocusRoutine.fromMap(it) }.getOrNull()
         }.firstOrNull { it.id == routineId && it.isEnabled } ?: return
@@ -115,3 +118,6 @@ private fun Any?.asRoutineMaps(): List<Map<String, Any?>> = (this as? List<*>)
             (key as? String)?.let { it to item }
         }?.toMap()
     }.orEmpty()
+
+private fun Any?.asStringMap(): Map<String, Any?>? = (this as? Map<*, *>)
+    ?.entries?.mapNotNull { (key, value) -> (key as? String)?.let { it to value } }?.toMap()

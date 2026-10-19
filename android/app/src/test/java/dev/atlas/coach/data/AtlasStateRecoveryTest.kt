@@ -1,5 +1,7 @@
 package dev.atlas.coach.data
 
+import dev.atlas.coach.focus.FocusJournalLink
+import dev.atlas.coach.rules.LocalPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,5 +51,33 @@ class AtlasStateRecoveryTest {
         assertEquals(setOf("focus"), recovered.invalidSubstates)
         assertEquals(null, recovered.values["focus"])
         assertEquals(mapOf("focus" to false), recovered.values["capabilities"])
+    }
+
+    @Test
+    fun oldDocumentsMigrateWithoutLinksAndNewSessionLinksAreValidatedIndependently() {
+        val legacy = AtlasStateRecovery.recover(
+            mapOf("policy" to LocalPolicy().toStorageMap(), "capabilities" to mapOf("focus" to true)),
+        )
+        assertTrue(legacy.invalidSubstates.isEmpty())
+        assertEquals(emptyList<Map<String, Any?>>(), legacy.values["focusJournalLinks"])
+
+        val link = FocusJournalLink(
+            sessionId = "session-1",
+            journalEntryId = "session-1",
+            mockDirectiveId = "directive-1",
+            projectId = null,
+            habitId = "habit-1",
+            completedWorkCycles = 2,
+            linkedAtUtcMillis = 1_700_000_000_000L,
+        )
+        val valid = AtlasStateRecovery.recover(mapOf("focusJournalLinks" to listOf(link.toMap())))
+        val restoredLink = FocusJournalLink.fromMap((valid.values["focusJournalLinks"] as List<*>).single() as Map<String, Any?>)
+        assertEquals(link, restoredLink)
+
+        val malformed = AtlasStateRecovery.recover(
+            mapOf("focusJournalLinks" to listOf(mapOf("sessionId" to "broken")), "capabilities" to mapOf("focus" to true)),
+        )
+        assertEquals(setOf("focusJournalLinks"), malformed.invalidSubstates)
+        assertEquals(mapOf("focus" to true), malformed.values["capabilities"])
     }
 }

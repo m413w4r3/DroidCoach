@@ -42,10 +42,12 @@ object AndroidFocusAlarmRuntime {
         val current = FocusEngine(AndroidClock).restore(saved)
         writeSession(loaded, current)
         val scheduler = AndroidPhaseAlarmScheduler(context)
-        if (current.status == FocusStatus.RUNNING) scheduler.schedule(current)
+        val notificationsEnabled = loaded.state["capabilities"].asStringMap()
+            ?.get("focusNotifications") == true
+        if (notificationsEnabled && current.status == FocusStatus.RUNNING) scheduler.schedule(current)
         else scheduler.cancel(current.id)
 
-        if (saved.status == FocusStatus.RUNNING && current.status == FocusStatus.FINISHED) {
+        if (notificationsEnabled && saved.status == FocusStatus.RUNNING && current.status == FocusStatus.FINISHED) {
             AndroidFocusNotifications(context).notify(
                 PhaseTransition(
                     sessionId = current.id,
@@ -62,6 +64,14 @@ object AndroidFocusAlarmRuntime {
     internal fun handlePhase(context: Context, transition: PhaseTransition) {
         val loaded = readState(context) ?: return
         val saved = loaded.focusSession() ?: return
+        val notificationsEnabled = loaded.state["capabilities"].asStringMap()
+            ?.get("focusNotifications") == true
+        if (!notificationsEnabled) {
+            AndroidPhaseAlarmScheduler(context).cancel(transition.sessionId)
+            val current = FocusEngine(AndroidClock).restore(saved)
+            writeSession(loaded, current)
+            return
+        }
         if (saved.id != transition.sessionId || saved.status != FocusStatus.RUNNING) {
             AndroidPhaseAlarmScheduler(context).cancel(transition.sessionId)
             return

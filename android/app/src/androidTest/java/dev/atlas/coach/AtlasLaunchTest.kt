@@ -12,7 +12,10 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.app.MainActivity
+import dev.atlas.coach.focus.FakeClock
+import dev.atlas.coach.focus.FocusPlan
 import dev.atlas.coach.launcher.AndroidLauncherCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,6 +32,10 @@ class AtlasLaunchTest {
 
     @Before
     fun clearDemoState() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        )
         InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
             .edit().clear().commit()
@@ -52,13 +59,13 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Accueil").performClick()
         composeRule.onNodeWithText("Habitudes").performScrollTo().performClick()
         composeRule.onNodeWithTag("habit_input").performTextInput("Lire dix minutes")
-        composeRule.onNodeWithText("Ajouter").performClick()
+        composeRule.onNodeWithText("Ajouter l'habitude").performScrollTo().performClick()
         composeRule.onNodeWithText("Valider aujourd'hui").performScrollTo().performClick()
         composeRule.onNodeWithText("Annuler aujourd'hui").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Annuler aujourd'hui").performScrollTo().performClick()
         composeRule.onNodeWithText("Valider aujourd'hui").assertIsDisplayed()
         composeRule.onNodeWithText("30 jours").performClick()
-        composeRule.onNodeWithText("Exporter").performClick()
+        composeRule.onNodeWithText("Exporter CSV").performScrollTo().performClick()
         composeRule.onNodeWithText("record_type", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Fermer").performClick()
 
@@ -71,18 +78,14 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Accueil").performClick()
         composeRule.onNodeWithText("Focus").performScrollTo().performClick()
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
-        composeRule.onNodeWithText("Relier à une habitude…").performScrollTo().performClick()
-        composeRule.onNodeWithText("Lire dix minutes").performClick()
-        composeRule.onNodeWithText("Annuler").performClick()
-        composeRule.onNodeWithText("Relier à une habitude…").performScrollTo().performClick()
-        composeRule.onNodeWithText("Lire dix minutes").performClick()
-        composeRule.onNodeWithText("Confirmer").performClick()
-        composeRule.onNodeWithText("Habitude cochée après votre confirmation.").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Session terminée avant le dernier cycle", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Relier à une habitude…").assertCountEquals(0)
 
         composeRule.onNodeWithText("Accueil").performClick()
         composeRule.onNodeWithText("Paramètres").performClick()
-        composeRule.onNodeWithText("Simulateur de friction · Diagnostic").performScrollTo().performClick()
-        composeRule.onNodeWithText("Événements simulés, pas une observation réelle").assertIsDisplayed()
+        composeRule.onNodeWithText("Diagnostic avancé / développeur").performScrollTo().performClick()
+        composeRule.onNodeWithText("Ouvrir le simulateur de friction").performScrollTo().performClick()
+        composeRule.onNodeWithText("Événements simulés, pas une observation réelle").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("simulate_four").performScrollTo().performClick()
         composeRule.onNodeWithText("Propositions émises : 1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Répéter le dernier événement (doublon)").performScrollTo().performClick()
@@ -113,15 +116,25 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Reporter").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Pause").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Bibliothèque").performClick()
-        composeRule.onNodeWithTag("content_focus-music").performScrollTo().performClick()
+        composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick()
+        composeRule.onNodeWithText("Recherches génériques").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Recherche; aucun lien vidéo précis sélectionné").get(0).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Ajouter un lien vidéo précis").performScrollTo().performClick()
+        composeRule.onNodeWithText("Titre").performTextInput("Lien test")
+        composeRule.onNodeWithText("URL YouTube HTTPS").performTextInput("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        composeRule.onNodeWithText("Ajouter").performClick()
+        composeRule.onNodeWithText("Lien test").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Épingler").performScrollTo().performClick()
+        composeRule.onNodeWithText("Désépingler").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Supprimer").performScrollTo().performClick()
+        composeRule.onNodeWithText("Aucun lien vidéo ajouté.").performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton() {
         composeRule.onNodeWithText("Habitudes").performScrollTo().performClick()
         composeRule.onNodeWithTag("habit_input").performTextInput("Lire hors ligne")
-        composeRule.onNodeWithText("Ajouter").performClick()
+        composeRule.onNodeWithText("Ajouter l'habitude").performScrollTo().performClick()
         composeRule.onNodeWithText("Accueil").performClick()
 
         composeRule.onNodeWithText("Commencer").performClick()
@@ -197,8 +210,8 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Nom de la routine").performClick()
         composeRule.onNodeWithText("Nom de la routine").performTextInput("Routine de test")
         composeRule.onNodeWithText("Ajouter la routine").performClick()
-        composeRule.onNodeWithText("Routine de test").assertIsDisplayed()
-        composeRule.onNodeWithText("Une routine ne lance rien automatiquement", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Routine de test").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Une routine envoie une proposition", substring = true).assertIsDisplayed()
         composeRule.onAllNodesWithText("Commencer").assertCountEquals(0)
     }
 
@@ -206,7 +219,7 @@ class AtlasLaunchTest {
     fun reefPomodoroSetupStartsAnAtlasSessionWithCycleState() {
         composeRule.onNodeWithText("Focus").performScrollTo().performClick()
         composeRule.onNodeWithText("Démarrer le Pomodoro").performScrollTo().performClick()
-        composeRule.onNodeWithText("Pomodoro 25/5 démarré", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Pomodoro démarré · 25 min de concentration, pause courte de 5 min", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Cycle 1 / 4").assertIsDisplayed()
     }
 
@@ -237,17 +250,32 @@ class AtlasLaunchTest {
     }
 
     @Test
-    fun visibleFocusTimerWritesOneCheckpointAfterTwentySeconds() {
-        composeRule.onNodeWithText("Commencer").performClick()
-        composeRule.onNodeWithText("Concentration · En cours").assertIsDisplayed()
-        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+    fun focusControllerWritesOneCheckpointAfterTwentySecondsOfMonotonicTime() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val prefs = context
             .getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
+        val clock = FakeClock(startUtcMillis = 1_000_000L, startMonotonicMillis = 1_000_000L)
+        lateinit var controller: AtlasController
+        instrumentation.runOnMainSync {
+            controller = AtlasController(context, clock)
+            controller.startFocus(FocusPlan.custom(workSeconds = 120L))
+        }
         val writeTimes = CopyOnWriteArrayList<Long>()
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "state_v1") writeTimes += System.currentTimeMillis()
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        composeRule.waitUntil(timeoutMillis = 27_000L) { writeTimes.isNotEmpty() }
+        instrumentation.runOnMainSync {
+            clock.advanceMonotonicMillis(19_999L)
+            controller.tickFocus()
+        }
+        assertEquals("Checkpoint was written before twenty seconds", 0, writeTimes.size)
+        instrumentation.runOnMainSync {
+            clock.advanceMonotonicMillis(1L)
+            controller.tickFocus()
+        }
+        composeRule.waitUntil(timeoutMillis = 2_000L) { writeTimes.isNotEmpty() }
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
 
         assertEquals(1, writeTimes.size)

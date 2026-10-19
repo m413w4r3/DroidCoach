@@ -18,6 +18,8 @@ fun LocalPolicy.toStorageMap(): Map<String, Any?> = mapOf(
     "pauseUntil" to pauseUntil,
     "vitalPackageNames" to vitalPackageNames.sorted(),
     "emergencyPauseMillis" to emergencyPauseMillis,
+    "allowlistedPackageNames" to allowlistedPackageNames.orEmpty().sorted(),
+    "excludedPackageNames" to excludedPackageNames.sorted(),
 )
 
 fun localPolicyFromStorage(values: Map<String, Any?>): LocalPolicy {
@@ -26,6 +28,12 @@ fun localPolicyFromStorage(values: Map<String, Any?>): LocalPolicy {
     require((quietStart == null) == (quietEnd == null)) { "Quiet hours must have both endpoints" }
     val vitalPackages = values.optionalList("vitalPackageNames")?.map {
         it as? String ?: throw IllegalArgumentException("Invalid vital package name")
+    }?.toSet().orEmpty()
+    val allowlistedPackages = values.optionalList("allowlistedPackageNames")?.map {
+        it as? String ?: throw IllegalArgumentException("Invalid allowlisted package name")
+    }?.toSet().orEmpty()
+    val excludedPackages = values.optionalList("excludedPackageNames")?.map {
+        it as? String ?: throw IllegalArgumentException("Invalid excluded package name")
     }?.toSet().orEmpty()
     val quietHours = if (quietStart == null) null else QuietHours(
         LocalTime.parse(quietStart),
@@ -40,6 +48,8 @@ fun localPolicyFromStorage(values: Map<String, Any?>): LocalPolicy {
         pauseUntil = values.optionalNumber("pauseUntil")?.toLong(),
         vitalPackageNames = vitalPackages,
         emergencyPauseMillis = values.optionalNumber("emergencyPauseMillis")?.toLong() ?: 30L * 60L * 1_000L,
+        allowlistedPackageNames = allowlistedPackages,
+        excludedPackageNames = excludedPackages,
     )
 }
 

@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.core.view.WindowCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
@@ -22,9 +23,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             AtlasTheme {
-                val controller = remember { AtlasController(applicationContext) }
+                val controller = remember { AtlasController(applicationContext).also { it.handleNotificationIntent(intent) } }
                 atlasController = controller
                 AtlasApp(
                     controller = controller,
@@ -35,6 +37,12 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        atlasController?.handleNotificationIntent(intent)
     }
 
     private fun requestHomeRoleExplicitly() {

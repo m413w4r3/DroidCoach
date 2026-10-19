@@ -1,6 +1,12 @@
 package dev.atlas.coach.app
 
+import android.Manifest
+import android.app.NotificationManager
+import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,11 +35,36 @@ import dev.atlas.coach.focus.FocusEngine
 import dev.atlas.coach.focus.FocusPlan
 import dev.atlas.coach.focus.FocusPreset
 import dev.atlas.coach.focus.FocusSession
+import dev.atlas.coach.focus.FocusStatus
+import dev.atlas.coach.focus.FocusHabitLinkCondition
+import dev.atlas.coach.focus.FocusLinkResult
+import dev.atlas.coach.focus.FocusSessionLinker
+import dev.atlas.coach.focus.FocusJournalLink
+import dev.atlas.coach.focus.InMemoryFocusJournalLinkStore
+import dev.atlas.coach.focus.PhaseNotificationResult
+import dev.atlas.coach.focus.PhaseTransition
 import dev.atlas.coach.focus.ReefPomodoroConfig
 import dev.atlas.coach.habits.Habit
+import dev.atlas.coach.habits.HabitReminder
 import dev.atlas.coach.habits.HabitLinkPolicy
 import dev.atlas.coach.habits.HabitSchedule
 import dev.atlas.coach.habits.InMemoryHabitRepository
+import dev.atlas.coach.habits.android.AndroidHabitReminderScheduler
+import dev.atlas.coach.focus.android.AndroidFocusNotifications
+import dev.atlas.coach.focus.android.AndroidPhaseAlarmScheduler
+import dev.atlas.coach.focus.android.AndroidRoutineProposalScheduler
+import dev.atlas.coach.usage.ObservationConsent
+import dev.atlas.coach.usage.ObservationPurpose
+import dev.atlas.coach.usage.UsageObserver
+import dev.atlas.coach.usage.UsagePollStatus
+import dev.atlas.coach.usage.UsageRetention
+import dev.atlas.coach.usage.android.AndroidEmergencyPauseStore
+import dev.atlas.coach.usage.android.AndroidFrictionPresenter
+import dev.atlas.coach.usage.android.AndroidProtectedPackages
+import dev.atlas.coach.usage.android.AndroidUsageAccessStatus
+import dev.atlas.coach.usage.android.AndroidUsageStatsEventSource
+import dev.atlas.coach.usage.android.SharedPreferencesUsageStores
+import dev.atlas.coach.usage.android.usageAccessSettingsIntent as systemUsageAccessSettingsIntent
 import dev.atlas.coach.rules.AppEventSimulator
 import dev.atlas.coach.rules.AppOpenEvent
 import dev.atlas.coach.rules.Intervention
@@ -41,6 +72,7 @@ import dev.atlas.coach.rules.LocalPolicy
 import dev.atlas.coach.rules.QuietHours
 import dev.atlas.coach.rules.RuleEvaluator
 import dev.atlas.coach.routines.FocusRoutine
+import dev.atlas.coach.routines.InMemoryFocusRoutineRepository
 import dev.atlas.coach.routines.RoutineEvaluator
 import dev.atlas.coach.routines.RoutineSchedule
 import java.time.LocalDate
@@ -51,7 +83,15 @@ import java.util.UUID
 import org.json.JSONObject
 
 /** Owns the small, synchronous local graph used by the Compose demo. */
-class AtlasController(context: Context) {
+class AtlasController(context: Context, private val clock: Clock = object : Clock {
+    override fun nowMillis(): Long = System.currentTimeMillis()
+    override fun monotonicMillis(): Long = SystemClock.elapsedRealtime()
+}) {
+    private val appContext = context.applicationContext
+    private val phaseAlarms = AndroidPhaseAlarmScheduler(appContext)
+    private val focusNotifications = AndroidFocusNotifications(appContext)
+    private val routineAlarms = AndroidRoutineProposalScheduler(appContext)
+    private val habitReminderScheduler = AndroidHabitReminderScheduler(appContext)
     private val store = LocalStateStore(AndroidStateBackend(context))
     private val stateReadResult = runCatching { store.readDocument() }
         .getOrElse { StateReadResult.Corrupt(null, "impossible de lire le stockage local") }
@@ -83,10 +123,6 @@ class AtlasController(context: Context) {
             "Certaines données locales sont illisibles ($reason). La copie de secours n'a pas pu être garantie; les valeurs de secours sont chargées sans écraser le stockage."
         }
     }
-    private val clock = object : Clock {
-        override fun nowMillis(): Long = System.currentTimeMillis()
-        override fun monotonicMillis(): Long = SystemClock.elapsedRealtime()
-    }
     private val focusEngine = FocusEngine(clock)
     private var focusSnapshot by mutableStateOf<FocusSession?>(null)
     private var focusHistoryEntries by mutableStateOf(
@@ -95,9 +131,10 @@ class AtlasController(context: Context) {
             .sortedByDescending { it.createdAtUtcMillis }
             .take(MAX_FOCUS_HISTORY),
     )
-    private var focusRoutinesSnapshot by mutableStateOf(
+    private val focusRoutineRepository = InMemoryFocusRoutineRepository(
         restored["focusRoutines"].asList().mapNotNull { it.asMap()?.let { values -> runCatching { FocusRoutine.fromMap(values) }.getOrNull() } }.take(MAX_FOCUS_ROUTINES),
     )
+    private var focusRoutinesSnapshot by mutableStateOf(focusRoutineRepository.list())
     val habits = InMemoryHabitRepository(clock = { clock.nowMillis() })
     private val initialDirective = restored["coach"].asMap()?.get("directives").asList()
         .firstNotNullOfOrNull { it.asMap()?.let(Directive::fromMap) }
@@ -110,14 +147,43 @@ class AtlasController(context: Context) {
         ?: dev.atlas.coach.rules.RuleEvaluatorState()
     private val ruleEvaluator = RuleEvaluator(ZoneId.systemDefault(), ruleState)
     private var policy by mutableStateOf(restored["policy"].asMap()?.let(::localPolicyFromStorage) ?: LocalPolicy())
+    private val usageStores = SharedPreferencesUsageStores(appContext)
+    private val usageAccessStatus = AndroidUsageAccessStatus(appContext)
+    private val usageObserver = UsageObserver(
+        eventSource = AndroidUsageStatsEventSource(
+            appContext.getSystemService(UsageStatsManager::class.java)
+                ?: error("UsageStatsManager is unavailable"),
+        ),
+        accessStatus = usageAccessStatus,
+        consentStore = usageStores,
+        cursorStore = usageStores,
+        stateStore = usageStores,
+        recordStore = usageStores,
+        ruleEvaluator = ruleEvaluator,
+        policyProvider = { policy },
+        frictionPresenter = AndroidFrictionPresenter(appContext),
+        platformProtectedPackages = {
+            AndroidProtectedPackages.protectedPackages(
+                appContext,
+                usageStores.currentConsent().allowlistedPackageNames,
+            )
+        },
+    )
+    private val pendingUsagePreferences = appContext.getSharedPreferences("atlas_usage_pending_consent", Context.MODE_PRIVATE)
+    private val focusLinkStore = InMemoryFocusJournalLinkStore(
+        restored["focusJournalLinks"].asList().mapNotNull { it.asMap()?.let { values -> runCatching { FocusJournalLink.fromMap(values) }.getOrNull() } },
+    )
+    private val focusSessionLinker = FocusSessionLinker(focusLinkStore)
     private var directiveSnapshot by mutableStateOf(initialDirective)
     private var habitsSnapshot by mutableStateOf<List<Habit>>(emptyList())
     private var checkedHabitIdsSnapshot by mutableStateOf<Set<String>>(emptySet())
     private var journalSnapshot by mutableStateOf<List<CoachJournalEntry>>(emptyList())
     private var interventionsSnapshot by mutableStateOf<List<Intervention>>(emptyList())
     private var coachPausedSnapshot by mutableStateOf(false)
-    private var catalog = restored["content"].asList().mapNotNull { it.asMap() }
-        .takeIf { it.isNotEmpty() }?.let(ContentCatalog::fromMaps) ?: ContentCatalog.demo()
+    private var catalog = restored["content"]?.let { raw ->
+        raw.asList().mapNotNull { it.asMap() }.let(ContentCatalog::fromMaps)
+    } ?: ContentCatalog.demo()
+    private var contentItemsSnapshot by mutableStateOf(catalog.items)
     private var habitLinkPolicy: HabitLinkPolicy
     private var lastSimulatedEvent: AppOpenEvent? = runCatching {
         restored["lastSimulatedEvent"].asMap()?.let(::eventFromMap)
@@ -144,11 +210,15 @@ class AtlasController(context: Context) {
         private set
 
     init {
+        policy = AndroidEmergencyPauseStore.apply(appContext, policy, clock.nowMillis())
         restored["focus"].asMap()?.let { saved ->
             runCatching { focusEngine.restore(FocusSession.fromMap(saved)) }
         }
         focusSnapshot = focusEngine.currentSession()
-        if (focusEngine.currentSession()?.status in setOf(dev.atlas.coach.focus.FocusStatus.RUNNING, dev.atlas.coach.focus.FocusStatus.PAUSED)) {
+        if (focusSnapshot?.status == FocusStatus.RUNNING && capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
+            focusSnapshot?.let(phaseAlarms::schedule)
+        }
+        if (focusSnapshot?.status in setOf(FocusStatus.RUNNING, FocusStatus.PAUSED)) {
             screen = SCREEN_FOCUS
         }
         lastFocusCheckpointAtElapsed = clock.monotonicMillis()
@@ -161,6 +231,10 @@ class AtlasController(context: Context) {
         restoreCoach(restored["coach"].asMap())
         directiveSnapshot = coach.currentDirective()
         refreshDomainSnapshots()
+        if (capabilities[CAP_FOCUS_ROUTINES] == true) {
+            routineAlarms.scheduleAll(focusRoutinesSnapshot, ZonedDateTime.now(), ZoneId.systemDefault())
+        }
+        if (capabilities[CAP_HABIT_REMINDERS] == true) habitReminderScheduler.rescheduleAll()
         when {
             recoveryReason != null && persistenceAllowed -> persist()
             recoveryReason != null -> touch()
@@ -174,13 +248,55 @@ class AtlasController(context: Context) {
     val focusHistory: List<FocusSession> get() = focusHistoryEntries
     val focusRoutines: List<FocusRoutine> get() = focusRoutinesSnapshot
     val activeHabits: List<Habit> get() = habitsSnapshot
+    val selectableUsageApps: List<UsageApp> get() = querySelectableUsageApps()
+    val selectedUsagePackages: Set<String> get() = usageStores.currentConsent().allowlistedPackageNames
+    val protectedUsagePackages: Set<String> get() = AndroidProtectedPackages.protectedPackages(
+        appContext,
+        usageStores.currentConsent().allowlistedPackageNames,
+    ).sorted().toSet()
+    val usagePermissionGranted: Boolean get() = usageAccessStatus.isAllowed()
+    val usageConsentActive: Boolean get() = usageStores.currentConsent().isExplicit && capabilities[CAP_APP_TRACKING] == true
+    val usageHistoryCount: Int get() = usageStores.allRecords().size
+    val usageRetentionDescription: String get() =
+        "${UsageRetention.EVENT_RETENTION_MILLIS / (24L * 60L * 60L * 1_000L)} jours maximum · ${UsageRetention.MAX_STORED_EVENTS} ouvertures locales au plus"
     val checkedHabitIds: Set<String> get() = checkedHabitIdsSnapshot
     val coachJournal: List<CoachJournalEntry> get() = journalSnapshot
     val interventions: List<Intervention> get() = interventionsSnapshot
-    val contentItems: List<ContentItem> get() = catalog.items
+    val contentItems: List<ContentItem> get() = contentItemsSnapshot
     val isCoachPaused: Boolean get() = coachPausedSnapshot
     val isEmergencyPaused: Boolean get() = policy.pauseUntil?.let { it > clock.nowMillis() } == true
     val quietHoursEnabled: Boolean get() = policy.quietHours != null
+
+    val canLinkCompletedFocusToHabit: Boolean
+        get() = focusSession?.let { FocusHabitLinkCondition.AllWorkCyclesCompleted.isSatisfiedBy(it) } == true
+
+    fun notificationPermissionGranted(): Boolean =
+        (Build.VERSION.SDK_INT < 33 || appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
+            appContext.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+
+    fun onNotificationPermissionResult(granted: Boolean) {
+        latestMessage = if (granted) {
+            "Notifications autorisées. Les alertes restent facultatives et réglables dans Android."
+        } else {
+            "Notifications refusées. Focus, routines et rappels restent utilisables dans ATLAS au premier plan."
+        }
+        touch()
+    }
+
+    fun handleNotificationIntent(intent: Intent?) {
+        if (intent?.action != AndroidFocusNotifications.ACTION_OPEN_FROM_NOTIFICATION) return
+        when {
+            intent.getStringExtra("atlas_open_routine_id") != null -> {
+                navigate(SCREEN_ROUTINES)
+                latestMessage = "Proposition de routine ouverte. Démarrez-la explicitement si vous le souhaitez."
+            }
+            intent.getStringExtra("atlas_open_focus_session") != null -> {
+                navigate(SCREEN_FOCUS)
+                latestMessage = "La phase Focus est terminée."
+            }
+        }
+        touch()
+    }
 
     fun navigate(destination: String) {
         screen = destination
@@ -236,10 +352,24 @@ class AtlasController(context: Context) {
             FocusPreset.POMODORO_25_5 -> ReefPomodoroConfig.DEFAULT
             FocusPreset.VARIANT_10_2 -> ReefPomodoroConfig(10, 2, 15, 4)
         }.toPomodoroConfig()
-        val plan = reefConfig.toFocusPlan(preset.presetId)
+        startFocus(reefConfig.toFocusPlan(preset.presetId))
+    }
+
+    /** Stable host API for preset, custom and deterministic integration-test plans. */
+    fun startFocus(plan: FocusPlan) {
+        if (capabilities[CAP_FOCUS] != true) {
+            latestMessage = "Le focus est désactivé dans les paramètres."
+            touch()
+            return
+        }
         archiveCurrentTerminalFocus()
-        focusEngine.start(plan, directive.id)
-        latestMessage = if (preset == FocusPreset.POMODORO_25_5) "Session 25/5 démarrée." else "Session 10/2 démarrée."
+        val started = focusEngine.start(plan, directive.id)
+        if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) phaseAlarms.schedule(started)
+        latestMessage = if (plan.continuous) {
+            "Focus continu démarré · ${plan.workSeconds}s de concentration par cycle."
+        } else {
+            "Focus démarré · ${plan.totalWorkCycles} cycle${if (plan.totalWorkCycles == 1) "" else "s"} au total."
+        }
         screen = SCREEN_FOCUS
         persist()
     }
@@ -253,10 +383,15 @@ class AtlasController(context: Context) {
         val plan = config.toPomodoroConfig().toFocusPlan(
             "reef-pomodoro-${config.focusMinutes}-${config.shortBreakMinutes}-${config.longBreakMinutes}-${config.cycles}",
         )
-        archiveCurrentTerminalFocus()
-        focusEngine.start(plan, directive.id)
-        latestMessage = "Pomodoro ${config.focusMinutes}/${config.shortBreakMinutes} démarré · pause longue toutes les ${config.cycles} phases."
-        screen = SCREEN_FOCUS
+        startFocus(plan)
+        latestMessage = if (config.continuous) {
+            "Pomodoro démarré · ${config.focusMinutes} min de concentration, " +
+                "pause courte de ${config.shortBreakMinutes} min · mode continu."
+        } else {
+            "Pomodoro démarré · ${config.focusMinutes} min de concentration, " +
+                "pause courte de ${config.shortBreakMinutes} min · " +
+                "${plan.totalWorkCycles} cycles de travail au total."
+        }
         persist()
     }
 
@@ -267,10 +402,7 @@ class AtlasController(context: Context) {
             return
         }
         archiveCurrentTerminalFocus()
-        focusEngine.start(FocusPlan.custom(20).copy(presetId = "demo-20-seconds"), directive.id)
-        latestMessage = "Session démo de 20 secondes démarrée."
-        screen = SCREEN_FOCUS
-        persist()
+        startFocus(FocusPlan.custom(20).copy(presetId = "demo-20-seconds"))
     }
 
     fun tickFocus() {
@@ -279,6 +411,29 @@ class AtlasController(context: Context) {
         val current = focusEngine.currentSession() ?: return
         focusSnapshot = current
         val transitioned = previous?.id != current.id || previous?.phase != current.phase || previous?.status != current.status
+        if (transitioned && previous?.status == FocusStatus.RUNNING &&
+            (previous.phase != current.phase || current.status == FocusStatus.FINISHED)
+        ) {
+            if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
+                val result = focusNotifications.notify(
+                    PhaseTransition(
+                        sessionId = current.id,
+                        sequence = 0,
+                        atUtcMillis = current.updatedAtUtcMillis,
+                        endedPhase = previous.phase,
+                        nextPhase = current.phase.takeIf { current.status == FocusStatus.RUNNING },
+                        completedWorkCycles = current.completedWorkCycles,
+                    ),
+                )
+                if (result != PhaseNotificationResult.POSTED) {
+                    latestMessage = "Phase terminée. Les notifications sont indisponibles; le compte à rebours continue dans ATLAS."
+                }
+            }
+        }
+        if (transitioned && current.status == FocusStatus.FINISHED) archiveFocusSession(current)
+        if (transitioned && capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
+            if (current.status == FocusStatus.RUNNING) phaseAlarms.schedule(current) else phaseAlarms.cancel(current.id)
+        }
         val elapsed = clock.monotonicMillis()
         val checkpointDue = current.status == dev.atlas.coach.focus.FocusStatus.RUNNING &&
             elapsed - lastFocusCheckpointAtElapsed >= FOCUS_CHECKPOINT_INTERVAL_MILLIS
@@ -294,12 +449,22 @@ class AtlasController(context: Context) {
             return
         }
         val session = focusSession ?: return
-        if (session.status.name == "RUNNING") focusEngine.pause(session.id) else if (session.status.name == "PAUSED") focusEngine.resume(session.id)
+        if (session.status == FocusStatus.RUNNING) focusEngine.pause(session.id)
+        else if (session.status == FocusStatus.PAUSED) focusEngine.resume(session.id)
         focusSnapshot = focusEngine.currentSession()
+        focusSnapshot?.let { current ->
+            if (current.status == FocusStatus.RUNNING && capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
+                phaseAlarms.schedule(current)
+            } else {
+                phaseAlarms.cancel(current.id)
+                focusNotifications.cancel(current.id)
+            }
+        }
         persist()
     }
 
     fun cancelFocus() {
+        focusSession?.let { phaseAlarms.cancel(it.id); focusNotifications.cancel(it.id) }
         focusSession?.let { focusEngine.cancel(it.id)?.let(::archiveFocusSession) }
         focusSnapshot = focusEngine.currentSession()
         latestMessage = "Session annulée."
@@ -307,9 +472,14 @@ class AtlasController(context: Context) {
     }
 
     fun finishFocus() {
+        focusSession?.let { phaseAlarms.cancel(it.id); focusNotifications.cancel(it.id) }
         focusSession?.let { focusEngine.finish(it.id)?.let(::archiveFocusSession) }
         focusSnapshot = focusEngine.currentSession()
-        latestMessage = "Session terminée. Voulez-vous la relier à une habitude ?"
+        latestMessage = if (focusSnapshot?.completedWorkCycles ?: 0 >= (focusSnapshot?.totalWorkCycles ?: Int.MAX_VALUE) && focusSnapshot?.continuous != true) {
+            "Session terminée. Voulez-vous la relier à une habitude ?"
+        } else {
+            "Session terminée avant le dernier cycle. Aucun lien d'habitude ne sera proposé."
+        }
         persist()
     }
 
@@ -320,19 +490,41 @@ class AtlasController(context: Context) {
             return
         }
         val session = focusSession ?: return
-        habitLinkPolicy.confirmLink(session.id, habitId, LocalDate.now())
-        latestMessage = "Habitude cochée après votre confirmation."
+        when (val result = focusSessionLinker.link(
+            session = session,
+            condition = FocusHabitLinkCondition.AllWorkCyclesCompleted,
+            habitId = habitId,
+            habitConfirmed = true,
+            linkedAtUtcMillis = clock.nowMillis(),
+        )) {
+            is FocusLinkResult.Recorded -> {
+                habitLinkPolicy.confirmLink(session.id, habitId, LocalDate.now())
+                latestMessage = "Habitude cochée après votre confirmation."
+            }
+            is FocusLinkResult.AlreadyRecorded -> latestMessage = "Cette session a déjà été reliée; aucun deuxième pointage n'a été ajouté."
+            FocusLinkResult.ConditionNotMet -> latestMessage = "Le lien est disponible après le dernier cycle de travail d'une session finie."
+            FocusLinkResult.HabitConfirmationRequired -> latestMessage = "Confirmez explicitement le lien avec l'habitude."
+        }
         persist()
     }
 
-    fun addHabit(name: String) {
+    fun addHabit(
+        name: String,
+        schedule: HabitSchedule = HabitSchedule.daily(),
+        reminder: HabitReminder? = null,
+    ) {
         if (capabilities[CAP_HABITS] != true) {
             latestMessage = "Les habitudes sont désactivées dans les paramètres."
             touch()
             return
         }
         try {
-            habits.add(name, HabitSchedule.daily())
+            val habit = habits.add(name, schedule)
+            if (reminder != null) habits.setReminder(habit.id, reminder)
+            if (reminder?.enabled == true && capabilities[CAP_HABIT_REMINDERS] == true) {
+                val result = habitReminderScheduler.schedule(habit.id, habit.name, reminder)
+                result.message?.let { latestMessage = it }
+            }
             latestMessage = "Habitude ajoutée."
             persist()
         } catch (error: IllegalArgumentException) {
@@ -359,6 +551,45 @@ class AtlasController(context: Context) {
         persist()
     }
 
+    fun updateHabit(habitId: String, name: String, schedule: HabitSchedule) {
+        if (capabilities[CAP_HABITS] != true) return
+        val current = habits.list().firstOrNull { it.id == habitId } ?: return
+        try {
+            val updated = current.copy(name = name.trim(), schedule = schedule)
+            habits.update(updated)
+            updated.reminder?.takeIf { it.enabled && capabilities[CAP_HABIT_REMINDERS] == true }?.let {
+                habitReminderScheduler.schedule(updated.id, updated.name, it)
+            }
+            latestMessage = "Planning de l'habitude mis à jour."
+            persist()
+        } catch (error: IllegalArgumentException) {
+            latestMessage = error.message ?: "Planning invalide."
+            touch()
+        }
+    }
+
+    fun archiveHabit(habitId: String) {
+        runCatching { habits.archive(habitId) }
+        habitReminderScheduler.cancel(habitId)
+        latestMessage = "Habitude supprimée de la liste active. Son historique local reste dans l'export."
+        persist()
+    }
+
+    fun setHabitReminder(habitId: String, reminder: HabitReminder?) {
+        if (capabilities[CAP_HABITS] != true) return
+        val saved = habits.setReminder(habitId, reminder)
+        var message = if (reminder?.enabled == true) "Rappel enregistré." else "Rappel désactivé."
+        if (reminder?.enabled == true && capabilities[CAP_HABIT_REMINDERS] == true) {
+            val result = habitReminderScheduler.schedule(saved.id, saved.name, reminder)
+            result.message?.let { message = it }
+        } else {
+            habitReminderScheduler.cancel(habitId)
+            if (reminder?.enabled == true) message = "Rappel enregistré, mais la capacité Rappels d'habitudes est désactivée."
+        }
+        latestMessage = message
+        persist()
+    }
+
     fun changeHistoryDays(days: Int) {
         historyDays = if (days == 30) 30 else 7
         touch()
@@ -375,7 +606,7 @@ class AtlasController(context: Context) {
         persist()
     }
 
-    fun addFocusRoutine(name: String, start: String, end: String, weekdaysOnly: Boolean): Boolean {
+    fun addFocusRoutine(name: String, start: String, end: String, weekdaysOnly: Boolean, focusMinutes: Int = 25): Boolean {
         if (capabilities[CAP_FOCUS_ROUTINES] != true) return false
         val normalizedName = name.trim()
         val startTime = runCatching { LocalTime.parse(start.trim()) }.getOrNull()
@@ -386,17 +617,56 @@ class AtlasController(context: Context) {
             return false
         }
         val schedule = if (weekdaysOnly) RoutineSchedule.weekdays(startTime, endTime) else RoutineSchedule.daily(startTime, endTime)
-        val routine = FocusRoutine.create(normalizedName, schedule)
-        focusRoutinesSnapshot = (focusRoutinesSnapshot + routine).takeLast(MAX_FOCUS_ROUTINES)
+        val routine = focusRoutineRepository.create(normalizedName, schedule, focusMinutes.coerceIn(1, 180))
+        focusRoutinesSnapshot = focusRoutineRepository.list().takeLast(MAX_FOCUS_ROUTINES)
+        routineAlarms.schedule(routine, ZonedDateTime.now(), ZoneId.systemDefault())
         latestMessage = "Routine locale ajoutée. Elle proposera un focus pendant sa plage horaire."
         persist()
         return true
     }
 
     fun deleteFocusRoutine(id: String) {
-        focusRoutinesSnapshot = focusRoutinesSnapshot.filterNot { it.id == id }
+        focusRoutineRepository.delete(id)
+        focusRoutinesSnapshot = focusRoutineRepository.list()
+        routineAlarms.cancel(id)
         persist()
     }
+
+    fun updateFocusRoutine(id: String, name: String, start: String, end: String, weekdaysOnly: Boolean, focusMinutes: Int = 25): Boolean {
+        if (capabilities[CAP_FOCUS_ROUTINES] != true) return false
+        val current = focusRoutineRepository.find(id) ?: return false
+        val startTime = runCatching { LocalTime.parse(start.trim()) }.getOrNull()
+        val endTime = runCatching { LocalTime.parse(end.trim()) }.getOrNull()
+        val normalizedName = name.trim()
+        if (normalizedName.isEmpty() || startTime == null || endTime == null) {
+            latestMessage = "Indiquez un nom et deux heures valides au format HH:mm."
+            touch()
+            return false
+        }
+        val schedule = if (weekdaysOnly) RoutineSchedule.weekdays(startTime, endTime) else RoutineSchedule.daily(startTime, endTime)
+        val updated = current.copy(name = normalizedName, schedule = schedule, focusMinutes = focusMinutes.coerceIn(1, 180))
+        focusRoutineRepository.update(updated)
+        focusRoutinesSnapshot = focusRoutineRepository.list()
+        routineAlarms.schedule(updated, ZonedDateTime.now(), ZoneId.systemDefault())
+        latestMessage = "Routine mise à jour. Elle reste une proposition à confirmer."
+        persist()
+        return true
+    }
+
+    fun setFocusRoutineEnabled(id: String, enabled: Boolean) {
+        val routine = focusRoutineRepository.setEnabled(id, enabled) ?: return
+        focusRoutinesSnapshot = focusRoutineRepository.list()
+        if (enabled && capabilities[CAP_FOCUS_ROUTINES] == true) {
+            routineAlarms.schedule(routine, ZonedDateTime.now(), ZoneId.systemDefault())
+        } else {
+            routineAlarms.cancel(id)
+        }
+        latestMessage = if (enabled) "Routine activée; elle proposera une session." else "Routine désactivée; son alarme a été annulée."
+        persist()
+    }
+
+    fun nextFocusRoutineTrigger(id: String, after: ZonedDateTime = ZonedDateTime.now()): ZonedDateTime? =
+        focusRoutineRepository.nextTrigger(id, after, ZoneId.systemDefault())
 
     fun activeFocusRoutines(now: ZonedDateTime = ZonedDateTime.now()): List<FocusRoutine> =
         RoutineEvaluator.active(focusRoutinesSnapshot, now).map { it.first }
@@ -415,10 +685,40 @@ class AtlasController(context: Context) {
     fun habitHistorySummary(habit: Habit): String {
         val history = habits.history(habit.id, LocalDate.now(), historyDays)
         val strength = (habits.strength(habit.id, LocalDate.now()) * 100).toInt()
-        return "${history.completedDueDays}/${history.dueDays} jours · force ${strength}% · série ${history.currentStreak}"
+        val rate = (history.completionRate * 100).toInt()
+        return "${history.completedDueDays}/${history.dueDays} échéances · taux ${rate}% · ${history.notDueDays} jours sans échéance · série ${history.currentStreak} (meilleure ${history.bestStreak}) · force ${strength}%"
     }
 
     fun exportHabits(): String = habits.exportCsv()
+
+    fun addContentLink(title: String, url: String): Boolean {
+        if (capabilities[CAP_CONTENT] != true) return false
+        return try {
+            catalog.addManualLink(title, url)
+            latestMessage = "Lien vidéo ajouté à la bibliothèque."
+            persist()
+            true
+        } catch (error: IllegalArgumentException) {
+            latestMessage = error.message ?: "Lien vidéo invalide."
+            touch()
+            false
+        }
+    }
+
+    fun removeContent(id: String) {
+        if (catalog.remove(id)) {
+            latestMessage = "Élément supprimé de la bibliothèque."
+            persist()
+        }
+    }
+
+    fun pinContent(id: String, pinned: Boolean) {
+        if (catalog.setPinned(id, pinned)) persist()
+    }
+
+    fun setContentOpenCounting(id: String, enabled: Boolean) {
+        if (catalog.setOpenCountingEnabled(id, enabled)) persist()
+    }
 
     fun openContent(id: String, context: Context): ContentOpenResult {
         if (capabilities[CAP_CONTENT] != true) {
@@ -427,8 +727,127 @@ class AtlasController(context: Context) {
         }
         val result = catalog.open(id, AndroidContentOpener(context))
         latestMessage = result.message
-        touch()
+        persist()
         return result
+    }
+
+    /** Explicit consent action. False means the user must grant Usage Access in Android Settings. */
+    fun activateUsageObservation(packageNames: Set<String>): Boolean {
+        val selectable = selectableUsageApps.mapTo(mutableSetOf()) { it.packageName }
+        val selected = packageNames.intersect(selectable)
+        if (selected.isEmpty()) {
+            latestMessage = "Choisissez au moins une application lançable."
+            touch()
+            return false
+        }
+        pendingUsagePreferences.edit().putStringSet(KEY_PENDING_USAGE_PACKAGES, selected.toSet()).apply()
+        if (!usageAccessStatus.isAllowed()) {
+            latestMessage = "Choix enregistré. Accordez Accès à l'utilisation dans Android, puis revenez dans ATLAS."
+            touch()
+            return false
+        }
+        return grantPendingUsageObservation(selected)
+    }
+
+    /** Called on Activity resume so permission changes made in Settings are observed immediately. */
+    fun onHostResumed() {
+        val pending = pendingUsagePreferences.getStringSet(KEY_PENDING_USAGE_PACKAGES, emptySet()).orEmpty()
+        if (usageAccessStatus.isAllowed()) {
+            if (pending.isNotEmpty()) grantPendingUsageObservation(pending)
+            return
+        }
+        if (pending.isNotEmpty()) {
+            pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
+            latestMessage = "Accès à l'utilisation non accordé. Aucune observation n'est active."
+            touch()
+        }
+        if (usageConsentActive) {
+            revokeUsageObservation("Accès à l'utilisation a été retiré. L'observation est arrêtée et son historique a été purgé.")
+        }
+    }
+
+    fun usageAccessSettingsIntent(): Intent = systemUsageAccessSettingsIntent()
+
+    fun pollUsageObservation() {
+        if (!usageConsentActive) return
+        if (!usageAccessStatus.isAllowed()) {
+            revokeUsageObservation("Accès à l'utilisation n'est plus autorisé. L'observation est arrêtée et son historique a été purgé.")
+            return
+        }
+        val result = usageObserver.poll(clock.nowMillis())
+        if (result.status == UsagePollStatus.PERMISSION_REQUIRED) {
+            revokeUsageObservation("Accès à l'utilisation n'est plus autorisé. L'observation est arrêtée et son historique a été purgé.")
+        } else if (result.interventions.isNotEmpty()) {
+            latestMessage = "Une proposition de pause est disponible dans la notification. ATLAS n'a pas bloqué l'application."
+            touch()
+        }
+    }
+
+    fun revokeUsageObservation(message: String = "Observation désactivée. L'historique et les données de déduplication ont été supprimés.") {
+        usageObserver.revokeConsent()
+        pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
+        policy = policy.copy(allowlistedPackageNames = emptySet())
+        capabilities = capabilities + (CAP_APP_TRACKING to false)
+        latestMessage = message
+        persist()
+    }
+
+    fun deleteUsageHistory() {
+        usageObserver.deleteHistory()
+        latestMessage = "Historique d'observation supprimé. Le consentement sélectionné reste actif."
+        touch()
+    }
+
+    fun exportUsageHistoryCsv(): String = usageObserver.exportHistoryCsv()
+
+    fun usagePermissionStatusText(): String = if (usagePermissionGranted) "Accordé dans Android" else "Non accordé dans Android"
+
+    private fun grantPendingUsageObservation(packageNames: Set<String>): Boolean {
+        val selected = packageNames.intersect(selectableUsageApps.mapTo(mutableSetOf()) { it.packageName })
+        if (selected.isEmpty() || !usageAccessStatus.isAllowed()) return false
+        return try {
+            val consent = ObservationConsent.grant(
+                purpose = ObservationPurpose.GENTLE_FRICTION,
+                allowlistedPackageNames = selected,
+                nowUtc = clock.nowMillis(),
+            )
+            usageObserver.acceptConsent(consent, clock.nowMillis())
+            pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
+            policy = policy.copy(allowlistedPackageNames = selected, excludedPackageNames = policy.excludedPackageNames + protectedUsagePackages)
+            capabilities = capabilities + (CAP_APP_TRACKING to true)
+            latestMessage = "Observation activée pour ${selected.size} application(s) sélectionnée(s). Les ouvertures sont lues uniquement quand ATLAS est visible."
+            persist()
+            true
+        } catch (error: IllegalArgumentException) {
+            latestMessage = error.message ?: "Le choix d'applications contient une app protégée."
+            pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
+            touch()
+            false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun querySelectableUsageApps(): List<UsageApp> {
+        val pm = appContext.packageManager
+        val launchIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        val resolved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(launchIntent, PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            pm.queryIntentActivities(launchIntent, 0)
+        }
+        val packages = resolved.mapNotNull { it.activityInfo?.packageName }.toSet()
+        val selectable = AndroidProtectedPackages.selectablePackages(appContext, packages)
+        return resolved.asSequence()
+            .mapNotNull { info ->
+                val packageName = info.activityInfo?.packageName ?: return@mapNotNull null
+                if (packageName !in selectable) return@mapNotNull null
+                val label = runCatching { info.loadLabel(pm).toString() }.getOrDefault(packageName)
+                UsageApp(packageName, label)
+            }
+            .distinctBy(UsageApp::packageName)
+            .sortedBy { it.label.lowercase() }
+            .toList()
     }
 
     fun simulateFourOpenings() {
@@ -441,7 +860,8 @@ class AtlasController(context: Context) {
         val events = AppEventSimulator(clock) { UUID.randomUUID().toString() }
             .generate("dev.atlas.demo.distraction", 4, 5 * 60L, now - 15 * 60 * 1_000L)
         var emitted = 0
-        events.forEach { event -> if (ruleEvaluator.evaluate(event, policy) != null) emitted++ }
+        val simulationPolicy = policy.copy(allowlistedPackageNames = setOf("dev.atlas.demo.distraction"))
+        events.forEach { event -> if (ruleEvaluator.evaluate(event, simulationPolicy) != null) emitted++ }
         lastSimulatedEvent = events.lastOrNull()
         lastSimulationInterventions = emitted
         simulationMessage = "4 événements simulés · $emitted proposition${if (emitted == 1) "" else "s"} affichée${if (emitted == 1) "" else "s"}."
@@ -459,7 +879,7 @@ class AtlasController(context: Context) {
         if (event == null) {
             simulationMessage = "Aucun événement précédent à répéter."
         } else {
-            val duplicateResult = ruleEvaluator.evaluate(event, policy)
+            val duplicateResult = ruleEvaluator.evaluate(event, policy.copy(allowlistedPackageNames = setOf("dev.atlas.demo.distraction")))
             simulationMessage = if (duplicateResult == null) {
                 "Doublon ignoré · ${ruleEvaluator.snapshot().interventions.size} intervention(s) conservée(s)."
             } else {
@@ -477,7 +897,8 @@ class AtlasController(context: Context) {
         }
         val events = AppEventSimulator(clock) { UUID.randomUUID().toString() }
             .generate("dev.atlas.demo.distraction", 4, 10L, clock.nowMillis())
-        val emitted = events.count { ruleEvaluator.evaluate(it, policy) != null }
+        val simulationPolicy = policy.copy(allowlistedPackageNames = setOf("dev.atlas.demo.distraction"))
+        val emitted = events.count { ruleEvaluator.evaluate(it, simulationPolicy) != null }
         lastSimulationInterventions = emitted
         simulationMessage = "4 nouveaux événements · $emitted proposition${if (emitted == 1) "" else "s"} pendant la période d'attente."
         persist()
@@ -489,18 +910,30 @@ class AtlasController(context: Context) {
     }
 
     fun setEmergencyPause() {
-        policy = policy.withEmergencyPause(clock.nowMillis())
+        val now = clock.nowMillis()
+        AndroidEmergencyPauseStore.pauseForThirtyMinutes(appContext, now)
+        policy = policy.withEmergencyPause(now)
         latestMessage = "Pause d'urgence active pendant 30 minutes."
         persist()
     }
 
     fun endEmergencyPause() {
+        AndroidEmergencyPauseStore.clear(appContext)
         policy = policy.copy(pauseUntil = null)
         latestMessage = "La pause d'urgence est terminée."
         persist()
     }
 
     fun setCapability(name: String, enabled: Boolean) {
+        if (name == CAP_APP_TRACKING) {
+            if (enabled) {
+                latestMessage = "L'observation ne peut être activée que depuis l'écran Observation, après choix des apps et vérification d'Android."
+                touch()
+            } else {
+                revokeUsageObservation()
+            }
+            return
+        }
         capabilities = capabilities + (name to enabled)
         if (name == CAP_LAUNCHER_HOME && !enabled && screen == SCREEN_LAUNCHER) {
             screen = SCREEN_HOME
@@ -510,7 +943,30 @@ class AtlasController(context: Context) {
             val current = focusEngine.currentSession()
             if (current != null && CapabilityRules.mustPauseFocusOnDisable(enabled, current.status)) {
                 focusSnapshot = focusEngine.pause(current.id)
+                phaseAlarms.cancel(current.id)
+                focusNotifications.cancel(current.id)
                 latestMessage = "Focus désactivé. La session a été mise en pause; réactivez Focus pour la reprendre."
+            }
+        }
+        if (name == CAP_FOCUS_NOTIFICATIONS) {
+            val active = focusEngine.currentSession()
+            if (enabled && active?.status == FocusStatus.RUNNING) phaseAlarms.schedule(active)
+            else if (!enabled && active != null) {
+                phaseAlarms.cancel(active.id)
+                focusNotifications.cancel(active.id)
+            }
+        }
+        if (name == CAP_FOCUS_ROUTINES) {
+            if (enabled) routineAlarms.scheduleAll(focusRoutineRepository.list(), ZonedDateTime.now(), ZoneId.systemDefault())
+            else focusRoutineRepository.list().forEach { routineAlarms.cancel(it.id) }
+        }
+        if (name == CAP_HABIT_REMINDERS) {
+            if (enabled) {
+                habits.list().forEach { habit ->
+                    habit.reminder?.takeIf(HabitReminder::enabled)?.let { habitReminderScheduler.schedule(habit.id, habit.name, it) }
+                }
+            } else {
+                habits.list().forEach { habit -> habitReminderScheduler.cancel(habit.id) }
             }
         }
         persist()
@@ -571,6 +1027,7 @@ class AtlasController(context: Context) {
             "focus" to focusSnapshot?.toMap(),
             "focusHistory" to focusHistoryEntries.map(FocusSession::toMap),
             "focusRoutines" to focusRoutinesSnapshot.map(FocusRoutine::toMap),
+            "focusJournalLinks" to focusLinkStore.all().map(FocusJournalLink::toMap),
             "habits" to habits.exportMaps(),
             "habitLink" to habitLinkPolicy.toMap(),
             "coach" to mapOf(
@@ -594,7 +1051,9 @@ class AtlasController(context: Context) {
 
     private fun refreshDomainSnapshots() {
         directiveSnapshot = coach.currentDirective()
+        contentItemsSnapshot = catalog.items
         habitsSnapshot = habits.list()
+        focusRoutinesSnapshot = focusRoutineRepository.list()
         val today = LocalDate.now()
         checkedHabitIdsSnapshot = habitsSnapshot.asSequence()
             .filter { habit -> habits.checkIns(habit.id).any { it.date == today } }
@@ -626,6 +1085,8 @@ class AtlasController(context: Context) {
         const val SCREEN_COACH = "Coach"
         const val SCREEN_SETTINGS = "Paramètres"
         const val SCREEN_SIMULATOR = "Simulateur de friction"
+        const val SCREEN_DIAGNOSTICS = "Diagnostic avancé / développeur"
+        const val SCREEN_OBSERVATION = "Observation"
         const val SCREEN_LAUNCHER = "Accueil launcher"
         const val SCREEN_ABOUT = "À propos / Licences"
         const val SCREEN_FOCUS_STATS = "Statistiques de focus"
@@ -638,9 +1099,12 @@ class AtlasController(context: Context) {
         const val CAP_APP_TRACKING = "appTrackingConsent"
         const val CAP_LAUNCHER_HOME = "launcherHome"
         const val CAP_FOCUS_ROUTINES = "focusRoutines"
+        const val CAP_FOCUS_NOTIFICATIONS = "focusNotifications"
+        const val CAP_HABIT_REMINDERS = "habitReminders"
         const val FOCUS_CHECKPOINT_INTERVAL_MILLIS = 20_000L
         const val MAX_FOCUS_HISTORY = 100
         const val MAX_FOCUS_ROUTINES = 100
+        private const val KEY_PENDING_USAGE_PACKAGES = "pending_allowlist"
 
         private fun readCapabilities(values: Map<String, Any?>?): Map<String, Boolean> {
             val defaults = mapOf(
@@ -652,6 +1116,8 @@ class AtlasController(context: Context) {
                 CAP_APP_TRACKING to false,
                 CAP_LAUNCHER_HOME to false,
                 CAP_FOCUS_ROUTINES to false,
+                CAP_FOCUS_NOTIFICATIONS to false,
+                CAP_HABIT_REMINDERS to false,
             )
             return defaults + values.orEmpty().mapNotNull { (key, value) -> (value as? Boolean)?.let { key to it } }
         }
@@ -669,6 +1135,8 @@ class AtlasController(context: Context) {
         )
     }
 }
+
+data class UsageApp(val packageName: String, val label: String)
 
 private fun Any?.asMap(): Map<String, Any?>? = (this as? Map<*, *>)
     ?.entries?.mapNotNull { (key, value) -> (key as? String)?.let { it to value } }?.toMap()

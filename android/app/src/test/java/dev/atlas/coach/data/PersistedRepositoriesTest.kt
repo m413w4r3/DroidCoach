@@ -11,6 +11,7 @@ import dev.atlas.coach.habits.InMemoryHabitRepository
 import dev.atlas.coach.rules.AppEventSimulator
 import dev.atlas.coach.rules.LocalPolicy
 import dev.atlas.coach.rules.RuleEvaluator
+import java.time.LocalTime
 import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
@@ -39,6 +40,35 @@ class PersistedRepositoriesTest {
         val duringCooldown = AppEventSimulator(clock) { "later-${laterIndex++}" }.generate("demo.app", 4, 60L, clock.nowMillis() + 1)
         assertEquals(0, duringCooldown.count { restored.evaluate(it, restoredPolicy) != null })
         assertEquals(1, restored.snapshot().interventions.size)
+    }
+
+    @Test
+    fun policyAllowlistAndExceptionsRoundTripWhileLegacyFieldsRemainIntact() {
+        val legacy = localPolicyFromStorage(
+            mapOf(
+                "ruleId" to "custom-rule",
+                "openThreshold" to 3,
+                "windowMillis" to 900_000L,
+                "cooldownMillis" to 120_000L,
+                "quietStart" to "22:00",
+                "quietEnd" to "07:00",
+                "pauseUntil" to 10_000L,
+                "vitalPackageNames" to listOf("com.android.phone"),
+            ),
+        )
+        assertEquals("custom-rule", legacy.ruleId)
+        assertEquals(3, legacy.openThreshold)
+        assertEquals(900_000L, legacy.windowMillis)
+        assertEquals(LocalTime.of(22, 0), legacy.quietHours?.start)
+        assertEquals(setOf("com.android.phone"), legacy.vitalPackageNames)
+        assertEquals(emptySet<String>(), legacy.allowlistedPackageNames)
+        assertEquals(emptySet<String>(), legacy.excludedPackageNames)
+
+        val consented = legacy.copy(
+            allowlistedPackageNames = setOf("dev.atlas.fixture.distraction"),
+            excludedPackageNames = setOf("com.android.settings"),
+        )
+        assertEquals(consented, localPolicyFromStorage(consented.toStorageMap()))
     }
 
     @Test

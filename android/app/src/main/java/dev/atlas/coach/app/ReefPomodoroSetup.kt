@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -29,17 +31,31 @@ internal fun ReefPomodoroSetup(onStart: (ReefPomodoroConfig) -> Unit) {
     var focus by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.focusMinutes) }
     var shortBreak by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.shortBreakMinutes) }
     var longBreak by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.longBreakMinutes) }
-    var cycles by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.cycles) }
+    var longBreakEvery by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.cycles) }
+    var totalCycles by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.totalWorkCycles) }
+    var continuous by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Pomodoro personnalisé", style = MaterialTheme.typography.titleMedium)
         DurationStepper("Concentration", focus, 1, 180) { focus = it }
         DurationStepper("Pause courte", shortBreak, 1, 60) { shortBreak = it }
         DurationStepper("Pause longue", longBreak, 1, 120) { longBreak = it }
-        DurationStepper("Cycles avant pause longue", cycles, 1, 12) { cycles = it }
+        DurationStepper("Cycles avant la pause longue", longBreakEvery, 1, 12) { longBreakEvery = it }
+        DurationStepper("Cycles de travail au total", totalCycles, 1, 100) { totalCycles = it }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column {
+                Text("Mode continu")
+                Text("Sans arrêt automatique après un nombre fixe de cycles.", style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = continuous, onCheckedChange = { continuous = it })
+        }
         Button(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
-            onClick = { onStart(ReefPomodoroConfig(focus, shortBreak, longBreak, cycles)) },
+            onClick = { onStart(ReefPomodoroConfig(focus, shortBreak, longBreak, longBreakEvery, totalCycles, continuous)) },
         ) { Text("Démarrer le Pomodoro") }
     }
 }
