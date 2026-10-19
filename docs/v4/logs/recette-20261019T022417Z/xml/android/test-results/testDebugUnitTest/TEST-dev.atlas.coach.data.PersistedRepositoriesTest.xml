@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.data.PersistedRepositoriesTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:24:25.995Z" hostname="all" time="0.036">
+  <properties/>
+  <testcase name="ruleCountsAndCooldownSurviveJsonRoundTrip" classname="dev.atlas.coach.data.PersistedRepositoriesTest" time="0.016"/>
+  <testcase name="habitsAndCoachRestoreSnapshotsAndKeepIdempotency" classname="dev.atlas.coach.data.PersistedRepositoriesTest" time="0.017"/>
+  <testcase name="policyAllowlistAndExceptionsRoundTripWhileLegacyFieldsRemainIntact" classname="dev.atlas.coach.data.PersistedRepositoriesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

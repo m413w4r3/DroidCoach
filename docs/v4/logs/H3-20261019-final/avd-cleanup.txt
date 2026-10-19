@@ -1,0 +1,8 @@
+H3 AVD cleanup after persistence checks — 19 October 2026
+
+- `adb shell pm clear dev.atlas.coach` → Success (only test fixture data cleared; APK remains installed)
+- `adb shell cmd package set-home-activity --user 0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity` → Success
+- `cmd package resolve-activity -a MAIN -c HOME` → `com.google.android.apps.nexuslauncher/.NexusLauncherActivity`
+- `am start -a MAIN -c HOME` delivered to the system launcher
+- `dumpsys activity activities`: `topResumedActivity=com.google.android.apps.nexuslauncher/.NexusLauncherActivity`
+- ATLAS debug package remains installed; no `ROLE_HOME` selection is active.

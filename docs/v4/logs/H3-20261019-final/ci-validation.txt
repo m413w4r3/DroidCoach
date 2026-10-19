@@ -1,0 +1,6 @@
+Workflow: .github/workflows/ci.yml
+JVM tests + lint + assembleDebug: PASS
+pytest: PASS
+No emulator setup: PASS
+PyYAML syntax parse: PASS
+actionlint: not installed; manual review + YAML parse used

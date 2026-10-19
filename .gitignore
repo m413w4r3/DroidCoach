@@ -1,5 +1,6 @@
 _research/
 .gradle/
+android/.kotlin/
 .idea/
 **/build/
 *.apk

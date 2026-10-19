@@ -1,0 +1,28 @@
+H3 — vérification système sur APK finale, 19 octobre 2026
+APK SHA-256: 63d04aa1e6a14ca5ebbf753c1c62dede0b5723a7ead0742c0be28116c35f2884
+AVD: Pixel_9_Pro_XL_2, emulator-5556, Android API 37 / sdk_full 37.2
+
+Commande de test: adb shell am instrument -w -e class dev.atlas.coach.launcher.LauncherFavoriteOpenInstrumentationTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Résultat: OK (1 test); assertion de restauration du contrôleur réussie.
+
+Données synthétiques écrites par le test direct:
+- focus_running=true
+- habit_present=true, habit_checked_in=true
+- settings_pinned=true
+
+Force-stop et relance:
+- adb shell am force-stop dev.atlas.coach: PASS
+- adb shell pidof dev.atlas.coach après force-stop: processus absent
+- adb shell am start -n dev.atlas.coach/.app.MainActivity: activité démarrée
+- les quatre assertions locales restent vraies après relance
+
+Redémarrage sans wipe:
+- adb reboot (aucune option wipe): PASS
+- sys.boot_completed=1
+- ro.boot.qemu.avd_name=Pixel_9_Pro_XL_2
+- getconf PAGE_SIZE=16384
+- HOME résolu: com.google.android.apps.nexuslauncher.NexusLauncherActivity
+- les quatre assertions locales restent vraies après reboot et après relance explicite de l'Activity
+- logcat depuis le reboot: 0 ligne FATAL EXCEPTION / ANR pour dev.atlas.coach
+
+Les valeurs d'état sérialisées ne sont pas copiées dans ce journal; seules les assertions synthétiques y figurent.

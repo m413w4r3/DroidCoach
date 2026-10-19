@@ -54,6 +54,7 @@ class SyncSettingsScreenCaptureTest {
                 }
             }
         }
+        composeRule.onNodeWithText("Partage backend facultatif").assertIsDisplayed()
         composeRule.onNodeWithTag("sync_status_card").assertIsDisplayed()
 
         when (state) {
@@ -83,7 +84,9 @@ class SyncSettingsScreenCaptureTest {
                 }
             }
         }
-        shell("screencap -p /sdcard/H2-$state.png")
+        composeRule.waitForIdle()
+        if (state != "disabled") shell("screencap -p /sdcard/H2-$state.png")
+        else android.util.Log.i("ATLAS_H2", "capture_state=disabled; screenshot omitted because this standalone host is blank; use the AtlasVisualCaptureTest LocalMock capture")
         android.util.Log.i("ATLAS_H2", "capture_state=$state status=${controller.syncStatus} pending=${controller.syncPendingCount}")
         if (state != "disabled") {
             composeRule.runOnUiThread {

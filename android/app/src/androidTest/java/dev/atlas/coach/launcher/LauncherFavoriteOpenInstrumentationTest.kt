@@ -7,6 +7,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.app.MainActivity
+import dev.atlas.coach.focus.FocusPlan
+import dev.atlas.coach.focus.FocusStatus
+import dev.atlas.coach.habits.HabitSchedule
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -27,7 +31,7 @@ class LauncherFavoriteOpenInstrumentationTest {
     }
 
     @Test
-    fun favoritePinSurvivesControllerRecreationAndLaunchesSettings() {
+    fun favoriteFocusAndHabitStateSurviveControllerRecreationAndLaunchSettings() {
         val catalog = AndroidLauncherCatalog(context)
         val settingsApp = catalog.list().firstOrNull { it.appPackage == "com.android.settings" }
         assertNotNull("Android Settings must be discoverable from MAIN/LAUNCHER", settingsApp)
@@ -37,8 +41,13 @@ class LauncherFavoriteOpenInstrumentationTest {
         val firstController = AtlasController(context)
         firstController.setCapability(AtlasController.CAP_LAUNCHER_HOME, true)
         firstController.toggleLauncherPin(app.appPackage)
+        firstController.addHabit("Recette locale", HabitSchedule.daily())
+        firstController.toggleHabitToday(firstController.habits.list().single())
+        firstController.startFocus(FocusPlan.custom(3_600))
         val restoredController = AtlasController(context)
         assertTrue(app.appPackage in restoredController.launcherPinnedPackages)
+        assertTrue(restoredController.habits.list().any { it.name == "Recette locale" })
+        assertEquals(FocusStatus.RUNNING, restoredController.focusSession?.status)
 
         assertTrue(catalog.launch(app))
         instrumentation.waitForIdleSync()

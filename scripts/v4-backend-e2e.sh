@@ -103,6 +103,7 @@ run_android_scenario() {
 run_capture() {
   local state="$1"
   local raw="$WORK_DIR/capture-$state.raw.log"
+  "$ADB" -s "$SERIAL" shell rm -f "/sdcard/H2-$state.png"
   if ! "$ADB" -s "$SERIAL" shell am instrument -w \
       -e class dev.atlas.coach.sync.SyncSettingsScreenCaptureTest#captureRequestedState \
       -e capture_state "$state" \
@@ -118,8 +119,12 @@ run_capture() {
     tail -120 "$OUTPUT_DIR/capture-$state.log" >&2
     return 1
   fi
-  "$ADB" -s "$SERIAL" pull "/sdcard/H2-$state.png" "$ROOT/docs/v4/captures/H2-$state.png" >/dev/null
-  printf 'PASS: capture %s saved.\n' "$state"
+  if [[ "$state" == "disabled" ]]; then
+    printf 'PASS: disabled LocalMock state asserted; clean capture is G-sync-offline.png.\n'
+  else
+    "$ADB" -s "$SERIAL" pull "/sdcard/H2-$state.png" "$ROOT/docs/v4/captures/H2-$state.png" >/dev/null
+    printf 'PASS: capture %s saved.\n' "$state"
+  fi
 }
 
 verify_sqlite_count() {

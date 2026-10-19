@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.sync.AgentContractsTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:24:26.236Z" hostname="all" time="0.008">
+  <properties/>
+  <testcase name="proposalJournalPersistsRecordsAcrossRecreation" classname="dev.atlas.coach.sync.AgentContractsTest" time="0.006"/>
+  <testcase name="mockOnlyProposesAndJournalsDeterministicSimulation" classname="dev.atlas.coach.sync.AgentContractsTest" time="0.001"/>
+  <testcase name="revokedMandateAndSystemActionsAreRejectedLocally" classname="dev.atlas.coach.sync.AgentContractsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.app.DisplayLabelsTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:45:33.692Z" hostname="all" time="0.002">
+  <properties/>
+  <testcase name="focusStatusesAndCoachEffectsUseFrenchLabels" classname="dev.atlas.coach.app.DisplayLabelsTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

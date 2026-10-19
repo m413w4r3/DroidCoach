@@ -170,6 +170,9 @@ class AtlasVisualCaptureTest {
         capture("G-settings-diagnostic.png")
         select(screen, CaptureScreen.SYNC)
         capture("G-sync-offline.png")
+        composeRule.runOnUiThread { night.intValue = Configuration.UI_MODE_NIGHT_YES }
+        composeRule.onNodeWithText("Désactivé · LocalMock").assertIsDisplayed()
+        capture("H3-sync-disabled-dark.png")
     }
 
     @Test

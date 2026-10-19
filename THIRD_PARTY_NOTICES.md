@@ -1,6 +1,6 @@
 # THIRD-PARTY NOTICES
 
-ATLAS S6 reuses the source files listed below for this project’s exclusively private use. This document is part of the required license and attribution notices. The application name, launcher icon, package ID and brand remain ATLAS-owned; no Reef or Olauncher branding assets are included.
+ATLAS is a public source repository distributed under GNU GPL version 3; see [LICENSE](LICENSE). Adapted GPL-covered sources and their exact origins are listed below. Reef's separate MIT attribution condition is retained. The application name, launcher icon, package ID and brand remain ATLAS-owned; no Reef or Olauncher branding assets are included.
 
 ## Components and source revisions
 

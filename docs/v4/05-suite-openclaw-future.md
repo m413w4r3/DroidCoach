@@ -17,3 +17,7 @@ Le workflow relit le mandat local au moment de chaque proposition, exécute `Man
 ## Extensions reportées
 
 Une implémentation ultérieure devra conserver ces contrats, expliciter provenance et rétention du contexte, révocation immédiate du mandat, confirmation pour tout effet externe et journal des décisions. La présence d'une interface ne signifie pas qu'un adaptateur OpenClaw ou LLM existe, ni qu'une action puisse être exécutée.
+
+## Vérification finale H3
+
+L'audit de fin de V4 confirme que ce document décrit des contrats uniquement. Aucun endpoint OpenClaw, processus agent, jeton, outil, shell, scheduler, LLM ou capacité d'action distante n'a été ajouté dans H3. Le mock déterministe reste local et ne consomme pas les données privées d'applications tierces.

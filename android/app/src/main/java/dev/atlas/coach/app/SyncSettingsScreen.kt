@@ -42,7 +42,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
     val syncEnabled = controller.capabilities[AtlasController.CAP_SYNC] == true
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Partage backend facultatif", style = MaterialTheme.typography.headlineSmall)
+        Text("Partage backend facultatif", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
         Text(
             "ATLAS reste local par défaut. Aucune connexion n'est ouverte avant l'activation de Sync et le choix d'au moins une catégorie.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -59,7 +59,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Activer la sync", modifier = Modifier.weight(1f))
+            Text("Activer la sync", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
             Switch(
                 checked = syncEnabled,
                 onCheckedChange = controller::setSyncEnabled,
@@ -71,7 +71,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text("Catégories partagées", style = MaterialTheme.typography.titleMedium)
+        Text("Catégories partagées", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         SyncCategoryRow("Focus", "Démarrages, pauses et fins; sans nom de tâche.", SyncDataCategory.FOCUS, controller)
         SyncCategoryRow("Habitudes", "Validations seulement; sans nom d'habitude.", SyncDataCategory.HABIT, controller)
         SyncCategoryRow("Bibliothèque", "Ouverture seulement; sans titre ni URL.", SyncDataCategory.CONTENT, controller)
@@ -80,11 +80,11 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = false, onCheckedChange = {}, enabled = false, modifier = Modifier.semantics { contentDescription = "Détails privés d'applications · indisponibles" })
             Column(modifier = Modifier.weight(1f)) {
-                Text("Détails privés d'applications")
+                Text("Détails privés d'applications", color = MaterialTheme.colorScheme.onSurface)
                 Text("Désactivés et jamais envoyés.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Text("Backend", style = MaterialTheme.typography.titleMedium)
+        Text("Backend", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text("URL du backend", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth().testTag("sync_backend_url"),
@@ -113,7 +113,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             },
         ) { Text("Enregistrer la configuration") }
         if (controller.syncTokenConfigured) {
-            Text("Jeton enregistré et chiffré; sa valeur n'est pas affichée.", style = MaterialTheme.typography.bodySmall)
+            Text("Jeton enregistré et chiffré; sa valeur n'est pas affichée.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
             OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = controller::clearSyncToken) {
                 Text("Supprimer le jeton")
             }
@@ -178,7 +178,7 @@ private fun SyncCategoryRow(
     ) {
             Checkbox(checked = checked, onCheckedChange = { controller.setSyncCategory(category, it) }, modifier = Modifier.semantics { contentDescription = title })
         Column(modifier = Modifier.weight(1f)) {
-            Text(title)
+            Text(title, color = MaterialTheme.colorScheme.onSurface)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

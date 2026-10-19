@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="30" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-10-19T02:47:02" hostname="localhost">
+  <testsuite name="dev.atlas.coach.AtlasLaunchTest" tests="11" failures="0" errors="0" skipped="0" time="25.932" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="reefPomodoroSetupStartsAnAtlasSessionWithCycleState" classname="dev.atlas.coach.AtlasLaunchTest" time="3.153" />
+    <testcase name="unknownSchemaIsQuarantinedAndShowsRecoveryMessage" classname="dev.atlas.coach.AtlasLaunchTest" time="1.105" />
+    <testcase name="optionalLauncherAndLicenseAttributionAreVisible" classname="dev.atlas.coach.AtlasLaunchTest" time="2.792" />
+    <testcase name="malformedPolicyAndRuleSubstatesAreQuarantinedWithoutStartupCrash" classname="dev.atlas.coach.AtlasLaunchTest" time="1.076" />
+    <testcase name="finishedFocusHistoryRestoresFromLocalPersistence" classname="dev.atlas.coach.AtlasLaunchTest" time="1.393" />
+    <testcase name="backReturnsFromDailySettingsToMoreAndTabsSelectTheirRoot" classname="dev.atlas.coach.AtlasLaunchTest" time="1.525" />
+    <testcase name="directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline" classname="dev.atlas.coach.AtlasLaunchTest" time="8.008" />
+    <testcase name="focusRoutineIsCapabilityGatedAndRequiresExplicitStart" classname="dev.atlas.coach.AtlasLaunchTest" time="2.075" />
+    <testcase name="focusControllerWritesOneCheckpointAfterTwentySecondsOfMonotonicTime" classname="dev.atlas.coach.AtlasLaunchTest" time="0.852" />
+    <testcase name="disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton" classname="dev.atlas.coach.AtlasLaunchTest" time="2.931" />
+    <testcase name="focusSessionRestorationSeed" classname="dev.atlas.coach.AtlasLaunchTest" time="1.022" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.FocusIntegrationInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="2.768" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="finiteTwoCyclePomodoroFinishesAndPostsPhaseNotification" classname="dev.atlas.coach.FocusIntegrationInstrumentationTest" time="2.768" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.AtlasPresentationTest" tests="4" failures="0" errors="0" skipped="0" time="5.335" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="homeRemainsReadableAtFontScale13" classname="dev.atlas.coach.app.AtlasPresentationTest" time="1.009" />
+    <testcase name="homeHasOnePrimaryActionAndSecondaryNegotiationMenu" classname="dev.atlas.coach.app.AtlasPresentationTest" time="1.271" />
+    <testcase name="bottomNavigationAndBackFollowTheScreenHistory" classname="dev.atlas.coach.app.AtlasPresentationTest" time="1.349" />
+    <testcase name="homeRemainsScrollableAtFontScale20" classname="dev.atlas.coach.app.AtlasPresentationTest" time="1.706" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.AtlasVisualCaptureTest" tests="6" failures="0" errors="0" skipped="0" time="14.127" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="capturesHomeInBothThemesAndAtFontScaleTwo" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="2.474" />
+    <testcase name="capturesEverydaySettingsAdvancedDiagnosticsAndOfflineSync" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="2.754" />
+    <testcase name="capturesObservationInterventionAndLibrary" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="2.735" />
+    <testcase name="capturesHabitsAndRoutines" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.910" />
+    <testcase name="capturesFocusActivePausedAndFinished" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="2.230" />
+    <testcase name="capturesLauncherHomeAndSearchableAppsList" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="2.024" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.LauncherPresentationTest" tests="1" failures="0" errors="0" skipped="0" time="2.041" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="swipeSearchPinAndFavoritesWorkInTheLauncherScreen" classname="dev.atlas.coach.app.LauncherPresentationTest" time="2.041" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.launcher.LauncherFavoriteOpenInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.207" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="favoriteFocusAndHabitStateSurviveControllerRecreationAndLaunchSettings" classname="dev.atlas.coach.launcher.LauncherFavoriteOpenInstrumentationTest" time="0.207" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.sync.AndroidTokenStoreInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.062" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="tokenIsEncryptedAtRestAndCanBeRevoked" classname="dev.atlas.coach.sync.AndroidTokenStoreInstrumentationTest" time="0.062" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.015" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="runRequestedBackendScenario" classname="dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest" time="0.015" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.sync.SyncSettingsScreenCaptureTest" tests="1" failures="0" errors="0" skipped="0" time="1.264" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="captureRequestedState" classname="dev.atlas.coach.sync.SyncSettingsScreenCaptureTest" time="1.264" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" tests="3" failures="0" errors="0" skipped="0" time="13.854" timestamp="2026-10-19T02:47:02" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="actualAppOpsDenialStopsBeforeQueryingUsageStats" classname="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" time="0.288" />
+    <testcase name="notificationPresenterReportsMissingManifestPermissionInsteadOfPosting" classname="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" time="0.003" />
+    <testcase name="fourRealFixtureOpensReachTheRuleAfterReturningToAtlas" classname="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" time="13.563" />
+  </testsuite>
+</testsuites>

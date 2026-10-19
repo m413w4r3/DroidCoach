@@ -1,0 +1,24 @@
+APK SHA-256: 63d04aa1e6a14ca5ebbf753c1c62dede0b5723a7ead0742c0be28116c35f2884
+
+$ /home/nill/Android/Sdk/build-tools/37.0.0/aapt2 dump permissions android/app/build/outputs/apk/debug/app-debug.apk
+package: dev.atlas.coach
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.PACKAGE_USAGE_STATS'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'
+permission: dev.atlas.coach.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+uses-permission: name='dev.atlas.coach.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+
+$ /home/nill/Android/Sdk/cmdline-tools/latest/bin/apkanalyzer manifest target-sdk android/app/build/outputs/apk/debug/app-debug.apk
+36
+
+Target SDK: 36
+
+Permissions absent by design: ACCESS_LOCAL_NETWORK, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM, QUERY_ALL_PACKAGES, SMS, Contacts, Accessibility, overlay, location, camera, microphone, Bluetooth.
+
+Post-install AVD AppOps (without test-only grant):
+$ adb -s emulator-5556 shell appops get dev.atlas.coach GET_USAGE_STATS
+No operations.
+Default mode: default
+$ adb -s emulator-5556 shell appops get dev.atlas.coach POST_NOTIFICATION
+Uid mode: POST_NOTIFICATION: ignore

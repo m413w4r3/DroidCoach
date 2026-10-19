@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.content.ContentLibraryTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:24:25.955Z" hostname="all" time="0.007">
+  <properties/>
+  <testcase name="manualLibraryAddsPinsPersistsAndDeletesSpecificLinks" classname="dev.atlas.coach.content.ContentLibraryTest" time="0.005"/>
+  <testcase name="demoSearchesAreDistinctFromSpecificVideoLinksAndLegacyMapsMigrate" classname="dev.atlas.coach.content.ContentLibraryTest" time="0.0"/>
+  <testcase name="onlySuccessfulOpensIncrementTheLocalPerItemCounterAndItCanBeDisabled" classname="dev.atlas.coach.content.ContentLibraryTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

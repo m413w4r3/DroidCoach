@@ -642,7 +642,7 @@ internal fun SettingsScreen(
 internal fun AboutLicensesScreen(context: Context) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("À propos / Licences", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Text("ATLAS contient des adaptations de code libre pour un usage privé. L'APK ne doit pas être distribuée sans publier les sources sous licences compatibles.")
+        Text("Le code source ATLAS est diffusé sous GNU GPL version 3.0. Les adaptations et leurs licences sont détaillées ci-dessous.")
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Reef · minuterie Pomodoro", style = MaterialTheme.typography.titleMedium)

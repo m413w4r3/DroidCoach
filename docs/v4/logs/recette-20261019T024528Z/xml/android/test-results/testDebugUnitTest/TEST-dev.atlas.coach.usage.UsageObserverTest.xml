@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.usage.UsageObserverTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:45:34.158Z" hostname="all" time="0.082">
+  <properties/>
+  <testcase name="outOfAllowlistExcludedAndProtectedPackagesAreNotRecordedOrEvaluated" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.042"/>
+  <testcase name="permissionDeniedOrLostNeverQueriesTheSource" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.001"/>
+  <testcase name="pollingIsThrottledAndCsvExportContainsOnlyPackageAndTime" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.006"/>
+  <testcase name="consentRequiresExplicitPurposeAndCannotIncludeAProtectedPackage" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.002"/>
+  <testcase name="sourceRetentionIsBoundedByAgeAndCount" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.017"/>
+  <testcase name="revokedConsentStopsQueriesAndPurgesCursorCountersAndHistoryImmediately" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.002"/>
+  <testcase name="fourConsentAllowedLaunchesCreateOneInterventionAndVisibleProposal" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.001"/>
+  <testcase name="repeatedActivityResumesAndFastNotificationShadeReturnAreDeduplicated" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.0"/>
+  <testcase name="permissionRevokedDuringUsageStatsQueryStopsWithoutCrashingOrKeepingCursor" classname="dev.atlas.coach.usage.UsageObserverTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.sync.SyncGatewayTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:24:26.250Z" hostname="all" time="0.285">
+  <properties/>
+  <testcase name="remoteCoachAndSyncRoundTripUseVersionedContractsAndServerAck" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.173"/>
+  <testcase name="manualSyncCanMakeDeferredEventsDueAndClearTheQueue" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.004"/>
+  <testcase name="unauthorizedResponseKeepsEventForConfiguredCredentials" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.008"/>
+  <testcase name="offlineEventSurvivesGatewayRecreationAndResumesAfterServerReturns" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.041"/>
+  <testcase name="localMockRemainsDeterministicAndDoesNotContactTheBackend" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.001"/>
+  <testcase name="disabledOrRevokedConsentSendsNothingAndDropsPreviouslyQueuedPrivateData" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.002"/>
+  <testcase name="privateAppDetailsRequireSeparateExplicitConsentAndStableUuidIsEnforced" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.002"/>
+  <testcase name="remoteCoachResponseRequiresExplicitCoachSharingConsent" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.003"/>
+  <testcase name="serverFailureUsesBoundedJitteredBackoffThenAcknowledgesSameUuid" classname="dev.atlas.coach.sync.SyncGatewayTest" time="0.05"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

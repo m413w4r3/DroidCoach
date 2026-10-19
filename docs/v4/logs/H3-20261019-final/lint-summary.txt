@@ -1,0 +1,4 @@
+Lint final (lint-results-debug.xml)
+Errors: 0
+Warnings: 37
+IDs: AndroidGradlePluginVersion, GradleDependency, NewerVersionAvailable, ObsoleteSdkInt, OldTargetApi, SetTextI18n, UseKtx

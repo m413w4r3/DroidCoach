@@ -1,45 +1,61 @@
-> Contient du code GPLv3/MIT/Apache — ne pas distribuer l'APK sans publier les sources sous licence compatible
+# ATLAS / DroidCoach — préparation V4
 
-# ATLAS — Kit de cadrage avant agent de code
+ATLAS est une application Android Compose de coaching personnel, encore au stade de démonstration locale. Elle fonctionne sans compte, abonnement, serveur ni secret. Les propositions locales sont déterministes. Aucun modèle LLM ou agent externe n'est connecté.
 
-Version de préparation : 2026-10-18. Ce dépôt contient le cadrage produit et une première application Android Compose locale (jalon VM-1). Point de départ : `architecture_coach_pixel.md` fourni par le porteur de projet. Les décisions ci-dessous affinent le document sans effacer son cadre de mandat révocable, de règles locales et de consentements.
+La configuration livrée compile avec AGP 9.4.1, Gradle 9.6.0, JDK 21, `compileSdk 37.2` et `targetSdk 36`. La recette finale a été exécutée sur l'AVD Android 17 `Pixel_9_Pro_XL_2` (`emulator-5556`, x86_64, pages mémoire 16 Ko). Aucun téléphone Pixel physique n'a été utilisé. Voir le [rapport de recette V4](docs/v4/03-recette-android17.md) et l'[audit Android 17](docs/v4/04-defauts-et-limites.md).
 
-## Objet final
-Un **système personnel de coaching Android** avec :
-- **ATLAS Android**, application principale installable sur un Google Pixel, capable de proposer un écran HOME minimal, directives/négociation, sessions de concentration, habitudes, usage d'applications et accès à des contenus choisis ;
-- **ATLAS Core**, service serveur modulaire pour mémoire des projets, directives, politique, revues, curation et adaptation d'agents IA ;
-- **Intégrations externes remplaçables** (Loop, ReVanced, RSS, notes) si elles ont une API ou une liaison vérifiée. L'expérience est unifiée, même si les logiciels restent séparés.
+## Fonctions livrées
 
-## Décision d'intégration
-Décision du porteur de projet pour cette préparation : usage exclusivement privé, APK non distribuée, reprise maximale des composants utiles des références auditables. Les licences GPLv3, MIT et Apache-2.0 sont acceptées pour cet usage. Toute redistribution exige la publication des sources et notices sous une licence compatible. Les composants de blocage, d'accessibilité, de surveillance et de privilège restent exclus du périmètre ATLAS.
+- Accueil ATLAS, navigation Compose, réglages indépendants par capability et pause d'urgence hors ligne.
+- Focus Pomodoro configurable, état local, pauses et fin automatique; notifications de phase facultatives, selon la permission Android.
+- Routines consultatives et rappels d'habitudes; Android peut retarder les alarmes inexactes.
+- Habitudes locales avec calendrier, check-in/retrait et export CSV.
+- Bibliothèque de liens vidéo ajoutés manuellement; ouverture via Intent Android ou navigateur. Aucun accès au flux privé YouTube ni contrôle interne de ReVanced.
+- Observation facultative via `UsageStatsManager`, après consentement système, allowlist et activation explicite. La détection est approximative et ne bloque pas l'application observée.
+- Sync facultative vers le backend FastAPI. Elle est désactivée par défaut; les catégories partagées sont vides au départ. Le jeton est chiffré par Android Keystore.
+- L'option HOME est activée uniquement après choix du rôle Android par l'utilisateur. Le launcher système reste accessible.
 
-## Par où commencer ?
-1. Lire `docs/01-produit.md`, `docs/02-architecture.md` et `docs/03-audit-open-source.md`.
-2. Si tu veux déléguer l'ensemble de l'étape technique au même agent, lui transmettre **le contenu de** `prompts/AGENT_PRINCIPAL.md` dans le dossier racine (en joignant les fichiers ou en lui donnant accès au dossier).
-3. L'agent documente ses vérifications et construit une V0 démontrable. La validation sur le Pixel réel reste nécessaire avant tout blocage fort.
-4. Utiliser `docs/04-recette-et-tests.md` comme définition de « terminé » ; suivre `docs/05-decisions-et-evolutions.md` pour les choix à différer.
+Les contrats d'extension IA sont documentés, mais OpenClaw, un LLM, une action Android pilotée par agent et une curation RSS ne sont pas implémentés. Voir [architecture réalisée](docs/v4/02-architecture-realisee.md) et [suite OpenClaw future](docs/v4/05-suite-openclaw-future.md).
 
-## Dossier de travail : dépôts externes
-Ne pas cloner tous les dépôts à la racine. Conserver leurs URLs dans `references/repos-candidats.yaml`. Pour inspecter le code, cloner **uniquement les présélectionnés** dans `_research/` (ignoré par Git), en checkout détaché sur SHA connu et lecture seule de préférence. La décision S6 autorise la reprise maximale de composants utiles pour cet usage exclusivement privé : consigner fichiers sources, SHA, licences, attribution et validation dans `docs/AUDIT_CIBLE.md` et `THIRD_PARTY_NOTICES.md`. Toute redistribution exige la publication des sources complètes sous licence compatible.
+## Démonstration sur l'AVD existant
 
-## Périmètre du premier incrément
-Une application Android minimale avec HOME *optionnel*, carte de directive, minuterie Pomodoro et historique local, suivi basique d'habitudes, consentement pour observation d'apps, règle locale de friction simulable, lien vidéo externe, pause et sortie de secours, plus backend contractuel pouvant fonctionner en mode mock hors ligne. Aucune dépendance obligatoire à OpenClaw, Reef, ReVanced ou Loop pour la première démonstration.
-
-## Non-objectifs initiaux
-Root, ROM, Device Owner, lockscreen remplacé, surveillance des écrans privés, publication Play Store, modification de l'APK ReVanced, accès universel aux réglages d'apps tierces, interdiction absolue de sortir du coach.
-
-## Build & VM-0
-
-Depuis la racine du dépôt, lancer `./scripts/build-android.sh`. L'APK debug est généré dans `android/app/build/outputs/apk/debug/app-debug.apk`. La validation VM-0 sur émulateur et le chemin de capture sont consignés dans [docs/VALIDATION_VM.md](docs/VALIDATION_VM.md).
-
-## VM-1 — démonstration Compose hors ligne
-
-L'application Android fonctionne sans serveur, compte, clé ni permission système runtime. Elle conserve focus, habitudes, réponses du coach, règles simulées et capacités dans un stockage local privé. Le HOME ATLAS est un candidat facultatif; l'application démarre d'abord comme Activity classique.
+Prérequis : JDK 21, Android SDK avec `platforms;android-37.2` et `build-tools;37.0.0`, Python 3.12 et l'AVD existant `Pixel_9_Pro_XL_2`. Ne pas créer ni effacer l'AVD.
 
 ```sh
-./scripts/build-android.sh
-/home/nill/Android/Sdk/platform-tools/adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk
-/home/nill/Android/Sdk/platform-tools/adb -s emulator-5554 shell am start -n dev.atlas.coach/dev.atlas.coach.app.MainActivity
+/home/nill/Android/Sdk/emulator/emulator \
+  -avd Pixel_9_Pro_XL_2 -no-snapshot-save -no-boot-anim -no-window -port 5556
+export ANDROID_SERIAL=emulator-5556
+cd android
+./gradlew :app:assembleDebug
+cd ..
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb shell monkey -p dev.atlas.coach 1
 ```
 
-Les résultats exécutés, les verdicts VM-1 et les captures réelles de l'AVD sont dans [docs/VALIDATION_VM.md](docs/VALIDATION_VM.md). La recette de l'émulateur utilisé et ses limites sont dans [docs/07-emulateur-linux.md](docs/07-emulateur-linux.md).
+La démonstration est utilisable sans démarrer `backend/`. Les données d'exemple sont locales et synthétiques. Pour activer l'observation, l'utilisateur suit le lien vers « Accès aux données d'utilisation » dans Android, puis choisit les applications autorisées dans ATLAS. Une révocation arrête l'observation. Le geste `appops` n'est réservé qu'aux tests AVD documentés.
+
+Pour un usage quotidien, démarrer Focus ou gérer ses habitudes depuis ATLAS. Les rappels et notifications peuvent être désactivés séparément dans les réglages de l'application ou d'Android. Le launcher système peut être rétabli dans Android → Applications par défaut → Application d'accueil, ou depuis l'action de sortie d'ATLAS.
+
+Le backend local de développement et ses tests sont décrits dans `backend/README.md` et `scripts/v4-backend-e2e.sh`. Une configuration distante requiert une URL et un jeton configurés par l'utilisateur; elle ne fait pas partie de la démonstration sans serveur.
+
+## Validation
+
+```sh
+export ANDROID_SERIAL=emulator-5556
+./scripts/v4-recette.sh
+./scripts/v4-backend-e2e.sh
+```
+
+La CI GitHub Actions exécute tests JVM, lint, assemblage debug et pytest. Elle ne lance pas d'émulateur Android 17; `connectedDebugAndroidTest` reste une recette locale sur AVD, documentée avec ses résultats sous [`docs/v4/logs/`](docs/v4/logs/).
+
+## Limites connues
+
+- `UsageStatsManager` fournit des événements best effort, avec latence variable. ATLAS n'intercepte pas l'écran, ne bloque pas d'application et n'affiche pas d'overlay sur le dialer, les réglages ou les fonctions d'urgence.
+- Les alarmes de focus, routines et habitudes sont inexactes et peuvent être retardées. Aucune permission d'alarme exacte n'est demandée.
+- `targetSdk 37` est reporté : Android 17 exigerait `ACCESS_LOCAL_NETWORK` pour le backend LAN et une nouvelle demande runtime. La cible retenue est 36, testée sur Android 17; le plan est dans l'audit.
+- Aucun service d'accessibilité, root, Device Owner, kiosque, installation silencieuse ou manipulation d'APK tierce n'est livré.
+- L'APK debug n'est pas signée pour une distribution et n'est pas publiée. Aucun test de publication Play Store n'a été effectué.
+
+## Licence et attribution
+
+Le code source est distribué sous [GNU GPL v3](LICENSE). Les adaptations de Reef conservent son attribution MIT particulière; les provenances Olauncher et Loop sont détaillées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Les références auditées ne signifient pas qu'un service ou dépôt tiers est intégré.

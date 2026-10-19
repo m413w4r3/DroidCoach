@@ -189,6 +189,7 @@ class AtlasLaunchTest {
     fun optionalLauncherAndLicenseAttributionAreVisible() {
         openSettings()
         composeRule.onNodeWithText("À propos et licences").performScrollTo().performClick()
+        composeRule.onNodeWithText("Le code source ATLAS est diffusé sous GNU GPL version 3.0.", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Reef par Pranav Purwar", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("github.com/aload0/Reef").assertIsDisplayed()
         composeRule.onNodeWithText("Olauncher · modèle de liste d'applications").assertIsDisplayed()

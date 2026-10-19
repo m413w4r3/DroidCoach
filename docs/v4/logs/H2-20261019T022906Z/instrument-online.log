@@ -1,0 +1,59 @@
+
+dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest:
+Error in runRequestedBackendScenario(dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest):
+java.net.SocketTimeoutException: failed to connect to /10.0.2.2 (port 43761) from /10.0.2.16 (port 45498) after 3000ms
+	at libcore.io.IoBridge.connectErrno(IoBridge.java:234)
+	at libcore.io.IoBridge.connect(IoBridge.java:178)
+	at java.net.PlainSocketImpl.socketConnect(PlainSocketImpl.java:142)
+	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:390)
+	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:230)
+	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:212)
+	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:436)
+	at java.net.Socket.connect(Socket.java:646)
+	at com.android.okhttp.internal.Platform.connectSocket(Platform.java:182)
+	at com.android.okhttp.internal.io.RealConnection.connectSocket(RealConnection.java:143)
+	at com.android.okhttp.internal.io.RealConnection.connect(RealConnection.java:114)
+	at com.android.okhttp.internal.http.StreamAllocation.findConnection(StreamAllocation.java:186)
+	at com.android.okhttp.internal.http.StreamAllocation.findHealthyConnection(StreamAllocation.java:128)
+	at com.android.okhttp.internal.http.StreamAllocation.newStream(StreamAllocation.java:97)
+	at com.android.okhttp.internal.http.HttpEngine.connect(HttpEngine.java:289)
+	at com.android.okhttp.internal.http.HttpEngine.sendRequest(HttpEngine.java:232)
+	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.execute(HttpURLConnectionImpl.java:465)
+	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.getResponse(HttpURLConnectionImpl.java:411)
+	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.getResponseCode(HttpURLConnectionImpl.java:542)
+	at dev.atlas.coach.sync.RemoteBackendGateway.request(RemoteBackendGateway.kt:203)
+	at dev.atlas.coach.sync.RemoteBackendGateway.request$default(RemoteBackendGateway.kt:184)
+	at dev.atlas.coach.sync.RemoteBackendGateway.currentDirective(RemoteBackendGateway.kt:77)
+	at dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest.runRequestedBackendScenario(RemoteBackendE2eInstrumentationTest.kt:50)
+
+
+Time: 3.074
+There was 1 failure:
+1) runRequestedBackendScenario(dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest)
+java.net.SocketTimeoutException: failed to connect to /10.0.2.2 (port 43761) from /10.0.2.16 (port 45498) after 3000ms
+	at libcore.io.IoBridge.connectErrno(IoBridge.java:234)
+	at libcore.io.IoBridge.connect(IoBridge.java:178)
+	at java.net.PlainSocketImpl.socketConnect(PlainSocketImpl.java:142)
+	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:390)
+	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:230)
+	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:212)
+	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:436)
+	at java.net.Socket.connect(Socket.java:646)
+	at com.android.okhttp.internal.Platform.connectSocket(Platform.java:182)
+	at com.android.okhttp.internal.io.RealConnection.connectSocket(RealConnection.java:143)
+	at com.android.okhttp.internal.io.RealConnection.connect(RealConnection.java:114)
+	at com.android.okhttp.internal.http.StreamAllocation.findConnection(StreamAllocation.java:186)
+	at com.android.okhttp.internal.http.StreamAllocation.findHealthyConnection(StreamAllocation.java:128)
+	at com.android.okhttp.internal.http.StreamAllocation.newStream(StreamAllocation.java:97)
+	at com.android.okhttp.internal.http.HttpEngine.connect(HttpEngine.java:289)
+	at com.android.okhttp.internal.http.HttpEngine.sendRequest(HttpEngine.java:232)
+	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.execute(HttpURLConnectionImpl.java:465)
+	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.getResponse(HttpURLConnectionImpl.java:411)
+	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.getResponseCode(HttpURLConnectionImpl.java:542)
+	at dev.atlas.coach.sync.RemoteBackendGateway.request(RemoteBackendGateway.kt:203)
+	at dev.atlas.coach.sync.RemoteBackendGateway.request$default(RemoteBackendGateway.kt:184)
+	at dev.atlas.coach.sync.RemoteBackendGateway.currentDirective(RemoteBackendGateway.kt:77)
+	at dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest.runRequestedBackendScenario(RemoteBackendE2eInstrumentationTest.kt:50)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1

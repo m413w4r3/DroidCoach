@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.atlas.coach.focus.FocusEngineTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-10-19T02:45:33.819Z" hostname="all" time="0.021">
+  <properties/>
+  <testcase name="tenMinuteVariantUsesTwoMinuteBreak" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.002"/>
+  <testcase name="forceStopRestorationPreservesSubsecondProgressFromWallClock" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.002"/>
+  <testcase name="acceleratedPlanCanUseScaledOrExplicitSecondDurations" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.002"/>
+  <testcase name="fakeClockAndRepositoryExposeSynchronousSessionLifecycle" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="restoringAcrossABoundaryUsesWallElapsedAndReplansFromCurrentPhase" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.001"/>
+  <testcase name="continuousPlanKeepsRepeatingAndStillUsesLongBreakCadence" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="interruptionAndWallClockChangeDoNotChangeLiveMonotonicProgress" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="finiteTwoCyclePlanTransitionsWorkBreakWorkThenFinishesWithoutFinalBreak" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="snapshotRestoresRunningTimerUsingBoundedWallClockElapsedTime" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.001"/>
+  <testcase name="legacyMapMigratesToContinuousWithoutLosingProgress" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="phaseScheduleDerivesFiniteBoundariesFromPersistedSnapshot" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.008"/>
+  <testcase name="longBreakFollowsConfiguredCycleAndOnlyRunsBetweenFiniteWorkCycles" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="oneCyclePlanFinishesAtWorkBoundaryWithoutStartingABreak" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.001"/>
+  <testcase name="pomodoro25_5CompletesWorkAndShortBreak" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.0"/>
+  <testcase name="pauseResumeFinishAndCancelAreIdempotent" classname="dev.atlas.coach.focus.FocusEngineTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
