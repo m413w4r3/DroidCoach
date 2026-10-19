@@ -61,3 +61,10 @@
 ## V6 (2026-10-19)
 - Agent OpenClaw dédié = agent existant `atlas` (seul agent, install propre) durci (tools deny `*`, workspace dédié) plutôt qu'un second agent nécessitant une nouvelle connexion OAuth interactive ; décision utilisateur. Voir `docs/v6/00-diagnostic-openclaw.md`.
 - `chatCompletions` activé sur le Gateway existant (nécessité : plan V6) ; transport isolé derrière `AgentAdapter` côté backend.
+- Lot D : faute de WorkManager déjà installé, l'inbox v2 est tirée à l'ouverture du Coach et par son bouton d'actualisation; aucun travail réseau périodique ni changement manifeste n'est ajouté.
+- Le client v2 réutilise l'URL et le Bearer déjà enregistrés par Sync. Android ne l'active que pour une URL HTTPS, car le manifeste V5 refuse le cleartext; en l'absence de configuration ou de réseau, le Coach reste local et déterministe.
+- La réponse GET inbox est `{proposals, cursor}` et ses acknowledgements gardent `{state, effect, at}` jusqu'à confirmation HTTP. Le contrat source spécifiait l'endpoint mais pas le nom du champ de collection; ce format est documenté dans `docs/v6/ANDROID_API.md` pour coordination du lot C.
+- `AgentMandate` V1 migre en `proposals_only`, sans catégories de données partagées. Le mandat V2 et sa version sont stockés dans le document local ATLAS; l'UI n'active les catégories partagées qu'après une action explicite.
+- Le futur HOME consomme `AtlasController.agentHomeState`. Les cartes omises d'un ordre partiel sont réajoutées; les sessions annulées gardent un tombstone durable.
+- `focus.plan` requiert la capability `focusRoutines` et réutilise l'alarme inexacte de proposition déjà livrée; aucun démarrage d'activité en arrière-plan n'est effectué.
+- `app_policy.adjust` reste refusée par le répartiteur : la règle UsageStats locale ne mesure pas la durée quotidienne. `app_policy.propose` peut seulement enregistrer une suggestion; aucun plafonnement fictif n'est appliqué.

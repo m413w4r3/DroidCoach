@@ -526,25 +526,7 @@ internal fun LibraryScreen(controller: AtlasController, @Suppress("UNUSED_PARAME
 
 @Composable
 internal fun CoachScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (controller.capabilities[AtlasController.CAP_COACH] != true) {
-            Text("Coach local désactivé dans les paramètres.")
-            return@Column
-        }
-        Text("Coach local · aucune IA ni serveur", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Directive : ${controller.directive.title}", style = MaterialTheme.typography.titleMedium)
-        if (controller.isCoachPaused) OutlinedButton(onClick = controller::resumeCoach) { Text("Réactiver le coach") }
-        if (controller.coachJournal.isEmpty()) Text("Le journal apparaîtra après votre première réponse.")
-        controller.coachJournal.forEach { entry ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(entry.choice.journalLabel(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    Text(entry.message)
-                    Text("Résultat : ${entry.effect.displayLabel()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
+    AgentCoachScreen(controller)
 }
 
 @Composable
