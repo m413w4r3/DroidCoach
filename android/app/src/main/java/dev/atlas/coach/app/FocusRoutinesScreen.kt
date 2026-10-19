@@ -91,6 +91,7 @@ data class ProposedFocusSession(
 fun FocusSessionScreen(
     controller: AtlasController,
     proposedSession: ProposedFocusSession? = null,
+    onStartProposed: (() -> Unit)? = null,
     onChooseHabit: () -> Unit = {},
 ) {
     val session = controller.focusSession?.takeUnless { it.status == FocusStatus.CANCELLED }
@@ -179,7 +180,7 @@ fun FocusSessionScreen(
                 Text("Notifications : ${focusNotificationStatus(controller)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
-                    onClick = { controller.startFocus(proposedSession.toFocusPlan()) },
+                    onClick = { onStartProposed?.invoke() ?: controller.startFocus(proposedSession.toFocusPlan()) },
                 ) { Text("Démarrer") }
                 TextButton(
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),

@@ -1,5 +1,6 @@
 package dev.atlas.coach.app
 
+import dev.atlas.coach.sync.agent.AgentFocusCardState
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -181,6 +182,28 @@ internal fun ShortcutButton(label: String, modifier: Modifier = Modifier, onClic
 
 @Composable
 internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int, onChooseHabit: () -> Unit) {
+    val activeSession = controller.focusSession
+    val proposal = controller.agentHomeState.focusProposal?.takeIf {
+        (it.state == AgentFocusCardState.PROPOSED || it.state == AgentFocusCardState.PLANNED) &&
+            it.proposalId !in controller.agentHomeState.cancelledFocusProposalIds
+    }
+    if (proposal != null && (activeSession == null || activeSession.status == FocusStatus.CANCELLED) &&
+        controller.capabilities[AtlasController.CAP_FOCUS] == true
+    ) {
+        FocusSessionScreen(
+            controller = controller,
+            proposedSession = ProposedFocusSession(
+                focusMinutes = proposal.focusMinutes,
+                breakMinutes = proposal.breakMinutes,
+                cycles = proposal.cycles,
+                label = proposal.label.take(60),
+                reason = "Session préparée par le coach. Vous pouvez la corriger avant de démarrer.",
+            ),
+            onStartProposed = { controller.startAgentProposedFocus(proposal.proposalId) },
+            onChooseHabit = onChooseHabit,
+        )
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Un pas à la fois", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text(
@@ -566,6 +589,9 @@ internal fun SettingsScreen(
             CapabilityRow("Coach local", controller, AtlasController.CAP_COACH)
             CapabilityRow("Routines de focus locales", controller, AtlasController.CAP_FOCUS_ROUTINES,
                 onChanged = { enabled -> controller.setCapability(AtlasController.CAP_FOCUS_ROUTINES, enabled); if (enabled) requestNotifications() })
+        }
+        AtlasSection("Apparence") {
+            dev.atlas.coach.app.ui.ThemePreferenceSection()
         }
         AtlasSection("Notifications facultatives") {
             Text("Android · ${if (controller.notificationPermissionGranted()) "autorisées" else "non autorisées ou désactivées"}", color = MaterialTheme.colorScheme.onSurfaceVariant)

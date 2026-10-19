@@ -33,6 +33,46 @@ data class HomeAgentState(
                     action = HomeCardAction.OPEN_LIBRARY,
                 )
             }
+            val agent = controller.agentHomeState
+            val connected = controller.agentStatus == dev.atlas.coach.sync.agent.coach.AgentStatus.CONNECTED
+            val status = if (connected) HomeAgentStatus.CONNECTED else HomeAgentStatus.LOCAL_ONLY
+            val agentDirective = agent.directive?.let { d ->
+                HomeDirective(
+                    title = d.title,
+                    body = d.body,
+                    primaryAction = when (d.primaryAction) {
+                        "focus.start" -> HomePrimaryAction.START_FOCUS
+                        "open_coach" -> HomePrimaryAction.OPEN_COACH
+                        else -> HomePrimaryAction.NONE
+                    },
+                )
+            }
+            val proposalCard = agent.focusProposal
+                ?.takeIf { it.state == dev.atlas.coach.sync.agent.AgentFocusCardState.PROPOSED || it.state == dev.atlas.coach.sync.agent.AgentFocusCardState.PLANNED }
+                ?.let { p ->
+                    HomeAgentCard(
+                        title = "Session proposée",
+                        body = "${p.label} · ${p.focusMinutes} min",
+                        actionLabel = "Voir la session",
+                        action = HomeCardAction.OPEN_FOCUS,
+                    )
+                }
+            val agentContent = agent.contentRecommendation?.let { c ->
+                HomeAgentCard(
+                    title = "Suggestion du coach",
+                    body = c.title,
+                    actionLabel = "Ouvrir la bibliothèque",
+                    action = HomeCardAction.OPEN_LIBRARY,
+                )
+            }
+            if (agentDirective != null) {
+                return HomeAgentState(
+                    directive = agentDirective,
+                    focusCard = focus ?: proposalCard,
+                    contentCard = agentContent ?: content,
+                    agentStatus = status,
+                )
+            }
             return HomeAgentState(
                 directive = HomeDirective(
                     title = controller.directive.title,
