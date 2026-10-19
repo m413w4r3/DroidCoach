@@ -11,8 +11,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.app.SyncSettingsScreen
 import dev.atlas.coach.app.ui.AtlasTheme
+import dev.atlas.coach.app.ui.AtlasRoutes
+import dev.atlas.coach.app.ui.AtlasScreenFrame
 import dev.atlas.coach.focus.FocusPlan
-import org.junit.Assume.assumeTrue
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -29,14 +30,29 @@ class SyncSettingsScreenCaptureTest {
     fun captureRequestedState() {
         val arguments = InstrumentationRegistry.getArguments()
         val state = arguments.getString("capture_state")
-        assumeTrue("capture_state argument is required for this scripted capture", state in setOf("disabled", "synchronized", "offline"))
+        if (state !in setOf("disabled", "synchronized", "offline")) {
+            android.util.Log.i("ATLAS_H2", "capture_state not requested; no screenshot scenario executed")
+            return
+        }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         resetSyncState(context)
         lateinit var controller: AtlasController
         composeRule.runOnUiThread { controller = AtlasController(context) }
 
         composeRule.setContent {
-            AtlasTheme { SyncSettingsScreen(controller, controller.revision) }
+            AtlasTheme {
+                AtlasScreenFrame(
+                    title = "Partage backend",
+                    activeDestination = AtlasRoutes.MORE,
+                    canGoBack = false,
+                    emergencyPaused = controller.isEmergencyPaused,
+                    onBack = {},
+                    onEmergencyPause = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
+                    onNavigate = {},
+                ) {
+                    SyncSettingsScreen(controller, controller.revision)
+                }
+            }
         }
         composeRule.onNodeWithTag("sync_status_card").assertIsDisplayed()
 

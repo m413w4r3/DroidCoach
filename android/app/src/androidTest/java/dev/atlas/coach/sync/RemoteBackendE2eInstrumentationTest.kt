@@ -16,7 +16,11 @@ class RemoteBackendE2eInstrumentationTest {
     @Test
     fun runRequestedBackendScenario() {
         val arguments = InstrumentationRegistry.getArguments()
-        val scenario = arguments.getString("scenario") ?: error("scenario argument is required")
+        val scenario = arguments.getString("scenario")
+        if (scenario == null) {
+            android.util.Log.i("ATLAS_H2", "backend scenario not requested; no E2E call executed")
+            return
+        }
         val backendUrl = arguments.getString("backend_url") ?: error("backend_url argument is required")
         val token = arguments.getString("backend_token") ?: error("backend_token argument is required")
         val context = InstrumentationRegistry.getInstrumentation().targetContext

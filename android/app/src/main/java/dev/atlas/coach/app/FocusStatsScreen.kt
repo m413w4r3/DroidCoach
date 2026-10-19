@@ -50,7 +50,7 @@ internal fun FocusStatsScreen(controller: AtlasController) {
                 }
             }
         }
-        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { controller.navigate(AtlasController.SCREEN_FOCUS) }) {
+        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { controller.navigationState.navigate(AtlasScreenId.FOCUS) }) {
             Text("Retour au focus")
         }
     }

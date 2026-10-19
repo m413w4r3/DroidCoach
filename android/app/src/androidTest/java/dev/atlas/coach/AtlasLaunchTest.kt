@@ -42,6 +42,28 @@ class AtlasLaunchTest {
         composeRule.activityRule.scenario.recreate()
     }
 
+    private fun openHome() = composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
+    private fun openFocus() = composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
+    private fun openHabits() = composeRule.onNodeWithContentDescription("Ouvrir Habitudes").performClick()
+    private fun openMore() = composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
+    private fun openSettings() { openMore(); composeRule.onNodeWithText("Usage quotidien").performScrollTo().performClick() }
+    private fun openLibrary() { openMore(); composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick() }
+    private fun openCoach() { openMore(); composeRule.onNodeWithText("Coach et journal").performScrollTo().performClick() }
+
+    @Test
+    fun backReturnsFromDailySettingsToMoreAndTabsSelectTheirRoot() {
+        openMore()
+        composeRule.onNodeWithText("Usage quotidien").performScrollTo().performClick()
+        composeRule.onNodeWithText("Accueil Android").performScrollTo().assertIsDisplayed()
+        composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.onNodeWithText("Autres espaces").assertIsDisplayed()
+
+        openFocus()
+        composeRule.onNodeWithText("Un pas à la fois").assertIsDisplayed()
+        openHome()
+        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
+    }
+
     @Test
     fun directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline() {
         composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
@@ -56,8 +78,8 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Session liée à : Lis/avance 10 min").assertIsDisplayed()
         composeRule.onNodeWithText("Reprendre").performScrollTo().performClick()
 
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Habitudes").performScrollTo().performClick()
+        openHome()
+        openHabits()
         composeRule.onNodeWithTag("habit_input").performTextInput("Lire dix minutes")
         composeRule.onNodeWithText("Ajouter l'habitude").performScrollTo().performClick()
         composeRule.onNodeWithText("Valider aujourd'hui").performScrollTo().performClick()
@@ -70,20 +92,20 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Fermer").performClick()
 
         composeRule.activityRule.scenario.recreate()
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Habitudes").performScrollTo().performClick()
+        openHome()
+        openHabits()
         composeRule.onNodeWithText("Lire dix minutes").assertIsDisplayed()
         composeRule.onNodeWithText("Valider aujourd'hui").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Focus").performScrollTo().performClick()
+        openHome()
+        openFocus()
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
         composeRule.onNodeWithText("Session terminée avant le dernier cycle", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Relier à une habitude…").assertCountEquals(0)
 
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Paramètres").performClick()
-        composeRule.onNodeWithText("Diagnostic avancé / développeur").performScrollTo().performClick()
+        openHome()
+        openSettings()
+        composeRule.onNodeWithText("Diagnostic avancé").performScrollTo().performClick()
         composeRule.onNodeWithText("Ouvrir le simulateur de friction").performScrollTo().performClick()
         composeRule.onNodeWithText("Événements simulés, pas une observation réelle").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("simulate_four").performScrollTo().performClick()
@@ -95,28 +117,28 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Activer les heures calmes 22:00–07:00").performScrollTo().performClick()
         composeRule.onNodeWithText("Règle : heures calmes 22:00–07:00 · délai d'attente 15 min · pause inactive.").assertIsDisplayed()
         composeRule.onNodeWithText("Désactiver les heures calmes").performScrollTo().performClick()
-        composeRule.onNodeWithText("Pause d'urgence 30 min").performClick()
+        composeRule.onNodeWithContentDescription("Activer la pause d'urgence de 30 minutes").performClick()
         composeRule.onNodeWithTag("simulate_four").performScrollTo().performClick()
         composeRule.onNodeWithText("4 événements simulés · 0 propositions affichées.").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Pause d'urgence active · terminer").performClick()
+        composeRule.onNodeWithContentDescription("Terminer la pause d'urgence").performClick()
 
-        composeRule.onNodeWithText("Accueil").performClick()
+        openHome()
+        composeRule.onNodeWithText("Autres réponses à la directive").performScrollTo().performClick()
         composeRule.onNodeWithText("Discuter").performScrollTo().performClick()
         composeRule.onNodeWithText("D'accord. Qu'est-ce qui rend cette étape difficile aujourd'hui ?").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Alternative").performScrollTo().performClick()
         composeRule.onNodeWithText("Essayons une version plus courte : Lis/avance 5 min.").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Reporter").performScrollTo().performClick()
         composeRule.onNodeWithText("C'est reporté à plus tard aujourd'hui.").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Mettre le coach en pause").performScrollTo().performClick()
+        composeRule.onNodeWithText("Pause coach").performScrollTo().performClick()
         composeRule.onNodeWithText("Le coach est en pause. Vous pouvez le réactiver quand vous le souhaitez.").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Coach · journal").performScrollTo().performClick()
-        composeRule.onNodeWithText("Commencer").performScrollTo().assertIsDisplayed()
+        openCoach()
         composeRule.onNodeWithText("Discuter").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Alternative").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Reporter").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Pause").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick()
+        openHome()
+        openLibrary()
         composeRule.onNodeWithText("Recherches génériques").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Recherche; aucun lien vidéo précis sélectionné").get(0).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Ajouter un lien vidéo précis").performScrollTo().performClick()
@@ -132,27 +154,27 @@ class AtlasLaunchTest {
 
     @Test
     fun disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton() {
-        composeRule.onNodeWithText("Habitudes").performScrollTo().performClick()
+        openHabits()
         composeRule.onNodeWithTag("habit_input").performTextInput("Lire hors ligne")
         composeRule.onNodeWithText("Ajouter l'habitude").performScrollTo().performClick()
-        composeRule.onNodeWithText("Accueil").performClick()
+        openHome()
 
         composeRule.onNodeWithText("Commencer").performClick()
         composeRule.onNodeWithText("Concentration · En cours").assertIsDisplayed()
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Paramètres").performScrollTo().performClick()
+        openHome()
+        openSettings()
         composeRule.onNodeWithContentDescription("Activer ou désactiver Focus").performClick()
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Focus").performScrollTo().performClick()
+        openHome()
+        openFocus()
         composeRule.onNodeWithText("Concentration · En pause").assertIsDisplayed()
         composeRule.onAllNodesWithText("Reprendre").assertCountEquals(0)
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
 
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Paramètres").performScrollTo().performClick()
+        openHome()
+        openSettings()
         composeRule.onNodeWithContentDescription("Activer ou désactiver Habitudes").performClick()
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Focus").performScrollTo().performClick()
+        openHome()
+        openFocus()
         composeRule.onNodeWithText("Session terminée").assertIsDisplayed()
         composeRule.onAllNodesWithText("Relier à une habitude…").assertCountEquals(0)
     }
@@ -165,47 +187,48 @@ class AtlasLaunchTest {
 
     @Test
     fun optionalLauncherAndLicenseAttributionAreVisible() {
-        composeRule.onNodeWithText("Paramètres").performScrollTo().performClick()
-        composeRule.onNodeWithText("À propos / Licences").performScrollTo().performClick()
+        openSettings()
+        composeRule.onNodeWithText("À propos et licences").performScrollTo().performClick()
         composeRule.onNodeWithText("Reef par Pranav Purwar", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("github.com/aload0/Reef").assertIsDisplayed()
         composeRule.onNodeWithText("Olauncher · modèle de liste d'applications").assertIsDisplayed()
         composeRule.onNodeWithText("Loop Habit Tracker · force d'habitude et CSV").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Paramètres").performScrollTo().performClick()
-        composeRule.onNodeWithContentDescription("Activer ou désactiver Accueil launcher facultatif ATLAS").performScrollTo().performClick()
-        composeRule.onNodeWithText("Accueil").performClick()
-        composeRule.onNodeWithText("Accueil launcher facultatif").performScrollTo().performClick()
+        openHome()
+        openSettings()
+        composeRule.onNodeWithContentDescription("Activer ou désactiver Accueil ATLAS facultatif").performScrollTo().performClick()
+        openHome()
+        openMore()
+        composeRule.onNodeWithText("Accueil et applications favorites").performScrollTo().performClick()
 
         composeRule.onNodeWithText("Directive du jour").assertIsDisplayed()
-        composeRule.onNodeWithText("Toutes les applications").performScrollTo().performClick()
-        composeRule.onNodeWithText("Applications").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Tout voir").performScrollTo().performClick()
+        composeRule.onNodeWithText("Toutes les applications").performScrollTo().assertIsDisplayed()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        assertTrue(AndroidLauncherCatalog(context).list().any { it.appPackage == context.packageName })
+        assertTrue(AndroidLauncherCatalog(context).list().none { it.appPackage == context.packageName })
         composeRule.onAllNodesWithText("Épingler").get(0).performScrollTo().performClick()
         assertTrue(composeRule.onAllNodesWithText("Épinglée").fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test
     fun finishedFocusHistoryRestoresFromLocalPersistence() {
-        composeRule.onNodeWithText("Focus").performScrollTo().performClick()
+        openFocus()
         composeRule.onNodeWithText("Mode démo · 20 secondes").performScrollTo().performClick()
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
         composeRule.onNodeWithText("Statistiques de focus").performScrollTo().performClick()
         composeRule.onNodeWithText("1 sessions archivées", substring = true).assertIsDisplayed()
 
         composeRule.activityRule.scenario.recreate()
-        composeRule.onNodeWithText("Focus").performScrollTo().performClick()
+        openFocus()
         composeRule.onNodeWithText("Statistiques de focus").performScrollTo().performClick()
         composeRule.onNodeWithText("1 sessions archivées", substring = true).assertIsDisplayed()
     }
 
     @Test
     fun focusRoutineIsCapabilityGatedAndRequiresExplicitStart() {
-        composeRule.onNodeWithText("Paramètres").performScrollTo().performClick()
+        openSettings()
         composeRule.onNodeWithContentDescription("Activer ou désactiver Routines de focus locales").performScrollTo().performClick()
-        composeRule.onNodeWithText("Accueil").performClick()
+        openMore()
         composeRule.onNodeWithText("Routines de focus").performScrollTo().performClick()
         composeRule.onNodeWithText("Nom de la routine").performClick()
         composeRule.onNodeWithText("Nom de la routine").performTextInput("Routine de test")
@@ -217,7 +240,7 @@ class AtlasLaunchTest {
 
     @Test
     fun reefPomodoroSetupStartsAnAtlasSessionWithCycleState() {
-        composeRule.onNodeWithText("Focus").performScrollTo().performClick()
+        openFocus()
         composeRule.onNodeWithText("Démarrer le Pomodoro").performScrollTo().performClick()
         composeRule.onNodeWithText("Pomodoro démarré · 25 min de concentration, pause courte de 5 min", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Cycle 1 / 4").assertIsDisplayed()

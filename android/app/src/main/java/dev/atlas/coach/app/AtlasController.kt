@@ -230,9 +230,9 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }.getOrNull()
     private var lastFocusCheckpointAtElapsed = 0L
 
+    internal val navigationState = AtlasNavigationState()
+    internal val launcherState = AtlasLauncherState(restored["launcherPins"].asList().filterIsInstance<String>().toSet())
     var revision by mutableIntStateOf(0)
-        private set
-    var screen by mutableStateOf(SCREEN_HOME)
         private set
     var latestMessage by mutableStateOf(recoveryNotice ?: (restored["latestMessage"] as? String))
         private set
@@ -252,8 +252,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         private set
     var syncStatusMessage by mutableStateOf("Le mode local ne contacte aucun serveur.")
         private set
-    var launcherPinnedPackages by mutableStateOf(restored["launcherPins"].asList().filterIsInstance<String>().toSet())
-        private set
+    val launcherPinnedPackages: Set<String> get() = launcherState.pinnedPackages
     var historyDays by mutableIntStateOf(7)
         private set
     var simulationMessage by mutableStateOf(restored["simulationMessage"] as? String)
@@ -273,7 +272,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             focusSnapshot?.let(phaseAlarms::schedule)
         }
         if (focusSnapshot?.status in setOf(FocusStatus.RUNNING, FocusStatus.PAUSED)) {
-            screen = SCREEN_FOCUS
+            navigationState.replace(AtlasScreenId.FOCUS)
         }
         lastFocusCheckpointAtElapsed = clock.monotonicMillis()
         restored["habits"].asList().mapNotNull { it.asMap() }.takeIf { it.isNotEmpty() }?.let { maps ->
@@ -343,19 +342,14 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         if (intent?.action != AndroidFocusNotifications.ACTION_OPEN_FROM_NOTIFICATION) return
         when {
             intent.getStringExtra("atlas_open_routine_id") != null -> {
-                navigate(SCREEN_ROUTINES)
+                navigationState.navigate(AtlasScreenId.ROUTINES)
                 latestMessage = "Proposition de routine ouverte. Démarrez-la explicitement si vous le souhaitez."
             }
             intent.getStringExtra("atlas_open_focus_session") != null -> {
-                navigate(SCREEN_FOCUS)
+                navigationState.navigate(AtlasScreenId.FOCUS)
                 latestMessage = "La phase Focus est terminée."
             }
         }
-        touch()
-    }
-
-    fun navigate(destination: String) {
-        screen = destination
         touch()
     }
 
@@ -644,7 +638,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                 val seconds = ((result.requestedDurationMinutes ?: 10) * 60L).coerceAtLeast(1L)
                 focusEngine.start(FocusPlan.custom(seconds).copy(presetId = "directive-${activeDirective.id}"), activeDirective.id)
                 enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS)
-                screen = SCREEN_FOCUS
+                navigationState.navigate(AtlasScreenId.FOCUS)
             }
         } catch (error: IllegalArgumentException) {
             latestMessage = error.message ?: "Cette réponse n'est pas disponible."
@@ -692,7 +686,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         } else {
             "Focus démarré · ${plan.totalWorkCycles} cycle${if (plan.totalWorkCycles == 1) "" else "s"} au total."
         }
-        screen = SCREEN_FOCUS
+        navigationState.navigate(AtlasScreenId.FOCUS)
         persist()
     }
 
@@ -938,12 +932,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
 
     fun toggleLauncherPin(packageName: String) {
         if (capabilities[CAP_LAUNCHER_HOME] != true || packageName.isBlank()) return
-        launcherPinnedPackages = if (packageName in launcherPinnedPackages) {
-            launcherPinnedPackages - packageName
-        } else {
-            launcherPinnedPackages + packageName
-        }
-        latestMessage = if (packageName in launcherPinnedPackages) "Application épinglée à l'accueil ATLAS." else "Application retirée des épingles ATLAS."
+        latestMessage = if (launcherState.togglePin(packageName)) "Application épinglée à l'accueil ATLAS." else "Application retirée des épingles ATLAS."
         persist()
     }
 
@@ -1285,8 +1274,8 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             return
         }
         capabilities = capabilities + (name to enabled)
-        if (name == CAP_LAUNCHER_HOME && !enabled && screen == SCREEN_LAUNCHER) {
-            screen = SCREEN_HOME
+        if (name == CAP_LAUNCHER_HOME && !enabled && navigationState.current == AtlasScreenId.LAUNCHER) {
+            navigationState.replace(AtlasScreenId.HOME)
             latestMessage = "Accueil launcher désactivé; l'accueil ATLAS reste accessible."
         }
         if (name == CAP_FOCUS && !enabled) {
@@ -1330,7 +1319,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             touch()
             return
         }
-        navigate(SCREEN_FOCUS_STATS)
+        navigationState.navigate(AtlasScreenId.FOCUS_STATS)
     }
 
     fun touch() {
@@ -1428,20 +1417,6 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     companion object {
-        const val SCREEN_HOME = "Accueil"
-        const val SCREEN_FOCUS = "Focus"
-        const val SCREEN_HABITS = "Habitudes"
-        const val SCREEN_LIBRARY = "Bibliothèque"
-        const val SCREEN_COACH = "Coach"
-        const val SCREEN_SETTINGS = "Paramètres"
-        const val SCREEN_SIMULATOR = "Simulateur de friction"
-        const val SCREEN_DIAGNOSTICS = "Diagnostic avancé / développeur"
-        const val SCREEN_OBSERVATION = "Observation"
-        const val SCREEN_LAUNCHER = "Accueil launcher"
-        const val SCREEN_ABOUT = "À propos / Licences"
-        const val SCREEN_FOCUS_STATS = "Statistiques de focus"
-        const val SCREEN_ROUTINES = "Routines de focus"
-        const val SCREEN_SYNC_SETTINGS = "Partage backend"
         const val CAP_FOCUS = "focus"
         const val CAP_HABITS = "habits"
         const val CAP_CONTENT = "content"

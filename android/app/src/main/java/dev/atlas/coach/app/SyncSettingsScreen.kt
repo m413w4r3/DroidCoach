@@ -23,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -76,26 +78,28 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
         SyncCategoryRow("Réponses du coach", "Choix explicite; la réponse locale reste disponible.", SyncDataCategory.COACH_INTERACTION, controller)
         SyncCategoryRow("Résumé global d'usage", "Réservé; aucun résumé n'est encore produit.", SyncDataCategory.APP_USAGE_SUMMARY, controller)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = false, onCheckedChange = {}, enabled = false)
+            Checkbox(checked = false, onCheckedChange = {}, enabled = false, modifier = Modifier.semantics { contentDescription = "Détails privés d'applications · indisponibles" })
             Column(modifier = Modifier.weight(1f)) {
                 Text("Détails privés d'applications")
                 Text("Désactivés et jamais envoyés.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text("Backend", style = MaterialTheme.typography.titleMedium)
+        Text("URL du backend", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth().testTag("sync_backend_url"),
             value = baseUrl,
             onValueChange = { baseUrl = it },
-            label = { Text("URL du backend") },
+            label = null,
             placeholder = { Text("https://serveur.example") },
             singleLine = true,
         )
+        Text("Jeton Bearer", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth().testTag("sync_backend_token"),
             value = token,
             onValueChange = { token = it },
-            label = { Text("Jeton Bearer") },
+            label = null,
             placeholder = { Text(if (controller.syncTokenConfigured) "Jeton enregistré · laisser vide pour le garder" else "Saisir le jeton") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -172,7 +176,7 @@ private fun SyncCategoryRow(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked = checked, onCheckedChange = { controller.setSyncCategory(category, it) })
+            Checkbox(checked = checked, onCheckedChange = { controller.setSyncCategory(category, it) }, modifier = Modifier.semantics { contentDescription = title })
         Column(modifier = Modifier.weight(1f)) {
             Text(title)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

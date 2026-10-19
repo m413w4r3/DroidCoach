@@ -30,6 +30,7 @@ Audit effectué le 2026-10-18 sur les clones en lecture seule de `references/rep
 - Les services d'accessibilité, Device Admin, contrôle de services, permissions de wallpaper/status bar, usages et raccourcis multi-profils sont écartés.
 - La capability `launcherHome` est indépendante et désactivée par défaut; épingles et capability restent dans l'état JSON local ATLAS.
 - L'écran affiche l'heure et la directive du jour, propose des gestes Compose simples, et permet le lancement explicite des applications listées.
+- Lot G refond cette présentation et ajoute la recherche, les favoris persistants et une sortie sûre; la provenance historique de `LauncherHomeScreen.kt` reste celle de `HomeFragment.kt` au SHA ci-dessus. Aucune source ou ressource Olauncher nouvelle n'a été copiée par G.
 - La sortie vers les réglages d'accueil Android est accessible depuis l'écran; le rôle HOME n'est jamais modifié automatiquement.
 - Les gestes Olauncher basés sur des `View` n'ont pas été copiés; les gestes du cadran Compose sont propres à ATLAS.
 - Aucun code, ressource, configuration Gradle ou dépendance Android Olauncher complète n'est importé.

@@ -11,6 +11,8 @@ ATLAS S6 reuses the source files listed below for this project’s exclusively p
 | Loop Habit Tracker / uhabits-core | https://github.com/iSoron/uhabits/tree/c06b682f6b7b9c09eb278a06ffb57a42f0cddd38 | GNU GPL v3.0 or later, per source headers and README | `android/app/src/main/java/dev/atlas/coach/habits/thirdparty/loop/` |
 | Lawnchair | https://github.com/LawnchairLauncher/lawnchair/tree/fc100ae9095a83b8b51c447a3b0a4ce2b399ad59 | Apache License 2.0 at repository root | No source files used. |
 
+Lot G refactored the Compose presentation in `android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt`. Its historical Olauncher adaptation remains attributed to `app/src/main/java/app/olauncher/ui/HomeFragment.kt` at `f8e8d6497c457734c7a3171d36374157678e1f33` under GPLv3; Lot G adds no new Olauncher source or assets. `docs/AUDIT_CIBLE.md` records the same provenance.
+
 ## Reef attribution condition
 
 Reef’s README requires every derivative work or redistribution to show a prominent link to the original repository in the application. ATLAS provides this link in **À propos / Licences** and in this notice. The adaptation does not use Reef’s name as its product name or use its official icon. The URL is <https://github.com/aload0/Reef>.

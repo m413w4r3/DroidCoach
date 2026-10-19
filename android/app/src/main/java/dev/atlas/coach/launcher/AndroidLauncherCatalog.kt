@@ -23,6 +23,7 @@ class AndroidLauncherCatalog(context: Context) {
         return queryActivities(packageManager, launcherIntent)
             .mapNotNull { resolveInfo ->
                 val activity = resolveInfo.activityInfo ?: return@mapNotNull null
+                if (activity.packageName == appContext.packageName) return@mapNotNull null
                 val label = resolveInfo.loadLabel(packageManager)?.toString()?.trim().orEmpty()
                 if (label.isEmpty()) return@mapNotNull null
                 LauncherAppModel(

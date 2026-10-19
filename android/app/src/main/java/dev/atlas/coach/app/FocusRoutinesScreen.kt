@@ -48,7 +48,6 @@ internal fun FocusRoutinesScreen(controller: AtlasController) {
     val activeIds = controller.activeFocusRoutines(now).mapTo(mutableSetOf()) { it.id }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Routines de focus", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text("Une routine envoie une proposition. Elle ne démarre jamais un focus automatiquement; aucun usage d'app n'est lu.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (controller.capabilities[AtlasController.CAP_FOCUS_ROUTINES] != true) {
             Text("La capacité Routines est désactivée. Activez-la dans Paramètres pour planifier des propositions.")
