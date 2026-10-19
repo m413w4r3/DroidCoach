@@ -11,9 +11,11 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.remember
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import dev.atlas.coach.app.ui.AtlasTheme
+import dev.atlas.coach.app.ui.ThemePreferenceStore
 
 /** Coach dashboard and management screens. Android HOME is implemented by [LauncherActivity]. */
 class MainActivity : ComponentActivity() {
@@ -33,7 +35,8 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         controller.handleNotificationIntent(intent)
         setContent {
-            AtlasTheme {
+            val themePreferenceStore = remember { ThemePreferenceStore.get(applicationContext) }
+            AtlasTheme(preference = themePreferenceStore.currentPreference) {
                 AtlasApp(
                     controller = controller,
                     context = this,

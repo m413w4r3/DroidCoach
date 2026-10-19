@@ -61,3 +61,6 @@
 ## V6 (2026-10-19)
 - Agent OpenClaw dédié = agent existant `atlas` (seul agent, install propre) durci (tools deny `*`, workspace dédié) plutôt qu'un second agent nécessitant une nouvelle connexion OAuth interactive ; décision utilisateur. Voir `docs/v6/00-diagnostic-openclaw.md`.
 - `chatCompletions` activé sur le Gateway existant (nécessité : plan V6) ; transport isolé derrière `AgentAdapter` côté backend.
+- Le thème ATLAS est sombre par défaut, avec les choix Sombre / Noir AMOLED / Suivre le système / Clair persistés dans `atlas_theme_preference`, séparément du document et du contrôleur ATLAS. Le noir AMOLED neutralise l'échelle d'animation Compose.
+- Le HOME construit `HomeAgentState.localDefault(controller)` de façon synchrone et hors ligne; une future source du lot D peut remplacer l'état sans rendre le réseau obligatoire. Le contrat est dans `docs/v6/HOME_STATE_API.md`.
+- Le lot E expose `FocusSessionScreen` pour intégration depuis `AtlasScreens.kt`, que le lot D modifie en parallèle. `FocusEngine` exige des phases de pause positives; une proposition de pause de 0 minute est donc représentée par une transition de 1 seconde jusqu'à une évolution du moteur.
