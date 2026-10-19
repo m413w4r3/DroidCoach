@@ -160,6 +160,7 @@ if ! rg -q '10\.0\.2\.2' <<<"$NETWORK_XML"; then
 fi
 
 "$ADB" -s "$SERIAL" install -r "$APK" > "$OUTPUT_DIR/install.log"
+"$ADB" -s "$SERIAL" install -r -t "$ANDROID_DIR/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" >> "$OUTPUT_DIR/install.log"
 run_capture disabled
 
 start_backend

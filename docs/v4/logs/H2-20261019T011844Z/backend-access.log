@@ -1,0 +1,25 @@
+INFO:     Started server process [63628]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:58575 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60242 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60246 - "GET /v1/directives/current HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60246 - "POST /v1/directives/demo-focus-001/respond HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60246 - "POST /v1/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60246 - "POST /v1/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34486 - "POST /v1/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34494 - "POST /v1/sync HTTP/1.1" 401 Unauthorized
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [63628]
+INFO:     Started server process [64231]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:58575 (Press CTRL+C to quit)
+INFO:     127.0.0.1:34520 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32902 - "POST /v1/sync HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [64231]

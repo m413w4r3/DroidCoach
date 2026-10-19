@@ -1,0 +1,6 @@
+--------- beginning of main
+10-19 03:18:56.157  4045  4060 I ATLAS_H2: scenario=unauthorized status=AUTH_REQUIRED pending=1
+10-19 03:18:56.812  4097  4112 I ATLAS_H2: scenario=disabled accepted=false pending=0 requests=0
+10-19 03:18:57.635  4131  4146 I ATLAS_H2: scenario=offline status=RETRY_SCHEDULED pending=1 stable_uuid=true
+10-19 03:18:59.904  4166  4181 I ATLAS_H2: capture_state=offline status=RETRY_SCHEDULED pending=1
+10-19 03:19:03.916  4303  4318 I ATLAS_H2: scenario=resume acknowledged=1 pending=0 stable_uuid=true
