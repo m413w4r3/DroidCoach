@@ -32,9 +32,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Le paquet legacy 'tools' (défaut de l'action) n'existe plus dans le dépôt SDK.
+          packages: ''
 
       - name: Install Android compile SDK
-        run: sdkmanager 'platforms;android-37.2' 'build-tools;37.0.0'
+        run: sdkmanager 'platform-tools' 'platforms;android-37.2' 'build-tools;37.0.0'
 
       - name: Run JVM tests, lint and debug build
         working-directory: android
