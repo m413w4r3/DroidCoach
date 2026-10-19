@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/proposal-v2.schema.json",
+  "title": "ATLAS Proposal v2",
+  "description": "Backend-created proposal. Android remains the final policy and execution authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "idempotency_key",
+    "conversation_id",
+    "mandate_id",
+    "mandate_version",
+    "context_version",
+    "created_at",
+    "expires_at",
+    "action_type",
+    "parameters",
+    "reason",
+    "required_level",
+    "state"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "proposal_id": { "type": "string", "format": "uuid" },
+    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "conversation_id": { "type": ["string", "null"], "maxLength": 80 },
+    "mandate_id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "mandate_version": { "type": "integer", "minimum": 1 },
+    "context_version": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "action_type": {
+      "enum": [
+        "home.set_directive",
+        "home.reorder_cards",
+        "focus.propose",
+        "focus.plan",
+        "focus.start",
+        "focus.pause",
+        "habit.suggest",
+        "app_policy.propose",
+        "app_policy.adjust",
+        "content.recommend"
+      ]
+    },
+    "parameters": {
+      "oneOf": [
+        { "$ref": "#/$defs/homeSetDirective" },
+        { "$ref": "#/$defs/homeReorderCards" },
+        { "$ref": "#/$defs/focusPropose" },
+        { "$ref": "#/$defs/focusPlan" },
+        { "$ref": "#/$defs/focusSession" },
+        { "$ref": "#/$defs/habitSuggest" },
+        { "$ref": "#/$defs/appPolicy" },
+        { "$ref": "#/$defs/contentRecommend" }
+      ]
+    },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "required_level": { "enum": ["proposal_only", "confirm", "preauthorized_ok"] },
+    "state": { "enum": ["proposed", "pending_confirmation", "accepted", "executed", "rejected", "expired", "cancelled"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "action_type": { "const": "home.set_directive" } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/homeSetDirective" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "const": "home.reorder_cards" } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/homeReorderCards" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "const": "focus.propose" } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/focusPropose" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "const": "focus.plan" } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/focusPlan" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "enum": ["focus.start", "focus.pause"] } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/focusSession" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "const": "habit.suggest" } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/habitSuggest" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "enum": ["app_policy.propose", "app_policy.adjust"] } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/appPolicy" } } }
+    },
+    {
+      "if": { "properties": { "action_type": { "const": "content.recommend" } }, "required": ["action_type"] },
+      "then": { "properties": { "parameters": { "$ref": "#/$defs/contentRecommend" } } }
+    }
+  ],
+  "$defs": {
+    "homeSetDirective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "body", "primary_action"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "primary_action": { "enum": ["focus.start", "open_coach", "none"] },
+        "focus_proposal_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "homeReorderCards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order"],
+      "properties": {
+        "order": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["directive", "focus", "content"] } }
+      }
+    },
+    "focusPropose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focus_minutes", "break_minutes", "cycles"],
+      "properties": {
+        "focus_minutes": { "type": "integer", "minimum": 1, "maximum": 180 },
+        "break_minutes": { "type": "integer", "minimum": 0, "maximum": 60 },
+        "cycles": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "label": { "type": ["string", "null"], "maxLength": 60 }
+      }
+    },
+    "focusPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focus_minutes", "break_minutes", "cycles", "start_at", "timezone"],
+      "properties": {
+        "focus_minutes": { "type": "integer", "minimum": 1, "maximum": 180 },
+        "break_minutes": { "type": "integer", "minimum": 0, "maximum": 60 },
+        "cycles": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "label": { "type": ["string", "null"], "maxLength": 60 },
+        "start_at": { "type": "string", "format": "date-time" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "focusSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_ref"],
+      "properties": { "session_ref": { "type": "string", "minLength": 1, "maxLength": 80 } }
+    },
+    "habitSuggest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "schedule"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "schedule": { "enum": ["daily", "weekdays"] }
+      }
+    },
+    "appPolicyWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["starts_at", "ends_at"],
+      "properties": {
+        "starts_at": { "type": "string", "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$" },
+        "ends_at": { "type": "string", "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$" },
+        "days": { "type": "array", "maxItems": 7, "uniqueItems": true, "items": { "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] } }
+      }
+    },
+    "appPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_ref", "daily_limit_minutes", "mode", "valid_until"],
+      "properties": {
+        "package_ref": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-zA-Z0-9_.-]+$" },
+        "daily_limit_minutes": { "type": "integer", "minimum": 5, "maximum": 480 },
+        "window": { "$ref": "#/$defs/appPolicyWindow" },
+        "mode": { "enum": ["soft_reminder", "friction"] },
+        "valid_until": { "type": "string", "format": "date-time" }
+      }
+    },
+    "contentRecommend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "content_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 },
+        "url": { "type": ["string", "null"], "minLength": 1, "maxLength": 2048 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 }
+      },
+      "oneOf": [
+        { "required": ["content_id"], "properties": { "url": { "type": "null" } } },
+        { "required": ["url"], "properties": { "content_id": { "type": "null" } } }
+      ]
+    }
+  }
+}

@@ -8,7 +8,6 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 
-
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 

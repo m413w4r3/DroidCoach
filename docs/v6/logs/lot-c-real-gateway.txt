@@ -1,0 +1,28 @@
+OpenClaw real gateway test (2026-10-19)
+{
+  "reply": "Identifie une tâche importante, choisis sa toute première étape et commence. Un créneau de 25 minutes suivi d’une pause de 5 minutes peut aider à lancer l’action.",
+  "proposals": [
+    {
+      "action_type": "focus.propose",
+      "context_version": "sha256-fede8773b12f8f0468273da76483a2dd",
+      "conversation_id": "conv_b18cc1dcbc8e9f7cef2dc23872f2e39c",
+      "created_at": "2026-10-19T13:15:32Z",
+      "expires_at": "2026-10-20T13:15:32Z",
+      "idempotency_key": "5bf4e5209b0f7aaa8de1571c5a7ccebfd8e26d3211eedaa7daf711e40680d8fa",
+      "mandate_id": "mandate-real-gateway-test",
+      "mandate_version": 1,
+      "parameters": {
+        "break_minutes": 5,
+        "cycles": 1,
+        "focus_minutes": 25,
+        "label": "Lancer la prochaine étape"
+      },
+      "proposal_id": "062114dc-1768-4196-a165-508ffab82f40",
+      "reason": "Suggérer un créneau de concentration sans présumer de la tâche.",
+      "required_level": "proposal_only",
+      "schema_version": 2,
+      "state": "proposed"
+    }
+  ],
+  "agent_status": "connected"
+}
