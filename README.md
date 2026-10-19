@@ -1,4 +1,6 @@
-# ATLAS / DroidCoach — préparation V4
+# ATLAS / DroidCoach — préparation V5
+
+**V5 :** ATLAS fournit une `LauncherActivity` HOME autonome (heure, date, directive, favoris, tiroir avec recherche) distincte de l'application de gestion (`MainActivity`). Voir [architecture HOME](docs/v5/01-architecture-home.md), [observation hors interface](docs/v5/02-observation-hors-interface.md), [recette émulateur](docs/v5/03-recette-home-emulateur.md) et [recette finale](docs/v5/04-recette-finale.md).
 
 ATLAS est une application Android Compose de coaching personnel, encore au stade de démonstration locale. Elle fonctionne sans compte, abonnement, serveur ni secret. Les propositions locales sont déterministes. Aucun modèle LLM ou agent externe n'est connecté.
 

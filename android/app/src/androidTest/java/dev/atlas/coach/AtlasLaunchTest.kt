@@ -253,6 +253,9 @@ class AtlasLaunchTest {
             .getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
         val raw = """{"schemaVersion":1,"policy":{"quietStart":"bad-time","quietEnd":"07:00"},"rules":{"recentEventsByRuleAndPackage":{"rule\\u0000app":[{"packageName":"app","timestampUtc":10}]}}}"""
         prefs.edit().putString("state_v1", raw).commit()
+        // Le contrôleur est partagé par processus : il faut le reconstruire pour relire le stockage.
+        (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as AtlasApplication)
+            .resetControllerForTesting()
         composeRule.activityRule.scenario.recreate()
 
         composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
@@ -266,6 +269,9 @@ class AtlasLaunchTest {
             .getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
         val raw = """{"schemaVersion":88,"focus":{}}"""
         prefs.edit().putString("state_v1", raw).commit()
+        // Le contrôleur est partagé par processus : il faut le reconstruire pour relire le stockage.
+        (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as AtlasApplication)
+            .resetControllerForTesting()
         composeRule.activityRule.scenario.recreate()
 
         composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()

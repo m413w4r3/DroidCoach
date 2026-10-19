@@ -64,7 +64,7 @@ class LauncherPresentationTest {
         composeRule.onNodeWithTag("launcher_search").performScrollTo().assertIsDisplayed().performTextInput(appLabel)
         composeRule.onNodeWithContentDescription("Épingler $appLabel parmi les favoris").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Retirer $appLabel des favoris").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("launcher_drawer_header").performTouchInput { swipeDown() }
+        composeRule.onNodeWithTag("launcher_drawer_header").performTouchInput { swipeDown(startY = centerY, endY = centerY + 400f) }
         composeRule.onNodeWithContentDescription("Ouvrir l'application favorite $appLabel").performScrollTo().assertIsDisplayed()
         composeRule.activity.onBackPressedDispatcher.onBackPressed()
         composeRule.onNodeWithText("Directive du jour").performScrollTo().assertIsDisplayed()
