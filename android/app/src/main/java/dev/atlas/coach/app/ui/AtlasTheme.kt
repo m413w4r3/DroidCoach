@@ -1,57 +1,30 @@
 package dev.atlas.coach.app.ui
 
+import android.content.res.Configuration
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-
-private val AtlasDarkColors = darkColorScheme(
-    primary = Color(0xFFD6EF83),
-    onPrimary = Color(0xFF202416),
-    primaryContainer = Color(0xFF303820),
-    onPrimaryContainer = Color(0xFFE5F5AD),
-    secondary = Color(0xFFC1CAAA),
-    onSecondary = Color(0xFF2A3320),
-    secondaryContainer = Color(0xFF3A4430),
-    onSecondaryContainer = Color(0xFFDDE8C4),
-    background = Color(0xFF111318),
-    onBackground = Color(0xFFF1F0E9),
-    surface = Color(0xFF1B1D23),
-    onSurface = Color(0xFFF1F0E9),
-    surfaceVariant = Color(0xFF292C33),
-    surfaceTint = Color(0xFFD6EF83),
-    onSurfaceVariant = Color(0xFFC4C6CE),
-    outline = Color(0xFF858893),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-)
-
-private val AtlasLightColors = lightColorScheme(
-    primary = Color(0xFF405900),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFE3F0C3),
-    onPrimaryContainer = Color(0xFF1B2600),
-    secondary = Color(0xFF53633E),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFE0E9D0),
-    onSecondaryContainer = Color(0xFF17210A),
-    background = Color(0xFFF7F8F2),
-    onBackground = Color(0xFF191C16),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF191C16),
-    surfaceVariant = Color(0xFFE8EAE1),
-    surfaceTint = Color(0xFF405900),
-    onSurfaceVariant = Color(0xFF41443A),
-    outline = Color(0xFF6C7063),
-    error = Color(0xFFBA1A1A),
-    onError = Color(0xFFFFFFFF),
-)
+import androidx.core.view.WindowCompat
 
 private val AtlasTypography = Typography(
     headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold),
@@ -69,10 +42,93 @@ private val AtlasTypography = Typography(
 )
 
 @Composable
-fun AtlasTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) AtlasDarkColors else AtlasLightColors,
-        typography = AtlasTypography,
-        content = content,
+fun AtlasTheme(
+    preference: AtlasThemePreference = AtlasThemePreference.DEFAULT,
+    content: @Composable () -> Unit,
+) {
+    val systemIsDark = isSystemInDarkTheme()
+    val dark = preference.resolvesToDark(systemIsDark)
+    val palette = when (preference) {
+        AtlasThemePreference.AMOLED -> AtlasThemePalettes.amoled
+        AtlasThemePreference.LIGHT -> AtlasThemePalettes.light
+        AtlasThemePreference.FOLLOW_SYSTEM -> if (systemIsDark) AtlasThemePalettes.dark else AtlasThemePalettes.light
+        AtlasThemePreference.DARK -> AtlasThemePalettes.dark
+    }
+    val configuration = LocalConfiguration.current
+    val themedConfiguration = remember(configuration, dark) {
+        Configuration(configuration).apply {
+            val nightMode = if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+        }
+    }
+    val view = LocalView.current
+    val indication = if (preference == AtlasThemePreference.AMOLED) NoAnimationIndication else LocalIndication.current
+    val scheme = if (dark) darkColorScheme(
+        primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
+        primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
+        secondary = Color(palette.secondary), onSecondary = Color(palette.onSecondary),
+        secondaryContainer = Color(palette.secondaryContainer), onSecondaryContainer = Color(palette.onSecondaryContainer),
+        background = Color(palette.background), onBackground = Color(palette.onBackground),
+        surface = Color(palette.surface), onSurface = Color(palette.onSurface),
+        surfaceDim = Color(palette.surfaceDim), surfaceBright = Color(palette.surfaceBright),
+        surfaceContainerLowest = Color(palette.surfaceContainerLowest), surfaceContainerLow = Color(palette.surfaceContainerLow),
+        surfaceContainer = Color(palette.surfaceContainer), surfaceContainerHigh = Color(palette.surfaceContainerHigh),
+        surfaceContainerHighest = Color(palette.surfaceContainerHighest),
+        surfaceVariant = Color(palette.surfaceVariant), onSurfaceVariant = Color(palette.onSurfaceVariant),
+        surfaceTint = Color(palette.primary), outline = Color(palette.outline),
+        error = Color(palette.error), onError = Color(palette.onError),
+    ) else lightColorScheme(
+        primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
+        primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
+        secondary = Color(palette.secondary), onSecondary = Color(palette.onSecondary),
+        secondaryContainer = Color(palette.secondaryContainer), onSecondaryContainer = Color(palette.onSecondaryContainer),
+        background = Color(palette.background), onBackground = Color(palette.onBackground),
+        surface = Color(palette.surface), onSurface = Color(palette.onSurface),
+        surfaceDim = Color(palette.surfaceDim), surfaceBright = Color(palette.surfaceBright),
+        surfaceContainerLowest = Color(palette.surfaceContainerLowest), surfaceContainerLow = Color(palette.surfaceContainerLow),
+        surfaceContainer = Color(palette.surfaceContainer), surfaceContainerHigh = Color(palette.surfaceContainerHigh),
+        surfaceContainerHighest = Color(palette.surfaceContainerHighest),
+        surfaceVariant = Color(palette.surfaceVariant), onSurfaceVariant = Color(palette.onSurfaceVariant),
+        surfaceTint = Color(palette.primary), outline = Color(palette.outline),
+        error = Color(palette.error), onError = Color(palette.onError),
     )
+
+    CompositionLocalProvider(
+        LocalConfiguration provides themedConfiguration,
+        LocalIndication provides indication,
+    ) {
+        SideEffect {
+            view.context.findActivity()?.window?.let { window ->
+                @Suppress("DEPRECATION")
+                run {
+                    window.statusBarColor = android.graphics.Color.TRANSPARENT
+                    window.navigationBarColor = android.graphics.Color.TRANSPARENT
+                }
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+        }
+        MaterialTheme(colorScheme = scheme, typography = AtlasTypography) {
+            Surface(color = scheme.background, contentColor = scheme.onBackground, content = content)
+        }
+    }
+}
+
+/** Suppresses animated press ripples for AMOLED; the app currently defines no screen transitions. */
+private object NoAnimationIndication : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode = object : Modifier.Node(), DrawModifierNode {
+        override fun ContentDrawScope.draw() = drawContent()
+    }
+
+    override fun equals(other: Any?): Boolean = other === this
+
+    override fun hashCode(): Int = System.identityHashCode(this)
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

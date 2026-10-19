@@ -68,3 +68,6 @@
 - Le futur HOME consomme `AtlasController.agentHomeState`. Les cartes omises d'un ordre partiel sont réajoutées; les sessions annulées gardent un tombstone durable.
 - `focus.plan` requiert la capability `focusRoutines` et réutilise l'alarme inexacte de proposition déjà livrée; aucun démarrage d'activité en arrière-plan n'est effectué.
 - `app_policy.adjust` reste refusée par le répartiteur : la règle UsageStats locale ne mesure pas la durée quotidienne. `app_policy.propose` peut seulement enregistrer une suggestion; aucun plafonnement fictif n'est appliqué.
+- Le thème ATLAS est sombre par défaut, avec les choix Sombre / Noir AMOLED / Suivre le système / Clair persistés dans `atlas_theme_preference`, séparément du document et du contrôleur ATLAS. Le noir AMOLED neutralise l'échelle d'animation Compose.
+- Le HOME construit `HomeAgentState.localDefault(controller)` de façon synchrone et hors ligne; une future source du lot D peut remplacer l'état sans rendre le réseau obligatoire. Le contrat est dans `docs/v6/HOME_STATE_API.md`.
+- Le lot E expose `FocusSessionScreen` pour intégration depuis `AtlasScreens.kt`, que le lot D modifie en parallèle. `FocusEngine` exige des phases de pause positives; une proposition de pause de 0 minute est donc représentée par une transition de 1 seconde jusqu'à une évolution du moteur.

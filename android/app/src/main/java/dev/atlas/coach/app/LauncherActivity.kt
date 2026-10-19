@@ -5,21 +5,20 @@ import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import dev.atlas.coach.app.ui.AtlasTheme
+import dev.atlas.coach.app.ui.ThemePreferenceStore
 
 /** Minimal, text-first Android HOME. It shares the process controller with [MainActivity]. */
 class LauncherActivity : ComponentActivity() {
@@ -35,26 +34,18 @@ class LauncherActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        @Suppress("DEPRECATION")
-        run {
-            window.statusBarColor = Color.TRANSPARENT
-            window.navigationBarColor = Color.TRANSPARENT
-        }
         refreshHomeRole()
         setContent {
-            val darkTheme = isSystemInDarkTheme()
-            SideEffect {
-                val insets = WindowCompat.getInsetsController(window, window.decorView)
-                insets.isAppearanceLightStatusBars = !darkTheme
-                insets.isAppearanceLightNavigationBars = !darkTheme
-            }
-            AtlasTheme {
+            val themePreferenceStore = remember { ThemePreferenceStore.get(applicationContext) }
+            AtlasTheme(preference = themePreferenceStore.currentPreference) {
                 LauncherHomeScreen(
                     controller = controller,
                     context = this,
                     isHomeRoleHeld = isAtlasHomeRole,
                     onRequestHomeRole = ::requestHomeRoleExplicitly,
                     openCoach = ::openCoach,
+                    openFocus = ::openFocus,
+                    openLibrary = ::openLibrary,
                     openPreviousLauncher = ::openSavedSystemLauncher,
                     openHomeSettings = ::openSystemHomeSettings,
                 )
@@ -102,6 +93,16 @@ class LauncherActivity : ComponentActivity() {
 
     private fun openCoach() {
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun openFocus() {
+        controller.navigationState.selectTab(AtlasScreenId.FOCUS)
+        openCoach()
+    }
+
+    private fun openLibrary() {
+        controller.navigationState.navigate(AtlasScreenId.LIBRARY)
+        openCoach()
     }
 
     private fun openSavedSystemLauncher() {

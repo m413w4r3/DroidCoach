@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,38 +28,65 @@ import androidx.compose.ui.unit.dp
 import dev.atlas.coach.focus.ReefPomodoroConfig
 
 @Composable
-internal fun ReefPomodoroSetup(onStart: (ReefPomodoroConfig) -> Unit) {
-    var focus by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.focusMinutes) }
-    var shortBreak by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.shortBreakMinutes) }
-    var longBreak by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.longBreakMinutes) }
-    var longBreakEvery by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.cycles) }
-    var totalCycles by remember { mutableIntStateOf(ReefPomodoroConfig.DEFAULT.totalWorkCycles) }
-    var continuous by remember { mutableStateOf(false) }
+internal fun ReefPomodoroSetup(
+    onStart: (ReefPomodoroConfig) -> Unit,
+    initialConfig: ReefPomodoroConfig = ReefPomodoroConfig.DEFAULT,
+    expandedInitially: Boolean = false,
+) {
+    var focus by remember(initialConfig) { mutableIntStateOf(initialConfig.focusMinutes) }
+    var shortBreak by remember(initialConfig) { mutableIntStateOf(initialConfig.shortBreakMinutes) }
+    var longBreak by remember(initialConfig) { mutableIntStateOf(initialConfig.longBreakMinutes) }
+    var longBreakEvery by remember(initialConfig) { mutableIntStateOf(initialConfig.cycles) }
+    var totalCycles by remember(initialConfig) { mutableIntStateOf(initialConfig.totalWorkCycles) }
+    var continuous by remember(initialConfig) { mutableStateOf(initialConfig.continuous) }
+    var customize by remember(expandedInitially, initialConfig) { mutableStateOf(expandedInitially) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Pomodoro personnalisé", style = MaterialTheme.typography.titleMedium)
-        DurationStepper("Concentration", focus, 1, 180) { focus = it }
-        DurationStepper("Pause courte", shortBreak, 1, 60) { shortBreak = it }
-        DurationStepper("Pause longue", longBreak, 1, 120) { longBreak = it }
-        DurationStepper("Cycles avant la pause longue", longBreakEvery, 1, 12) { longBreakEvery = it }
-        DurationStepper("Cycles de travail au total", totalCycles, 1, 100) { totalCycles = it }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Text("Mode continu")
-                Text("Sans arrêt automatique après un nombre fixe de cycles.", style = MaterialTheme.typography.bodySmall)
-            }
-            Switch(checked = continuous, onCheckedChange = { continuous = it })
-        }
+        Text("Session proposée", style = MaterialTheme.typography.titleMedium)
+        Text("$focus min de concentration · pause $shortBreak min · $totalCycles cycles")
         Button(
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
+            onClick = { onStart(currentPomodoroConfig(focus, shortBreak, longBreak, longBreakEvery, totalCycles, continuous)) },
+        ) { Text("Démarrer") }
+        TextButton(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
-            onClick = { onStart(ReefPomodoroConfig(focus, shortBreak, longBreak, longBreakEvery, totalCycles, continuous)) },
-        ) { Text("Démarrer le Pomodoro") }
+            onClick = { customize = !customize },
+        ) { Text(if (customize) "Masquer la personnalisation" else "Personnaliser") }
+
+        if (customize) {
+            Text("Réglages avancés", style = MaterialTheme.typography.titleSmall)
+            DurationStepper("Concentration", focus, 1, 180) { focus = it }
+            DurationStepper("Pause courte", shortBreak, 1, 60) { shortBreak = it }
+            DurationStepper("Pause longue", longBreak, 1, 120) { longBreak = it }
+            DurationStepper("Cycles avant la pause longue", longBreakEvery, 1, 12) { longBreakEvery = it }
+            DurationStepper("Cycles de travail au total", totalCycles, 1, 100) { totalCycles = it }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text("Mode continu")
+                    Text("Sans arrêt automatique après un nombre fixe de cycles.", style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(checked = continuous, onCheckedChange = { continuous = it })
+            }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+                onClick = { onStart(currentPomodoroConfig(focus, shortBreak, longBreak, longBreakEvery, totalCycles, continuous)) },
+            ) { Text("Démarrer cette session") }
+        }
     }
 }
+
+private fun currentPomodoroConfig(
+    focus: Int,
+    shortBreak: Int,
+    longBreak: Int,
+    longBreakEvery: Int,
+    totalCycles: Int,
+    continuous: Boolean,
+): ReefPomodoroConfig = ReefPomodoroConfig(focus, shortBreak, longBreak, longBreakEvery, totalCycles, continuous)
 
 @Composable
 private fun DurationStepper(label: String, value: Int, minimum: Int, maximum: Int, onChange: (Int) -> Unit) {

@@ -25,6 +25,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -49,10 +51,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.heightIn
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -76,16 +80,22 @@ internal fun LauncherHomeScreen(
     isHomeRoleHeld: Boolean,
     onRequestHomeRole: () -> Unit,
     openCoach: () -> Unit,
+    openFocus: () -> Unit = openCoach,
+    openLibrary: () -> Unit = openCoach,
     openPreviousLauncher: () -> Unit,
     openHomeSettings: () -> Unit,
+    agentState: HomeAgentState = HomeAgentState.localDefault(controller),
 ) {
     if (CapabilityRules.mayRenderLauncherHome(controller.capabilities, isHomeRoleHeld)) {
         LauncherHomeContent(
             controller = controller,
             context = context,
             openCoach = openCoach,
+            openFocus = openFocus,
+            openLibrary = openLibrary,
             openPreviousLauncher = openPreviousLauncher,
             openHomeSettings = openHomeSettings,
+            agentState = agentState,
         )
     } else {
         LauncherRoleSetupScreen(onRequestHomeRole, openHomeSettings)
@@ -116,8 +126,11 @@ private fun LauncherHomeContent(
     controller: AtlasController,
     context: Context,
     openCoach: () -> Unit,
+    openFocus: () -> Unit,
+    openLibrary: () -> Unit,
     openPreviousLauncher: () -> Unit,
     openHomeSettings: () -> Unit,
+    agentState: HomeAgentState,
 ) {
     val catalog = remember(context) { AndroidLauncherCatalog(context) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -131,6 +144,7 @@ private fun LauncherHomeContent(
     var search by remember { mutableStateOf("") }
     var drawerOpen by remember { mutableStateOf(false) }
     var launcherMessage by remember { mutableStateOf<String?>(null) }
+    var showDirectiveDetails by remember { mutableStateOf(false) }
 
     BackHandler(enabled = true) {
         if (drawerOpen) drawerOpen = false
@@ -183,7 +197,7 @@ private fun LauncherHomeContent(
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                 .padding(top = 18.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (drawerOpen) {
                 Column(
@@ -231,16 +245,62 @@ private fun LauncherHomeContent(
                             .replaceFirstChar { it.uppercase(Locale.FRANCE) },
                         style = MaterialTheme.typography.bodyLarge,
                     )
-                    Text("Glissez vers le haut pour ouvrir les applications.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = { drawerOpen = true }) {
-                        Text("Ouvrir le tiroir d'applications")
+                        Text("Applications et recherche")
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Directive du jour", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                    Text(controller.directive.title, style = MaterialTheme.typography.headlineSmall)
-                    Text(controller.directive.reason, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (density.fontScale >= 1.6f) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Prochaine étape", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(agentState.agentStatus.homeStatusLabel(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Prochaine étape", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(agentState.agentStatus.homeStatusLabel(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
+                                .semantics {
+                                    contentDescription = "Directive : ${truncateHomeDirectiveTitle(agentState.directive.title)}. Afficher le détail."
+                                },
+                            onClick = { showDirectiveDetails = true },
+                        ) {
+                            Text(
+                                truncateHomeDirectiveTitle(agentState.directive.title),
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.headlineSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (agentState.directive.body.isNotBlank()) {
+                            Text(
+                                agentState.directive.body,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Button(
+                            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
+                            onClick = {
+                                when (agentState.directive.primaryAction) {
+                                    HomePrimaryAction.START_FOCUS -> openFocus()
+                                    HomePrimaryAction.OPEN_COACH -> openCoach()
+                                    HomePrimaryAction.NONE -> showDirectiveDetails = true
+                                }
+                            },
+                            enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                        ) {
+                            Text(agentState.directive.primaryAction.homeActionLabel())
+                        }
+                    }
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -264,6 +324,13 @@ private fun LauncherHomeContent(
                             }
                         }
                     }
+                }
+
+                agentState.focusCard?.let { card ->
+                    HomeAgentCardView(card) { openHomeCard(card.action, openFocus, openCoach, openLibrary) }
+                }
+                agentState.contentCard?.let { card ->
+                    HomeAgentCardView(card) { openHomeCard(card.action, openFocus, openCoach, openLibrary) }
                 }
             }
             launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -296,6 +363,57 @@ private fun LauncherHomeContent(
             ) { Text("Coach") }
         }
     }
+
+    if (showDirectiveDetails) {
+        AlertDialog(
+            onDismissRequest = { showDirectiveDetails = false },
+            title = { Text(agentState.directive.title) },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    Text(agentState.directive.body.ifBlank { "Aucun détail supplémentaire." })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDirectiveDetails = false }) { Text("Fermer") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun HomeAgentCardView(card: HomeAgentCard, onAction: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(card.title, style = MaterialTheme.typography.titleSmall)
+            Text(card.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            TextButton(modifier = Modifier.sizeIn(minHeight = 44.dp), onClick = onAction) { Text(card.actionLabel) }
+        }
+    }
+}
+
+private fun openHomeCard(
+    action: HomeCardAction,
+    openFocus: () -> Unit,
+    openCoach: () -> Unit,
+    openLibrary: () -> Unit,
+) {
+    when (action) {
+        HomeCardAction.OPEN_FOCUS -> openFocus()
+        HomeCardAction.OPEN_COACH -> openCoach()
+        HomeCardAction.OPEN_LIBRARY -> openLibrary()
+    }
+}
+
+private fun HomeAgentStatus.homeStatusLabel(): String = when (this) {
+    HomeAgentStatus.CONNECTED -> "Connecté"
+    HomeAgentStatus.UNAVAILABLE -> "Agent indisponible"
+    HomeAgentStatus.LOCAL_ONLY -> "Mode local · hors ligne"
+}
+
+private fun HomePrimaryAction.homeActionLabel(): String = when (this) {
+    HomePrimaryAction.START_FOCUS -> "Préparer le focus"
+    HomePrimaryAction.OPEN_COACH -> "Ouvrir le coach"
+    HomePrimaryAction.NONE -> "Aucune action proposée"
 }
 
 @Composable
