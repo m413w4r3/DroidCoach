@@ -931,9 +931,19 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun toggleLauncherPin(packageName: String) {
-        if (capabilities[CAP_LAUNCHER_HOME] != true || packageName.isBlank()) return
+        if (packageName.isBlank()) return
         latestMessage = if (launcherState.togglePin(packageName)) "Application épinglée à l'accueil ATLAS." else "Application retirée des épingles ATLAS."
         persist()
+    }
+
+    fun syncLauncherHomeRole(isAtlasDefault: Boolean) {
+        launcherState.refreshHomeRole(isAtlasDefault)
+        if (capabilities[CAP_LAUNCHER_HOME] != isAtlasDefault) {
+            capabilities = capabilities + (CAP_LAUNCHER_HOME to isAtlasDefault)
+            persist()
+        } else {
+            touch()
+        }
     }
 
     fun addFocusRoutine(name: String, start: String, end: String, weekdaysOnly: Boolean, focusMinutes: Int = 25): Boolean {
@@ -1274,10 +1284,6 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             return
         }
         capabilities = capabilities + (name to enabled)
-        if (name == CAP_LAUNCHER_HOME && !enabled && navigationState.current == AtlasScreenId.LAUNCHER) {
-            navigationState.replace(AtlasScreenId.HOME)
-            latestMessage = "Accueil launcher désactivé; l'accueil ATLAS reste accessible."
-        }
         if (name == CAP_FOCUS && !enabled) {
             val current = focusEngine.currentSession()
             if (current != null && CapabilityRules.mustPauseFocusOnDisable(enabled, current.status)) {

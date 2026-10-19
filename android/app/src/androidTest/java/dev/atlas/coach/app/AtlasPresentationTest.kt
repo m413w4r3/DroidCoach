@@ -52,7 +52,7 @@ class AtlasPresentationTest {
                         onEmergencyPause = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
                         onNavigate = {},
                     ) {
-                        HomeScreen(controller, controller.revision, context)
+                        HomeScreen(controller, controller.revision)
                     }
                 }
             }
@@ -106,15 +106,15 @@ class AtlasPresentationTest {
         }
         composeRule.setContent {
             AtlasTheme {
-                AtlasApp(controller, context, requestHomeRole = {}, openSystemHome = {}, openSystemLauncher = {})
+                AtlasApp(controller, context, requestHomeRole = {}, openSystemHome = {})
             }
         }
 
-        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsNotSelected()
         composeRule.onNodeWithText("Un pas à la fois").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsSelected()
@@ -126,7 +126,7 @@ class AtlasPresentationTest {
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
     }
 

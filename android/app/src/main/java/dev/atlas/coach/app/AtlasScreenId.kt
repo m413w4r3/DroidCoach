@@ -12,7 +12,6 @@ internal object AtlasScreenId {
     const val SIMULATOR = "Simulateur de friction"
     const val DIAGNOSTICS = "Diagnostic avancé / développeur"
     const val OBSERVATION = "Observation"
-    const val LAUNCHER = "Accueil launcher"
     const val ABOUT = "À propos / Licences"
     const val FOCUS_STATS = "Statistiques de focus"
     const val ROUTINES = "Routines de focus"

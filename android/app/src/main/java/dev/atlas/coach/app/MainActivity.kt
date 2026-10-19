@@ -2,41 +2,43 @@ package dev.atlas.coach.app
 
 import android.app.Activity
 import android.app.role.RoleManager
-import android.content.Intent
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.core.view.WindowCompat
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.remember
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.edit
+import androidx.core.view.WindowCompat
 import dev.atlas.coach.app.ui.AtlasTheme
 
+/** Coach dashboard and management screens. Android HOME is implemented by [LauncherActivity]. */
 class MainActivity : ComponentActivity() {
-    private var atlasController: AtlasController? = null
+    private val controller: AtlasController
+        get() = (application as AtlasApplication).controller
+
     private val homeRoleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        atlasController?.reportMessage(
-            if (result.resultCode == Activity.RESULT_OK) "ATLAS a été choisi comme application d'accueil." else "Demande refusée ou annulée; l'application d'accueil du système reste disponible.",
+        controller.reportMessage(
+            if (result.resultCode == Activity.RESULT_OK) "ATLAS a été choisi comme application d'accueil."
+            else "Demande refusée ou annulée; l'application d'accueil du système reste disponible.",
         )
+        syncHomeRole()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        controller.handleNotificationIntent(intent)
         setContent {
             AtlasTheme {
-                val controller = remember { AtlasController(applicationContext).also { it.handleNotificationIntent(intent) } }
-                atlasController = controller
                 AtlasApp(
                     controller = controller,
                     context = this,
                     requestHomeRole = ::requestHomeRoleExplicitly,
-                    openSystemHome = ::openSystemHome,
-                    openSystemLauncher = ::openSavedSystemLauncher,
-                    homeLaunch = intent.action == Intent.ACTION_MAIN && intent.categories?.contains(Intent.CATEGORY_HOME) == true,
+                    openSystemHome = ::openSystemHomeSettings,
                 )
             }
         }
@@ -45,27 +47,24 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        atlasController?.handleNotificationIntent(intent)
-        if (intent.action == Intent.ACTION_MAIN && intent.categories?.contains(Intent.CATEGORY_HOME) == true) {
-            if (atlasController?.capabilities?.get(AtlasController.CAP_LAUNCHER_HOME) == true) {
-                atlasController?.navigationState?.selectTab(AtlasScreenId.LAUNCHER)
-            } else {
-                atlasController?.navigationState?.replace(AtlasScreenId.HOME)
-            }
-        }
+        controller.handleNotificationIntent(intent)
     }
 
     override fun onResume() {
         super.onResume()
+        syncHomeRole()
+    }
+
+    private fun syncHomeRole() {
         val home = resolvedHomeActivity()
         val isAtlas = home?.packageName == packageName
         if (!isAtlas && home != null) {
-            getSharedPreferences("atlas_launcher_exit", MODE_PRIVATE).edit()
-                .putString("system_home_package", home.packageName)
-                .putString("system_home_class", home.className)
-                .apply()
+            getSharedPreferences("atlas_launcher_exit", MODE_PRIVATE).edit {
+                putString("system_home_package", home.packageName)
+                putString("system_home_class", home.className)
+            }
         }
-        atlasController?.launcherState?.refreshHomeRole(isAtlas)
+        controller.syncLauncherHomeRole(isAtlas)
     }
 
     private fun resolvedHomeActivity(): ComponentName? {
@@ -75,51 +74,35 @@ class MainActivity : ComponentActivity() {
         return ComponentName(activity.packageName, activity.name)
     }
 
-    private fun openSavedSystemLauncher() {
-        val preferences = getSharedPreferences("atlas_launcher_exit", MODE_PRIVATE)
-        val pkg = preferences.getString("system_home_package", null)
-        val cls = preferences.getString("system_home_class", null)
-        val component = if (pkg != null && cls != null && pkg != packageName) ComponentName(pkg, cls) else null
-        val intent = component?.let {
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setComponent(it).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val launched = intent?.let { runCatching { startActivity(it) }.isSuccess } == true
-        if (!launched) openSystemHome()
-    }
-
     private fun requestHomeRoleExplicitly() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            atlasController?.reportMessage("Le rôle Accueil requiert Android 10 ou ultérieur.")
+            controller.reportMessage("Le rôle Accueil requiert Android 10 ou ultérieur.")
             return
         }
         val manager = getSystemService(RoleManager::class.java)
         if (manager == null || !manager.isRoleAvailable(RoleManager.ROLE_HOME)) {
-            atlasController?.reportMessage("Le rôle Accueil n'est pas disponible sur cet appareil.")
+            controller.reportMessage("Le rôle Accueil n'est pas disponible sur cet appareil.")
             return
         }
         resolvedHomeActivity()?.takeIf { it.packageName != packageName }?.let { home ->
-            getSharedPreferences("atlas_launcher_exit", MODE_PRIVATE).edit()
-                .putString("system_home_package", home.packageName)
-                .putString("system_home_class", home.className)
-                .apply()
+            getSharedPreferences("atlas_launcher_exit", MODE_PRIVATE).edit {
+                putString("system_home_package", home.packageName)
+                putString("system_home_class", home.className)
+            }
         }
         runCatching { homeRoleLauncher.launch(manager.createRequestRoleIntent(RoleManager.ROLE_HOME)) }
-            .onFailure { atlasController?.reportMessage("Impossible d'ouvrir la demande de rôle Accueil.") }
+            .onFailure { controller.reportMessage("Impossible d'ouvrir la demande de rôle Accueil.") }
     }
 
-    private fun openSystemHome() {
+    private fun openSystemHomeSettings() {
         val candidates = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Intent(Settings.ACTION_HOME_SETTINGS))
             add(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
             add(Intent(Settings.ACTION_SETTINGS))
         }
-        val destination = candidates.firstOrNull { packageManager.resolveActivity(it, 0) != null }
-        if (destination == null) {
-            atlasController?.reportMessage("Les réglages de l'accueil ne sont pas disponibles sur cet appareil.")
-            return
+        candidates.forEach { destination ->
+            if (runCatching { startActivity(destination) }.isSuccess) return
         }
-        runCatching { startActivity(destination) }
-            .onFailure { atlasController?.reportMessage("Impossible d'ouvrir les réglages de l'application d'accueil.") }
+        controller.reportMessage("Les réglages de l'accueil ne sont pas disponibles sur cet appareil.")
     }
-
 }

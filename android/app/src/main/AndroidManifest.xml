@@ -21,6 +21,7 @@
     </queries>
 
     <application
+        android:name=".app.AtlasApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -39,17 +40,18 @@
             </intent-filter>
         </activity>
 
-        <activity-alias
-            android:name=".app.AtlasHomeActivity"
+        <activity
+            android:name=".app.LauncherActivity"
             android:exported="true"
-            android:label="ATLAS (accueil facultatif)"
-            android:targetActivity=".app.MainActivity">
+            android:label="ATLAS"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="false">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-        </activity-alias>
+        </activity>
 
         <activity
             android:name=".usage.android.IntentionActivity"

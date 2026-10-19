@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasController
+import dev.atlas.coach.app.AtlasApplication
 import dev.atlas.coach.app.MainActivity
 import dev.atlas.coach.focus.FakeClock
 import dev.atlas.coach.focus.FocusPlan
@@ -39,10 +41,12 @@ class AtlasLaunchTest {
         InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
             .edit().clear().commit()
+        (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as AtlasApplication)
+            .resetControllerForTesting()
         composeRule.activityRule.scenario.recreate()
     }
 
-    private fun openHome() = composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
+    private fun openHome() = composeRule.onNodeWithContentDescription("Ouvrir Tableau").performClick()
     private fun openFocus() = composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
     private fun openHabits() = composeRule.onNodeWithContentDescription("Ouvrir Habitudes").performClick()
     private fun openMore() = composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
@@ -66,7 +70,7 @@ class AtlasLaunchTest {
 
     @Test
     fun directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline() {
-        composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
+        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
         composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
 
         composeRule.onNodeWithText("Commencer").performClick()
@@ -186,8 +190,11 @@ class AtlasLaunchTest {
     }
 
     @Test
-    fun optionalLauncherAndLicenseAttributionAreVisible() {
+    fun homeRoleSettingsAreSeparateFromTheCoachDashboardAndLicenseAttributionIsVisible() {
         openSettings()
+        composeRule.onNodeWithText("Accueil Android").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Choisir ATLAS comme accueil…").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription("Activer ou désactiver Accueil ATLAS facultatif").assertCountEquals(0)
         composeRule.onNodeWithText("À propos et licences").performScrollTo().performClick()
         composeRule.onNodeWithText("Le code source ATLAS est diffusé sous GNU GPL version 3.0.", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Reef par Pranav Purwar", substring = true).assertIsDisplayed()
@@ -196,19 +203,12 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Loop Habit Tracker · force d'habitude et CSV").assertIsDisplayed()
 
         openHome()
-        openSettings()
-        composeRule.onNodeWithContentDescription("Activer ou désactiver Accueil ATLAS facultatif").performScrollTo().performClick()
-        openHome()
         openMore()
-        composeRule.onNodeWithText("Accueil et applications favorites").performScrollTo().performClick()
-
-        composeRule.onNodeWithText("Directive du jour").assertIsDisplayed()
-        composeRule.onNodeWithText("Tout voir").performScrollTo().performClick()
-        composeRule.onNodeWithText("Toutes les applications").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Accueil et applications favorites").assertCountEquals(0)
+        openHome()
+        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertTrue(AndroidLauncherCatalog(context).list().none { it.appPackage == context.packageName })
-        composeRule.onAllNodesWithText("Épingler").get(0).performScrollTo().performClick()
-        assertTrue(composeRule.onAllNodesWithText("Épinglée").fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test
@@ -255,7 +255,7 @@ class AtlasLaunchTest {
         prefs.edit().putString("state_v1", raw).commit()
         composeRule.activityRule.scenario.recreate()
 
-        composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
+        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
         composeRule.onNodeWithText("sous-états invalides", substring = true).assertIsDisplayed()
         assertTrueQuarantineContains(prefs.all, raw)
     }
@@ -268,7 +268,7 @@ class AtlasLaunchTest {
         prefs.edit().putString("state_v1", raw).commit()
         composeRule.activityRule.scenario.recreate()
 
-        composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
+        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
         composeRule.onNodeWithText("version de schéma inconnue", substring = true).assertIsDisplayed()
         assertTrueQuarantineContains(prefs.all, raw)
     }

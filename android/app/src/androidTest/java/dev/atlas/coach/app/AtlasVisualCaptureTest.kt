@@ -57,27 +57,39 @@ class AtlasVisualCaptureTest {
                 LocalDensity provides Density(baseDensity.density, fontScale.value),
             ) {
                 AtlasTheme {
-                    AtlasScreenFrame(
-                        title = screen.value.title,
-                        activeDestination = screen.value.activeDestination,
-                        canGoBack = false,
-                        emergencyPaused = controller.isEmergencyPaused,
-                        onBack = {},
-                        onEmergencyPause = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
-                        onNavigate = {},
-                    ) {
-                        when (screen.value) {
-                            CaptureScreen.HOME -> HomeScreen(controller, controller.revision, context)
-                            CaptureScreen.LAUNCHER -> LauncherHomeScreen(controller, context, openSystemHome = {})
-                            CaptureScreen.FOCUS -> FocusScreen(controller, controller.revision, onChooseHabit = {})
-                            CaptureScreen.HABITS -> HabitsScreen(controller, controller.revision, onExport = {})
-                            CaptureScreen.ROUTINES -> FocusRoutinesScreen(controller)
-                            CaptureScreen.OBSERVATION -> ObservationScreen(controller, context, requestNotifications = {})
-                            CaptureScreen.INTERVENTION -> SimulatorScreen(controller, controller.revision)
-                            CaptureScreen.LIBRARY -> LibraryScreen(controller, controller.revision, context)
-                            CaptureScreen.SETTINGS -> SettingsScreen(controller, {}, {}, {}, {})
-                            CaptureScreen.DIAGNOSTICS -> DiagnosticsScreen(controller)
-                            CaptureScreen.SYNC -> SyncSettingsScreen(controller, controller.revision)
+                    if (screen.value == CaptureScreen.LAUNCHER) {
+                        LauncherHomeScreen(
+                            controller = controller,
+                            context = context,
+                            isHomeRoleHeld = true,
+                            onRequestHomeRole = {},
+                            openCoach = {},
+                            openPreviousLauncher = {},
+                            openHomeSettings = {},
+                        )
+                    } else {
+                        AtlasScreenFrame(
+                            title = screen.value.title,
+                            activeDestination = screen.value.activeDestination,
+                            canGoBack = false,
+                            emergencyPaused = controller.isEmergencyPaused,
+                            onBack = {},
+                            onEmergencyPause = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
+                            onNavigate = {},
+                        ) {
+                            when (screen.value) {
+                                CaptureScreen.HOME -> HomeScreen(controller, controller.revision)
+                                CaptureScreen.FOCUS -> FocusScreen(controller, controller.revision, onChooseHabit = {})
+                                CaptureScreen.HABITS -> HabitsScreen(controller, controller.revision, onExport = {})
+                                CaptureScreen.ROUTINES -> FocusRoutinesScreen(controller)
+                                CaptureScreen.OBSERVATION -> ObservationScreen(controller, context, requestNotifications = {})
+                                CaptureScreen.INTERVENTION -> SimulatorScreen(controller, controller.revision)
+                                CaptureScreen.LIBRARY -> LibraryScreen(controller, controller.revision, context)
+                                CaptureScreen.SETTINGS -> SettingsScreen(controller, {}, {}, {}, {})
+                                CaptureScreen.DIAGNOSTICS -> DiagnosticsScreen(controller)
+                                CaptureScreen.SYNC -> SyncSettingsScreen(controller, controller.revision)
+                                CaptureScreen.LAUNCHER -> Unit
+                            }
                         }
                     }
                 }
@@ -102,7 +114,7 @@ class AtlasVisualCaptureTest {
         val night = mutableIntStateOf(Configuration.UI_MODE_NIGHT_NO)
         val fontScale = mutableStateOf(1f)
         show(controller, screen, night, fontScale)
-        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
         composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
         capture("G-home-light.png")
@@ -178,16 +190,16 @@ class AtlasVisualCaptureTest {
     @Test
     fun capturesLauncherHomeAndSearchableAppsList() {
         val controller = newController()
-        controller.setCapability(AtlasController.CAP_LAUNCHER_HOME, true)
+        controller.syncLauncherHomeRole(true)
         val screen = mutableStateOf(CaptureScreen.LAUNCHER)
         val night = mutableIntStateOf(Configuration.UI_MODE_NIGHT_NO)
         val fontScale = mutableStateOf(1f)
         show(controller, screen, night, fontScale)
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Tout voir").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Ouvrir le tiroir d'applications").fetchSemanticsNodes().isNotEmpty()
         }
         capture("G-launcher-home.png")
-        composeRule.onNodeWithText("Tout voir").performScrollTo().performClick()
+        composeRule.onNodeWithText("Ouvrir le tiroir d'applications").performScrollTo().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Épingler").fetchSemanticsNodes().isNotEmpty() ||
                 composeRule.onAllNodesWithText("Aucune application avec un raccourci d'accueil n'est visible.").fetchSemanticsNodes().isNotEmpty()

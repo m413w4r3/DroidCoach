@@ -185,7 +185,7 @@ fun AtlasScreenFrame(
                 Column(modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
                     if (fontScale >= 1.6f) {
                         Row(Modifier.fillMaxWidth()) {
-                            AtlasNavItem("Accueil", AtlasRoutes.HOME, activeDestination, onNavigate)
+                            AtlasNavItem("Tableau", AtlasRoutes.HOME, activeDestination, onNavigate)
                             AtlasNavItem("Focus", AtlasRoutes.FOCUS, activeDestination, onNavigate)
                         }
                         Row(Modifier.fillMaxWidth()) {
@@ -194,7 +194,7 @@ fun AtlasScreenFrame(
                         }
                     } else {
                         Row(Modifier.fillMaxWidth()) {
-                            AtlasNavItem("Accueil", AtlasRoutes.HOME, activeDestination, onNavigate)
+                            AtlasNavItem("Tableau", AtlasRoutes.HOME, activeDestination, onNavigate)
                             AtlasNavItem("Focus", AtlasRoutes.FOCUS, activeDestination, onNavigate)
                             AtlasNavItem("Habitudes", AtlasRoutes.HABITS, activeDestination, onNavigate)
                             AtlasNavItem("Plus", AtlasRoutes.MORE, activeDestination, onNavigate)

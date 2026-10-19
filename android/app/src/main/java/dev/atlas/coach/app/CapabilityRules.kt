@@ -6,6 +6,10 @@ import dev.atlas.coach.focus.FocusStatus
 object CapabilityRules {
     fun enabled(capabilities: Map<String, Boolean>, key: String): Boolean = capabilities[key] == true
 
+    /** The Android HOME role is the explicit opt-in; legacy capability state is not required. */
+    fun mayRenderLauncherHome(capabilities: Map<String, Boolean>, isAndroidHomeRole: Boolean): Boolean =
+        isAndroidHomeRole || enabled(capabilities, AtlasController.CAP_LAUNCHER_HOME)
+
     fun mayTickFocus(capabilities: Map<String, Boolean>, status: FocusStatus?): Boolean =
         enabled(capabilities, AtlasController.CAP_FOCUS) && status == FocusStatus.RUNNING
 

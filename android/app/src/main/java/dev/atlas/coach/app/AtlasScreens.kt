@@ -72,8 +72,6 @@ import dev.atlas.coach.habits.HabitSchedule
 import dev.atlas.coach.habits.HabitScheduleKind
 import dev.atlas.coach.content.ContentItem
 import dev.atlas.coach.content.ContentKind
-import dev.atlas.coach.launcher.AndroidLauncherCatalog
-import dev.atlas.coach.launcher.LauncherAppModel
 import dev.atlas.coach.app.ui.AtlasPrimaryButton
 import dev.atlas.coach.app.ui.AtlasSettingRow
 import dev.atlas.coach.app.ui.AtlasSection
@@ -88,14 +86,8 @@ import java.time.LocalTime
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int, context: Context) {
+internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
     var showResponses by remember { mutableStateOf(false) }
-    val catalog = remember(context) { AndroidLauncherCatalog(context) }
-    val pinnedApps = remember(catalog, controller.launcherPinnedPackages) {
-        if (controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true) {
-            catalog.list().filter { it.appPackage in controller.launcherPinnedPackages }.take(4)
-        } else emptyList()
-    }
     val focus = controller.focusSession
     val checkedToday = controller.checkedHabitIds.size
     val totalHabits = controller.activeHabits.size
@@ -179,20 +171,6 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
             AtlasTertiaryButton("Voir les habitudes", onClick = { controller.navigationState.selectTab(AtlasScreenId.HABITS) })
         }
 
-        if (controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true) {
-            AtlasSection("Applications favorites") {
-                if (pinnedApps.isEmpty()) {
-                    Text("Aucune application favorite. Choisissez-en dans l'accueil ATLAS.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    pinnedApps.forEach { app ->
-                        AtlasTertiaryButton(app.appLabel, onClick = {
-                            if (!catalog.launch(app)) controller.reportMessage("Impossible d'ouvrir ${app.appLabel}.")
-                        })
-                    }
-                }
-                AtlasTertiaryButton("Gérer les applications favorites", onClick = { controller.navigationState.navigate(AtlasScreenId.LAUNCHER) })
-            }
-        }
     }
 }
 
@@ -579,9 +557,6 @@ internal fun MoreScreen(controller: AtlasController) {
             if (controller.capabilities[AtlasController.CAP_FOCUS_ROUTINES] == true) {
                 AtlasSecondaryButton("Routines de focus", onClick = { controller.navigationState.navigate(AtlasScreenId.ROUTINES) })
             }
-            if (controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true) {
-                AtlasSecondaryButton("Accueil et applications favorites", onClick = { controller.navigationState.navigate(AtlasScreenId.LAUNCHER) })
-            }
         }
         AtlasSection("Réglages") {
             AtlasSecondaryButton("Usage quotidien", onClick = { controller.navigationState.navigate(AtlasScreenId.SETTINGS) })
@@ -619,16 +594,15 @@ internal fun SettingsScreen(
             AtlasSecondaryButton("Vérifier l'autorisation de notifications", onClick = requestNotifications)
         }
         AtlasSection("Accueil Android") {
-            CapabilityRow("Accueil ATLAS facultatif", controller, AtlasController.CAP_LAUNCHER_HOME)
             val homeRoleLabel = when (controller.launcherState.homeRoleHeld) {
                 true -> "ATLAS est l'application d'accueil par défaut"
                 false -> "Le launcher système reste l'application d'accueil"
                 null -> "État du rôle en cours de lecture"
             }
             AtlasStatus(homeRoleLabel, if (controller.launcherState.homeRoleHeld == true) AtlasStatusKind.ACTIVE else AtlasStatusKind.AUTHORIZED)
-            AtlasSecondaryButton("Proposer ATLAS comme accueil…", onClick = requestHomeRole, enabled = controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true)
-            AtlasTertiaryButton("Gérer l'accueil Android", onClick = openSystemHome)
-            Text("La demande de rôle n'apparaît qu'après ce choix explicite. Refuser garde l'accueil système.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AtlasSecondaryButton("Choisir ATLAS comme accueil…", onClick = requestHomeRole)
+            AtlasTertiaryButton("Gérer ou retirer le rôle Accueil", onClick = openSystemHome)
+            Text("HOME est l'écran d'accueil Android : il ouvre vos applications favorites. Ce tableau de bord coach reste dans l'application ATLAS et regroupe Focus, Habitudes, Observation, Sync et les paramètres. Android conserve le choix final du launcher.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AtlasSection("Données et diagnostic") {
             AtlasSecondaryButton("Exporter les données locales", onClick = onExport)

@@ -35,8 +35,6 @@ fun AtlasApp(
     context: Context,
     requestHomeRole: () -> Unit,
     openSystemHome: () -> Unit,
-    openSystemLauncher: () -> Unit = openSystemHome,
-    homeLaunch: Boolean = false,
 ) {
     val revision = controller.revision
     var showDataExport by remember { mutableStateOf(false) }
@@ -93,26 +91,18 @@ fun AtlasApp(
         }
     }
 
-    LaunchedEffect(homeLaunch, controller.capabilities[AtlasController.CAP_LAUNCHER_HOME]) {
-        if (homeLaunch && controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true) {
-            controller.navigationState.selectTab(AtlasScreenId.LAUNCHER)
-        } else if (controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] != true && controller.navigationState.current == AtlasScreenId.LAUNCHER) {
-            controller.navigationState.replace(AtlasScreenId.HOME)
-        }
-    }
-
     BackHandler(enabled = controller.navigationState.current != AtlasScreenId.HOME && controller.navigationState.canGoBack) {
         controller.navigationState.back()
     }
 
     val activeDestination = when (controller.navigationState.current) {
-        AtlasScreenId.HOME, AtlasScreenId.LAUNCHER -> AtlasRoutes.HOME
+        AtlasScreenId.HOME -> AtlasRoutes.HOME
         AtlasScreenId.FOCUS, AtlasScreenId.FOCUS_STATS -> AtlasRoutes.FOCUS
         AtlasScreenId.HABITS -> AtlasRoutes.HABITS
         else -> AtlasRoutes.MORE
     }
     val screenTitle = when (controller.navigationState.current) {
-        AtlasScreenId.HOME, AtlasScreenId.LAUNCHER -> "ATLAS"
+        AtlasScreenId.HOME -> "Tableau de bord"
         AtlasScreenId.DIAGNOSTICS -> "Diagnostic avancé"
         AtlasScreenId.SYNC_SETTINGS -> "Partage backend"
         else -> controller.navigationState.current
@@ -135,7 +125,7 @@ fun AtlasApp(
         },
     ) {
         when (controller.navigationState.current) {
-            AtlasScreenId.HOME -> HomeScreen(controller, revision, context)
+            AtlasScreenId.HOME -> HomeScreen(controller, revision)
             AtlasScreenId.FOCUS -> FocusScreen(controller, revision, onChooseHabit = { showLinkChoices = true })
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)
@@ -152,11 +142,6 @@ fun AtlasApp(
             AtlasScreenId.DIAGNOSTICS -> DiagnosticsScreen(controller)
             AtlasScreenId.SYNC_SETTINGS -> SyncSettingsScreen(controller, revision)
             AtlasScreenId.OBSERVATION -> ObservationScreen(controller, context, requestNotifications)
-            AtlasScreenId.LAUNCHER -> if (controller.capabilities[AtlasController.CAP_LAUNCHER_HOME] == true) {
-                LauncherHomeScreen(controller, context, openSystemLauncher)
-            } else {
-                HomeScreen(controller, revision, context)
-            }
             AtlasScreenId.FOCUS_STATS -> FocusStatsScreen(controller)
             AtlasScreenId.ROUTINES -> FocusRoutinesScreen(controller)
             AtlasScreenId.ABOUT -> AboutLicensesScreen(context)

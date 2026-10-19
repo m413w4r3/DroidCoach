@@ -10,8 +10,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.os.Build
-import android.os.Process
-import java.text.Collator
 
 class AndroidLauncherCatalog(context: Context) {
     private val appContext = context.applicationContext
@@ -19,8 +17,7 @@ class AndroidLauncherCatalog(context: Context) {
     fun list(): List<LauncherAppModel> {
         val packageManager = appContext.packageManager
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val collator = Collator.getInstance()
-        return queryActivities(packageManager, launcherIntent)
+        return LauncherAppRules.sort(queryActivities(packageManager, launcherIntent)
             .mapNotNull { resolveInfo ->
                 val activity = resolveInfo.activityInfo ?: return@mapNotNull null
                 if (activity.packageName == appContext.packageName) return@mapNotNull null
@@ -28,14 +25,11 @@ class AndroidLauncherCatalog(context: Context) {
                 if (label.isEmpty()) return@mapNotNull null
                 LauncherAppModel(
                     appLabel = label,
-                    key = collator.getCollationKey(label),
                     appPackage = activity.packageName,
                     activityClassName = activity.name,
-                    user = Process.myUserHandle(),
                 )
             }
-            .distinctBy { it.appPackage }
-            .sorted()
+        )
     }
 
     fun launch(app: LauncherAppModel): Boolean = runCatching {

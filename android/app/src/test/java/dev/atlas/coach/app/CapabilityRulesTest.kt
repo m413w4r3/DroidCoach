@@ -20,4 +20,12 @@ class CapabilityRulesTest {
         assertTrue(CapabilityRules.mustPauseFocusOnDisable(false, FocusStatus.RUNNING))
         assertFalse(CapabilityRules.mustPauseFocusOnDisable(false, FocusStatus.PAUSED))
     }
+
+    @Test
+    fun selectedAndroidHomeRoleRendersLauncherEvenWhenLegacyCapabilityIsOff() {
+        val oldInstall = mapOf(AtlasController.CAP_LAUNCHER_HOME to false)
+        assertTrue(CapabilityRules.mayRenderLauncherHome(oldInstall, isAndroidHomeRole = true))
+        assertFalse(CapabilityRules.mayRenderLauncherHome(oldInstall, isAndroidHomeRole = false))
+        assertTrue(CapabilityRules.mayRenderLauncherHome(mapOf(AtlasController.CAP_LAUNCHER_HOME to true), isAndroidHomeRole = false))
+    }
 }

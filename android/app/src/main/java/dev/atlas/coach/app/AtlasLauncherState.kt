@@ -1,5 +1,6 @@
 package dev.atlas.coach.app
 
+import dev.atlas.coach.launcher.LauncherAppRules
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,7 +14,7 @@ internal class AtlasLauncherState(initialPinnedPackages: Set<String>) {
         private set
 
     fun togglePin(packageName: String): Boolean {
-        pinnedPackages = if (packageName in pinnedPackages) pinnedPackages - packageName else pinnedPackages + packageName
+        pinnedPackages = LauncherAppRules.toggleFavorite(pinnedPackages, packageName)
         return packageName in pinnedPackages
     }
 
