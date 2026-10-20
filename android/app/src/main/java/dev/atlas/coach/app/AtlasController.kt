@@ -26,9 +26,19 @@ import dev.atlas.coach.content.ContentItem
 import dev.atlas.coach.content.ContentOpenResult
 import dev.atlas.coach.content.ContentUrlValidator
 import dev.atlas.coach.data.AndroidStateBackend
+import dev.atlas.coach.data.AndroidPersistenceDiagnosticsStore
+import dev.atlas.coach.data.AndroidRevocationBarrierStorage
 import dev.atlas.coach.data.AtlasStateRecovery
 import dev.atlas.coach.data.LocalStateStore
+import dev.atlas.coach.data.PersistFailureKind
+import dev.atlas.coach.data.PersistResult
+import dev.atlas.coach.data.PersistWriteException
+import dev.atlas.coach.data.PersistenceDiagnostics
+import dev.atlas.coach.data.PersistenceDiagnosticsStore
 import dev.atlas.coach.data.RecoveredAtlasState
+import dev.atlas.coach.data.RevocationBarrier
+import dev.atlas.coach.data.RevocationBarrierStorage
+import dev.atlas.coach.data.StateBackend
 import dev.atlas.coach.data.StateReadResult
 import dev.atlas.coach.data.localPolicyFromStorage
 import dev.atlas.coach.data.ruleEvaluatorStateFromStorage
@@ -168,11 +178,25 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import org.json.JSONObject
 
 /** Owns the small, synchronous local graph used by the Compose demo. */
-class AtlasController(context: Context, private val clock: Clock = object : Clock {
+class AtlasController(
+    context: Context,
+    private val clock: Clock = object : Clock {
     override fun nowMillis(): Long = System.currentTimeMillis()
     override fun monotonicMillis(): Long = SystemClock.elapsedRealtime()
-}) : AgentActionPort {
+    },
+    stateBackendOverride: StateBackend? = null,
+    revocationBarrierStorageOverride: RevocationBarrierStorage? = null,
+    persistenceDiagnosticsStoreOverride: PersistenceDiagnosticsStore? = null,
+) : AgentActionPort {
     private val appContext = context.applicationContext
+    // This deny marker is read before any agent client can be constructed or request scheduled.
+    private val revocationBarrier = RevocationBarrier(
+        revocationBarrierStorageOverride ?: AndroidRevocationBarrierStorage(appContext),
+    )
+    private val persistenceDiagnostics = PersistenceDiagnostics(
+        persistenceDiagnosticsStoreOverride ?: AndroidPersistenceDiagnosticsStore(appContext),
+    )
+    private val store = LocalStateStore(stateBackendOverride ?: AndroidStateBackend(appContext))
     private val syncOutbox: EventOutbox = AndroidSyncStorage.outbox(appContext)
     private val syncTokenStore = SharedPreferencesBearerTokenStore(appContext)
     private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
@@ -195,7 +219,6 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     private val focusNotifications = AndroidFocusNotifications(appContext)
     private val routineAlarms = AndroidRoutineProposalScheduler(appContext)
     private val habitReminderScheduler = AndroidHabitReminderScheduler(appContext)
-    private val store = LocalStateStore(AndroidStateBackend(context))
     private val stateReadResult = runCatching { store.readDocument() }
         .getOrElse { StateReadResult.Corrupt(null, "impossible de lire le stockage local") }
     private val recovery: RecoveredAtlasState = when (val result = stateReadResult) {
@@ -310,6 +333,8 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     private var agentConversationId: String? = restored["agentConversationId"] as? String
     @Volatile private var agentApiClient: AgentApiClient? = null
     private val agentRequestGeneration = AtomicLong(0L)
+    private val agentAuthorizationCommitInProgress = AtomicBoolean(false)
+    private val agentConsentMigrationReady = AtomicBoolean(restored.containsKey(KEY_AGENT_CONTEXT_CONSENT_DATES))
     private val agentVerifier = MandateVerifier()
     private val agentDispatcher by lazy {
         ActionDispatcher(
@@ -391,20 +416,30 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         domainsProvider = ::agentContextDomainViews,
         nowUtcMillis = clock::nowMillis,
         persistConsentDates = {
-            agentConsentMigrationPending = false
-            persistAfterInitialization()
+            if (persistAfterInitializationOrThrow("agent.consent_dates")) {
+                agentConsentMigrationPending = false
+                agentConsentMigrationReady.set(true)
+            }
         },
         additionalConsentDates = {
             locationPanelCoordinator.consentStore.locationSummarySharingConsentAtUtcMillis()
                 ?.let { mapOf(AgentContextCategory.LOCATION_SUMMARY.wireValue to it) }
                 .orEmpty()
         },
+        agentAccessAllowed = ::isAgentRequestAllowed,
+        showConsentedContext = ::isAgentContextVisible,
     )
     private val goalPanelCoordinator = GoalPanelCoordinator(
         readSubdocument = { goalsSubdocument },
         persistSubdocument = { subdocument ->
+            val previous = goalsSubdocument
             goalsSubdocument = subdocument
-            persistAfterInitialization()
+            try {
+                persistAfterInitializationOrThrow("goals.write")
+            } catch (error: Exception) {
+                goalsSubdocument = previous
+                throw error
+            }
         },
         nowUtcMillis = clock::nowMillis,
         focusSessions = ::goalFocusSessions,
@@ -467,7 +502,6 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
         if (capabilities[CAP_HABIT_REMINDERS] == true) habitReminderScheduler.rescheduleAll()
         refreshSyncRuntime()
-        refreshAgentApiRuntime()
         refreshBackgroundUsageWork()
         pruneExpiredAgentInbox()
         reconcilePersistedBackendObservation()
@@ -478,15 +512,30 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val deferredPersistenceRequested = persistRequestedDuringInitialization
         persistRequestedDuringInitialization = false
         when {
+            recoveryReason != null && persistenceAllowed && agentConsentMigrationPending -> {
+                try {
+                    persistOrThrow("agent.consent_dates")
+                } catch (_: PersistOperationException) {
+                    blockAgentForRevocation("agent.consent_dates")
+                    latestMessage = "Les autorisations héritées n'ont pas pu être enregistrées; l'agent reste bloqué."
+                }
+            }
             recoveryReason != null && persistenceAllowed -> persist()
             recoveryReason != null -> touch()
             agentConsentMigrationPending && persistenceAllowed -> {
-                agentConsentMigrationPending = false
-                persist()
+                try {
+                    persistOrThrow("agent.consent_dates")
+                    agentConsentMigrationPending = false
+                    agentConsentMigrationReady.set(true)
+                } catch (_: PersistOperationException) {
+                    blockAgentForRevocation("agent.consent_dates")
+                    latestMessage = "Les autorisations héritées n'ont pas pu être enregistrées; l'agent reste bloqué."
+                }
             }
             stateReadResult == StateReadResult.Missing -> persist()
             deferredPersistenceRequested && persistenceAllowed -> persist()
         }
+        refreshAgentApiRuntime()
         if (canUseRemoteSync() && syncOutbox.size() > 0) scheduleSync(0L)
     }
 
@@ -539,7 +588,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     val visibleAgentProposals: List<AgentInboxEntry> get() = agentInboxRepository.visible()
     val agentEffectHistory: List<AgentEffectRecord> get() = agentEffectJournal.entries().asReversed()
     val agentSuggestions: List<String> get() = agentSuggestionsSnapshot
-    val isAgentEnabled: Boolean get() = capabilities[CAP_AGENT] == true && !agentMandate.revoked && !agentMandate.suspended
+    val isAgentEnabled: Boolean get() = isAgentRequestAllowed()
     val coachGoals: List<GoalsPanelEntry> get() = goalPanelCoordinator.entries()
     val goalFocusLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.focusLinkOptions()
     val goalHabitLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.habitLinkOptions()
@@ -590,10 +639,16 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         runCatching(operation)
             .onSuccess {
                 latestMessage = successMessage
-                persist()
                 recordDueGoalReviews()
             }
-            .onFailure { error -> latestMessage = error.message?.take(180) ?: "Modification de l'objectif impossible."; touch() }
+            .onFailure { error ->
+                latestMessage = if (error is PersistOperationException) {
+                    "Impossible d'enregistrer l'objectif. Son état précédent est conservé."
+                } else {
+                    error.message?.take(180) ?: "Modification de l'objectif impossible."
+                }
+                touch()
+            }
     }
 
     fun setLocationRequestConsent(enabled: Boolean) {
@@ -604,11 +659,40 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun setLocationSummaryConsent(enabled: Boolean) {
-        if (!enabled) agentRequestGeneration.incrementAndGet()
-        locationPanelCoordinator.setCoachSummaryConsent(enabled)
-        if (!enabled) locationPanelCoordinator.stopMobility(MobilitySessionStopReason.SHARING_REVOKED)
-        queueProactivePurgeRevoked()
-        persist()
+        agentAuthorizationCommitInProgress.set(true)
+        val locationCategory = AgentContextCategory.LOCATION_SUMMARY.wireValue
+        val barrierStored = if (enabled) true else blockAgentForRevocation("agent.location_consent", locationCategory)
+        try {
+            if (!enabled) agentRequestGeneration.incrementAndGet()
+            locationPanelCoordinator.setCoachSummaryConsent(enabled)
+            if (!enabled) locationPanelCoordinator.stopMobility(MobilitySessionStopReason.SHARING_REVOKED)
+            queueProactivePurgeRevoked()
+            if (!enabled) {
+                val stateStored = runCatching { persistOrThrow("agent.location_consent") }.isSuccess
+                latestMessage = if (barrierStored && stateStored) {
+                    "Partage de localisation retiré; l'agent est bloqué jusqu'à une nouvelle activation."
+                } else {
+                    "Partage retiré dans cette session; stockage en échec, l'agent reste bloqué et la révocation n'est pas confirmée."
+                }
+            } else {
+                persistOrThrow("agent.location_consent")
+                if (!revocationBarrier.clearCategoryAfterDurableOptIn(locationCategory, true)) {
+                    recordPersistenceFailure("agent.location_consent", PersistFailureKind.STORAGE_IO)
+                    latestMessage = "Consentement enregistré, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
+                } else if (revocationBarrier.isBlocked()) {
+                    latestMessage = "Consentement de localisation enregistré; l'agent reste bloqué par une autre révocation en attente."
+                } else {
+                    latestMessage = "Partage du résumé de localisation activé."
+                }
+            }
+            touch()
+        } catch (_: PersistOperationException) {
+            latestMessage = "Impossible d'enregistrer le consentement. L'agent reste bloqué."
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
+        }
     }
 
     fun setMobilityConsent(enabled: Boolean) {
@@ -1018,7 +1102,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     private fun refreshAgentApiRuntime() {
-        val configured = capabilities[CAP_AGENT] == true && syncTokenStore.token() != null &&
+        val configured = isAgentRequestAllowed() && syncTokenStore.token() != null &&
             syncBaseUrl.isNotBlank() && isAllowedAgentBackendUrl(syncBaseUrl)
         agentApiClient = if (configured) runCatching {
             AgentApiClient(
@@ -1029,10 +1113,11 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     check(runOnMainAndWait {
                         lastSharedAgentContextJsonSnapshot = snapshot.toJsonString()
                         lastSharedAgentContextAtUtcMillisSnapshot = clock.nowMillis()
-                        persist()
+                        persist(operation = "agent.shared_context")
                         true
                     }) { "Could not persist the exact shared context" }
                 },
+                requestAllowed = ::isAgentRequestAllowed,
             )
         }.getOrNull() else null
         if (!configured || agentApiClient == null) {
@@ -1041,12 +1126,54 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
     }
 
+    private fun isAgentRequestAllowed(): Boolean {
+        if (agentAuthorizationCommitInProgress.get() || !agentConsentMigrationReady.get() || revocationBarrier.isBlocked()) return false
+        val mandate = agentMandateStore.current()
+        val now = clock.nowMillis()
+        if (capabilities[CAP_AGENT] != true || mandate.revoked || mandate.suspended || now >= mandate.expiresAtUtcMillis) return false
+        val dates = agentContextCoordinator.consentDates()
+        if (mandate.sharedDataCategories.any { dates[it]?.let { at -> at in 1L..now } != true }) return false
+        if (AgentContextCategory.APP_USAGE_SUMMARY.wireValue in mandate.sharedDataCategories && !usageConsentActive) return false
+        if (AgentContextCategory.LOCATION_SUMMARY.wireValue in mandate.sharedDataCategories &&
+            !locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled()
+        ) return false
+        return true
+    }
+
+    private fun isAgentContextVisible(): Boolean {
+        if (!agentConsentMigrationReady.get() || revocationBarrier.isBlocked()) return false
+        val mandate = agentMandateStore.current()
+        val now = clock.nowMillis()
+        if (mandate.revoked || mandate.suspended || now >= mandate.expiresAtUtcMillis) return false
+        val dates = agentContextCoordinator.consentDates()
+        return mandate.sharedDataCategories.all { dates[it]?.let { at -> at in 1L..now } == true }
+    }
+
+    private fun canExplicitOptInClearBarrier(): Boolean {
+        val mandate = agentMandateStore.current()
+        return capabilities[CAP_AGENT] == true && !mandate.revoked && !mandate.suspended &&
+            clock.nowMillis() < mandate.expiresAtUtcMillis
+    }
+
+    private fun blockAgentForRevocation(operation: String, category: String? = null): Boolean {
+        agentRequestGeneration.incrementAndGet()
+        val stored = if (category == null) revocationBarrier.block() else revocationBarrier.blockCategory(category)
+        return stored.also {
+            if (!stored) recordPersistenceFailure(operation, PersistFailureKind.STORAGE_IO)
+        }
+    }
+
+    private fun recordPersistenceFailure(operation: String, reason: PersistFailureKind) {
+        persistenceDiagnostics.record(operation, reason, clock.nowMillis())
+    }
+
     private fun isProactiveCoachEnabled(): Boolean =
         CapabilityRules.mayRunProactiveCoach(capabilities, isAgentEnabled) && !isEmergencyPaused
 
     private fun currentMandateZoneId(): ZoneId = ZoneId.of(agentMandateStore.current().focusWindow.timezone)
 
     private fun proactiveConsentSnapshot(): ProactiveConsentSnapshot {
+        if (!isAgentRequestAllowed()) return ProactiveConsentSnapshot.EMPTY
         val mandate = agentMandateStore.current()
         if (mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis) {
             return ProactiveConsentSnapshot.EMPTY
@@ -1176,7 +1303,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             else "Agent indisponible — fonctions locales actives"
         agentInboxRepository.mergePulled(response.proposals, null)
         recordBackendContactSucceeded(inboxAlreadyMarked = true)
-        dispatchPreauthorizedInbox()
+        if (!dispatchPreauthorizedInbox()) return@runOnMainAndWait false
         persist()
         syncWorker.execute { sendPendingAgentAcks(client) }
         true
@@ -1193,11 +1320,17 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
 
     private fun persistProactiveCoachState(json: String) {
         val write = {
+            val previous = proactiveCoachStateValue
             proactiveCoachStateValue = json
-            persist()
-            true
+            try {
+                persistOrThrow("proactive.state")
+                true
+            } catch (error: Exception) {
+                proactiveCoachStateValue = previous
+                throw error
+            }
         }
-        check(runOnMainAndWait(write)) { "Proactive state could not be persisted" }
+        check(runOnMainAndWait(write)) { "Proactive state could not be durably persisted" }
     }
 
     private fun recordDueGoalReviews(nowUtcMillis: Long = clock.nowMillis()) {
@@ -1296,7 +1429,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     recordBackendContactSucceeded(inboxAlreadyMarked = true)
                     agentStatus = AgentStatus.CONNECTED
                     agentStatusMessage = "Agent connecté"
-                    dispatchPreauthorizedInbox()
+                    if (!dispatchPreauthorizedInbox()) return@post
                     persist()
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
@@ -1321,13 +1454,20 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             touch()
             return
         }
-        val conversationId = agentConversationId ?: UUID.randomUUID().toString().also { agentConversationId = it }
+        val previousConversationId = agentConversationId
+        val conversationId = previousConversationId ?: UUID.randomUUID().toString().also { agentConversationId = it }
         addAgentConversationMessage(AgentConversationMessage(
             role = AgentMessageRole.USER,
             text = message,
             createdAtUtcMillis = clock.nowMillis(),
         ))
-        persist()
+        if (!runCatching { persistOrThrow("agent.chat_message") }.isSuccess) {
+            agentConversationSnapshot = agentConversationSnapshot.dropLast(1)
+            agentConversationId = previousConversationId
+            latestMessage = "Impossible d'enregistrer votre message; aucune requête agent n'a été envoyée."
+            touch()
+            return
+        }
         val client = agentApiClient
         if (client == null) {
             agentStatus = AgentStatus.UNAVAILABLE
@@ -1356,7 +1496,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                             listOf(sharedDataSummary(mandate))
                         },
                     ))
-                    dispatchPreauthorizedInbox()
+                    if (!dispatchPreauthorizedInbox()) return@post
                     persist()
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
@@ -1408,7 +1548,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                         else "Agent indisponible — fonctions locales actives"
                     agentInboxRepository.mergePulled(response.proposals, null)
                     recordBackendContactSucceeded(inboxAlreadyMarked = true)
-                    dispatchPreauthorizedInbox()
+                    if (!dispatchPreauthorizedInbox()) return@post
                     persist()
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
@@ -1468,11 +1608,25 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         "Catégories consenties : ${mandate.sharedDataCategories.sorted().joinToString(", ")}"
     }
 
-    private fun dispatchPreauthorizedInbox() {
-        agentInboxRepository.visible().forEach { entry ->
-            if (agentMandate.mode == AgentMode.PREAUTHORIZED) {
-                agentDispatcher.dispatchPreauthorized(entry.id)
+    private fun dispatchPreauthorizedInbox(): Boolean {
+        if (!isAgentRequestAllowed()) return false
+        if (!runCatching { persistOrThrow("agent.inbox") }.isSuccess) {
+            latestMessage = "Impossible d'enregistrer les propositions; aucune action automatique n'a été exécutée."
+            touch()
+            return false
+        }
+        try {
+            agentInboxRepository.visible().forEach { entry ->
+                if (agentMandate.mode == AgentMode.PREAUTHORIZED) {
+                    agentDispatcher.dispatchPreauthorized(entry.id)
+                }
             }
+            persistOrThrow("agent.inbox")
+            return true
+        } catch (_: Exception) {
+            latestMessage = "Impossible de confirmer localement les propositions; les actions automatiques restent suspendues."
+            touch()
+            return false
         }
     }
 
@@ -1502,6 +1656,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     private fun sendPendingAgentAcks(client: AgentApiClient) {
+        if (!isAgentRequestAllowed()) return
         agentInboxRepository.pendingAcks().forEach { entry ->
             try {
                 if (entry.proposal.state == ProposalState.EXECUTED) {
@@ -1633,56 +1788,150 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun disableAgent() {
-        proactiveEffectGeneration.incrementAndGet()
-        queueProactiveDisableAndPurge()
-        capabilities = capabilities + (CAP_AGENT to false)
-        agentRequestGeneration.incrementAndGet()
-        agentMandateStore.revoke()
-        cancelPendingAgentWork("Agent désactivé")
-        agentApiClient = null
-        agentStatus = AgentStatus.UNAVAILABLE
-        agentStatusMessage = "Agent désactivé — fonctions locales actives"
-        latestMessage = "Agent désactivé. Les fonctions locales restent actives."
-        persist()
+        val barrierStored = blockAgentForRevocation("agent.disable")
+        agentAuthorizationCommitInProgress.set(true)
+        try {
+            proactiveEffectGeneration.incrementAndGet()
+            queueProactiveDisableAndPurge()
+            capabilities = capabilities + (CAP_AGENT to false)
+            agentRequestGeneration.incrementAndGet()
+            agentMandateStore.revoke()
+            cancelPendingAgentWork("Agent désactivé")
+            agentApiClient = null
+            agentStatus = AgentStatus.UNAVAILABLE
+            agentStatusMessage = "Agent désactivé — fonctions locales actives"
+            val stateStored = runCatching { persistOrThrow("agent.disable") }.isSuccess
+            latestMessage = if (barrierStored && stateStored) {
+                "Agent désactivé. Les fonctions locales restent actives."
+            } else {
+                "Agent bloqué dans cette session; stockage en échec, la désactivation n'est pas confirmée."
+            }
+            touch()
+        } catch (_: Exception) {
+            latestMessage = "Agent bloqué dans cette session; stockage en échec, la désactivation n'est pas confirmée."
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
+        }
     }
 
     fun enableAgent() {
-        capabilities = capabilities + (CAP_AGENT to true)
-        val current = agentMandateStore.current()
-        if (current.revoked || current.suspended) {
-            agentContextCoordinator.resetCategoryConsents(current.sharedDataCategories)
-            replaceAgentMandate(current.copy(revoked = false, suspended = false))
+        agentAuthorizationCommitInProgress.set(true)
+        val previousCapability = capabilities[CAP_AGENT] == true
+        val previousMandate = agentMandateStore.current()
+        try {
+            capabilities = capabilities + (CAP_AGENT to true)
+            if (previousMandate.revoked || previousMandate.suspended) {
+                agentContextCoordinator.resetCategoryConsents(previousMandate.sharedDataCategories)
+                agentMandateStore.replace(previousMandate.copy(revoked = false, suspended = false))
+                agentRequestGeneration.incrementAndGet()
+            }
+            persistOrThrow("agent.enable")
+            val eligible = canExplicitOptInClearBarrier()
+            val barrierWriteSucceeded = if (eligible) revocationBarrier.clearAfterDurableOptIn(true) else true
+            if (!barrierWriteSucceeded) {
+                recordPersistenceFailure("agent.enable", PersistFailureKind.STORAGE_IO)
+                latestMessage = "Activation enregistrée, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
+            } else if (!eligible) {
+                latestMessage = "Agent activé localement; le mandat est encore suspendu ou expiré."
+            } else if (revocationBarrier.isBlocked()) {
+                latestMessage = "Agent activé; les autorisations retirées restent bloquées jusqu'à leur nouvelle activation."
+            } else {
+                latestMessage = "Agent réactivé en mode propositions seulement."
+            }
+            agentStatus = AgentStatus.UNAVAILABLE
+            touch()
+        } catch (_: Exception) {
+            capabilities = capabilities + (CAP_AGENT to previousCapability)
+            agentMandateStore.replace(previousMandate)
+            agentRequestGeneration.incrementAndGet()
+            latestMessage = "Impossible d'enregistrer la réactivation. L'agent reste bloqué."
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
         }
-        refreshAgentApiRuntime()
-        latestMessage = "Agent réactivé en mode propositions seulement."
-        persist()
     }
 
     fun suspendAgentMandate() {
-        proactiveEffectGeneration.incrementAndGet()
-        replaceAgentMandate(agentMandateStore.current().copy(suspended = true))
-        queueProactiveDisableAndPurge()
-        cancelPendingAgentWork("Mandat suspendu")
-        latestMessage = "Mandat suspendu. Les planifications de l'agent sont annulées."
-        persist()
+        val barrierStored = blockAgentForRevocation("agent.suspend")
+        agentAuthorizationCommitInProgress.set(true)
+        try {
+            proactiveEffectGeneration.incrementAndGet()
+            agentMandateStore.replace(agentMandateStore.current().copy(suspended = true))
+            agentRequestGeneration.incrementAndGet()
+            queueProactiveDisableAndPurge()
+            cancelPendingAgentWork("Mandat suspendu")
+            val stateStored = runCatching { persistOrThrow("agent.suspend") }.isSuccess
+            latestMessage = if (barrierStored && stateStored) {
+                "Mandat suspendu. Les planifications de l'agent sont annulées."
+            } else {
+                "Agent bloqué dans cette session; stockage en échec, la suspension n'est pas confirmée."
+            }
+            touch()
+        } catch (_: Exception) {
+            latestMessage = "Agent bloqué dans cette session; stockage en échec, la suspension n'est pas confirmée."
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
+        }
     }
 
     fun resumeAgentMandate() {
-        val current = agentMandateStore.current()
-        agentContextCoordinator.resetCategoryConsents(current.sharedDataCategories)
-        replaceAgentMandate(current.copy(suspended = false, revoked = false))
-        latestMessage = "Mandat réactivé en mode propositions seulement."
-        persist()
+        agentAuthorizationCommitInProgress.set(true)
+        val previous = agentMandateStore.current()
+        try {
+            agentContextCoordinator.resetCategoryConsents(previous.sharedDataCategories)
+            agentMandateStore.replace(previous.copy(suspended = false, revoked = false))
+            agentRequestGeneration.incrementAndGet()
+            persistOrThrow("agent.resume")
+            val eligible = canExplicitOptInClearBarrier()
+            val barrierWriteSucceeded = if (eligible) revocationBarrier.clearAfterDurableOptIn(true) else true
+            if (!barrierWriteSucceeded) {
+                recordPersistenceFailure("agent.resume", PersistFailureKind.STORAGE_IO)
+                latestMessage = "Mandat enregistré, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
+            } else if (eligible && !revocationBarrier.isBlocked()) {
+                latestMessage = "Mandat réactivé en mode propositions seulement."
+            } else {
+                latestMessage = "Mandat enregistré, mais l'agent reste bloqué."
+            }
+            touch()
+        } catch (_: Exception) {
+            agentMandateStore.replace(previous)
+            agentRequestGeneration.incrementAndGet()
+            latestMessage = "Impossible d'enregistrer la réactivation du mandat. L'agent reste bloqué."
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
+        }
     }
 
     fun revokeAgentMandate() {
-        proactiveEffectGeneration.incrementAndGet()
-        queueProactiveDisableAndPurge()
-        agentRequestGeneration.incrementAndGet()
-        agentMandateStore.revoke()
-        cancelPendingAgentWork("Mandat révoqué")
-        latestMessage = "Mandat révoqué. Les actions en attente sont annulées."
-        persist()
+        val barrierStored = blockAgentForRevocation("agent.revoke")
+        agentAuthorizationCommitInProgress.set(true)
+        try {
+            proactiveEffectGeneration.incrementAndGet()
+            queueProactiveDisableAndPurge()
+            agentRequestGeneration.incrementAndGet()
+            agentMandateStore.revoke()
+            cancelPendingAgentWork("Mandat révoqué")
+            val stateStored = runCatching { persistOrThrow("agent.revoke") }.isSuccess
+            latestMessage = if (barrierStored && stateStored) {
+                "Mandat révoqué. Les actions en attente sont annulées."
+            } else {
+                "Agent bloqué dans cette session; stockage en échec, la révocation n'est pas confirmée."
+            }
+            touch()
+        } catch (_: Exception) {
+            latestMessage = "Agent bloqué dans cette session; stockage en échec, la révocation n'est pas confirmée."
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
+        }
     }
 
     fun setAgentMode(mode: AgentMode) = updateAgentMandate { it.copy(mode = mode) }
@@ -1691,16 +1940,25 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         mandate.copy(allowedActions = if (allowed) mandate.allowedActions + action else mandate.allowedActions - action)
     }
 
-    fun setAgentSharedCategory(category: String, allowed: Boolean) = updateAgentMandate { mandate ->
-        val next = mandate.copy(
-            sharedDataCategories = if (allowed) mandate.sharedDataCategories + category else mandate.sharedDataCategories - category,
-        )
-        agentContextCoordinator.setCategoryConsent(category, allowed)
-        if (!allowed) queueProactivePurgeRevoked()
-        if (!allowed && category == AgentContextCategory.LOCATION_SUMMARY.wireValue) {
-            locationPanelCoordinator.setCoachSummaryConsent(false)
+    fun setAgentSharedCategory(category: String, allowed: Boolean) {
+        require(category in AgentContextCategory.wireValueSet) { "Unknown context category" }
+        if (!allowed) blockAgentForRevocation("agent.category_consent", category)
+        updateAgentMandate(
+            operation = "agent.category_consent",
+            explicitOptIn = allowed,
+            revocation = !allowed,
+            optInCategory = category.takeIf { allowed },
+        ) { mandate ->
+            val next = mandate.copy(
+                sharedDataCategories = if (allowed) mandate.sharedDataCategories + category else mandate.sharedDataCategories - category,
+            )
+            agentContextCoordinator.setCategoryConsent(category, allowed)
+            if (!allowed) queueProactivePurgeRevoked()
+            if (!allowed && category == AgentContextCategory.LOCATION_SUMMARY.wireValue) {
+                locationPanelCoordinator.setCoachSummaryConsent(false)
+            }
+            next
         }
-        next
     }
 
     fun setAgentFocusWindow(
@@ -1711,46 +1969,76 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         maxSessionsPerDay: Int,
         maxChangesPerDay: Int,
     ) {
-        val current = agentMandateStore.current()
-        val updated = runCatching {
+        updateAgentMandate(operation = "agent.focus_window") { current ->
             current.copy(
                 focusWindow = current.focusWindow.copy(
                     days = days,
-                start = start, end = end, maxMinutesPerSession = maxMinutes,
-                maxSessionsPerDay = maxSessionsPerDay,
+                    start = start,
+                    end = end,
+                    maxMinutesPerSession = maxMinutes,
+                    maxSessionsPerDay = maxSessionsPerDay,
                 ),
                 maxChangesPerDay = maxChangesPerDay,
             )
-        }.getOrNull() ?: run {
-            latestMessage = "Jours, fenêtre horaire ou quotas invalides."
-            touch()
-            return
         }
-        replaceAgentMandate(updated)
-        latestMessage = "Fenêtre horaire et quotas du mandat enregistrés."
-        persist()
     }
 
-    private fun updateAgentMandate(transform: (AgentMandate) -> AgentMandate) {
+    private fun updateAgentMandate(
+        operation: String = "agent.mandate",
+        explicitOptIn: Boolean = false,
+        revocation: Boolean = false,
+        optInCategory: String? = null,
+        transform: (AgentMandate) -> AgentMandate,
+    ) {
+        agentAuthorizationCommitInProgress.set(true)
         val current = agentMandateStore.current()
-        runCatching { transform(current) }
-            .onSuccess {
-                replaceAgentMandate(it)
-                latestMessage = "Mandat enregistré · ${agentMandate.version}."
-                persist()
-            }
-            .onFailure {
-                latestMessage = "Modification du mandat invalide."
+        try {
+            val updated = transform(current)
+            replaceAgentMandate(updated, refreshRuntime = false)
+            try {
+                persistOrThrow(operation)
+            } catch (error: Exception) {
+                if (!revocation) replaceAgentMandate(current, refreshRuntime = false)
+                latestMessage = if (revocation) {
+                    "Agent bloqué dans cette session; stockage en échec, le retrait n'est pas confirmé."
+                } else {
+                    "Impossible d'enregistrer la modification du mandat."
+                }
                 touch()
+                return
             }
+            if (explicitOptIn && optInCategory != null &&
+                !revocationBarrier.clearCategoryAfterDurableOptIn(optInCategory, true)
+            ) {
+                recordPersistenceFailure(operation, PersistFailureKind.STORAGE_IO)
+                latestMessage = "Consentement enregistré, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
+            } else if (revocation && revocationBarrier.isBlocked()) {
+                latestMessage = "Autorisation retirée durablement; l'agent reste bloqué jusqu'à une nouvelle activation explicite."
+            } else if (explicitOptIn && revocationBarrier.isBlocked()) {
+                latestMessage = "Consentement enregistré; l'agent reste bloqué par une autre révocation en attente."
+            } else {
+                latestMessage = "Mandat enregistré · ${agentMandate.version}."
+            }
+            touch()
+        } catch (error: Exception) {
+            latestMessage = if (error is PersistOperationException) {
+                "Impossible d'enregistrer le changement; l'agent reste bloqué et le retrait n'est pas confirmé."
+            } else {
+                "Modification du mandat invalide."
+            }
+            touch()
+        } finally {
+            agentAuthorizationCommitInProgress.set(false)
+            refreshAgentApiRuntime()
+        }
     }
 
-    private fun replaceAgentMandate(mandate: AgentMandate) {
+    private fun replaceAgentMandate(mandate: AgentMandate, refreshRuntime: Boolean = true) {
         agentMandateStore.replace(mandate.copy(id = agentMandateStore.current().id))
         agentRequestGeneration.incrementAndGet()
         if (mandate.revoked || mandate.suspended) queueProactiveDisableAndPurge()
         else queueProactivePurgeRevoked()
-        refreshAgentApiRuntime()
+        if (refreshRuntime) refreshAgentApiRuntime()
     }
 
     private fun cancelPendingAgentWork(reason: String) {
@@ -1786,7 +2074,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val focusCount = journal.count { it.actionType == "focus.start" && it.state == ProposalState.EXECUTED }
         return AgentVerificationContext(
             nowUtcMillis = now,
-            agentEnabled = this.capabilities[CAP_AGENT] == true,
+            agentEnabled = isAgentRequestAllowed(),
             emergencyPaused = isEmergencyPaused,
             capabilities = capabilities,
             observedPackages = observed,
@@ -2877,38 +3165,75 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
     }
 
-    private fun persist(durable: Boolean = true) {
-        focusSnapshot = focusEngine.currentSession()
-        refreshDomainSnapshots()
-        if (!persistenceAllowed) {
-            touch()
-            return
-        }
-        val snapshot = try {
-            stateMap()
+    /** Non-critical UI writes report failures and leave the app usable in memory. */
+    private fun persist(operation: String = "state", durable: Boolean = true): PersistResult {
+        try {
+            focusSnapshot = focusEngine.currentSession()
+            refreshDomainSnapshots()
         } catch (error: Exception) {
-            android.util.Log.e("ATLAS.Controller", "Unable to prepare local state (${error.javaClass.simpleName})")
+            val reason = persistenceFailureKind(error)
+            recordPersistenceFailure(operation, reason)
             latestMessage = "Impossible de préparer l'état local. La session reste disponible en mémoire."
             touch()
-            return
+            return PersistResult.Failed(reason)
         }
-        try {
+        if (!persistenceAllowed) {
+            recordPersistenceFailure(operation, PersistFailureKind.INVALID_STATE)
+            latestMessage = "Impossible d'enregistrer l'état local; la récupération interdit de remplacer les données existantes."
+            touch()
+            return PersistResult.NotWritable
+        }
+        return try {
+            val snapshot = try {
+                stateMap()
+            } catch (error: Exception) {
+                val reason = persistenceFailureKind(error)
+                recordPersistenceFailure(operation, reason)
+                latestMessage = "Impossible de préparer l'état local. La session reste disponible en mémoire."
+                touch()
+                return PersistResult.Failed(reason)
+            }
             store.write(snapshot, durable = durable)
             lastFocusCheckpointAtElapsed = clock.monotonicMillis()
+            touch()
+            PersistResult.Stored
         } catch (error: Exception) {
-            android.util.Log.e("ATLAS.Controller", "Unable to write local state (${error.javaClass.simpleName})")
+            val reason = persistenceFailureKind(error)
+            recordPersistenceFailure(operation, reason)
             latestMessage = "Impossible d'enregistrer l'état local. La session reste disponible en mémoire."
+            touch()
+            PersistResult.Failed(reason)
         }
-        touch()
     }
 
-    private fun persistAfterInitialization() {
+    /** Critical writes use this boundary and cannot be reported as committed after an error. */
+    private fun persistOrThrow(operation: String, durable: Boolean = true): PersistResult {
+        val result = persist(operation, durable)
+        if (result != PersistResult.Stored) throw PersistOperationException(result)
+        if (agentConsentMigrationPending) {
+            agentConsentMigrationPending = false
+            agentConsentMigrationReady.set(true)
+        }
+        return result
+    }
+
+    private fun persistAfterInitializationOrThrow(operation: String): Boolean {
         if (!stateGraphReady) {
             persistRequestedDuringInitialization = true
-            return
+            return false
         }
-        persist()
+        persistOrThrow(operation)
+        return true
     }
+
+    private fun persistenceFailureKind(error: Exception): PersistFailureKind = when (error) {
+        is PersistWriteException -> error.reason
+        is java.io.IOException -> PersistFailureKind.STORAGE_IO
+        is IllegalArgumentException -> PersistFailureKind.INVALID_STATE
+        else -> PersistFailureKind.UNKNOWN
+    }
+
+    private class PersistOperationException(val result: PersistResult) : RuntimeException()
 
     private fun stateMap(): Map<String, Any?> {
         val coachState = coach.snapshotState()

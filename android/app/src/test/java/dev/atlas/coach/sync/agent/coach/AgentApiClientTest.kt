@@ -54,6 +54,26 @@ class AgentApiClientTest {
     }
 
     @Test
+    fun centralizedRequestGateBlocksInboxBeforeTokenLookupOrSocketCreation() {
+        var tokenLookups = 0
+        ServerSocket(0).use { server ->
+            server.soTimeout = 300
+            val client = AgentApiClient(
+                baseUrl = "http://127.0.0.1:${server.localPort}",
+                tokenProvider = BearerTokenProvider { tokenLookups++; "test-token" },
+                requestAllowed = { false },
+            )
+
+            val failure = runCatching { client.pullInbox(null) }.exceptionOrNull()
+
+            assertTrue(failure is AgentApiException)
+            assertEquals(403, (failure as AgentApiException).statusCode)
+            assertEquals(0, tokenLookups)
+            assertTrue(runCatching { server.accept() }.exceptionOrNull() is SocketTimeoutException)
+        }
+    }
+
+    @Test
     fun revokedProactivePlanAuthorizationBlocksRequestBeforeWrite() {
         ServerSocket(0).use { server ->
             server.soTimeout = 300

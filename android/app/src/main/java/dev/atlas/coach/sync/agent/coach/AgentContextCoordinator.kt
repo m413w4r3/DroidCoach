@@ -18,6 +18,8 @@ class AgentContextCoordinator(
     private val persistConsentDates: (Map<String, Long>) -> Unit,
     private val additionalConsentDates: () -> Map<String, Long> = { emptyMap() },
     private val assembler: AgentContextAssembler = AgentContextAssembler(),
+    private val agentAccessAllowed: () -> Boolean = { true },
+    private val showConsentedContext: () -> Boolean = agentAccessAllowed,
 ) {
     private val consentAt = linkedMapOf<String, Long>().apply {
         initialConsentAtUtcMillis.orEmpty()
@@ -37,26 +39,39 @@ class AgentContextCoordinator(
     @Synchronized
     fun setCategoryConsent(category: String, enabled: Boolean) {
         require(category in AgentContextCategory.wireValueSet) { "Unknown context category" }
-        if (enabled) consentAt[category] = nowUtcMillis().coerceAtLeast(1L)
-        else consentAt.remove(category)
-        persistConsentDates(consentAt.toMap())
+        val previous = consentAt[category]
+        if (enabled) consentAt[category] = nowUtcMillis().coerceAtLeast(1L) else consentAt.remove(category)
+        try {
+            persistConsentDates(consentAt.toMap())
+        } catch (error: Exception) {
+            if (previous == null) consentAt.remove(category) else consentAt[category] = previous
+            throw error
+        }
     }
 
     @Synchronized
     fun resetCategoryConsents(categories: Set<String>) {
         require(categories.all { it in AgentContextCategory.wireValueSet }) { "Unknown context category" }
+        val previous = consentAt.toMap()
         val now = nowUtcMillis().coerceAtLeast(1L)
         AgentContextCategory.wireValues.forEach { category ->
             if (category in categories) consentAt[category] = now else consentAt.remove(category)
         }
-        persistConsentDates(consentAt.toMap())
+        try {
+            persistConsentDates(consentAt.toMap())
+        } catch (error: Exception) {
+            consentAt.clear()
+            consentAt.putAll(previous)
+            throw error
+        }
     }
 
     fun preview(): AgentContextPreview = assembleCurrent().preview()
 
     fun assembleCurrent(): AgentContextSnapshot {
         val now = nowUtcMillis().coerceAtLeast(1L)
-        val mandate = mandateProvider()
+        val currentMandate = mandateProvider()
+        val mandate = if (showConsentedContext()) currentMandate else currentMandate.copy(sharedDataCategories = emptySet())
         val dates = currentConsentDates()
         val categoriesWithDates = mandate.sharedDataCategories.filterTo(linkedSetOf()) { category ->
             dates[category]?.let { it in 1L..now } == true
@@ -69,6 +84,7 @@ class AgentContextCoordinator(
     /** Called by AgentApiClient after its background queue drains and immediately before write. */
     @Suppress("UNUSED_PARAMETER")
     fun requestContext(snapshot: AgentContextSnapshot): AgentRequestContext? {
+        if (!agentAccessAllowed()) return null
         val now = nowUtcMillis().coerceAtLeast(1L)
         val currentMandate = mandateProvider()
         if (currentMandate.revoked || currentMandate.suspended || now >= currentMandate.expiresAtUtcMillis) return null

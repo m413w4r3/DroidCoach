@@ -36,8 +36,7 @@ class GoalRepository(
     fun add(goal: GoalRecord): GoalRecord {
         require(goal.status != GoalStatus.COMPLETED) { "A goal must be explicitly completed after creation" }
         require(goal.id !in records) { "A goal with this ID already exists" }
-        records[goal.id] = goal
-        persistCurrent()
+        commit(LinkedHashMap(records).apply { put(goal.id, goal) })
         return goal
     }
 
@@ -51,8 +50,7 @@ class GoalRepository(
             "Use an explicit confirmation or calculated progress to complete a goal"
         }
         if (goal != previous) {
-            records[goal.id] = goal
-            persistCurrent()
+            commit(LinkedHashMap(records).apply { put(goal.id, goal) })
         }
         return goal
     }
@@ -65,8 +63,7 @@ class GoalRepository(
         require(confirmedAtUtcMillis >= goal.updatedAt) { "Confirmation time cannot precede the latest goal update" }
         if (goal.status == GoalStatus.COMPLETED) return goal
         return goal.copy(status = GoalStatus.COMPLETED, updatedAt = confirmedAtUtcMillis).also {
-            records[goalId] = it
-            persistCurrent()
+            commit(LinkedHashMap(records).apply { put(goalId, it) })
         }
     }
 
@@ -82,19 +79,23 @@ class GoalRepository(
         require(completedAtUtcMillis >= goal.updatedAt) { "Completion time cannot precede the latest goal update" }
         if (goal.status == GoalStatus.COMPLETED) return goal
         return goal.copy(status = GoalStatus.COMPLETED, updatedAt = completedAtUtcMillis).also {
-            records[goalId] = it
-            persistCurrent()
+            commit(LinkedHashMap(records).apply { put(goalId, it) })
         }
     }
 
     @Synchronized
     fun remove(goalId: String): Boolean {
-        if (records.remove(goalId) == null) return false
-        persistCurrent()
+        if (goalId !in records) return false
+        commit(LinkedHashMap(records).apply { remove(goalId) })
         return true
     }
 
-    private fun persistCurrent() = persistSubdocument(encode(records.values.toList()))
+    /** Publish the cache only after the owner confirms the outer document was stored. */
+    private fun commit(nextRecords: LinkedHashMap<String, GoalRecord>) {
+        persistSubdocument(encode(nextRecords.values.toList()))
+        records.clear()
+        records.putAll(nextRecords)
+    }
 
     private fun emptySubdocument(): Map<String, Any?> = mapOf(
         "schema_version" to GOALS_SCHEMA_VERSION,

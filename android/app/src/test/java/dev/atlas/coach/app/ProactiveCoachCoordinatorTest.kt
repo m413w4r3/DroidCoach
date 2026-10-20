@@ -121,4 +121,44 @@ class ProactiveCoachCoordinatorTest {
         assertEquals(0, writes)
         assertEquals(corruptJson, stateJson)
     }
+
+    @Test
+    fun failedDurableReservationMakesNoAgentCallOrNotification() {
+        val now = Instant.parse("2026-10-19T12:00:00Z").toEpochMilli()
+        var stateJson: String? = null
+        var failWrites = false
+        var requests = 0
+        var notifications = 0
+        val coordinator = ProactiveCoachCoordinator(
+            readStateJson = { stateJson },
+            writeStateJson = {
+                if (failWrites) throw IllegalStateException("private disk detail")
+                stateJson = it
+            },
+            currentConsent = { ProactiveConsentSnapshot(mapOf("focus" to now - 1_000L)) },
+            isEnabled = { true },
+            nowUtcMillis = { now },
+            mandateZoneId = { ZoneId.of("UTC") },
+            requestPlan = { requests++; ProactivePlanResponse(ProactiveNotificationContent("Plan", "Action")) },
+            showNotification = { notifications++ },
+        )
+        coordinator.record(
+            CoachTrigger(
+                eventId = "focus:failed-reservation",
+                source = CoachTriggerSource.FOCUS_COMPLETED,
+                occurredAtUtcMillis = now,
+                reliability = CoachTriggerReliability.VERIFIED,
+            ),
+        )
+        val beforeReservation = stateJson
+        failWrites = true
+
+        val result = coordinator.runDue()
+
+        assertEquals(ProactiveRunStatus.PERSISTENCE_FAILED, result.status)
+        assertEquals(0, requests)
+        assertEquals(0, notifications)
+        assertEquals(beforeReservation, stateJson)
+        assertTrue(ProactiveCoachState.fromJsonString(requireNotNull(stateJson)).requestReservations.isEmpty())
+    }
 }

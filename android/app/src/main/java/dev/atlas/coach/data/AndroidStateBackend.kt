@@ -13,7 +13,7 @@ class AndroidStateBackend(context: Context) : StateBackend {
             val value = preferences.all[KEY_STATE] ?: return null
             value as? String ?: throw IllegalStateException("Stored ATLAS state is not a string")
         } catch (error: Exception) {
-            Log.e("ATLAS.Persistence", "Unable to read private local state", error)
+            Log.e("ATLAS.Persistence", "Unable to read private local state (${error.javaClass.simpleName})")
             throw error
         }
     }

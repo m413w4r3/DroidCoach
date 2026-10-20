@@ -64,6 +64,7 @@ class AgentApiClient(
     private val readTimeoutMillis: Int = 65_000,
     private val freshRequestContext: ((AgentContextSnapshot) -> AgentRequestContext?)? = null,
     private val onContextWritten: ((AgentContextSnapshot) -> Unit)? = null,
+    private val requestAllowed: () -> Boolean = { true },
 ) {
     private val base = baseUrl.trimEnd('/')
 
@@ -230,6 +231,9 @@ class AgentApiClient(
         body: JSONObject? = null,
         bodyFactory: (() -> RequestBody)? = null,
     ): JSONObject {
+        if (!runCatching(requestAllowed).getOrDefault(false)) {
+            throw AgentApiException("Agent access is no longer active", 403)
+        }
         val token = tokenProvider.token()?.trim()?.takeIf { it.isNotEmpty() }
             ?: throw AgentApiException("Bearer token is not configured", 401)
         val connection = try { URL(base + path).openConnection() as HttpURLConnection }

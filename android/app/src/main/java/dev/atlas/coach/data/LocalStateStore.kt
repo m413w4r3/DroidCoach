@@ -50,15 +50,25 @@ class LocalStateStore(private val backend: StateBackend) {
         rawValue?.let { backend.quarantine(it, reason) } ?: false
 
     fun write(state: Map<String, Any?>, durable: Boolean = true) {
-        val version = if (state.containsKey("schemaVersion")) {
-            (state["schemaVersion"] as? Number)?.toInt()
-                ?: throw IllegalArgumentException("schemaVersion must be a number")
-        } else {
-            CURRENT_SCHEMA_VERSION
+        val value = try {
+            val version = if (state.containsKey("schemaVersion")) {
+                (state["schemaVersion"] as? Number)?.toInt()
+                    ?: throw IllegalArgumentException("schemaVersion must be a number")
+            } else {
+                CURRENT_SCHEMA_VERSION
+            }
+            require(version == CURRENT_SCHEMA_VERSION) { "Cannot write unsupported state schema $version" }
+            JSONObject((state + ("schemaVersion" to version)).toJsonMap()).toString()
+        } catch (_: IllegalArgumentException) {
+            throw PersistWriteException(PersistFailureKind.INVALID_STATE)
+        } catch (_: Exception) {
+            throw PersistWriteException(PersistFailureKind.SERIALIZATION)
         }
-        require(version == CURRENT_SCHEMA_VERSION) { "Cannot write unsupported state schema $version" }
-        val value = JSONObject((state + ("schemaVersion" to version)).toJsonMap()).toString()
-        if (durable) backend.write(value) else backend.writeCheckpoint(value)
+        try {
+            if (durable) backend.write(value) else backend.writeCheckpoint(value)
+        } catch (_: Exception) {
+            throw PersistWriteException(PersistFailureKind.STORAGE_IO)
+        }
     }
 
     companion object {

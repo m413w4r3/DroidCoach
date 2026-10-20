@@ -99,3 +99,10 @@
 - Les sous-sessions Nimbalyst utilisent `openai-codex:gpt-6-luna`, effort `xhigh`, notification de fin; au plus trois exécutants. Le checkout est partagé avec propriété exclusive des fichiers; les fichiers globaux sont réservés à S6.
 - Toute catégorie autorisée héritée sans date de consentement reçoit la date de migration, jamais une date ancienne implicite. Le contexte est réassemblé puis minimisé contre le consentement courant avant transport.
 - L’AVD personnel `Pixel_9_Pro_XL_2` est signalé invalide par avdmanager et reste intact. La recette utilise uniquement `atlas_v62_disposable_api37`, créé pour cette mission (API 37.2, x86_64, port 5580). Sa partition initiale de 774 Mio était saturée dès le démarrage; ce seul AVD neuf a été réinitialisé avec une partition de 4096 Mio avant toute installation ATLAS.
+
+## V6.2.1 — Lot A
+
+- Les écritures Goals, consentements et mandat passent par un commit racine vérifié; le cache Goals et l’état proactif ne sont publiés qu’après succès. Les messages de réussite suivent le commit.
+- La barrière agent est indépendante du document ATLAS (`atlas_agent_revocation_barrier`, clés `agent_blocked_v1` et `blocked_categories_v1`, `SharedPreferences.commit()`). Une révocation globale exige un nouvel opt-in agent durable; le retrait d’une catégorie ou du résumé de localisation exige le consentement durable de la même catégorie. Le client agent et le dispatcher relisent cette barrière avant chaque requête ou exécution.
+- Le journal de persistance vit dans `atlas_persistence_diagnostics`, séparé du document métier; il ne garde que le code d’opération, le type de panne et l’horodatage, sur 20 lignes au plus.
+- Si le stockage racine et le commit de la barrière échouent tous deux, le latch mémoire bloque les requêtes jusqu’à la fin du processus et l’interface signale que la révocation n’est pas confirmée. Aucun mécanisme local ne peut garantir la survie de cette panne totale après arrêt forcé; une nouvelle installation reste bloquée seulement si un des stockages indépendants a accepté le marqueur.
