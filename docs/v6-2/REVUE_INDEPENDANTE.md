@@ -41,3 +41,24 @@ Aucune compilation ni aucun test n’a été lancé, conformément à la demande
 Checkout `main`, HEAD `ee1e7b58c06531f6fdc631a42cdd7522d8ee90e1`; `git status` montre des modifications suivies et de nouveaux fichiers Android/backend/docs V6.2 non commitées. Environnement observé : OpenJDK 21.0.12.1, Python 3.12.3, `ANDROID_HOME=/home/nill/Android/Sdk`; les exécutables `gradle`, `adb` et `emulator` sont présents. Les commandes utilisées étaient des lectures (`git status/diff/rev-parse`, `cat`, `rg`, `nl`, `java -version`, `python --version`, `command -v`). Aucun Gradle, AVD, test, accès réseau ou modèle n’a été lancé. Aucun téléphone Pixel réel n’a été utilisé.
 
 Les constats d’intégration et de correction ont été transmis à S6 et S5 via les rapports Nimbalyst; aucun propriétaire de code n’a été modifié par cette revue.
+
+## Addendum post-push — 2026-10-20
+
+Le contenu historique ci-dessus est conservé. Les constats S7 sur la fraîcheur du contexte, le double coarsening, le budget Android/backend, le statut des objectifs et le fuseau proactif sont signalés comme corrigés dans l'audit post-push; les constats ci-dessous distinguent leur état actuel des nouveaux reliquats.
+
+| Constat | État | Éléments actuels |
+| --- | --- | --- |
+| S7-1 — snapshot Goals/Habit périmé au transport | Corrigé | L'audit post-push répertorie la reconstruction fraîche du contexte dans [AgentContextCoordinator](../../android/app/src/main/java/dev/atlas/coach/sync/agent/coach/AgentContextCoordinator.kt) et ses [tests](../../android/app/src/test/java/dev/atlas/coach/sync/agent/coach/AgentContextCoordinatorTest.kt). |
+| S7-2 — coarsening répété des résumés | Corrigé | Le traitement courant est décrit dans [LocationRepository](../../android/app/src/main/java/dev/atlas/coach/location/LocationRepository.kt) et [LocationPrivacyTest](../../android/app/src/test/java/dev/atlas/coach/location/LocationPrivacyTest.kt). |
+| S7-3 — enveloppe de budget Android/backend différente | Corrigé | Voir l'[audit post-push](AUDIT_POST_PUSH_2026-10-20.md), le modèle backend [SharedContext](../../backend/atlas_backend/models_v2.py) et ses [tests](../../backend/tests/test_agent_v2.py). |
+| S7-4 — statut Goals absent du contexte | Corrigé | Les objectifs inactifs sont filtrés par [AgentContextAssembler](../../android/app/src/main/java/dev/atlas/coach/sync/agent/context/AgentContextAssembler.kt) et couverts par [AgentContextAssemblerTest](../../android/app/src/test/java/dev/atlas/coach/sync/agent/context/AgentContextAssemblerTest.kt). |
+| S7-5 — fuseau système au lieu du fuseau du mandat | Corrigé | La correction figure dans l'[audit post-push](AUDIT_POST_PUSH_2026-10-20.md); le calcul courant est dans [ProactiveCoachCoordinator](../../android/app/src/main/java/dev/atlas/coach/app/ProactiveCoachCoordinator.kt). |
+| P0-A — faux succès de persistance | Ouvert | Hors Lot D; voir le [constat et les tests requis](AUDIT_POST_PUSH_2026-10-20.md). |
+| P0-B — révocation durable et purge du dernier contexte | Ouvert | Hors Lot D; voir le [constat](AUDIT_POST_PUSH_2026-10-20.md). |
+| P1-A à P1-D — proactivité, notification, consentement Goals, diagnostic | Ouvert | Suivis par les lots dédiés; voir l'[audit](AUDIT_POST_PUSH_2026-10-20.md). |
+| P2-A — tiroir HOME non paresseux | À confirmer | Le code emploie `LazyColumn` avec la clé stable `appPackage` dans [LauncherHomeScreen](../../android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt); [le test 100/250 apps](../../android/app/src/androidTest/java/dev/atlas/coach/app/LauncherDrawerLazyInstrumentationTest.kt) compile. L'exécution AVD reste à faire. |
+| P2-B — concentration dans AtlasController | Ouvert | Refonte explicitement différée; aucun changement du contrôleur dans ce lot. Voir l'[audit](AUDIT_POST_PUSH_2026-10-20.md). |
+| P2-C — statut post-push, liens et index de preuves | Corrigé | Voir l'[addendum de livraison](LIVRAISON.md), l'[index des preuves](INDEX_PREUVES.md) et la [matrice issue #1](ISSUE_1_LOCALISATION.md). |
+| Issue GitHub #1 — localisation facultative | À confirmer | Le code et les documents sont recensés dans [la matrice critère par critère](ISSUE_1_LOCALISATION.md); recommandation de ne pas fermer avant une preuve Android 17. |
+
+Les conclusions reposent sur l'audit du HEAD V6.2 indiqué dans [l'audit post-push](AUDIT_POST_PUSH_2026-10-20.md). Les nouveaux liens de cet addendum sont relatifs; les références absolues historiques plus haut restent inchangées.

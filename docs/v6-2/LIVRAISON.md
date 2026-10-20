@@ -60,3 +60,17 @@ backend/.venv/bin/python -m pytest backend/tests -q
 ```
 
 Le [script instrumenté](../../scripts/v62-complete-instrumentation.sh) vérifie un AVD jetable précis et efface uniquement les données de ses packages de test : ne pas l'utiliser sur un téléphone personnel. Le [guide Pixel](GUIDE_PIXEL.md) décrit l'installation et la recette non destructive sur téléphone secondaire. Le [guide OpenClaw existant](../v6/GUIDE_UTILISATEUR.md) reste applicable ; le jeton Gateway appartient au backend. [Contrats](CONTRATS_INTERFACES.md), [mandat et matrice d'actions](../v6/SECURITE_ET_MANDAT.md), [réemploi OSS](REEMPLOI_OSS.md).
+
+## Addendum post-push — Lot D
+
+État au 20 octobre 2026. La base V6.2 post-push auditée est `819cdfd1223f87676403cf7fd4c043a97bd2354c` (`main`). Le worktree de ce lot a démarré à ce HEAD; il n'inclut aucun changement poussé ou fusionné.
+
+Le tiroir des applications rend désormais ses lignes dans une `LazyColumn` bornée, clé stable `appPackage`; HOME conserve son défilement text-first et le footer Apps/Coach/Pause/Plus reste hors de la liste. Le test instrumenté [LauncherDrawerLazyInstrumentationTest](../../android/app/src/androidTest/java/dev/atlas/coach/app/LauncherDrawerLazyInstrumentationTest.kt) couvre les fixtures synthétiques 100/250, le portrait en largeurs Compose 320/360 dp, fontScale 1×/2×, l'accès à la dernière app et le clic Coach. Le test est compilé mais son exécution AVD n'a pas été faite dans ce lot.
+
+Commande ciblée à lancer sur l'AVD jetable : `adb shell am instrument -w -e class dev.atlas.coach.app.LauncherDrawerLazyInstrumentationTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner`.
+
+Commande exécutée dans `android/` : `./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` — **BUILD SUCCESSFUL**, 256 tests JVM, 0 échec, 0 erreur, 0 ignoré; lint, assemblage debug et assemblage AndroidTest réussis. Aucun émulateur n'a été lancé.
+
+La baseline d'orchestration communiquée pour cette mission est distincte des comptes historiques ci-dessus : instrumentation API 34, 48 cas, 47 PASS et 1 échec environnemental préexistant dans `V62MobilityServiceInstrumentedTest.visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail` (position injectée à environ 8 900 km). Android 17 et téléphone Pixel physique ne sont pas revendiqués comme testés.
+
+L'audit post-push est copié dans [AUDIT_POST_PUSH_2026-10-20.md](AUDIT_POST_PUSH_2026-10-20.md). Les captures et journaux existants sont listés dans [INDEX_PREUVES.md](INDEX_PREUVES.md). La couverture de l'issue #1 et le reliquat Android 17 sont dans [ISSUE_1_LOCALISATION.md](ISSUE_1_LOCALISATION.md); recommandation : garder l'issue ouverte.

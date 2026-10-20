@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -91,6 +93,7 @@ internal fun LauncherHomeScreen(
     openPreviousLauncher: () -> Unit,
     openHomeSettings: () -> Unit,
     agentState: HomeAgentState = HomeAgentState.localDefault(controller),
+    drawerAppsOverrideForTests: List<LauncherAppModel>? = null,
 ) {
     if (CapabilityRules.mayRenderLauncherHome(controller.capabilities, isHomeRoleHeld)) {
         LauncherHomeContent(
@@ -102,6 +105,7 @@ internal fun LauncherHomeScreen(
             openPreviousLauncher = openPreviousLauncher,
             openHomeSettings = openHomeSettings,
             agentState = agentState,
+            drawerAppsOverrideForTests = drawerAppsOverrideForTests,
         )
     } else {
         LauncherRoleSetupScreen(onRequestHomeRole, openHomeSettings)
@@ -137,6 +141,7 @@ private fun LauncherHomeContent(
     openPreviousLauncher: () -> Unit,
     openHomeSettings: () -> Unit,
     agentState: HomeAgentState,
+    drawerAppsOverrideForTests: List<LauncherAppModel>?,
 ) {
     val catalog = remember(context) { AndroidLauncherCatalog(context) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -169,12 +174,18 @@ private fun LauncherHomeContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(refreshToken, catalog) {
-        loading = true
-        loadError = false
-        val result = withContext(Dispatchers.IO) { runCatching { catalog.list() } }
-        apps = result.getOrElse { loadError = true; emptyList() }
-        loading = false
+    LaunchedEffect(refreshToken, catalog, drawerAppsOverrideForTests) {
+        if (drawerAppsOverrideForTests != null) {
+            apps = drawerAppsOverrideForTests
+            loadError = false
+            loading = false
+        } else {
+            loading = true
+            loadError = false
+            val result = withContext(Dispatchers.IO) { runCatching { catalog.list() } }
+            apps = result.getOrElse { loadError = true; emptyList() }
+            loading = false
+        }
     }
     LaunchedEffect(Unit) {
         while (true) {
@@ -213,46 +224,75 @@ private fun LauncherHomeContent(
             }
             val activeFocus = agentState.focusCard?.takeIf(HomeAgentCard::isActiveFocus)
 
-            Column(
-                modifier = Modifier.fillMaxSize().clipToBounds().verticalScroll(rememberScrollState())
-                    .testTag("launcher_home_scroll_region")
-                    .padding(top = 18.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (drawerOpen) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
-                            .testTag("launcher_drawer_header"),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+            if (drawerOpen) {
+                Box(
+                    modifier = Modifier.fillMaxSize().clipToBounds()
+                        .testTag("launcher_home_scroll_region")
+                        .padding(top = 18.dp, bottom = 12.dp),
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().testTag("launcher_drawer_list"),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text("Applications", style = MaterialTheme.typography.headlineMedium)
-                        Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth().testTag("launcher_search"),
-                        value = search,
-                        onValueChange = { search = it },
-                        label = { Text("Rechercher une application") },
-                        placeholder = { Text("Nom ou paquet") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
-                    )
-                    when {
-                        loading -> Text("Chargement des applications…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        loadError -> Text("La liste n'a pas pu être chargée. Revenez ici pour réessayer.", color = MaterialTheme.colorScheme.error)
-                        apps.isEmpty() -> Text("Aucune application avec un raccourci d'accueil n'est visible.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        filteredApps.isEmpty() -> Text("Aucune application ne correspond à cette recherche.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else -> filteredApps.forEach { app ->
-                            LauncherAppRow(
-                                app = app,
-                                pinned = app.appPackage in controller.launcherPinnedPackages,
-                                onLaunch = { onLaunchApp(app) },
-                                onTogglePin = { controller.toggleLauncherPin(app.appPackage) },
+                        item(key = "drawer_header") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
+                                    .testTag("launcher_drawer_header"),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text("Applications", style = MaterialTheme.typography.headlineMedium)
+                                Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item(key = "drawer_search") {
+                            OutlinedTextField(
+                                modifier = Modifier.fillMaxWidth().testTag("launcher_search"),
+                                value = search,
+                                onValueChange = { search = it },
+                                label = { Text("Rechercher une application") },
+                                placeholder = { Text("Nom ou paquet") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
                             )
                         }
+                        when {
+                            loading -> item(key = "drawer_loading") {
+                                Text("Chargement des applications…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            loadError -> item(key = "drawer_error") {
+                                Text("La liste n'a pas pu être chargée. Revenez ici pour réessayer.", color = MaterialTheme.colorScheme.error)
+                            }
+                            apps.isEmpty() -> item(key = "drawer_empty") {
+                                Text("Aucune application avec un raccourci d'accueil n'est visible.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            filteredApps.isEmpty() -> item(key = "drawer_filtered_empty") {
+                                Text("Aucune application ne correspond à cette recherche.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            else -> items(items = filteredApps, key = { it.appPackage }) { app ->
+                                LauncherAppRow(
+                                    app = app,
+                                    pinned = app.appPackage in controller.launcherPinnedPackages,
+                                    onLaunch = { onLaunchApp(app) },
+                                    onTogglePin = { controller.toggleLauncherPin(app.appPackage) },
+                                )
+                            }
+                        }
+                        launcherMessage?.let { message ->
+                            item(key = "drawer_message") {
+                                Text(message, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
-                } else {
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize().clipToBounds()
+                        .verticalScroll(rememberScrollState())
+                        .testTag("launcher_home_scroll_region")
+                        .padding(top = 18.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
                             .testTag("launcher_swipe_header"),
@@ -378,8 +418,8 @@ private fun LauncherHomeContent(
                             }
                         }
                     }
+                    launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
-                launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
 

@@ -21,7 +21,10 @@ class AgentContextCoordinator(
     private val agentAccessAllowed: () -> Boolean = { true },
     private val showConsentedContext: () -> Boolean = agentAccessAllowed,
     private val blockedCategories: () -> Set<String> = { emptySet() },
+    initialIncludeExistingGoals: Boolean = false,
+    private val persistIncludeExistingGoals: (Boolean) -> Unit = {},
 ) {
+    private var includeExistingGoalsSnapshot = initialIncludeExistingGoals
     private val consentAt = linkedMapOf<String, Long>().apply {
         initialConsentAtUtcMillis.orEmpty()
             .filterKeys { it in AgentContextCategory.wireValueSet }
@@ -37,19 +40,39 @@ class AgentContextCoordinator(
     @Synchronized
     fun consentDates(): Map<String, Long> = consentAt.toMap()
 
+    @Synchronized
+    fun includesExistingGoals(): Boolean = includeExistingGoalsSnapshot
+
+    @Synchronized
+    fun setIncludeExistingGoals(enabled: Boolean) {
+        val previous = includeExistingGoalsSnapshot
+        includeExistingGoalsSnapshot = enabled
+        try {
+            persistIncludeExistingGoals(enabled)
+        } catch (error: Exception) {
+            includeExistingGoalsSnapshot = previous
+            throw error
+        }
+    }
+
     /** Applies the independent revocation barrier to a restored or current mandate. */
     fun effectiveMandate(mandate: AgentMandate = mandateProvider()): AgentMandate =
         effectiveMandate(mandate, blockedCategories())
 
     @Synchronized
-    fun setCategoryConsent(category: String, enabled: Boolean) {
+    fun setCategoryConsent(category: String, enabled: Boolean, resetIncludeExistingGoals: Boolean = false) {
         require(category in AgentContextCategory.wireValueSet) { "Unknown context category" }
         val previous = consentAt[category]
+        val previousIncludeExistingGoals = includeExistingGoalsSnapshot
         if (enabled) consentAt[category] = nowUtcMillis().coerceAtLeast(1L) else consentAt.remove(category)
+        if (resetIncludeExistingGoals && category == AgentContextCategory.GOALS.wireValue) {
+            includeExistingGoalsSnapshot = false
+        }
         try {
             persistConsentDates(consentAt.toMap())
         } catch (error: Exception) {
             if (previous == null) consentAt.remove(category) else consentAt[category] = previous
+            includeExistingGoalsSnapshot = previousIncludeExistingGoals
             throw error
         }
     }
@@ -58,15 +81,18 @@ class AgentContextCoordinator(
     fun resetCategoryConsents(categories: Set<String>) {
         require(categories.all { it in AgentContextCategory.wireValueSet }) { "Unknown context category" }
         val previous = consentAt.toMap()
+        val previousIncludeExistingGoals = includeExistingGoalsSnapshot
         val now = nowUtcMillis().coerceAtLeast(1L)
         AgentContextCategory.wireValues.forEach { category ->
             if (category in categories) consentAt[category] = now else consentAt.remove(category)
         }
+        if (AgentContextCategory.GOALS.wireValue in categories) includeExistingGoalsSnapshot = false
         try {
             persistConsentDates(consentAt.toMap())
         } catch (error: Exception) {
             consentAt.clear()
             consentAt.putAll(previous)
+            includeExistingGoalsSnapshot = previousIncludeExistingGoals
             throw error
         }
     }
@@ -85,7 +111,7 @@ class AgentContextCoordinator(
         }
         val contextMandate = mandate.copy(sharedDataCategories = categoriesWithDates)
         val domains = domainsProvider()
-        return assembler.assemble(contextMandate, dates, domains, now)
+        return assembler.assemble(contextMandate, dates, domains, now, includesExistingGoals())
     }
 
     /** Called by AgentApiClient after its background queue drains and immediately before write. */
@@ -108,7 +134,8 @@ class AgentContextCoordinator(
         // The user's request may have waited in the sync queue while local records or consent
         // changed. Rebuild from current domain views here; the API client minimizes this immutable
         // snapshot again against the same latest authorization immediately before writing bytes.
-        val latestSnapshot = assembler.assemble(consentBoundMandate, dates, domains, now)
+        val includeExistingGoals = includesExistingGoals()
+        val latestSnapshot = assembler.assemble(consentBoundMandate, dates, domains, now, includeExistingGoals)
         return AgentRequestContext(
             mandate = consentBoundMandate,
             snapshot = latestSnapshot,
@@ -119,6 +146,7 @@ class AgentContextCoordinator(
                 },
                 locationSummarySharingEnabled = domains.locationSummarySharingEnabled &&
                     AgentContextCategory.LOCATION_SUMMARY.wireValue !in blocked,
+                includeExistingGoals = includeExistingGoals,
             ),
             nowUtcMillis = now,
         )

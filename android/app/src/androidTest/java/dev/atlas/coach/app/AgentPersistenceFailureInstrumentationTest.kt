@@ -8,9 +8,14 @@ import dev.atlas.coach.data.PersistenceDiagnosticsStore
 import dev.atlas.coach.data.RevocationBarrierState
 import dev.atlas.coach.data.RevocationBarrierStorage
 import dev.atlas.coach.data.StateBackend
+import dev.atlas.coach.data.LocalStateStore
 import dev.atlas.coach.focus.Clock
 import dev.atlas.coach.goals.GoalMetric
 import dev.atlas.coach.sync.agent.context.AgentContextCategory
+import dev.atlas.coach.sync.agent.context.LastContextDisclosureStatus
+import dev.atlas.coach.sync.agent.AgentMandate
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -22,6 +27,105 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class AgentPersistenceFailureInstrumentationTest {
+    @Test
+    fun failedLegacyDisclosureMigrationNeverReexposesPayloadValuesInController() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = isolatedContext("legacy-disclosure-write-failure")
+        val backend = MemoryStateBackend()
+        val barrier = MemoryBarrierStorage()
+        val legacyPayload = JSONObject()
+            .put("consented_categories", JSONArray(listOf("focus")))
+            .put("categories", JSONObject().put("focus", JSONArray(listOf("legacy private value"))))
+            .toString()
+        LocalStateStore(backend).write(mapOf(
+            "agentMandate" to AgentMandate.default().copy(sharedDataCategories = setOf("focus")).toJson().toString(),
+            "lastAgentSharedContext" to legacyPayload,
+            "lastAgentSharedContextAt" to 1_800_000_000_000L,
+        ))
+        backend.failWrites = true
+
+        lateinit var controller: AtlasController
+        instrumentation.runOnMainSync { controller = makeController(context, backend, barrier) }
+
+        assertEquals(null, controller.lastSharedAgentContextJson)
+        assertFalse(controller.agentContextPreview.serializedPayload.contains("legacy private value"))
+        assertEquals(LastContextDisclosureStatus.ATTEMPTED, controller.lastContextDisclosureAudit?.status)
+    }
+
+    @Test
+    fun existingGoalsChoicePersistsAndResetsOnGoalsRevocation() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = isolatedContext("existing-goals-choice")
+        val backend = MemoryStateBackend()
+        val barrier = MemoryBarrierStorage()
+        lateinit var controller: AtlasController
+        instrumentation.runOnMainSync {
+            controller = makeController(context, backend, barrier)
+            controller.setAgentSharedCategory(AgentContextCategory.GOALS.wireValue, true)
+            controller.setIncludeExistingAgentGoals(true)
+        }
+
+        assertEquals(true, LocalStateStore(backend).read()["agentIncludeExistingGoals"])
+        lateinit var recreated: AtlasController
+        instrumentation.runOnMainSync { recreated = makeController(context, backend, barrier) }
+        assertEquals(true, recreated.includeExistingAgentGoals)
+
+        instrumentation.runOnMainSync {
+            recreated.setAgentSharedCategory(AgentContextCategory.GOALS.wireValue, false)
+        }
+        assertEquals(false, LocalStateStore(backend).read()["agentIncludeExistingGoals"])
+        lateinit var afterRevocation: AtlasController
+        instrumentation.runOnMainSync { afterRevocation = makeController(context, backend, barrier) }
+        assertEquals(false, afterRevocation.includeExistingAgentGoals)
+    }
+
+    @Test
+    fun legacySharedPayloadIsPurgedAfterCategoryRevocationAndControllerRecreation() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = isolatedContext("legacy-disclosure")
+        val backend = MemoryStateBackend()
+        val barrier = MemoryBarrierStorage()
+        val categories = setOf(AgentContextCategory.FOCUS.wireValue, AgentContextCategory.GOALS.wireValue)
+        val legacyPayload = JSONObject()
+            .put("consented_categories", JSONArray(categories.toList()))
+            .put("categories", JSONObject()
+                .put("focus", JSONArray(listOf("legacy private focus value")))
+                .put("goals", JSONArray(listOf("legacy private goal value"))))
+            .toString()
+        LocalStateStore(backend).write(mapOf(
+            "agentMandate" to AgentMandate.default().copy(sharedDataCategories = categories).toJson().toString(),
+            "lastAgentSharedContext" to legacyPayload,
+            "lastAgentSharedContextAt" to 1_800_000_000_000L,
+        ))
+
+        lateinit var controller: AtlasController
+        instrumentation.runOnMainSync { controller = makeController(context, backend, barrier) }
+
+        assertEquals(null, controller.lastSharedAgentContextJson)
+        assertFalse(controller.agentContextPreview.serializedPayload.contains("legacy private"))
+        assertEquals(LastContextDisclosureStatus.ATTEMPTED, controller.lastContextDisclosureAudit?.status)
+        var persisted = LocalStateStore(backend).read()
+        assertFalse(persisted.containsKey("lastAgentSharedContext"))
+        assertFalse(persisted.toString().contains("legacy private"))
+
+        instrumentation.runOnMainSync {
+            controller.setAgentSharedCategory(AgentContextCategory.FOCUS.wireValue, false)
+        }
+        assertEquals(null, controller.lastSharedAgentContextJson)
+        persisted = LocalStateStore(backend).read()
+        assertFalse(persisted.toString().contains("legacy private"))
+
+        lateinit var recreated: AtlasController
+        instrumentation.runOnMainSync { recreated = makeController(context, backend, barrier) }
+        assertEquals(null, recreated.lastSharedAgentContextJson)
+        assertFalse(recreated.agentContextPreview.serializedPayload.contains("legacy private"))
+        assertEquals(
+            setOf("focus", "goals"),
+            recreated.lastContextDisclosureAudit?.categoryNames?.toSet(),
+        )
+        assertFalse(LocalStateStore(backend).read().toString().contains("legacy private"))
+    }
+
     @Test
     fun failedGoalCreateUpdateAndStatusKeepDiskCacheAndRecreatedControllerConsistent() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

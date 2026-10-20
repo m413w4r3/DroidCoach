@@ -113,3 +113,11 @@
 - Le worker appelle le contrôleur singleton d'`AtlasApplication`, collecte les revues d'objectifs, rappels d'habitudes et plans quotidiens, puis attend le scheduler existant au plus 60 secondes. Le réseau reste sur le `ScheduledExecutorService`; expiration et absence de travail rendent `success` sans nouvelle tentative rapprochée.
 - Une notification renvoie uniquement l'UUID d'une proposition déjà présente dans l'inbox locale et la destination `coach`. L'ouverture met en avant cet élément; elle n'accepte ni ne distribue la proposition. Une proposition expirée reste visible avec son état et sans actions.
 - `androidx.work:work-testing:2.10.5` est ajouté uniquement à `androidTestImplementation`, car WorkManager n'est pas simulé par Robolectric/JVM dans ce dépôt.
+
+## 2026-10-20 — V6.2.1 Lot D
+
+- Le tiroir d'applications Compose utilise `appPackage` comme clé stable et unique de `LazyColumn`; la règle de filtrage déduplique déjà les applications par package. La liste prend la hauteur restante au-dessus du footer permanent, tandis que le HOME text-first garde son scroll actuel. | Évite une clé d'index instable quand la recherche ou l'épinglage modifie la liste et maintient le footer séparé du contenu paresseux.
+
+## V6.2.1 — Lot B (2026-10-20)
+- Le dernier partage conserve durablement uniquement son horodatage, ses catégories et son statut; le JSON détaillé reste en mémoire tant que le processus et le consentement sont actifs, puis disparaît à la révocation ou à la fin du processus. La migration des anciennes sauvegardes est critique et masque immédiatement leurs valeurs, même si l'écriture échoue.
+- Inclure l'état courant des objectifs actifs antérieurs au consentement est désactivé à chaque nouvel opt-in `goals`. L'activation doit être écrite durablement; les événements Focus/check-in antérieurs au consentement restent exclus des catégories événementielles.
