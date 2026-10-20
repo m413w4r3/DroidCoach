@@ -33,6 +33,7 @@ class AgentContextSnapshot internal constructor(
     sourceTimestampsUtcMillis: Map<String, List<Long>>,
     private val usageConsentAtAssembly: ObservationConsent? = null,
     private val locationSharingEnabledAtAssembly: Boolean = false,
+    private val includesExistingGoalsAtAssembly: Boolean = false,
 ) {
     val consentedCategories: List<String> = immutableList(consentedCategories)
     val categories: Map<String, List<String>> = immutableMap(
@@ -115,7 +116,9 @@ class AgentContextSnapshot internal constructor(
             val timestamps = sourceTimestampsUtcMillis[category].orEmpty()
             val retained = values.indices.filter { index ->
                 val at = timestamps[index]
-                at >= cutoff && at <= nowUtcMillis
+                val existingGoalStateAllowed = category == AgentContextCategory.GOALS.wireValue &&
+                    includesExistingGoalsAtAssembly && currentDomainConsent.includeExistingGoals
+                (existingGoalStateAllowed || at >= cutoff) && at <= nowUtcMillis
             }
             if (retained.isNotEmpty()) {
                 retainedItems[category] = retained.map(values::get)
@@ -128,6 +131,7 @@ class AgentContextSnapshot internal constructor(
             retainedTimestamps,
             usageConsentAtAssembly = usageConsentAtAssembly,
             locationSharingEnabledAtAssembly = locationSharingEnabledAtAssembly,
+            includesExistingGoalsAtAssembly = includesExistingGoalsAtAssembly,
         )
     }
 
@@ -182,6 +186,7 @@ class AgentContextSnapshot internal constructor(
 data class AgentContextDomainConsent(
     val usageConsent: ObservationConsent? = null,
     val locationSummarySharingEnabled: Boolean = false,
+    val includeExistingGoals: Boolean = false,
 )
 
 /** Human-readable preview data is derived from exactly the payload that will be serialized. */

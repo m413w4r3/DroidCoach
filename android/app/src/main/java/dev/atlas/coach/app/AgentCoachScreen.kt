@@ -284,6 +284,12 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
     }
 
     val contextPreview = controller.agentContextPreview
+    LaunchedEffect(contextPreview.authorizedCategories.isEmpty()) {
+        if (contextPreview.authorizedCategories.isEmpty()) {
+            showContextPayload = false
+            showLastSharedContextPayload = false
+        }
+    }
     val goals = remember(controller, revision) { controller.coachGoals }
     val focusLinkOptions = remember(controller, revision) { controller.goalFocusLinkOptions }
     val habitLinkOptions = remember(controller, revision) { controller.goalHabitLinkOptions }
@@ -337,42 +343,62 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            TextButton(
-                modifier = Modifier.testTag("agent_next_context_payload_toggle"),
-                onClick = { showContextPayload = !showContextPayload },
-            ) {
-                Text(
-                    if (showContextPayload) "Masquer le JSON exact du prochain envoi"
-                    else "Afficher le JSON exact du prochain envoi",
-                )
-            }
-            if (showContextPayload) {
-                Card(Modifier.fillMaxWidth().testTag("agent_next_context_payload")) {
-                    Text(contextPreview.serializedPayload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Text("Ce payload est assemblé depuis l'état local au moment de l'envoi et réduit juste avant le transport.", style = MaterialTheme.typography.bodySmall)
-            val sentAt = controller.lastSharedAgentContextAtUtcMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
-            Text(
-                sentAt?.let { "Dernier payload écrit vers le backend · $it" } ?: "Aucun payload n'a encore été envoyé au backend.",
-                style = MaterialTheme.typography.labelMedium,
-            )
-            controller.lastSharedAgentContextJson?.let { payload ->
+            if (contextPreview.authorizedCategories.isNotEmpty()) {
                 TextButton(
-                    modifier = Modifier.testTag("agent_last_shared_context_payload_toggle"),
-                    onClick = { showLastSharedContextPayload = !showLastSharedContextPayload },
+                    modifier = Modifier.testTag("agent_next_context_payload_toggle"),
+                    onClick = { showContextPayload = !showContextPayload },
                 ) {
                     Text(
-                        if (showLastSharedContextPayload) "Masquer le dernier JSON réellement partagé"
-                        else "Afficher le dernier JSON réellement partagé",
+                        if (showContextPayload) "Masquer le JSON exact du prochain envoi"
+                        else "Afficher le JSON exact du prochain envoi",
                     )
                 }
-                if (showLastSharedContextPayload) {
-                    Card(Modifier.fillMaxWidth().testTag("agent_last_shared_context_payload")) {
-                        Text(payload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                if (showContextPayload) {
+                    Card(Modifier.fillMaxWidth().testTag("agent_next_context_payload")) {
+                        Text(contextPreview.serializedPayload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            } else {
+                Text("Le détail du prochain contexte s'affichera pendant un consentement actif.", style = MaterialTheme.typography.bodySmall)
+            }
+            Text("Ce payload est assemblé depuis l'état local au moment de l'envoi et réduit juste avant le transport.", style = MaterialTheme.typography.bodySmall)
+            val audit = controller.lastContextDisclosureAudit
+            val sentAt = audit?.sentAtUtcMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
+            Text(
+                sentAt?.let { "Dernier contexte écrit · $it · ${audit.status.displayLabel()}" }
+                    ?: "Aucun historique local de contexte.",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            audit?.categoryNames?.takeIf { it.isNotEmpty() }?.let { categories ->
+                Text(
+                    "Catégories de cet envoi : ${categories.mapNotNull(dataCategoryLabels::get).joinToString(" · ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (contextPreview.authorizedCategories.isNotEmpty()) {
+                controller.lastSharedAgentContextJson?.let { payload ->
+                    Text("Aperçu du dernier contexte conservé en mémoire pour cette session seulement.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(
+                        modifier = Modifier.testTag("agent_last_shared_context_payload_toggle"),
+                        onClick = { showLastSharedContextPayload = !showLastSharedContextPayload },
+                    ) {
+                        Text(
+                            if (showLastSharedContextPayload) "Masquer l'aperçu du dernier contexte"
+                            else "Afficher l'aperçu du dernier contexte",
+                        )
+                    }
+                    if (showLastSharedContextPayload) {
+                        Card(Modifier.fillMaxWidth().testTag("agent_last_shared_context_payload")) {
+                            Text(payload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
+            Text("Arrêter le partage bloque les prochains envois. Supprimer l'historique local efface l'audit enregistré; la copie déjà reçue par le backend n'est pas supprimée.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_delete_context_history"),
+                onClick = controller::deleteLastContextDisclosureHistory,
+            ) { Text("Supprimer l'historique local") }
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
                 onClick = controller::requestAgentPlan,
@@ -699,9 +725,10 @@ private fun MandatePanel(controller: AtlasController) {
 @Composable
 private fun SharedDataPanel(controller: AtlasController) {
     val mandate = controller.agentMandate
+    val authorizedCategories = controller.agentContextPreview.authorizedCategories
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Données partagées avec le coach", style = MaterialTheme.typography.titleLarge)
-        Text("Les catégories cochées autorisent le partage correspondant. Le Coach affiche le payload prévu et le dernier payload réellement écrit avant le transport.")
+        Text("Les catégories cochées autorisent les prochains envois. Les décocher arrête le partage de cette catégorie.")
         dataCategoryLabels.forEach { (category, label) ->
             Row(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
@@ -709,6 +736,26 @@ private fun SharedDataPanel(controller: AtlasController) {
                     onCheckedChange = { controller.setAgentSharedCategory(category, it) },
                 )
                 Text(label)
+            }
+            if (category == AgentContextCategory.GOALS.wireValue &&
+                category in authorizedCategories
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = controller.includeExistingAgentGoals,
+                        onCheckedChange = controller::setIncludeExistingAgentGoals,
+                        modifier = Modifier.testTag("agent_include_existing_goals"),
+                    )
+                    Text("Inclure mes objectifs actifs existants")
+                }
+                Text(
+                    if (controller.includeExistingAgentGoals) {
+                        "Leur état actuel peut être inclus. Les événements Focus et check-in antérieurs au consentement restent exclus."
+                    } else {
+                        "Désactivé par défaut. Seuls les objectifs créés ou modifiés depuis ce consentement seront inclus."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         if (mandate.sharedDataCategories.isEmpty()) {
@@ -719,6 +766,11 @@ private fun SharedDataPanel(controller: AtlasController) {
         }
         Text("L'observation UsageStats exige son propre consentement Android et ATLAS. Les actions n'accordent aucune permission système.", style = MaterialTheme.typography.bodySmall)
     }
+}
+
+private fun dev.atlas.coach.sync.agent.context.LastContextDisclosureStatus.displayLabel(): String = when (this) {
+    dev.atlas.coach.sync.agent.context.LastContextDisclosureStatus.SUCCESS -> "écriture terminée côté ATLAS"
+    dev.atlas.coach.sync.agent.context.LastContextDisclosureStatus.ATTEMPTED -> "tentative, réponse non confirmée"
 }
 
 @Composable

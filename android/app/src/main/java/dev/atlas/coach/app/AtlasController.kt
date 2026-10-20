@@ -155,6 +155,8 @@ import dev.atlas.coach.sync.agent.context.AgentContextCategory
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
 import dev.atlas.coach.sync.agent.context.AgentContextPreview
 import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
+import dev.atlas.coach.sync.agent.context.LastContextDisclosureAudit
+import dev.atlas.coach.sync.agent.context.LastContextDisclosureStatus
 import dev.atlas.coach.location.LocationSummary
 import dev.atlas.coach.location.MobilitySessionStopReason
 import dev.atlas.coach.usage.ObservationRecord
@@ -197,6 +199,13 @@ class AtlasController(
         persistenceDiagnosticsStoreOverride ?: AndroidPersistenceDiagnosticsStore(appContext),
     )
     private val store = LocalStateStore(stateBackendOverride ?: AndroidStateBackend(appContext))
+    private data class InitialState(
+        val readResult: StateReadResult,
+        val legacyContextAudit: LastContextDisclosureAudit?,
+        val contextAuditMigrationPending: Boolean,
+    )
+
+    private val initialState = readInitialState()
     private val syncOutbox: EventOutbox = AndroidSyncStorage.outbox(appContext)
     private val syncTokenStore = SharedPreferencesBearerTokenStore(appContext)
     private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
@@ -219,8 +228,7 @@ class AtlasController(
     private val focusNotifications = AndroidFocusNotifications(appContext)
     private val routineAlarms = AndroidRoutineProposalScheduler(appContext)
     private val habitReminderScheduler = AndroidHabitReminderScheduler(appContext)
-    private val stateReadResult = runCatching { store.readDocument() }
-        .getOrElse { StateReadResult.Corrupt(null, "impossible de lire le stockage local") }
+    private val stateReadResult = initialState.readResult
     private val recovery: RecoveredAtlasState = when (val result = stateReadResult) {
         is StateReadResult.Loaded -> runCatching { AtlasStateRecovery.recover(result.state) }
             .getOrElse { RecoveredAtlasState(emptyMap(), setOf("document")) }
@@ -244,7 +252,7 @@ class AtlasController(
     private val persistenceAllowed = recoveryReason == null || quarantineSucceeded
     private val recoveryNotice = recoveryReason?.let { reason ->
         if (quarantineSucceeded) {
-            "Certaines données locales ont été écartées ($reason). Une copie brute a été mise en quarantaine; les valeurs de secours sont actives."
+            "Certaines données locales ont été écartées ($reason). Une copie locale a été mise en quarantaine; les valeurs de secours sont actives."
         } else {
             "Certaines données locales sont illisibles ($reason). La copie de secours n'a pas pu être garantie; les valeurs de secours sont chargées sans écraser le stockage."
         }
@@ -397,13 +405,60 @@ class AtlasController(
     private var agentConsentMigrationPending = !restored.containsKey(KEY_AGENT_CONTEXT_CONSENT_DATES)
     private var stateGraphReady = false
     private var persistRequestedDuringInitialization = false
-    private var lastSharedAgentContextJsonSnapshot by mutableStateOf(restored["lastAgentSharedContext"] as? String)
-    private var lastSharedAgentContextAtUtcMillisSnapshot by mutableStateOf(
-        (restored["lastAgentSharedContextAt"] as? Number)?.toLong(),
+    private var lastSharedAgentContextJsonSnapshot by mutableStateOf<String?>(null)
+    private var lastContextDisclosureAuditSnapshot by mutableStateOf(
+        LastContextDisclosureAudit.fromMap(restored[KEY_LAST_CONTEXT_DISCLOSURE_AUDIT].asMap())
+            ?: if (restored.containsKey(KEY_LAST_CONTEXT_DISCLOSURE_AUDIT)) null else initialState.legacyContextAudit,
     )
+    private var lastContextAuditMigrationPending = initialState.contextAuditMigrationPending
     private var agentPlanReply by mutableStateOf(restored["agentPlanReply"] as? String)
     private var proactiveEngagementModeSnapshot by mutableStateOf(ProactiveEngagementMode.NORMAL)
     @Volatile private var proactiveCoachStateValue: Any? = restored["proactiveCoach"]
+
+    private fun readInitialState(): InitialState {
+        val result = runCatching { store.readDocument() }
+            .getOrElse { StateReadResult.Corrupt(null, "impossible de lire le stockage local") }
+        return when (result) {
+            is StateReadResult.Loaded -> {
+                val values = result.state
+                val hasAudit = values.containsKey(KEY_LAST_CONTEXT_DISCLOSURE_AUDIT)
+                val legacyPayload = values["lastAgentSharedContext"] as? String
+                val audit = if (hasAudit) null else LastContextDisclosureAudit.fromLegacyPayload(
+                    legacyPayload,
+                    (values["lastAgentSharedContextAt"] as? Number)?.toLong(),
+                )
+                val sanitizedValues = values - setOf("lastAgentSharedContext", "lastAgentSharedContextAt")
+                val sanitizedJson = runCatching {
+                    JSONObject(result.rawJson).apply {
+                        remove("lastAgentSharedContext")
+                        remove("lastAgentSharedContextAt")
+                    }.toString()
+                }.getOrElse { JSONObject(sanitizedValues).toString() }
+                InitialState(
+                    readResult = StateReadResult.Loaded(sanitizedValues, sanitizedJson),
+                    legacyContextAudit = audit,
+                    contextAuditMigrationPending = !hasAudit && legacyPayload != null,
+                )
+            }
+            is StateReadResult.Corrupt -> {
+                // Unparseable documents keep their raw copy: losing the quarantine would forbid every later write.
+                val sanitizedJson = result.rawJson?.let { raw ->
+                    runCatching {
+                        JSONObject(raw).apply {
+                            remove("lastAgentSharedContext")
+                            remove("lastAgentSharedContextAt")
+                        }.toString()
+                    }.getOrDefault(raw)
+                }
+                InitialState(
+                    readResult = StateReadResult.Corrupt(sanitizedJson, result.reason),
+                    legacyContextAudit = null,
+                    contextAuditMigrationPending = false,
+                )
+            }
+            StateReadResult.Missing -> InitialState(StateReadResult.Missing, null, false)
+        }
+    }
 
     private val locationPanelCoordinator = LocationPanelCoordinator(appContext)
     private val agentContextCoordinator = AgentContextCoordinator(
@@ -429,6 +484,10 @@ class AtlasController(
         agentAccessAllowed = ::isAgentRequestAllowed,
         showConsentedContext = ::isAgentContextVisible,
         blockedCategories = revocationBarrier::blockedCategories,
+        initialIncludeExistingGoals = restored[KEY_AGENT_INCLUDE_EXISTING_GOALS] as? Boolean ?: false,
+        persistIncludeExistingGoals = {
+            persistOrThrow("agent.goals_include_existing")
+        },
     )
     private val goalPanelCoordinator = GoalPanelCoordinator(
         readSubdocument = { goalsSubdocument },
@@ -536,6 +595,15 @@ class AtlasController(
             stateReadResult == StateReadResult.Missing -> persist()
             deferredPersistenceRequested && persistenceAllowed -> persist()
         }
+        if (lastContextAuditMigrationPending && persistenceAllowed) {
+            try {
+                persistOrThrow("agent.context_audit_migration")
+                lastContextAuditMigrationPending = false
+            } catch (_: PersistOperationException) {
+                latestMessage = "Le résumé local du dernier partage n'a pas pu être migré. Les anciennes valeurs restent masquées."
+                touch()
+            }
+        }
         refreshAgentApiRuntime()
         if (canUseRemoteSync() && syncOutbox.size() > 0) scheduleSync(0L)
     }
@@ -595,8 +663,11 @@ class AtlasController(
     val goalHabitLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.habitLinkOptions()
     val nextPriorityGoalAction: String? get() = goalPanelCoordinator.nextPriorityAction()
     val agentContextPreview: AgentContextPreview get() = agentContextCoordinator.preview()
-    val lastSharedAgentContextJson: String? get() = lastSharedAgentContextJsonSnapshot
-    val lastSharedAgentContextAtUtcMillis: Long? get() = lastSharedAgentContextAtUtcMillisSnapshot
+    val lastSharedAgentContextJson: String?
+        get() = lastSharedAgentContextJsonSnapshot.takeIf { agentContextPreview.authorizedCategories.isNotEmpty() }
+    val lastContextDisclosureAudit: LastContextDisclosureAudit? get() = lastContextDisclosureAuditSnapshot
+    val lastSharedAgentContextAtUtcMillis: Long? get() = lastContextDisclosureAuditSnapshot?.sentAtUtcMillis
+    val includeExistingAgentGoals: Boolean get() = agentContextCoordinator.includesExistingGoals()
     val latestAgentPlanReply: String? get() = agentPlanReply
     val proactiveEngagementMode: ProactiveEngagementMode get() = proactiveEngagementModeSnapshot
     val locationPanelState: LocationPanelState
@@ -666,6 +737,7 @@ class AtlasController(
         try {
             if (!enabled) agentRequestGeneration.incrementAndGet()
             locationPanelCoordinator.setCoachSummaryConsent(enabled)
+            if (!enabled) purgeLastSharedContextCategory(AgentContextCategory.LOCATION_SUMMARY.wireValue)
             if (!enabled) locationPanelCoordinator.stopMobility(MobilitySessionStopReason.SHARING_REVOKED)
             queueProactivePurgeRevoked()
             if (!enabled) {
@@ -1116,11 +1188,31 @@ class AtlasController(
                 freshRequestContext = agentContextCoordinator::requestContext,
                 onContextWritten = { snapshot ->
                     check(runOnMainAndWait {
-                        lastSharedAgentContextJsonSnapshot = snapshot.toJsonString()
-                        lastSharedAgentContextAtUtcMillisSnapshot = clock.nowMillis()
-                        persist(operation = "agent.shared_context")
-                        true
-                    }) { "Could not persist the exact shared context" }
+                        val categoriesStillAllowed = agentContextCoordinator.preview().authorizedCategories.toSet()
+                        var payloadJson = snapshot.toJsonString()
+                        snapshot.consentedCategories.filterNot { it in categoriesStillAllowed }.forEach { revoked ->
+                            payloadJson = LastContextDisclosureAudit.purgePayloadCategory(payloadJson, revoked) ?: ""
+                        }
+                        lastSharedAgentContextJsonSnapshot = payloadJson.takeIf {
+                            it.isNotEmpty() && categoriesStillAllowed.isNotEmpty() && isAgentContextVisible()
+                        }
+                        lastContextDisclosureAuditSnapshot = LastContextDisclosureAudit(
+                            sentAtUtcMillis = clock.nowMillis().coerceAtLeast(1L),
+                            categoryNames = snapshot.consentedCategories,
+                            status = LastContextDisclosureStatus.SUCCESS,
+                        )
+                        try {
+                            persistOrThrow("agent.shared_context")
+                            true
+                        } catch (_: Exception) {
+                            lastContextDisclosureAuditSnapshot = lastContextDisclosureAuditSnapshot?.copy(
+                                status = LastContextDisclosureStatus.ATTEMPTED,
+                            )
+                            latestMessage = "Le contexte a été écrit vers le backend, mais son audit local n'a pas pu être enregistré. Une copie distante peut exister."
+                            touch()
+                            false
+                        }
+                    }) { "Could not persist the context disclosure audit" }
                 },
                 requestAllowed = ::isAgentRequestAllowed,
             )
@@ -1798,6 +1890,7 @@ class AtlasController(
         val barrierStored = blockAgentForRevocation("agent.disable")
         agentAuthorizationCommitInProgress.set(true)
         try {
+            clearLastSharedContextPayload()
             proactiveEffectGeneration.incrementAndGet()
             queueProactiveDisableAndPurge()
             capabilities = capabilities + (CAP_AGENT to false)
@@ -1867,6 +1960,7 @@ class AtlasController(
         val barrierStored = blockAgentForRevocation("agent.suspend")
         agentAuthorizationCommitInProgress.set(true)
         try {
+            clearLastSharedContextPayload()
             proactiveEffectGeneration.incrementAndGet()
             agentMandateStore.replace(agentMandateStore.current().copy(suspended = true))
             agentRequestGeneration.incrementAndGet()
@@ -1926,6 +2020,7 @@ class AtlasController(
         val barrierStored = blockAgentForRevocation("agent.revoke")
         agentAuthorizationCommitInProgress.set(true)
         try {
+            clearLastSharedContextPayload()
             proactiveEffectGeneration.incrementAndGet()
             queueProactiveDisableAndPurge()
             agentRequestGeneration.incrementAndGet()
@@ -1955,7 +2050,10 @@ class AtlasController(
 
     fun setAgentSharedCategory(category: String, allowed: Boolean) {
         require(category in AgentContextCategory.wireValueSet) { "Unknown context category" }
-        if (!allowed) blockAgentForRevocation("agent.category_consent", category)
+        if (!allowed) {
+            blockAgentForRevocation("agent.category_consent", category)
+            purgeLastSharedContextCategory(category)
+        }
         updateAgentMandate(
             operation = "agent.category_consent",
             explicitOptIn = allowed,
@@ -1965,13 +2063,64 @@ class AtlasController(
             val next = mandate.copy(
                 sharedDataCategories = if (allowed) mandate.sharedDataCategories + category else mandate.sharedDataCategories - category,
             )
-            agentContextCoordinator.setCategoryConsent(category, allowed)
+            agentContextCoordinator.setCategoryConsent(
+                category,
+                allowed,
+                resetIncludeExistingGoals = category == AgentContextCategory.GOALS.wireValue,
+            )
             if (!allowed) queueProactivePurgeRevoked()
             if (!allowed && category == AgentContextCategory.LOCATION_SUMMARY.wireValue) {
                 locationPanelCoordinator.setCoachSummaryConsent(false)
             }
             next
         }
+    }
+
+    fun setIncludeExistingAgentGoals(enabled: Boolean) {
+        if (enabled && AgentContextCategory.GOALS.wireValue !in agentContextCoordinator.preview().authorizedCategories) {
+            latestMessage = "Activez d'abord le partage de la catégorie Objectifs."
+            touch()
+            return
+        }
+        try {
+            agentContextCoordinator.setIncludeExistingGoals(enabled)
+            latestMessage = if (enabled) {
+                "Choix enregistré. Les objectifs actifs existants pourront apparaître dans le prochain envoi."
+            } else {
+                "Choix enregistré. Seuls les objectifs créés ou modifiés depuis le consentement seront inclus."
+            }
+            touch()
+        } catch (_: Exception) {
+            latestMessage = "Impossible d'enregistrer ce choix. Les objectifs actifs existants restent exclus."
+            touch()
+        }
+    }
+
+    fun deleteLastContextDisclosureHistory() {
+        val previousAudit = lastContextDisclosureAuditSnapshot
+        clearLastSharedContextPayload()
+        lastContextDisclosureAuditSnapshot = null
+        try {
+            persistOrThrow("agent.context_audit_delete")
+            latestMessage = "Historique local du contexte supprimé. Une copie déjà reçue par le backend n'est pas supprimée."
+        } catch (_: Exception) {
+            lastContextDisclosureAuditSnapshot = previousAudit
+            latestMessage = "Impossible de supprimer durablement l'historique local. Une copie déjà reçue par le backend n'est pas supprimée."
+        }
+        touch()
+    }
+
+    private fun purgeLastSharedContextCategory(category: String) {
+        lastSharedAgentContextJsonSnapshot = LastContextDisclosureAudit.purgePayloadCategory(
+            lastSharedAgentContextJsonSnapshot,
+            category,
+        )
+    }
+
+    private fun clearLastSharedContextPayload() {
+        lastSharedAgentContextJsonSnapshot = LastContextDisclosureAudit.purgeAllPayloadValues(
+            lastSharedAgentContextJsonSnapshot,
+        )
     }
 
     fun setAgentFocusWindow(
@@ -3298,8 +3447,8 @@ class AtlasController(
             "goals" to goalsSubdocument,
             "agentContentActivity" to contentActivityTimestamps,
             KEY_AGENT_CONTEXT_CONSENT_DATES to agentContextCoordinator.consentDates(),
-            "lastAgentSharedContext" to lastSharedAgentContextJsonSnapshot,
-            "lastAgentSharedContextAt" to lastSharedAgentContextAtUtcMillisSnapshot,
+            KEY_LAST_CONTEXT_DISCLOSURE_AUDIT to lastContextDisclosureAuditSnapshot?.toMap(),
+            KEY_AGENT_INCLUDE_EXISTING_GOALS to agentContextCoordinator.includesExistingGoals(),
             "agentPlanReply" to agentPlanReply,
             "proactiveCoach" to proactiveCoachStateValue,
         )
@@ -3357,6 +3506,8 @@ class AtlasController(
         const val MAX_AGENT_CONVERSATION_MESSAGES = 80
         private const val MAX_AGENT_CONTENT_ACTIVITY = 200
         private const val KEY_AGENT_CONTEXT_CONSENT_DATES = "agentContextConsentAt"
+        private const val KEY_LAST_CONTEXT_DISCLOSURE_AUDIT = "lastAgentContextDisclosureAudit"
+        private const val KEY_AGENT_INCLUDE_EXISTING_GOALS = "agentIncludeExistingGoals"
         private const val KEY_PENDING_USAGE_PACKAGES = "pending_allowlist"
         private val DAILY_PLAN_DUE_TIME: LocalTime = LocalTime.of(8, 0)
         private val PROACTIVE_QUIET_HOURS_START: LocalTime = LocalTime.of(22, 0)

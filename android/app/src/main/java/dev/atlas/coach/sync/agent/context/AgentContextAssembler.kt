@@ -71,6 +71,7 @@ class AgentContextAssembler {
         consentAtUtcMillis: Map<String, Long>,
         domains: AgentContextDomainViews,
         nowUtcMillis: Long,
+        includeExistingGoals: Boolean = false,
     ): AgentContextSnapshot {
         require(nowUtcMillis > 0L) { "Context assembly requires a real current time" }
         val mandateIsCurrent = !currentMandate.revoked && !currentMandate.suspended &&
@@ -104,6 +105,7 @@ class AgentContextAssembler {
             val goalsConsent = validConsentDates[AgentContextCategory.GOALS.wireValue]
             if (goalsConsent != null) addGoalCandidates(
                 domains.goals, domains.focusSessions, domains.habitCheckIns, goalsConsent, nowUtcMillis,
+                includeExistingGoals,
             )
 
             val locationConsent = validConsentDates[AgentContextCategory.LOCATION_SUMMARY.wireValue]
@@ -116,6 +118,7 @@ class AgentContextAssembler {
             candidates,
             sourceUsageConsent = domains.usageConsent,
             locationSharingEnabledAtAssembly = domains.locationSummarySharingEnabled,
+            includeExistingGoals = includeExistingGoals,
         )
     }
 
@@ -222,20 +225,24 @@ class AgentContextAssembler {
 
     private fun MutableList<Candidate>.addGoalCandidates(
         goals: List<GoalRecord>, sessions: List<FocusSession>, checkIns: List<HabitCheckIn>, consentAt: Long, now: Long,
+        includeExistingGoals: Boolean,
     ) {
         val consentDate = Instant.ofEpochMilli(consentAt).atZone(ZoneOffset.UTC).toLocalDate()
         goals.asSequence()
             .filter { it.status == GoalStatus.ACTIVE }
-            .filter { it.updatedAt in consentAt..now }
+            .filter { it.updatedAt <= now && (includeExistingGoals || it.updatedAt >= consentAt) }
             .distinctBy(GoalRecord::id)
             .forEach { goal ->
                 val linkedSessions = GoalProgressCalculator.latestFinishedSessions(sessions).asSequence()
                     .filter { it.id in goal.linkedFocusSessionIds }
-                    .filter { it.createdAtUtcMillis in consentAt..now }
+                    .filter { it.createdAtUtcMillis <= now &&
+                        (includeExistingGoals || it.createdAtUtcMillis >= consentAt) }
                     .toList()
                 val linkedCheckIns = checkIns.asSequence()
-                    .filter { it.habitId in goal.linkedHabitIds && it.createdAtUtcMillis in consentAt..now }
-                    .filter { !it.date.isBefore(consentDate) }
+                    .filter { it.habitId in goal.linkedHabitIds }
+                    .filter { it.createdAtUtcMillis <= now &&
+                        (includeExistingGoals || it.createdAtUtcMillis >= consentAt) }
+                    .filter { includeExistingGoals || !it.date.isBefore(consentDate) }
                     .distinctBy { it.habitId to it.dateEpochDay }
                     .toList()
                 val progress = GoalProgressCalculator.calculate(goal, linkedSessions, linkedCheckIns)
@@ -281,6 +288,7 @@ class AgentContextAssembler {
         candidates: List<Candidate>,
         sourceUsageConsent: ObservationConsent? = null,
         locationSharingEnabledAtAssembly: Boolean = false,
+        includeExistingGoals: Boolean = false,
     ): AgentContextSnapshot {
         val selected = linkedMapOf<String, MutableList<Candidate>>()
         val sorted = candidates.sortedWith(
@@ -305,7 +313,7 @@ class AgentContextAssembler {
                 if (categoryItems.isEmpty()) selected.remove(original.category)
             }
         }
-        return snapshotFrom(authorized, selected, sourceUsageConsent, locationSharingEnabledAtAssembly)
+        return snapshotFrom(authorized, selected, sourceUsageConsent, locationSharingEnabledAtAssembly, includeExistingGoals)
     }
 
     private fun snapshotFrom(
@@ -313,6 +321,7 @@ class AgentContextAssembler {
         selected: Map<String, List<Candidate>>,
         sourceUsageConsent: ObservationConsent?,
         locationSharingEnabledAtAssembly: Boolean,
+        includeExistingGoals: Boolean,
     ): AgentContextSnapshot {
         val items = linkedMapOf<String, List<String>>()
         val timestamps = linkedMapOf<String, List<Long>>()
@@ -329,6 +338,7 @@ class AgentContextAssembler {
             timestamps,
             usageConsentAtAssembly = sourceUsageConsent,
             locationSharingEnabledAtAssembly = locationSharingEnabledAtAssembly,
+            includesExistingGoalsAtAssembly = includeExistingGoals,
         )
     }
 
