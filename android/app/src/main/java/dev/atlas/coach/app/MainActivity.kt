@@ -16,6 +16,7 @@ import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import dev.atlas.coach.app.ui.AtlasTheme
 import dev.atlas.coach.app.ui.ThemePreferenceStore
+import java.util.UUID
 
 /** Coach dashboard and management screens. Android HOME is implemented by [LauncherActivity]. */
 class MainActivity : ComponentActivity() {
@@ -33,7 +34,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        controller.handleNotificationIntent(intent)
+        handleNotificationIntent(intent)
         setContent {
             val themePreferenceStore = remember { ThemePreferenceStore.get(applicationContext) }
             AtlasTheme(preference = themePreferenceStore.currentPreference) {
@@ -50,12 +51,28 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        controller.handleNotificationIntent(intent)
+        handleNotificationIntent(intent)
     }
 
     override fun onResume() {
         super.onResume()
         syncHomeRole()
+        controller.refreshProactiveCoachWork()
+    }
+
+    private fun handleNotificationIntent(incoming: Intent?) {
+        if (incoming?.action != ProactiveCoachNotificationPublisher.ACTION_OPEN_PROPOSAL) {
+            controller.handleNotificationIntent(incoming)
+            return
+        }
+        if (incoming.getStringExtra(ProactiveCoachNotificationPublisher.EXTRA_DESTINATION) !=
+            ProactiveCoachNotificationPublisher.DESTINATION_COACH
+        ) return
+        val proposalId = incoming.getStringExtra(ProactiveCoachNotificationPublisher.EXTRA_LOCAL_PROPOSAL_ID)
+            ?: return
+        val canonicalId = runCatching { UUID.fromString(proposalId).toString() }.getOrNull()
+        if (canonicalId != proposalId || controller.agentInbox.none { it.id == proposalId }) return
+        controller.openProactiveProposalFromNotification(proposalId)
     }
 
     private fun syncHomeRole() {

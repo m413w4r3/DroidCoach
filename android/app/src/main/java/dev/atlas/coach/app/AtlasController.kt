@@ -149,6 +149,9 @@ import dev.atlas.coach.coach.proactive.ProactiveEngagementMode
 import dev.atlas.coach.coach.proactive.ProactiveNotificationContent
 import dev.atlas.coach.coach.proactive.ProactivePlanRequest
 import dev.atlas.coach.coach.proactive.ProactivePlanResponse
+import dev.atlas.coach.coach.proactive.ProactiveRunResult
+import dev.atlas.coach.coach.proactive.ProactiveRunStatus
+import dev.atlas.coach.coach.proactive.android.ProactiveCoachWorkScheduler
 import dev.atlas.coach.location.MobilitySessionCompletion
 import dev.atlas.coach.location.MobilitySessionStatusStore
 import dev.atlas.coach.sync.agent.context.AgentContextCategory
@@ -209,7 +212,9 @@ class AtlasController(
     private val syncGeneration = AtomicLong(0L)
     private val proactiveEffectGeneration = AtomicLong(0L)
     private val proactiveDrainScheduled = AtomicBoolean(false)
+    private val proactiveDrainLock = Any()
     private val pendingProactiveEvents = ConcurrentLinkedQueue<CoachTrigger>()
+    private val proactiveWorkerWaiters = ConcurrentLinkedQueue<CompletableFuture<ProactiveRunResult>>()
     private val effectiveConsent = AtomicReference(SyncConsent.DISABLED)
     @Volatile private var remoteBackend: RemoteBackendGateway? = null
     @Volatile private var syncRetryFuture: ScheduledFuture<*>? = null
@@ -599,6 +604,8 @@ class AtlasController(
     val lastSharedAgentContextAtUtcMillis: Long? get() = lastSharedAgentContextAtUtcMillisSnapshot
     val latestAgentPlanReply: String? get() = agentPlanReply
     val proactiveEngagementMode: ProactiveEngagementMode get() = proactiveEngagementModeSnapshot
+    var highlightedProactiveProposalId by mutableStateOf<String?>(null)
+        private set
     val locationPanelState: LocationPanelState
         get() = locationPanelCoordinator.panelState(
             locationCapability = capabilities[CAP_LOCATION] == true,
@@ -766,11 +773,64 @@ class AtlasController(
         (Build.VERSION.SDK_INT < 33 || appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
             appContext.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
 
+    private fun proactiveWorkEligible(): Boolean =
+        isAgentRequestAllowed() && isProactiveCoachEnabled() &&
+            ProactiveCoachNotificationPublisher.notificationsAvailable(appContext)
+
+    /** Rechecks all durable opt-ins and Android notification availability before scheduling work. */
+    fun refreshProactiveCoachWork() {
+        ProactiveCoachWorkScheduler.refresh(appContext, proactiveWorkEligible())
+    }
+
+    /** Worker entry point. Event collection stays on main; all plan I/O stays on [syncWorker]. */
+    fun runProactiveWorkFromWorker(): CompletableFuture<ProactiveRunResult> {
+        val result = CompletableFuture<ProactiveRunResult>()
+        val prepare = Runnable {
+            refreshProactiveCoachWork()
+            if (!proactiveWorkEligible()) {
+                result.complete(ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED))
+            } else {
+                synchronized(proactiveDrainLock) {
+                    if (result.isCancelled) return@Runnable
+                    proactiveWorkerWaiters.add(result)
+                    result.whenComplete { _, _ -> if (result.isCancelled) proactiveWorkerWaiters.remove(result) }
+                    val now = clock.nowMillis()
+                    recordDueGoalReviews(now)
+                    recordDueHabitReminders(now)
+                    recordDailyPlanDue(now)
+                    scheduleProactiveEventDrain()
+                }
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) prepare.run() else mainHandler.post(prepare)
+        return result
+    }
+
     fun onNotificationPermissionResult(granted: Boolean) {
         latestMessage = if (granted) {
             "Notifications autorisées. Les alertes restent facultatives et réglables dans Android."
         } else {
             "Notifications refusées. Focus, routines et rappels restent utilisables dans ATLAS au premier plan."
+        }
+        refreshProactiveCoachWork()
+        touch()
+    }
+
+    /** Opens only a proposal already present in the local inbox; it never accepts or dispatches it. */
+    fun openProactiveProposalFromNotification(proposalId: String) {
+        if (!dev.atlas.coach.coach.proactive.isLocalProposalId(proposalId)) return
+        if (!isAgentRequestAllowed()) {
+            latestMessage = "Le mandat du Coach n'est pas actif. Aucune action n'a été effectuée."
+            touch()
+            return
+        }
+        val entry = agentInboxRepository.get(proposalId) ?: return
+        highlightedProactiveProposalId = entry.id
+        navigationState.selectTab(AtlasScreenId.COACH)
+        latestMessage = if (entry.proposal.state == ProposalState.EXPIRED) {
+            "Cette proposition a expiré. Aucune action n'a été effectuée."
+        } else {
+            "Proposition ouverte dans le Coach. Aucune action n'a été effectuée."
         }
         touch()
     }
@@ -1209,8 +1269,10 @@ class AtlasController(
         if (!isProactiveCoachEnabled()) return
         val batch = events.toList()
         if (batch.isEmpty()) return
-        pendingProactiveEvents.addAll(batch)
-        scheduleProactiveEventDrain()
+        synchronized(proactiveDrainLock) {
+            pendingProactiveEvents.addAll(batch)
+            scheduleProactiveEventDrain()
+        }
     }
 
     private fun queueProactiveRun() {
@@ -1225,22 +1287,41 @@ class AtlasController(
     private fun scheduleProactiveEventDrain() {
         if (!proactiveDrainScheduled.compareAndSet(false, true)) return
         syncWorker.schedule({
+            var workerWaiters = emptyList<CompletableFuture<ProactiveRunResult>>()
             try {
-                val eventBatch = buildList {
-                    while (true) {
-                        val event = pendingProactiveEvents.poll() ?: break
-                        add(event)
+                val snapshot = synchronized(proactiveDrainLock) {
+                    val waiters = buildList {
+                        while (true) add(proactiveWorkerWaiters.poll() ?: break)
                     }
+                    val events = buildList {
+                        while (true) add(pendingProactiveEvents.poll() ?: break)
+                    }
+                    waiters to events
                 }
+                workerWaiters = snapshot.first
+                val eventBatch = snapshot.second
+                var runRequired = workerWaiters.isNotEmpty()
                 if (eventBatch.isNotEmpty() && isProactiveCoachEnabled()) {
                     val recorded = proactiveCoachCoordinator.recordAll(eventBatch)
-                    if (recorded.any { it == dev.atlas.coach.coach.proactive.CoachTriggerRecordStatus.RECORDED }) {
-                        runCatching { proactiveCoachCoordinator.runDue() }
+                    runRequired = runRequired || recorded.any {
+                        it == dev.atlas.coach.coach.proactive.CoachTriggerRecordStatus.RECORDED
                     }
                 }
+                if (runRequired) {
+                    val decision = if (proactiveWorkEligible()) {
+                        runCatching { proactiveCoachCoordinator.runDue() }
+                            .getOrElse { ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED) }
+                    } else {
+                        ProactiveCoachWorkScheduler.cancel(appContext)
+                        ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED)
+                    }
+                    workerWaiters.forEach { it.complete(decision) }
+                }
+            } catch (_: Exception) {
+                workerWaiters.forEach { it.complete(ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED)) }
             } finally {
                 proactiveDrainScheduled.set(false)
-                if (pendingProactiveEvents.isNotEmpty()) scheduleProactiveEventDrain()
+                if (pendingProactiveEvents.isNotEmpty() || proactiveWorkerWaiters.isNotEmpty()) scheduleProactiveEventDrain()
             }
         }, PROACTIVE_EVENT_DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS)
     }
@@ -1285,10 +1366,18 @@ class AtlasController(
                 request,
             )
         ) return null
+        val localProposalId = response.proposals.firstNotNullOfOrNull { proposal ->
+            val entry = agentInboxRepository.get(proposal.proposalId) ?: return@firstNotNullOfOrNull null
+            entry.id.takeIf {
+                entry.proposal.state in setOf(ProposalState.PROPOSED, ProposalState.PENDING_CONFIRMATION) &&
+                    entry.proposal.expiresAtUtcMillis > clock.nowMillis()
+            }
+        } ?: return ProactivePlanResponse()
         val notificationBody = response.reply.trim().take(ProactiveNotificationContent.MAX_BODY_LENGTH)
             .ifBlank { "Ouvrez ATLAS pour consulter votre prochaine étape." }
         return ProactivePlanResponse(
-            ProactiveNotificationContent("Votre plan ATLAS est prêt", notificationBody),
+            notification = ProactiveNotificationContent("Votre plan ATLAS est prêt", notificationBody),
+            localProposalId = localProposalId,
         )
     }
 
@@ -1820,6 +1909,7 @@ class AtlasController(
         } finally {
             agentAuthorizationCommitInProgress.set(false)
             refreshAgentApiRuntime()
+            refreshProactiveCoachWork()
         }
     }
 
@@ -1860,6 +1950,7 @@ class AtlasController(
         } finally {
             agentAuthorizationCommitInProgress.set(false)
             refreshAgentApiRuntime()
+            refreshProactiveCoachWork()
         }
     }
 
@@ -1885,6 +1976,7 @@ class AtlasController(
         } finally {
             agentAuthorizationCommitInProgress.set(false)
             refreshAgentApiRuntime()
+            refreshProactiveCoachWork()
         }
     }
 
@@ -1919,6 +2011,7 @@ class AtlasController(
         } finally {
             agentAuthorizationCommitInProgress.set(false)
             refreshAgentApiRuntime()
+            refreshProactiveCoachWork()
         }
     }
 
@@ -1944,6 +2037,7 @@ class AtlasController(
         } finally {
             agentAuthorizationCommitInProgress.set(false)
             refreshAgentApiRuntime()
+            refreshProactiveCoachWork()
         }
     }
 
@@ -2875,6 +2969,7 @@ class AtlasController(
         recordDueHabitReminders()
         recordDailyPlanDue()
         queueProactiveRun()
+        refreshProactiveCoachWork()
     }
 
     fun usageAccessSettingsIntent(): Intent = systemUsageAccessSettingsIntent()
@@ -3071,6 +3166,7 @@ class AtlasController(
         cancelPendingAgentWork("Pause d'urgence locale; action annulée")
         latestMessage = "Pause d'urgence active pendant 30 minutes."
         persist()
+        refreshProactiveCoachWork()
     }
 
     fun endEmergencyPause() {
@@ -3078,6 +3174,7 @@ class AtlasController(
         policy = policy.copy(pauseUntil = null)
         latestMessage = "La pause d'urgence est terminée."
         persist()
+        refreshProactiveCoachWork()
     }
 
     fun setCapability(name: String, enabled: Boolean) {
@@ -3159,6 +3256,7 @@ class AtlasController(
             }
         }
         persist()
+        if (name == CAP_AGENT_PROACTIVE) refreshProactiveCoachWork()
     }
 
     fun exportAllData(): String = JSONObject(stateMap()).toString(2)

@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -109,6 +110,9 @@ internal fun AgentCoachScreen(
     var message by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<AgentInboxEntry?>(null) }
     val pendingProposals = remember(controller, revision) { controller.visibleAgentProposals }
+    val notificationProposal = remember(controller, revision) {
+        controller.highlightedProactiveProposalId?.let { id -> controller.agentInbox.firstOrNull { it.id == id } }
+    }
     val latestProvenance = remember(controller, revision) {
         HomeAgentState.localDefault(controller).directiveStatusLabel()
     }
@@ -172,7 +176,7 @@ internal fun AgentCoachScreen(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Proposition prioritaire", style = MaterialTheme.typography.titleLarge)
-                val proposal = pendingProposals.firstOrNull()
+                val proposal = notificationProposal ?: pendingProposals.firstOrNull()
                 if (proposal == null) Text("Aucune proposition en attente.")
                 else {
                     val sourceMetadata = listOf(controller.agentProposalSourceSummary(proposal.proposal))
@@ -180,6 +184,11 @@ internal fun AgentCoachScreen(
                         entry = proposal,
                         provenanceLabel = readableProvenanceLabel(sourceMetadata, latestProvenance),
                         contextCategories = readableContextCategories(sourceMetadata),
+                        highlighted = proposal.id == controller.highlightedProactiveProposalId,
+                        showActions = controller.isAgentEnabled && proposal.proposal.state in setOf(
+                            ProposalState.PROPOSED,
+                            ProposalState.PENDING_CONFIRMATION,
+                        ),
                         onAccept = { controller.acceptAgentProposal(proposal.id) },
                         onEdit = { editing = proposal },
                         onPostpone = { controller.postponeAgentProposal(proposal.id) },
@@ -460,25 +469,36 @@ private fun AgentProposalCard(
     entry: AgentInboxEntry,
     provenanceLabel: String,
     contextCategories: String?,
+    highlighted: Boolean,
+    showActions: Boolean,
     onAccept: () -> Unit,
     onEdit: () -> Unit,
     onPostpone: () -> Unit,
     onReject: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth().testTag("agent_priority_proposal_${entry.id}")) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("agent_priority_proposal_${entry.id}"),
+        colors = CardDefaults.cardColors(
+            containerColor = if (highlighted) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(actionLabels[entry.proposal.actionType] ?: entry.proposal.actionType, style = MaterialTheme.typography.titleMedium)
             Text("Motif : ${entry.proposal.reason}")
+            if (highlighted) Text("Ouverte depuis une notification", style = MaterialTheme.typography.labelMedium)
             Text("Provenance : $provenanceLabel", style = MaterialTheme.typography.bodySmall)
             contextCategories?.let { Text("Catégories : $it", style = MaterialTheme.typography.bodySmall) }
             Text("État : ${proposalStateLabel(entry)}", style = MaterialTheme.typography.bodySmall)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
-                OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
-                TextButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
+            if (showActions) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
+                    OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
+                    TextButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
+                }
             }
         }
     }
