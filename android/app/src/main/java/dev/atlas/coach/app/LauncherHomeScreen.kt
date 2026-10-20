@@ -224,42 +224,52 @@ private fun LauncherHomeContent(
             }
             val activeFocus = agentState.focusCard?.takeIf(HomeAgentCard::isActiveFocus)
 
-            Column(
-                modifier = Modifier.fillMaxSize().clipToBounds()
-                    .then(if (drawerOpen) Modifier else Modifier.verticalScroll(rememberScrollState()))
-                    .testTag("launcher_home_scroll_region")
-                    .padding(top = 18.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (drawerOpen) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
-                            .testTag("launcher_drawer_header"),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+            if (drawerOpen) {
+                Box(
+                    modifier = Modifier.fillMaxSize().clipToBounds()
+                        .testTag("launcher_home_scroll_region")
+                        .padding(top = 18.dp, bottom = 12.dp),
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().testTag("launcher_drawer_list"),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text("Applications", style = MaterialTheme.typography.headlineMedium)
-                        Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth().testTag("launcher_search"),
-                        value = search,
-                        onValueChange = { search = it },
-                        label = { Text("Rechercher une application") },
-                        placeholder = { Text("Nom ou paquet") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
-                    )
-                    when {
-                        loading -> Text("Chargement des applications…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        loadError -> Text("La liste n'a pas pu être chargée. Revenez ici pour réessayer.", color = MaterialTheme.colorScheme.error)
-                        apps.isEmpty() -> Text("Aucune application avec un raccourci d'accueil n'est visible.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        filteredApps.isEmpty() -> Text("Aucune application ne correspond à cette recherche.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else -> LazyColumn(
-                            modifier = Modifier.fillMaxWidth().weight(1f).testTag("launcher_drawer_list"),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(items = filteredApps, key = { it.appPackage }) { app ->
+                        item(key = "drawer_header") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
+                                    .testTag("launcher_drawer_header"),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text("Applications", style = MaterialTheme.typography.headlineMedium)
+                                Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item(key = "drawer_search") {
+                            OutlinedTextField(
+                                modifier = Modifier.fillMaxWidth().testTag("launcher_search"),
+                                value = search,
+                                onValueChange = { search = it },
+                                label = { Text("Rechercher une application") },
+                                placeholder = { Text("Nom ou paquet") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
+                            )
+                        }
+                        when {
+                            loading -> item(key = "drawer_loading") {
+                                Text("Chargement des applications…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            loadError -> item(key = "drawer_error") {
+                                Text("La liste n'a pas pu être chargée. Revenez ici pour réessayer.", color = MaterialTheme.colorScheme.error)
+                            }
+                            apps.isEmpty() -> item(key = "drawer_empty") {
+                                Text("Aucune application avec un raccourci d'accueil n'est visible.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            filteredApps.isEmpty() -> item(key = "drawer_filtered_empty") {
+                                Text("Aucune application ne correspond à cette recherche.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            else -> items(items = filteredApps, key = { it.appPackage }) { app ->
                                 LauncherAppRow(
                                     app = app,
                                     pinned = app.appPackage in controller.launcherPinnedPackages,
@@ -268,8 +278,21 @@ private fun LauncherHomeContent(
                                 )
                             }
                         }
+                        launcherMessage?.let { message ->
+                            item(key = "drawer_message") {
+                                Text(message, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
-                } else {
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize().clipToBounds()
+                        .verticalScroll(rememberScrollState())
+                        .testTag("launcher_home_scroll_region")
+                        .padding(top = 18.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
                             .testTag("launcher_swipe_header"),
@@ -395,8 +418,8 @@ private fun LauncherHomeContent(
                             }
                         }
                     }
+                    launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
-                launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
 
