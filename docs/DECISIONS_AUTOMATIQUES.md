@@ -99,3 +99,7 @@
 - Les sous-sessions Nimbalyst utilisent `openai-codex:gpt-6-luna`, effort `xhigh`, notification de fin; au plus trois exécutants. Le checkout est partagé avec propriété exclusive des fichiers; les fichiers globaux sont réservés à S6.
 - Toute catégorie autorisée héritée sans date de consentement reçoit la date de migration, jamais une date ancienne implicite. Le contexte est réassemblé puis minimisé contre le consentement courant avant transport.
 - L’AVD personnel `Pixel_9_Pro_XL_2` est signalé invalide par avdmanager et reste intact. La recette utilise uniquement `atlas_v62_disposable_api37`, créé pour cette mission (API 37.2, x86_64, port 5580). Sa partition initiale de 774 Mio était saturée dès le démarrage; ce seul AVD neuf a été réinitialisé avec une partition de 4096 Mio avant toute installation ATLAS.
+
+## 2026-10-20 — V6.2.1 Lot D
+
+- Le tiroir d'applications Compose utilise `appPackage` comme clé stable et unique de `LazyColumn`; la règle de filtrage déduplique déjà les applications par package. La liste prend la hauteur restante au-dessus du footer permanent, tandis que le HOME text-first garde son scroll actuel. | Évite une clé d'index instable quand la recherche ou l'épinglage modifie la liste et maintient le footer séparé du contenu paresseux.
