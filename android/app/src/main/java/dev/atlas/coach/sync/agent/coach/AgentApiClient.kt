@@ -60,8 +60,8 @@ class AgentApiException(message: String, val statusCode: Int? = null, cause: Thr
 class AgentApiClient(
     baseUrl: String,
     private val tokenProvider: BearerTokenProvider,
-    private val connectTimeoutMillis: Int = 4_000,
-    private val readTimeoutMillis: Int = 65_000,
+    private val connectTimeoutMillis: Int = DEFAULT_CONNECT_TIMEOUT_MILLIS.toInt(),
+    private val readTimeoutMillis: Int = DEFAULT_READ_TIMEOUT_MILLIS.toInt(),
     private val freshRequestContext: ((AgentContextSnapshot) -> AgentRequestContext?)? = null,
     private val onContextWritten: ((AgentContextSnapshot) -> Unit)? = null,
     private val requestAllowed: () -> Boolean = { true },
@@ -269,6 +269,10 @@ class AgentApiClient(
     }
 
     companion object {
+        const val DEFAULT_CONNECT_TIMEOUT_MILLIS = 4_000L
+        const val DEFAULT_READ_TIMEOUT_MILLIS = 65_000L
+        const val DEFAULT_HTTP_TRANSPORT_TIMEOUT_BUDGET_MILLIS =
+            DEFAULT_CONNECT_TIMEOUT_MILLIS + DEFAULT_READ_TIMEOUT_MILLIS
         private const val MAX_REPLY_LENGTH = 4_000
         private const val MAX_PROPOSALS = 5
         private const val MAX_PROPOSALS_PER_PULL = 100
