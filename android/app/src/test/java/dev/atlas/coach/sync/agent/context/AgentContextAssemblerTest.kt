@@ -204,6 +204,100 @@ class AgentContextAssemblerTest {
     }
 
     @Test
+    fun existingGoalsChoiceIncludesCurrentOldActiveGoalButNeverPreConsentEvents() {
+        val consentAt = NOW - HOUR
+        val oldFocus = session("historic-focus", FocusStatus.FINISHED, consentAt - 1L, 25 * 60L, 1, 0L)
+        val currentFocus = session("current-focus", FocusStatus.FINISHED, consentAt + 1_000L, 60L, 1, 0L)
+        val oldCheckIn = checkIn("historic-checkin", "habit-1", utcDate(consentAt - DAY), consentAt - 2L)
+        val oldGoal = GoalRecord(
+            id = "old-active-goal",
+            title = "Fixture active legacy goal",
+            description = "Synthetic existing goal",
+            metric = GoalMetric.FOCUS_MINUTES,
+            targetValue = 120,
+            linkedFocusSessionIds = setOf(oldFocus.id),
+            linkedHabitIds = setOf("habit-1"),
+            createdAt = consentAt - 30L * DAY,
+            updatedAt = consentAt - 20L * DAY,
+        )
+        val inactiveOldGoal = oldGoal.copy(id = "inactive-old-goal", title = "Fixture inactive old goal", status = GoalStatus.PAUSED)
+        val domains = AgentContextDomainViews(
+            focusSessions = listOf(oldFocus, currentFocus),
+            habits = listOf(Habit("habit-1", "fixture habit", HabitSchedule.daily(), consentAt - 30L * DAY)),
+            habitCheckIns = listOf(oldCheckIn),
+            goals = listOf(oldGoal, inactiveOldGoal),
+        )
+        val mandate = mandate(shared = setOf("goals", "focus", "habit"))
+        val consentDates = mapOf("goals" to consentAt, "focus" to consentAt, "habit" to consentAt)
+
+        val withoutChoice = assembler.assemble(mandate, consentDates, domains, NOW)
+        val withChoice = assembler.assemble(mandate, consentDates, domains, NOW, includeExistingGoals = true)
+
+        assertFalse(withoutChoice.categories.containsKey("goals"))
+        assertEquals(1, withoutChoice.categories.getValue("focus").size)
+        assertTrue(withoutChoice.categories.getValue("focus").single().contains("1 min"))
+        assertTrue(withChoice.categories.getValue("goals").single().contains("Fixture active legacy goal"))
+        assertFalse(withChoice.toJsonString().contains("Fixture inactive old goal"))
+        assertEquals(1, withChoice.categories.getValue("focus").size)
+        assertTrue("focus events before consent remain excluded", withChoice.categories.getValue("focus").none { "25 min" in it })
+        assertTrue("check-in events before consent remain excluded", "habit" !in withChoice.categories)
+        assertFalse(withChoice.toJsonString().contains("historic-focus"))
+        assertFalse(withChoice.toJsonString().contains("historic-checkin"))
+    }
+
+    @Test
+    fun goalEditAfterConsentIsIncludedWithoutExistingGoalChoiceAndInactiveGoalsStayExcluded() {
+        val consentAt = NOW - HOUR
+        val old = GoalRecord(
+            id = "old-active-goal",
+            title = "Fixture edited after consent",
+            description = "Synthetic existing goal",
+            metric = GoalMetric.MANUAL,
+            targetValue = 1,
+            createdAt = consentAt - 30L * DAY,
+            updatedAt = NOW - 1L,
+        )
+        val inactive = old.copy(id = "inactive", title = "Fixture inactive goal", status = GoalStatus.PAUSED)
+
+        val snapshot = assembler.assemble(
+            mandate(shared = setOf("goals")),
+            mapOf("goals" to consentAt),
+            AgentContextDomainViews(goals = listOf(old, inactive)),
+            NOW,
+        )
+
+        assertEquals(1, snapshot.categories.getValue("goals").size)
+        assertTrue(snapshot.categories.getValue("goals").single().contains("Fixture edited after consent"))
+        assertFalse(snapshot.toJsonString().contains("Fixture inactive goal"))
+    }
+
+    @Test
+    fun existingGoalsOptInDoesNotChangeCategoryOrPayloadLimits() {
+        val consentAt = NOW - HOUR
+        val goals = (0 until 12).map { index ->
+            GoalRecord(
+                id = "old-goal-$index",
+                title = "Fixture old goal $index",
+                description = "Synthetic existing goal",
+                metric = GoalMetric.MANUAL,
+                targetValue = 1,
+                createdAt = consentAt - 10L * DAY,
+                updatedAt = consentAt - 9L * DAY,
+            )
+        }
+        val snapshot = assembler.assemble(
+            mandate(shared = setOf("goals")),
+            mapOf("goals" to consentAt),
+            AgentContextDomainViews(goals = goals),
+            NOW,
+            includeExistingGoals = true,
+        )
+
+        assertEquals(10, snapshot.categories.getValue("goals").size)
+        assertTrue(snapshot.toJsonString().toByteArray(Charsets.UTF_8).size <= AgentContextSnapshot.MAX_CONTEXT_BYTES)
+    }
+
+    @Test
     fun revokedCategoryAndRenewedConsentAreAppliedToTheSnapshotBeforeTransport() {
         val consentAt = NOW - 2L * HOUR
         val snapshot = assembler.assemble(
