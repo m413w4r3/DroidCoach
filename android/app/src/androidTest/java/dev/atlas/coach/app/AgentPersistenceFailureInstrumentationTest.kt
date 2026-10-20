@@ -108,6 +108,52 @@ class AgentPersistenceFailureInstrumentationTest {
         }
     }
 
+    @Test
+    fun failedCategoryWithdrawalKeepsOtherConsentThroughControllerRecreationAndOptIn() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = isolatedContext("category-partial")
+        val backend = MemoryStateBackend()
+        val barrier = MemoryBarrierStorage()
+        lateinit var controller: AtlasController
+        instrumentation.runOnMainSync {
+            controller = makeController(context, backend, barrier)
+            controller.enableAgent()
+            controller.setAgentSharedCategory(AgentContextCategory.FOCUS.wireValue, true)
+            controller.setAgentSharedCategory(AgentContextCategory.GOALS.wireValue, true)
+        }
+        assertTrue(controller.isAgentEnabled)
+
+        backend.failWrites = true
+        instrumentation.runOnMainSync {
+            controller.setAgentSharedCategory(AgentContextCategory.FOCUS.wireValue, false)
+        }
+        assertTrue(controller.isAgentEnabled)
+        assertEquals(listOf(AgentContextCategory.GOALS.wireValue), controller.agentContextPreview.authorizedCategories)
+        assertTrue(controller.agentMandate.sharedDataCategories.containsAll(
+            setOf(AgentContextCategory.FOCUS.wireValue, AgentContextCategory.GOALS.wireValue),
+        ))
+        assertEquals(setOf(AgentContextCategory.FOCUS.wireValue), barrier.state.blockedCategories)
+
+        backend.failWrites = false
+        lateinit var recreated: AtlasController
+        instrumentation.runOnMainSync { recreated = makeController(context, backend, barrier) }
+        assertTrue(recreated.isAgentEnabled)
+        assertTrue(recreated.agentMandate.sharedDataCategories.containsAll(
+            setOf(AgentContextCategory.FOCUS.wireValue, AgentContextCategory.GOALS.wireValue),
+        ))
+        assertEquals(listOf(AgentContextCategory.GOALS.wireValue), recreated.agentContextPreview.authorizedCategories)
+
+        instrumentation.runOnMainSync {
+            recreated.setAgentSharedCategory(AgentContextCategory.FOCUS.wireValue, true)
+        }
+        assertTrue(recreated.isAgentEnabled)
+        assertEquals(
+            setOf(AgentContextCategory.FOCUS.wireValue, AgentContextCategory.GOALS.wireValue),
+            recreated.agentContextPreview.authorizedCategories.toSet(),
+        )
+        assertTrue(barrier.state.blockedCategories.isEmpty())
+    }
+
     private fun makeController(context: Context, backend: StateBackend, barrier: RevocationBarrierStorage) = AtlasController(
         context = context,
         clock = FixedClock,
