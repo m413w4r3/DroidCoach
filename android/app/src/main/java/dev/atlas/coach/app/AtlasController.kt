@@ -677,6 +677,8 @@ class AtlasController(
     val proactiveEngagementMode: ProactiveEngagementMode get() = proactiveEngagementModeSnapshot
     var highlightedProactiveProposalId by mutableStateOf<String?>(null)
         private set
+    var proactiveNotificationProposalUnavailable by mutableStateOf(false)
+        private set
     val locationPanelState: LocationPanelState
         get() = locationPanelCoordinator.panelState(
             locationCapability = capabilities[CAP_LOCATION] == true,
@@ -896,7 +898,12 @@ class AtlasController(
             touch()
             return
         }
-        val entry = agentInboxRepository.get(proposalId) ?: return
+        val entry = agentInboxRepository.get(proposalId)
+        if (entry == null) {
+            openUnavailableProactiveProposalFromNotification()
+            return
+        }
+        proactiveNotificationProposalUnavailable = false
         highlightedProactiveProposalId = entry.id
         navigationState.selectTab(AtlasScreenId.COACH)
         latestMessage = if (entry.proposal.state == ProposalState.EXPIRED) {
@@ -904,6 +911,41 @@ class AtlasController(
         } else {
             "Proposition ouverte dans le Coach. Aucune action n'a été effectuée."
         }
+        touch()
+    }
+
+    /** Opens the Coach destination when a proactive plan has no local proposal to select. */
+    fun openCoachFromProactiveNotification() {
+        if (!isAgentRequestAllowed()) {
+            latestMessage = "Le mandat du Coach n'est pas actif. Aucune action n'a été effectuée."
+            touch()
+            return
+        }
+        proactiveNotificationProposalUnavailable = false
+        highlightedProactiveProposalId = null
+        navigationState.selectTab(AtlasScreenId.COACH)
+        latestMessage = "Plan ouvert dans le Coach. Aucune action n'a été effectuée."
+        touch()
+    }
+
+    /** Shows a neutral, non-actionable state for a UUID pruned from the local inbox. */
+    fun openUnavailableProactiveProposalFromNotification() {
+        if (!isAgentRequestAllowed()) {
+            latestMessage = "Le mandat du Coach n'est pas actif. Aucune action n'a été effectuée."
+            touch()
+            return
+        }
+        proactiveNotificationProposalUnavailable = true
+        highlightedProactiveProposalId = null
+        navigationState.selectTab(AtlasScreenId.COACH)
+        latestMessage = PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE
+        touch()
+    }
+
+    fun clearUnavailableProactiveNotificationState() {
+        if (!proactiveNotificationProposalUnavailable) return
+        proactiveNotificationProposalUnavailable = false
+        if (latestMessage == PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE) latestMessage = null
         touch()
     }
 
@@ -1464,7 +1506,7 @@ class AtlasController(
                 entry.proposal.state in setOf(ProposalState.PROPOSED, ProposalState.PENDING_CONFIRMATION) &&
                     entry.proposal.expiresAtUtcMillis > clock.nowMillis()
             }
-        } ?: return ProactivePlanResponse()
+        }
         val notificationBody = response.reply.trim().take(ProactiveNotificationContent.MAX_BODY_LENGTH)
             .ifBlank { "Ouvrez ATLAS pour consulter votre prochaine étape." }
         return ProactivePlanResponse(
@@ -3602,6 +3644,8 @@ class AtlasController(
         const val MAX_FOCUS_ROUTINES = 100
         const val MAX_AGENT_MESSAGE_LENGTH = 2_000
         const val MAX_AGENT_CONVERSATION_MESSAGES = 80
+        const val PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE =
+            "Cette proposition n'est plus disponible (expirée ou retirée). Aucune action n'a été effectuée."
         private const val MAX_AGENT_CONTENT_ACTIVITY = 200
         private const val KEY_AGENT_CONTEXT_CONSENT_DATES = "agentContextConsentAt"
         private const val KEY_LAST_CONTEXT_DISCLOSURE_AUDIT = "lastAgentContextDisclosureAudit"

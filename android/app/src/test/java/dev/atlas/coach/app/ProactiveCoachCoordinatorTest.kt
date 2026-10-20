@@ -1,6 +1,7 @@
 package dev.atlas.coach.app
 
 import dev.atlas.coach.coach.proactive.CoachTrigger
+import dev.atlas.coach.coach.proactive.CoachTriggerRecordStatus
 import dev.atlas.coach.coach.proactive.CoachTriggerReliability
 import dev.atlas.coach.coach.proactive.CoachTriggerSource
 import dev.atlas.coach.coach.proactive.ProactiveCoachState
@@ -58,6 +59,55 @@ class ProactiveCoachCoordinatorTest {
         assertEquals(listOf("focus_completed"), requests)
         assertEquals(listOf("Plan prêt:$localProposalId"), notifications)
         assertEquals(ProactiveCoachState.CURRENT_SCHEMA_VERSION, ProactiveCoachState.fromJsonString(requireNotNull(stateJson)).schemaVersion)
+    }
+
+    @Test
+    fun dueTriggerRunsWithoutActivityAfterQuietHoursAndIsNotReplayedAfterRecreation() {
+        var now = Instant.parse("2026-10-20T21:00:00Z").toEpochMilli() // 23:00 in the mandate zone.
+        val grantAt = now - 60_000L
+        var stateJson: String? = null
+        var requests = 0
+        var notifications = 0
+        fun coordinator() = ProactiveCoachCoordinator(
+            readStateJson = { stateJson },
+            writeStateJson = { stateJson = it },
+            currentConsent = { ProactiveConsentSnapshot(mapOf("focus" to grantAt)) },
+            isEnabled = { true },
+            nowUtcMillis = { now },
+            mandateZoneId = { ZoneId.of("Europe/Paris") },
+            requestPlan = {
+                requests++
+                ProactivePlanResponse(
+                    notification = ProactiveNotificationContent("Plan", "Ouvrez le Coach."),
+                    localProposalId = localProposalId,
+                )
+            },
+            showNotification = { notifications++ },
+        )
+
+        val firstProcess = coordinator()
+        val due = CoachTrigger(
+            eventId = "daily-plan:2026-10-20",
+            source = CoachTriggerSource.DAILY_PLAN_DUE,
+            occurredAtUtcMillis = now,
+            reliability = CoachTriggerReliability.VERIFIED,
+        )
+        assertEquals(CoachTriggerRecordStatus.RECORDED, firstProcess.record(due))
+        assertEquals(ProactiveRunStatus.QUIET_HOURS, firstProcess.runDue().status)
+        assertEquals(0, requests)
+
+        // A recreated process sees the same durable due event and reevaluates the injected clock.
+        now = Instant.parse("2026-10-21T06:00:00Z").toEpochMilli() // 08:00 in Europe/Paris.
+        val resumedProcess = coordinator()
+        assertEquals(CoachTriggerRecordStatus.DUPLICATE, resumedProcess.record(due))
+        assertEquals(ProactiveRunStatus.REQUESTED, resumedProcess.runDue().status)
+        assertEquals(1, requests)
+        assertEquals(1, notifications)
+
+        val recreatedAfterReservation = coordinator()
+        assertEquals(ProactiveRunStatus.NO_ELIGIBLE_TRIGGERS, recreatedAfterReservation.runDue().status)
+        assertEquals(1, requests)
+        assertEquals(1, notifications)
     }
 
     @Test

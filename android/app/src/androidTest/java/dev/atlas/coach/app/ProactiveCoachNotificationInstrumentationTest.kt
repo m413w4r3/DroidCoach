@@ -1,7 +1,10 @@
 package dev.atlas.coach.app
 
 import android.app.Activity
+import android.app.ActivityOptions
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.coach.proactive.CoachTriggerSource
@@ -46,6 +49,20 @@ class ProactiveCoachNotificationInstrumentationTest {
     }
 
     @Test
+    fun tappingPlanNotificationWithoutProposalOpensCoachWithoutHighlight() {
+        val fixture = prepareFixture(expired = false)
+        val activity = tapNotification(fixture, proposalId = null)
+
+        assertEquals(AtlasScreenId.COACH, fixture.controller.navigationState.current)
+        assertEquals(null, fixture.controller.highlightedProactiveProposalId)
+        assertEquals(
+            setOf(ProactiveCoachNotificationPublisher.EXTRA_DESTINATION),
+            activity.intent.extras?.keySet(),
+        )
+        finish(activity)
+    }
+
+    @Test
     fun tappingAnExpiredNotificationOpensItsExpiredStateWithoutChangingIt() {
         val fixture = prepareFixture(expired = true)
         val activity = tapNotification(fixture)
@@ -55,6 +72,43 @@ class ProactiveCoachNotificationInstrumentationTest {
         assertEquals(ProposalState.EXPIRED, fixture.controller.agentInbox.single().proposal.state)
         assertTrue(fixture.controller.latestMessage.orEmpty().contains("a expiré"))
         finish(activity)
+    }
+
+    @Test
+    fun tappingAValidIdPrunedFromTheInboxShowsUnavailableStateWithoutActions() {
+        val fixture = prepareFixture(expired = false)
+        val missingProposalId = UUID.randomUUID().toString()
+        val activity = tapNotification(fixture, proposalId = missingProposalId)
+
+        assertEquals(AtlasScreenId.COACH, fixture.controller.navigationState.current)
+        assertEquals(null, fixture.controller.highlightedProactiveProposalId)
+        assertTrue(fixture.controller.proactiveNotificationProposalUnavailable)
+        assertEquals(
+            AtlasController.PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE,
+            fixture.controller.latestMessage,
+        )
+        finish(activity)
+    }
+
+    @Test
+    fun tappingNotificationWithInvalidIdIsIgnored() {
+        val fixture = prepareFixture(expired = false)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
+        val intent = Intent(fixture.context, MainActivity::class.java)
+            .setAction(ProactiveCoachNotificationPublisher.ACTION_OPEN_PROPOSAL)
+            .putExtra(ProactiveCoachNotificationPublisher.EXTRA_LOCAL_PROPOSAL_ID, "not-a-uuid")
+            .putExtra(ProactiveCoachNotificationPublisher.EXTRA_DESTINATION, ProactiveCoachNotificationPublisher.DESTINATION_COACH)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        instrumentation.runOnMainSync { fixture.context.startActivity(intent) }
+        val activity = instrumentation.waitForMonitorWithTimeout(monitor, 5_000) as? MainActivity
+        instrumentation.removeMonitor(monitor)
+
+        assertNotNull("Invalid notification id did not open MainActivity", activity)
+        assertEquals(AtlasScreenId.HOME, fixture.controller.navigationState.current)
+        assertEquals(null, fixture.controller.highlightedProactiveProposalId)
+        assertEquals(false, fixture.controller.proactiveNotificationProposalUnavailable)
+        finish(requireNotNull(activity))
     }
 
     @Test
@@ -125,10 +179,11 @@ class ProactiveCoachNotificationInstrumentationTest {
         state = ProposalState.PROPOSED,
     )
 
-    private fun tapNotification(fixture: Fixture): MainActivity {
+    @Suppress("DEPRECATION")
+    private fun tapNotification(fixture: Fixture, proposalId: String? = fixture.proposalId): MainActivity {
         val notification = ProactiveNotification(
-            notificationId = "notification-${fixture.proposalId}",
-            localProposalId = fixture.proposalId,
+            notificationId = "notification-${proposalId ?: "plan"}-${fixture.proposalId}",
+            localProposalId = proposalId,
             title = "Votre plan ATLAS est prêt",
             body = "Ouvrez le Coach pour consulter la proposition.",
             mode = ProactiveEngagementMode.NORMAL,
@@ -136,7 +191,15 @@ class ProactiveCoachNotificationInstrumentationTest {
         )
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
-        ProactiveCoachNotificationPublisher(fixture.context).contentIntentFor(notification).send()
+        val launchOptions = ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            launchOptions.setPendingIntentBackgroundActivityStartMode(
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+            )
+        }
+        ProactiveCoachNotificationPublisher(fixture.context)
+            .contentIntentFor(notification)
+            .send(launchOptions.toBundle())
         val activity = instrumentation.waitForMonitorWithTimeout(monitor, 5_000) as? MainActivity
         instrumentation.removeMonitor(monitor)
         assertNotNull("Notification did not open MainActivity", activity)

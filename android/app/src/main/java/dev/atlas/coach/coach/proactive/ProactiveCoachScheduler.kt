@@ -274,14 +274,14 @@ data class ProactiveNotificationContent(
 
 data class ProactiveNotification(
     val notificationId: String,
-    val localProposalId: String,
+    val localProposalId: String?,
     val title: String,
     val body: String,
     val mode: ProactiveEngagementMode,
     val triggerSources: Set<CoachTriggerSource>,
 ) {
     init {
-        require(isLocalProposalId(localProposalId))
+        require(localProposalId == null || isLocalProposalId(localProposalId))
     }
 }
 
@@ -409,8 +409,9 @@ class ProactiveCoachScheduler(
         val content = response.notification ?: return ProactiveRunResult(
             ProactiveRunStatus.REQUESTED, request.reservationId, request.triggers.size,
         )
+        // Notification copy remains useful even if the plan has no active local proposal.
+        // Invalid IDs are never forwarded as notification payloads.
         val localProposalId = response.localProposalId?.takeIf(::isLocalProposalId)
-            ?: return ProactiveRunResult(ProactiveRunStatus.REQUESTED, request.reservationId, request.triggers.size)
         val latestConsent = runCatching(currentConsent).getOrElse {
             return ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED, request.reservationId, request.triggers.size)
         }
@@ -581,7 +582,7 @@ class ProactiveCoachScheduler(
     private fun reserveNotification(
         request: ProactivePlanRequest,
         content: ProactiveNotificationContent,
-        localProposalId: String,
+        localProposalId: String?,
         nowUtcMillis: Long,
         zoneId: ZoneId,
     ): NotificationOutcome {

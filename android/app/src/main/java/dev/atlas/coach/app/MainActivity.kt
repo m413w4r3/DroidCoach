@@ -69,9 +69,16 @@ class MainActivity : ComponentActivity() {
             ProactiveCoachNotificationPublisher.DESTINATION_COACH
         ) return
         val proposalId = incoming.getStringExtra(ProactiveCoachNotificationPublisher.EXTRA_LOCAL_PROPOSAL_ID)
-            ?: return
+        if (proposalId == null) {
+            controller.openCoachFromProactiveNotification()
+            return
+        }
         val canonicalId = runCatching { UUID.fromString(proposalId).toString() }.getOrNull()
-        if (canonicalId != proposalId || controller.agentInbox.none { it.id == proposalId }) return
+        if (canonicalId != proposalId) return
+        if (controller.agentInbox.none { it.id == proposalId }) {
+            controller.openUnavailableProactiveProposalFromNotification()
+            return
+        }
         controller.openProactiveProposalFromNotification(proposalId)
     }
 

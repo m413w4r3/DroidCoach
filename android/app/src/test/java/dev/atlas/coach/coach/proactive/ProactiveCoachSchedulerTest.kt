@@ -373,21 +373,39 @@ class ProactiveCoachSchedulerTest {
     }
 
     @Test
-    fun `notification is not posted without a validated local proposal id`() {
+    fun `notification is posted without a local proposal id`() {
         val h = Harness(allConsents)
         h.record(trigger("unlinked-notification"))
-        var notifications = 0
+        val notifications = mutableListOf<ProactiveNotification>()
 
         val result = h.scheduler.runDue(
             NOW,
             utc,
             requestPlan = { ProactivePlanResponse(ProactiveNotificationContent("Conseil", "Action proposée")) },
-            showNotification = { notifications++ },
+            showNotification = { notifications += it },
         )
 
         assertEquals(ProactiveRunStatus.REQUESTED, result.status)
-        assertEquals(0, notifications)
-        assertTrue(h.state.notificationReservations.isEmpty())
+        assertEquals(1, notifications.size)
+        assertNull(notifications.single().localProposalId)
+        assertEquals(1, h.state.notificationReservations.size)
+    }
+
+    @Test
+    fun `notification is posted with the validated local proposal id when available`() {
+        val h = Harness(allConsents)
+        h.record(trigger("linked-notification"))
+        val notifications = mutableListOf<ProactiveNotification>()
+
+        val result = h.scheduler.runDue(
+            NOW,
+            utc,
+            requestPlan = { responseWithLocalProposal() },
+            showNotification = { notifications += it },
+        )
+
+        assertEquals(ProactiveRunStatus.REQUESTED, result.status)
+        assertEquals(localProposalId, notifications.single().localProposalId)
     }
 
     @Test

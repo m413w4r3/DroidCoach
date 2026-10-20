@@ -121,3 +121,8 @@
 ## V6.2.1 — Lot B (2026-10-20)
 - Le dernier partage conserve durablement uniquement son horodatage, ses catégories et son statut; le JSON détaillé reste en mémoire tant que le processus et le consentement sont actifs, puis disparaît à la révocation ou à la fin du processus. La migration des anciennes sauvegardes est critique et masque immédiatement leurs valeurs, même si l'écriture échoue.
 - Inclure l'état courant des objectifs actifs antérieurs au consentement est désactivé à chaque nouvel opt-in `goals`. L'activation doit être écrite durablement; les événements Focus/check-in antérieurs au consentement restent exclus des catégories événementielles.
+
+## 2026-10-20 — Correctifs de notification proactive Lot C
+
+- Une notification de plan reste publiable sans proposition locale valide. Son `PendingIntent` n'emporte alors que la destination Coach et ouvre l'onglet sans sélection; une proposition locale éventuelle est référencée par UUID.
+- Un UUID valide retiré de l'inbox ouvre Coach sur un état neutre sans actions. Un identifiant mal formé est ignoré; le tap n'accepte ni ne distribue jamais une proposition.

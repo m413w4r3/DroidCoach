@@ -29,6 +29,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -113,12 +114,18 @@ internal fun AgentCoachScreen(
     val notificationProposal = remember(controller, revision) {
         controller.highlightedProactiveProposalId?.let { id -> controller.agentInbox.firstOrNull { it.id == id } }
     }
+    val missingNotificationProposal = controller.proactiveNotificationProposalUnavailable ||
+        (controller.highlightedProactiveProposalId != null && notificationProposal == null)
     val latestProvenance = remember(controller, revision) {
         HomeAgentState.localDefault(controller).directiveStatusLabel()
     }
 
     LaunchedEffect(pullOnOpen) {
         if (pullOnOpen) controller.pullAgentInbox()
+    }
+
+    DisposableEffect(controller) {
+        onDispose(controller::clearUnavailableProactiveNotificationState)
     }
 
     Column(
@@ -176,8 +183,13 @@ internal fun AgentCoachScreen(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Proposition prioritaire", style = MaterialTheme.typography.titleLarge)
-                val proposal = notificationProposal ?: pendingProposals.firstOrNull()
-                if (proposal == null) Text("Aucune proposition en attente.")
+                val proposal = if (missingNotificationProposal) null else notificationProposal ?: pendingProposals.firstOrNull()
+                if (missingNotificationProposal) {
+                    Text(
+                        AtlasController.PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE,
+                        modifier = Modifier.testTag("proactive_proposal_unavailable"),
+                    )
+                } else if (proposal == null) Text("Aucune proposition en attente.")
                 else {
                     val sourceMetadata = listOf(controller.agentProposalSourceSummary(proposal.proposal))
                     AgentProposalCard(

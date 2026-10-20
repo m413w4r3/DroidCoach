@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.net.toUri
 import dev.atlas.coach.coach.proactive.isLocalProposalId
 import dev.atlas.coach.coach.proactive.ProactiveNotification
 
@@ -38,13 +37,12 @@ class ProactiveCoachNotificationPublisher(context: Context) {
     }
 
     internal fun contentIntentFor(notification: ProactiveNotification): PendingIntent {
-        require(isLocalProposalId(notification.localProposalId))
+        require(notification.localProposalId == null || isLocalProposalId(notification.localProposalId))
         val intent = Intent(appContext, MainActivity::class.java)
             .setAction(ACTION_OPEN_PROPOSAL)
-            .setData("atlas://coach/proposal/${notification.localProposalId}".toUri())
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra(EXTRA_LOCAL_PROPOSAL_ID, notification.localProposalId)
             .putExtra(EXTRA_DESTINATION, DESTINATION_COACH)
+        notification.localProposalId?.let { proposalId -> intent.putExtra(EXTRA_LOCAL_PROPOSAL_ID, proposalId) }
         return PendingIntent.getActivity(
             appContext,
             notification.notificationId.hashCode(),
