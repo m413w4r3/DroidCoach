@@ -273,6 +273,40 @@ class ActionDispatcherTest {
     }
 
     @Test
+    fun localCommitFailureLeavesPreparedEffectAndDoesNotCreateTerminalAck() {
+        val inbox = AgentInboxRepository(MemoryStorage()) { now }
+        val proposal = focusProposal()
+        inbox.mergePulled(listOf(proposal), "cursor")
+        val journal = InMemoryAgentEffectJournal()
+        var commitAttempts = 0
+        val actions = object : AgentActionPort by FakeActions() {
+            override fun proposeFocus(proposal: ProposalV2): AgentActionOutcome {
+                commitAttempts++
+                return AgentActionOutcome(
+                    applied = false,
+                    effect = "Impossible d'enregistrer l'état local; réconciliation requise.",
+                    requiresReconciliation = true,
+                )
+            }
+
+            override fun reconcile(proposal: ProposalV2, idempotencyKey: String) =
+                AgentEffectReconciliation.NOT_APPLIED
+        }
+        val dispatcher = dispatcher(inbox, journal, actions)
+
+        val first = dispatcher.accept(proposal.proposalId)
+        assertEquals(DispatchStatus.NEEDS_RECONCILIATION, first.status)
+        assertEquals(AgentEffectPhase.PREPARED, journal.findByProposalId(proposal.proposalId)?.phase)
+        assertEquals(ProposalState.ACCEPTED, inbox.get(proposal.proposalId)?.proposal?.state)
+        assertTrue(inbox.pendingAcks().isEmpty())
+
+        assertEquals(DispatchStatus.NEEDS_RECONCILIATION, dispatcher.accept(proposal.proposalId).status)
+        assertEquals(2, commitAttempts)
+        assertEquals(AgentEffectPhase.PREPARED, journal.findByProposalId(proposal.proposalId)?.phase)
+        assertTrue(inbox.pendingAcks().isEmpty())
+    }
+
+    @Test
     fun restartAfterLocalEffectBeforeFinalJournalReconcilesWithoutRepeatingEffect() {
         val inboxStorage = MemoryStorage()
         val journalStorage = MemoryStorage()

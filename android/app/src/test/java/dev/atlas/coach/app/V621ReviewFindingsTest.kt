@@ -37,7 +37,7 @@ import org.junit.Test
 import sun.misc.Unsafe
 import java.time.ZoneId
 
-/** Independent S7 reproductions. Each failing case is ignored in CI after its failure is recorded. */
+/** Independent S7 regressions for failed commits and sensitive quarantine data. */
 class V621ReviewFindingsTest {
     @Test
     @Ignore("V621-REVIEW: R2")
@@ -55,14 +55,15 @@ class V621ReviewFindingsTest {
     }
 
     @Test
-    @Ignore("V621-REVIEW: R1")
     fun localAgentActionMustNotReportAppliedWhenRootCommitFails() {
         val (controller, backend) = controllerWhoseRootWriteFails()
         val outcome = controller.setHomeDirective(homeDirectiveProposal())
 
         assertEquals(1, backend.writes)
         val state = controller.readField("agentHomeStateSnapshot\$delegate") as MutableState<AgentHomeState>
-        assertEquals("Review directive", state.value.directive?.title)
+        // The review reproduction expected the in-memory mutation to remain, but the
+        // required transaction contract publishes it only after the durable root write.
+        assertEquals(null, state.value.directive)
         assertTrue(controller.latestMessage.orEmpty().contains("Impossible d'enregistrer l'état local"))
         assertFalse("dispatch reported success although root persistence failed", outcome.applied)
     }

@@ -15,7 +15,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** applied=false guarantees no local effect; an exception means the outcome may be ambiguous. */
-data class AgentActionOutcome(val applied: Boolean, val effect: String)
+data class AgentActionOutcome(
+    val applied: Boolean,
+    val effect: String,
+    /** Keep the prepared journal entry open when a durable local commit failed. */
+    val requiresReconciliation: Boolean = false,
+)
 
 /** Explicit, closed action port implemented by AtlasController. */
 interface AgentActionPort {
@@ -350,6 +355,12 @@ class ActionDispatcher(
             return AgentDispatchResult(
                 DispatchStatus.NEEDS_RECONCILIATION,
                 "Résultat local incertain; l'effet est journalisé avant reprise.",
+            )
+        }
+        if (outcome.requiresReconciliation) {
+            return AgentDispatchResult(
+                DispatchStatus.NEEDS_RECONCILIATION,
+                outcome.effect,
             )
         }
         return complete(accepted, record, outcome)

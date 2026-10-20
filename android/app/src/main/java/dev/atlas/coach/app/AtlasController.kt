@@ -49,6 +49,7 @@ import dev.atlas.coach.goals.GoalRepository
 import dev.atlas.coach.goals.GoalStatus
 import dev.atlas.coach.focus.Clock
 import dev.atlas.coach.focus.FocusEngine
+import dev.atlas.coach.focus.FocusPhase
 import dev.atlas.coach.focus.FocusPlan
 import dev.atlas.coach.focus.FocusPreset
 import dev.atlas.coach.focus.FocusSession
@@ -2453,19 +2454,25 @@ class AtlasController(
     }
 
     override fun setHomeDirective(proposal: ProposalV2): AgentActionOutcome {
-        agentHomeStateSnapshot = agentHomeStateSnapshot.withRemoteDirective(proposal)
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Directive HOME enregistrée localement.")
+        val next = agentHomeStateSnapshot.withRemoteDirective(proposal)
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Directive HOME enregistrée localement.",
+            overrides = mapOf("agentHomeState" to next.toJson().toString()),
+            publish = { agentHomeStateSnapshot = next },
+        )
     }
 
     override fun reorderHomeCards(proposal: ProposalV2): AgentActionOutcome {
         val requested = (proposal.parameters["order"] as List<*>).filterIsInstance<String>()
         val completed = requested + AgentHomeState.DEFAULT_CARD_ORDER.filterNot(requested::contains)
-        agentHomeStateSnapshot = agentHomeStateSnapshot.copy(cardOrder = completed)
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Ordre des cartes HOME enregistré; les autres cartes restent visibles.")
+        val next = agentHomeStateSnapshot.copy(cardOrder = completed)
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Ordre des cartes HOME enregistré; les autres cartes restent visibles.",
+            overrides = mapOf("agentHomeState" to next.toJson().toString()),
+            publish = { agentHomeStateSnapshot = next },
+        )
     }
 
     override fun proposeFocus(proposal: ProposalV2): AgentActionOutcome {
@@ -2473,7 +2480,6 @@ class AtlasController(
         if (previous?.state in setOf(AgentFocusCardState.PLANNED, AgentFocusCardState.RUNNING, AgentFocusCardState.PAUSED)) {
             return AgentActionOutcome(false, "Une session Focus agent est déjà planifiée ou active; annulez-la avant de la remplacer.")
         }
-        previous?.let { cancelAgentFocusProposal(it.proposalId) }
         val card = AgentFocusProposalCard(
             proposalId = proposal.proposalId,
             label = proposal.parameters["label"] as? String ?: "Session proposée",
@@ -2483,10 +2489,31 @@ class AtlasController(
             longBreakMinutes = 15,
             longBreakEveryCycles = minOf(4, (proposal.parameters["cycles"] as Number).toInt()),
         )
-        agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card)
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Session proposée enregistrée localement.")
+        val next = agentHomeStateSnapshot.copy(
+            focusProposal = card,
+            cancelledFocusProposalIds = previous?.let {
+                agentHomeStateSnapshot.cancelledFocusProposalIds + it.proposalId
+            } ?: agentHomeStateSnapshot.cancelledFocusProposalIds,
+        )
+        val retiredRoutineId = previous?.routineId
+        val nextRoutines = focusRoutineRepository.list()
+            .filterNot { it.id == retiredRoutineId }
+            .map(FocusRoutine::toMap)
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Session proposée enregistrée localement.",
+            overrides = mapOf(
+                "agentHomeState" to next.toJson().toString(),
+                "focusRoutines" to nextRoutines,
+            ),
+            publish = {
+                focusRoutinesSnapshot = focusRoutineRepository.list().filterNot { it.id == retiredRoutineId }
+                agentHomeStateSnapshot = next
+                retiredRoutineId?.let { routineAlarms.cancel(it); focusRoutineRepository.delete(it) }
+                retireReplacedFocusProposal(previous?.proposalId)
+                focusRoutinesSnapshot = focusRoutineRepository.list()
+            },
+        )
     }
 
     override fun planFocus(proposal: ProposalV2): AgentActionOutcome {
@@ -2513,9 +2540,6 @@ class AtlasController(
             focusMinutes = minutes,
             preauthorizedStart = false,
         )
-        focusRoutinesSnapshot = focusRoutineRepository.list()
-        routineAlarms.schedule(routine, ZonedDateTime.now(zone), zone)
-        previous?.let { cancelAgentFocusProposal(it.proposalId) }
         val card = AgentFocusProposalCard(
             proposalId = proposal.proposalId,
             label = routine.name,
@@ -2528,10 +2552,34 @@ class AtlasController(
             longBreakMinutes = 15,
             longBreakEveryCycles = minOf(4, (proposal.parameters.getValue("cycles") as Number).toInt()),
         )
-        agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card)
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Session planifiée avec une alarme inexacte; le démarrage demandera une confirmation.")
+        val next = agentHomeStateSnapshot.copy(
+            focusProposal = card,
+            cancelledFocusProposalIds = previous?.let {
+                agentHomeStateSnapshot.cancelledFocusProposalIds + it.proposalId
+            } ?: agentHomeStateSnapshot.cancelledFocusProposalIds,
+        )
+        val retiredRoutineId = previous?.routineId
+        val nextRoutines = (focusRoutineRepository.list().filterNot { it.id == retiredRoutineId } + routine)
+            .map(FocusRoutine::toMap)
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Session planifiée avec une alarme inexacte; le démarrage demandera une confirmation.",
+            overrides = mapOf(
+                "agentHomeState" to next.toJson().toString(),
+                "focusRoutines" to nextRoutines,
+            ),
+            rollbackPreparation = {
+                focusRoutineRepository.delete(routine.id)
+                focusRoutinesSnapshot = focusRoutineRepository.list()
+            },
+            publish = {
+                agentHomeStateSnapshot = next
+                retiredRoutineId?.let { routineAlarms.cancel(it); focusRoutineRepository.delete(it) }
+                retireReplacedFocusProposal(previous?.proposalId)
+                focusRoutinesSnapshot = focusRoutineRepository.list()
+                routineAlarms.schedule(routine, ZonedDateTime.now(zone), zone)
+            },
+        )
     }
 
     override fun startFocus(proposal: ProposalV2): AgentActionOutcome {
@@ -2543,7 +2591,6 @@ class AtlasController(
         if (active?.status in setOf(FocusStatus.RUNNING, FocusStatus.PAUSED)) {
             return AgentActionOutcome(false, "Une autre session Focus est déjà active.")
         }
-        archiveCurrentTerminalFocus()
         val plan = FocusPlan(
             presetId = "agent-${card.proposalId}",
             workSeconds = card.focusMinutes * 60L,
@@ -2554,14 +2601,50 @@ class AtlasController(
             continuous = card.continuous,
             taskTitle = card.label,
         )
-        val started = focusEngine.start(plan, card.proposalId)
-        focusSnapshot = started
-        if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) phaseAlarms.schedule(started)
-        agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card.copy(state = AgentFocusCardState.RUNNING))
-        recordAppliedLocalEffect(proposal)
-        enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS)
-        persist()
-        return AgentActionOutcome(true, "Focus démarré localement sans ouvrir d'activité.")
+        val now = clock.nowMillis()
+        val started = FocusSession(
+            id = UUID.randomUUID().toString(),
+            directiveId = card.proposalId,
+            presetId = plan.presetId,
+            phase = FocusPhase.WORK,
+            status = FocusStatus.RUNNING,
+            createdAtUtcMillis = now,
+            updatedAtUtcMillis = now,
+            remainingSeconds = plan.workSeconds,
+            remainingMillis = plan.workSeconds * 1_000L,
+            completedWorkCycles = 0,
+            workSeconds = plan.workSeconds,
+            shortBreakSeconds = plan.shortBreakSeconds,
+            longBreakSeconds = plan.longBreakSeconds,
+            longBreakEveryCycles = plan.longBreakEveryCycles,
+            totalWorkCycles = plan.totalWorkCycles,
+            continuous = plan.continuous,
+            taskTitle = plan.taskTitle,
+        )
+        val terminalSession = focusEngine.snapshot()?.takeIf {
+            it.status == FocusStatus.FINISHED || it.status == FocusStatus.CANCELLED
+        }
+        val nextHistory = terminalSession?.let { terminal ->
+            (listOf(terminal) + focusHistoryEntries.filterNot { it.id == terminal.id }).take(MAX_FOCUS_HISTORY)
+        } ?: focusHistoryEntries
+        val nextHome = agentHomeStateSnapshot.copy(focusProposal = card.copy(state = AgentFocusCardState.RUNNING))
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Focus démarré localement sans ouvrir d'activité.",
+            overrides = mapOf(
+                "focus" to started.toMap(),
+                "focusHistory" to nextHistory.map(FocusSession::toMap),
+                "agentHomeState" to nextHome.toJson().toString(),
+            ),
+            publish = {
+                focusHistoryEntries = nextHistory
+                focusSnapshot = focusEngine.restore(started)
+                agentHomeStateSnapshot = nextHome
+                if (terminalSession != null) archiveFocusSession(terminalSession)
+                if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) phaseAlarms.schedule(started)
+                enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS)
+            },
+        )
     }
 
     override fun pauseFocus(proposal: ProposalV2): AgentActionOutcome {
@@ -2569,34 +2652,52 @@ class AtlasController(
         if (active.status != FocusStatus.RUNNING) return AgentActionOutcome(false, "La session Focus n'est pas en cours.")
         val ref = proposal.parameters.getValue("session_ref") as String
         if ((active.directiveId ?: active.id) != ref) return AgentActionOutcome(false, "La référence ne correspond pas à la session active.")
-        focusSnapshot = focusEngine.pause(active.id)
-        phaseAlarms.cancel(active.id)
-        focusNotifications.cancel(active.id)
-        agentHomeStateSnapshot.focusProposal?.takeIf { it.proposalId == ref }?.let { card ->
-            agentHomeStateSnapshot = agentHomeStateSnapshot.copy(focusProposal = card.copy(state = AgentFocusCardState.PAUSED))
-        }
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Session Focus mise en pause.")
+        val paused = active.copy(
+            status = FocusStatus.PAUSED,
+            updatedAtUtcMillis = clock.nowMillis(),
+        )
+        val nextHome = agentHomeStateSnapshot.focusProposal?.takeIf { it.proposalId == ref }?.let { card ->
+            agentHomeStateSnapshot.copy(focusProposal = card.copy(state = AgentFocusCardState.PAUSED))
+        } ?: agentHomeStateSnapshot
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Session Focus mise en pause.",
+            overrides = mapOf(
+                "focus" to paused.toMap(),
+                "agentHomeState" to nextHome.toJson().toString(),
+            ),
+            publish = {
+                focusSnapshot = focusEngine.restore(paused)
+                agentHomeStateSnapshot = nextHome
+                phaseAlarms.cancel(active.id)
+                focusNotifications.cancel(active.id)
+            },
+        )
     }
 
     override fun suggestHabit(proposal: ProposalV2): AgentActionOutcome {
         val name = proposal.parameters.getValue("name") as String
         val schedule = proposal.parameters.getValue("schedule") as String
-        agentSuggestionsSnapshot = (agentSuggestionsSnapshot + "Habitude proposée : $name · $schedule").takeLast(100)
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Suggestion d'habitude enregistrée; aucune habitude n'a été créée sans confirmation.")
+        val next = (agentSuggestionsSnapshot + "Habitude proposée : $name · $schedule").takeLast(100)
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Suggestion d'habitude enregistrée; aucune habitude n'a été créée sans confirmation.",
+            overrides = mapOf("agentSuggestions" to next),
+            publish = { agentSuggestionsSnapshot = next },
+        )
     }
 
     override fun proposeAppPolicy(proposal: ProposalV2): AgentActionOutcome {
         val packageRef = proposal.parameters.getValue("package_ref") as String
         val minutes = proposal.parameters.getValue("daily_limit_minutes") as Number
-        agentSuggestionsSnapshot = (agentSuggestionsSnapshot +
+        val next = (agentSuggestionsSnapshot +
             "Politique proposée pour $packageRef : ${minutes.toInt()} min/jour · aucune règle modifiée.").takeLast(100)
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Politique suggérée localement; elle n'est pas encore appliquée.")
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Politique suggérée localement; elle n'est pas encore appliquée.",
+            overrides = mapOf("agentSuggestions" to next),
+            publish = { agentSuggestionsSnapshot = next },
+        )
     }
 
     override fun adjustAppPolicy(proposal: ProposalV2): AgentActionOutcome = AgentActionOutcome(
@@ -2614,34 +2715,83 @@ class AtlasController(
         if (url != null && !ContentUrlValidator.isAllowedSearchOrVideo(url)) {
             return AgentActionOutcome(false, "URL refusée par la liste de domaines autorisés.")
         }
-        agentHomeStateSnapshot = agentHomeStateSnapshot.copy(contentRecommendation = AgentContentCard(contentId, url, title))
-        recordAppliedLocalEffect(proposal)
-        persist()
-        return AgentActionOutcome(true, "Contenu recommandé sur HOME; son ouverture reste manuelle.")
+        val next = agentHomeStateSnapshot.copy(contentRecommendation = AgentContentCard(contentId, url, title))
+        return persistAgentAction(
+            proposal = proposal,
+            successMessage = "Contenu recommandé sur HOME; son ouverture reste manuelle.",
+            overrides = mapOf("agentHomeState" to next.toJson().toString()),
+            publish = { agentHomeStateSnapshot = next },
+        )
+    }
+
+    private fun persistAgentAction(
+        proposal: ProposalV2,
+        successMessage: String,
+        overrides: Map<String, Any?>,
+        rollbackPreparation: () -> Unit = {},
+        publish: () -> Unit,
+    ): AgentActionOutcome {
+        val operation = "agent.action.${proposal.actionType}"
+        val candidate = try {
+            stateMap() + overrides + mapOf(
+                "latestMessage" to successMessage,
+                "appliedLocalAgentEffectKeys" to (appliedLocalAgentEffectKeys + proposal.idempotencyKey).toList(),
+            )
+        } catch (error: Exception) {
+            recordPersistenceFailure(operation, persistenceFailureKind(error))
+            return failedAgentAction(rollbackPreparation)
+        }
+        try {
+            persistOrThrow(operation, stateOverride = candidate)
+        } catch (_: PersistOperationException) {
+            return failedAgentAction(rollbackPreparation)
+        }
+        appliedLocalAgentEffectKeys += proposal.idempotencyKey
+        runCatching(publish)
+        latestMessage = successMessage
+        touch()
+        return AgentActionOutcome(true, successMessage)
+    }
+
+    private fun failedAgentAction(rollbackPreparation: () -> Unit): AgentActionOutcome {
+        runCatching(rollbackPreparation)
+        runCatching {
+            focusSnapshot = focusEngine.currentSession()
+            refreshDomainSnapshots()
+        }
+        val message = "Impossible d'enregistrer l'état local. L'action n'a pas été appliquée et reste en réconciliation."
+        latestMessage = message
+        touch()
+        return AgentActionOutcome(applied = false, effect = message, requiresReconciliation = true)
+    }
+
+    private fun retireReplacedFocusProposal(proposalId: String?) {
+        if (proposalId == null) return
+        runCatching {
+            agentInboxRepository.get(proposalId)
+                ?.takeIf { !it.proposal.state.terminal }
+                ?.let { agentInboxRepository.update(proposalId, ProposalState.CANCELLED, "Session proposée remplacée localement") }
+        }
     }
 
     override fun reconcile(proposal: ProposalV2, idempotencyKey: String): AgentEffectReconciliation {
         if (proposal.idempotencyKey != idempotencyKey) return AgentEffectReconciliation.UNKNOWN
         if (idempotencyKey in appliedLocalAgentEffectKeys) return AgentEffectReconciliation.APPLIED
+        // The business state and this marker share one root commit; alarms and notifications
+        // are scheduled only after that commit, so a missing marker proves no action was applied.
         return when (AgentActionType.parse(proposal.actionType)) {
             AgentActionType.HOME_SET_DIRECTIVE,
             AgentActionType.HOME_REORDER_CARDS,
             AgentActionType.HABIT_SUGGEST,
             AgentActionType.APP_POLICY_PROPOSE,
             AgentActionType.APP_POLICY_ADJUST,
-            AgentActionType.CONTENT_RECOMMEND -> AgentEffectReconciliation.NOT_APPLIED
-            // Focus also schedules or cancels Android alarms; absence of the durable marker
-            // cannot prove whether that platform side effect was observed before a crash.
             AgentActionType.FOCUS_PROPOSE,
             AgentActionType.FOCUS_PLAN,
             AgentActionType.FOCUS_START,
             AgentActionType.FOCUS_PAUSE,
+            AgentActionType.CONTENT_RECOMMEND -> AgentEffectReconciliation.NOT_APPLIED
             null -> AgentEffectReconciliation.UNKNOWN
         }
-    }
-
-    private fun recordAppliedLocalEffect(proposal: ProposalV2) {
-        appliedLocalAgentEffectKeys += proposal.idempotencyKey
     }
 
     fun resumeCoach() {
@@ -3482,7 +3632,11 @@ class AtlasController(
     }
 
     /** Non-critical UI writes report failures and leave the app usable in memory. */
-    private fun persist(operation: String = "state", durable: Boolean = true): PersistResult {
+    private fun persist(
+        operation: String = "state",
+        durable: Boolean = true,
+        stateOverride: Map<String, Any?>? = null,
+    ): PersistResult {
         try {
             focusSnapshot = focusEngine.currentSession()
             refreshDomainSnapshots()
@@ -3500,7 +3654,7 @@ class AtlasController(
             return PersistResult.NotWritable
         }
         return try {
-            val snapshot = try {
+            val snapshot = stateOverride ?: try {
                 stateMap()
             } catch (error: Exception) {
                 val reason = persistenceFailureKind(error)
@@ -3523,8 +3677,12 @@ class AtlasController(
     }
 
     /** Critical writes use this boundary and cannot be reported as committed after an error. */
-    private fun persistOrThrow(operation: String, durable: Boolean = true): PersistResult {
-        val result = persist(operation, durable)
+    private fun persistOrThrow(
+        operation: String,
+        durable: Boolean = true,
+        stateOverride: Map<String, Any?>? = null,
+    ): PersistResult {
+        val result = persist(operation, durable, stateOverride)
         if (result != PersistResult.Stored) throw PersistOperationException(result)
         if (agentConsentMigrationPending) {
             agentConsentMigrationPending = false
