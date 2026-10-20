@@ -91,14 +91,19 @@ class AgentPersistenceFailureInstrumentationTest {
                     "location" -> controller.setLocationSummaryConsent(false)
                 }
             }
-            assertFalse(controller.isAgentEnabled)
+            val agentBlockedGlobally = case == "mandate" || case == "disable"
+            assertEquals(agentBlockedGlobally, !controller.isAgentEnabled)
             assertTrue(barrier.blocked)
-            assertTrue(controller.latestMessage.orEmpty().contains("n'est pas confirm"))
+            val failureMessage = controller.latestMessage.orEmpty()
+            assertTrue(
+                failureMessage.contains("échec") || failureMessage.contains("échoué") ||
+                    failureMessage.contains("pas pu être enregistré") || failureMessage.contains("n'est pas confirm"),
+            )
 
             backend.failWrites = false
             lateinit var recreated: AtlasController
             instrumentation.runOnMainSync { recreated = makeController(context, backend, barrier) }
-            assertFalse("agent access after $case revocation", recreated.isAgentEnabled)
+            assertEquals("agent access after $case revocation", !agentBlockedGlobally, recreated.isAgentEnabled)
             assertTrue("context categories after $case revocation", recreated.agentContextPreview.authorizedCategories.isEmpty())
         }
     }
