@@ -447,14 +447,17 @@ class AtlasController(
                 )
             }
             is StateReadResult.Corrupt -> {
-                // Unparseable documents keep their raw copy: losing the quarantine would forbid every later write.
+                // Keep recoverable non-sensitive blobs intact, but never copy a malformed legacy payload.
                 val sanitizedJson = result.rawJson?.let { raw ->
                     runCatching {
                         JSONObject(raw).apply {
                             remove("lastAgentSharedContext")
                             remove("lastAgentSharedContextAt")
                         }.toString()
-                    }.getOrDefault(raw)
+                    }.getOrElse {
+                        if (raw.contains("\"lastAgentSharedContext\"")) redactedCorruptDocumentEnvelope(raw, result.reason)
+                        else raw
+                    }
                 }
                 InitialState(
                     readResult = StateReadResult.Corrupt(sanitizedJson, result.reason),
@@ -464,6 +467,20 @@ class AtlasController(
             }
             StateReadResult.Missing -> InitialState(StateReadResult.Missing, null, false)
         }
+    }
+
+    private fun redactedCorruptDocumentEnvelope(raw: String, reason: String): String {
+        val bytes = raw.toByteArray(Charsets.UTF_8)
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString(separator = "") { byte -> "%02x".format(byte) }
+        return JSONObject()
+            .put("quarantine_format", "redacted_corrupt_document_v1")
+            .put("reason", reason)
+            .put("at_utc_millis", System.currentTimeMillis())
+            .put("raw_length_bytes", bytes.size)
+            .put("raw_sha256", digest)
+            .toString()
     }
 
     private val locationPanelCoordinator = LocationPanelCoordinator(appContext)

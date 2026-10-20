@@ -29,7 +29,6 @@ import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
-import org.junit.Ignore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -40,7 +39,6 @@ import java.time.ZoneId
 /** Independent S7 regressions for failed commits and sensitive quarantine data. */
 class V621ReviewFindingsTest {
     @Test
-    @Ignore("V621-REVIEW: R2")
     fun malformedLegacyContextMustBeRemovedBeforeQuarantine() {
         val secret = "private legacy objective"
         val raw = """{"schemaVersion":1,"lastAgentSharedContext":"{\"categories\":{\"goals\":[\"$secret\"]}}","broken": }"""
@@ -52,6 +50,11 @@ class V621ReviewFindingsTest {
 
         assertTrue(store.quarantine(corrupt.rawJson, corrupt.reason))
         assertFalse("the quarantine still contains the old shared goal", backend.quarantined.orEmpty().contains(secret))
+        val envelope = org.json.JSONObject(requireNotNull(backend.quarantined))
+        assertEquals("redacted_corrupt_document_v1", envelope.getString("quarantine_format"))
+        assertTrue(envelope.getLong("at_utc_millis") > 0L)
+        assertTrue(envelope.getInt("raw_length_bytes") > 0)
+        assertEquals(64, envelope.getString("raw_sha256").length)
     }
 
     @Test
