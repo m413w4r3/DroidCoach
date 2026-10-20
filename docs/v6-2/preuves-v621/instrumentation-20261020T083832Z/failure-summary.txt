@@ -1,0 +1,2 @@
+dev.atlas.coach.location.V62MobilityServiceInstrumentedTest.html :: visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail
+  java.lang.AssertionError: The mobility summary must approximately correspond to the injected position within 25 km; distance_m=8925794.0 | at org.junit.Assert.fail(Assert.java:89) | at org.junit.Assert.assertTrue(Assert.java:42) | at dev.atlas.coach.location.V62MobilityServiceInstrumentedTest.visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail(V62MobilityServiceInstrumentedTest.kt:105)

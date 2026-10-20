@@ -126,3 +126,12 @@
 
 - Une notification de plan reste publiable sans proposition locale valide. Son `PendingIntent` n'emporte alors que la destination Coach et ouvre l'onglet sans sélection; une proposition locale éventuelle est référencée par UUID.
 - Un UUID valide retiré de l'inbox ouvre Coach sur un état neutre sans actions. Un identifiant mal formé est ignoré; le tap n'accepte ni ne distribue jamais une proposition.
+
+## V6.2.1 — Orchestration (2026-10-20)
+
+- Branche locale `feat/atlas-v6-2-1` depuis `819cdfd`; chaque lot dans un worktree Nimbalyst dédié, fusionné par l'orchestrateur (intégrateur unique S6). Aucun push, tag ni merge sur `main`.
+- Les agents B et C ont pu modifier `AtlasController.kt`/`MainActivity.kt` dans leur seul worktree, en commits « demande d'intégration » séparés, pour compiler et tester ; l'orchestrateur a relu et fusionné ces hunks. Le Lot D (tiroir/docs, aucun fichier commun avec A) a démarré pendant la revue de A.
+- Un document local non parsable garde sa copie brute en quarantaine (correctif intégrateur sur le Lot B) : sans quarantaine, `persistenceAllowed` passait à faux et toute écriture critique échouait.
+- L'AVD jetable `atlas_v62_disposable_api34` a été prêté aux agents D et C uniquement pour `adb install` / `am instrument`; l'AVD personnel n'a pas été démarré.
+- Les journaux volumineux du harnais restent hors dépôt (`/tmp/v621`); seuls les compteurs et résumés représentatifs sont versionnés sous `docs/v6-2/preuves-v621/`.
+- Le scénario OpenClaw réel est rejoué avec le backend éphémère et un jeton aléatoire du script existant; les captures `docs/v6/captures` réécrites par le script sont restaurées depuis git.
