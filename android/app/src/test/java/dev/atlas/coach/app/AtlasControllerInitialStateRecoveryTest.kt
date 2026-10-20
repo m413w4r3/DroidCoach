@@ -23,15 +23,16 @@ import sun.misc.Unsafe
 
 class AtlasControllerInitialStateRecoveryTest {
     @Test
-    fun unparseableDocumentIsQuarantinedRawThenGoalPersistsAcrossRecreation() {
+    fun unparseableDocumentIsQuarantinedAsValueFreeEnvelopeThenGoalPersistsAcrossRecreation() {
         val backend = MemoryStateBackend("{pas du json")
         val store = LocalStateStore(backend)
         val initial = controllerForRead(store).readInitialStateForTest()
         val corrupt = initial.readResult as StateReadResult.Corrupt
 
-        assertEquals("{pas du json", corrupt.rawJson)
+        val envelope = org.json.JSONObject(requireNotNull(corrupt.rawJson))
+        assertEquals("redacted_corrupt_document_v1", envelope.getString("quarantine_format"))
         assertTrue(store.quarantine(corrupt.rawJson, corrupt.reason))
-        assertEquals("{pas du json", backend.quarantinedValue)
+        assertFalse(backend.quarantinedValue.orEmpty().contains("pas du json"))
 
         // The controller replaces its recovered empty state after quarantine succeeds.
         store.write(emptyMap())

@@ -448,17 +448,15 @@ class AtlasController(
                 )
             }
             is StateReadResult.Corrupt -> {
-                // Keep recoverable non-sensitive blobs intact, but never copy a malformed legacy payload.
+                // A parseable blob is quarantined without the legacy payload. An unparseable one cannot be
+                // proven free of it (escaped keys defeat text filters), so only a value-free envelope is kept.
                 val sanitizedJson = result.rawJson?.let { raw ->
                     runCatching {
                         JSONObject(raw).apply {
                             remove("lastAgentSharedContext")
                             remove("lastAgentSharedContextAt")
                         }.toString()
-                    }.getOrElse {
-                        if (raw.contains("\"lastAgentSharedContext\"")) redactedCorruptDocumentEnvelope(raw, result.reason)
-                        else raw
-                    }
+                    }.getOrElse { redactedCorruptDocumentEnvelope(raw, result.reason) }
                 }
                 InitialState(
                     readResult = StateReadResult.Corrupt(sanitizedJson, result.reason),

@@ -145,3 +145,4 @@
 ## 2026-10-20 — V6.2.1, revue S7 R2
 
 - Quand un document ATLAS illisible contient la clé `lastAgentSharedContext`, la quarantaine conserve seulement la raison, l'horodatage, la taille et l'empreinte SHA-256. La valeur brute est volontairement écartée; sa récupération manuelle depuis la quarantaine n'est donc plus possible, afin qu'un ancien contexte d'objectif ne persiste pas dans une copie de récupération.
+- R4 (contre-vérification S7) : tout document local non parsable est désormais mis en quarantaine sous forme d'enveloppe sans valeurs (raison, horodatage, longueur, SHA-256), qu'il semble ou non contenir `lastAgentSharedContext` — un nom de clé échappé contournait le filtre textuel. La récupération manuelle d'un document illisible n'est plus possible; la quarantaine compte comme réussie, donc les écritures restent autorisées.

@@ -29,7 +29,6 @@ import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
-import org.junit.Ignore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -59,7 +58,6 @@ class V621ReviewFindingsTest {
     }
 
     @Test
-    @Ignore("V621-REVIEW: R4")
     fun malformedLegacyContextWithEscapedKeyMustBeRemovedBeforeQuarantine() {
         val secret = "private escaped-key objective"
         // JSON permits escaped characters in property names; the document is malformed only
