@@ -1,0 +1,4 @@
+UsageFixtureInstrumentationTest#actualAppOpsDenialStopsBeforeQueryingUsageStats was intentionally not run.
+That method invokes `appops set --uid ... GET_USAGE_STATS ignore` and changes Android AppOps through UiAutomation shell; AGENTS.md prohibits privileged system-shell changes.
+The two safe UsageFixture methods were run separately; four fixture launches reported BLOCKED because GET_USAGE_STATS was not allowed, so no launch scenario ran.
+V62RealGatewayContextBridgeTest was excluded by the requested notClass argument. No real Gateway/model request was made in this recipe.

@@ -1,0 +1,13 @@
+--------- beginning of main
+10-20 00:28:37.297 13836 13858 I ATLAS_V62_REAL: stage=coach_composed
+10-20 00:28:37.892 13836 13858 I ATLAS_V62_REAL: stage=chat_clicked
+10-20 00:28:43.297 13836 13858 I ATLAS_V62_REAL: stage=assistant_received
+10-20 00:28:43.297 13836 13858 I ATLAS_V62_REAL: stage=reply_received
+10-20 00:28:43.298 13836 13858 I ATLAS_V62_REAL: stage=reply_mentions_focus_minutes
+10-20 00:28:43.298 13836 13858 I ATLAS_V62_REAL: stage=first_payload_verified
+10-20 00:30:31.184 15005 15027 I ATLAS_V62_REAL: stage=coach_composed
+10-20 00:30:31.901 15005 15027 I ATLAS_V62_REAL: stage=chat_clicked
+10-20 00:30:36.493 15005 15027 I ATLAS_V62_REAL: stage=assistant_received
+10-20 00:30:36.494 15005 15027 I ATLAS_V62_REAL: stage=reply_received
+10-20 00:30:36.494 15005 15027 I ATLAS_V62_REAL: stage=reply_mentions_focus_minutes
+10-20 00:30:36.494 15005 15027 I ATLAS_V62_REAL: stage=first_payload_verified

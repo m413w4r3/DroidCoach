@@ -6,7 +6,6 @@ import dev.atlas.coach.sync.agent.AgentFocusProposalCard
 import dev.atlas.coach.sync.agent.AgentHomeDirective
 import dev.atlas.coach.sync.agent.AgentHomeState
 import dev.atlas.coach.sync.agent.DirectiveProvenance
-import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -83,32 +82,28 @@ class HomeAgentStateTest {
     }
 
     @Test
-    fun remoteDirectiveStatusNamesOriginAvailabilityAndLastContactTime() {
+    fun remoteDirectiveUsesReadableConnectedOrPreservedProvenance() {
         val unavailable = HomeAgentState(
             directive = HomeDirective("Remote", "Persisted", HomePrimaryAction.NONE, DirectiveProvenance.REMOTE_AI),
             directiveProvenance = DirectiveProvenance.REMOTE_AI,
             backendState = AgentBackendState.UNAVAILABLE,
             lastSuccessfulContactAtUtcMillis = 10L * 60L * 60L * 1_000L + 7L * 60L * 1_000L,
         )
+        val connected = unavailable.copy(backendState = AgentBackendState.REACHABLE)
 
-        assertEquals(
-            "Directive OpenClaw · backend indisponible · dernier contact 01/01 10:07",
-            unavailable.directiveStatusLabel(nowUtcMillis = 10L * 60L * 60L * 1_000L, zoneId = ZoneOffset.UTC),
-        )
+        assertEquals("Dernière directive conservée", unavailable.directiveStatusLabel())
+        assertEquals("Coach connecté", connected.directiveStatusLabel())
     }
 
     @Test
-    fun localDirectiveAlsoShowsBackendStatusAndLastSuccessfulContact() {
+    fun localDirectiveUsesShortLocalProvenance() {
         val local = HomeAgentState(
             directive = HomeDirective("Cap", "", HomePrimaryAction.NONE, DirectiveProvenance.MANUAL_ENTRY),
             directiveProvenance = DirectiveProvenance.MANUAL_ENTRY,
             backendState = AgentBackendState.UNVERIFIED,
         )
 
-        assertEquals(
-            "Directive locale · statut backend inconnu · aucun contact réussi",
-            local.directiveStatusLabel(zoneId = ZoneOffset.UTC),
-        )
+        assertEquals("Local", local.directiveStatusLabel())
     }
 
     @Test

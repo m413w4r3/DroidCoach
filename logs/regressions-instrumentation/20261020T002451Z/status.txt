@@ -1,0 +1,8 @@
+full_suite_tests=47
+full_suite_failures=3
+full_suite_errors=0
+full_suite_skipped=0
+additional_failures=0
+additional_errors=1
+capture_png_files=21/21
+recipe=FAIL

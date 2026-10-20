@@ -182,6 +182,9 @@ internal fun ShortcutButton(label: String, modifier: Modifier = Modifier, onClic
 
 @Composable
 internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int, onChooseHabit: () -> Unit) {
+    val focusEnabled = controller.capabilities[AtlasController.CAP_FOCUS] == true
+    val pausedSession = controller.focusSession?.takeIf { it.status == FocusStatus.PAUSED }
+    val finishedSession = controller.focusSession?.takeIf { it.status == FocusStatus.FINISHED }
     val proposal = controller.agentHomeState.focusProposal?.takeIf {
         (it.state == AgentFocusCardState.PROPOSED || it.state == AgentFocusCardState.PLANNED) &&
             it.proposalId !in controller.agentHomeState.cancelledFocusProposalIds
@@ -202,7 +205,45 @@ internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETE
         )
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (controller.capabilities[AtlasController.CAP_FOCUS] != true) {
+        if (!focusEnabled && pausedSession != null) {
+            Text(
+                pausedSession.taskTitle ?: controller.directiveTitle(pausedSession.directiveId),
+                modifier = Modifier.testTag("focus_active_task"),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "${pausedSession.remainingSeconds.div(60).toString().padStart(2, '0')}:" +
+                    pausedSession.remainingSeconds.rem(60).toString().padStart(2, '0'),
+                modifier = Modifier.fillMaxWidth().testTag("focus_time_remaining"),
+                textAlign = TextAlign.Center,
+                fontSize = 56.sp,
+                fontWeight = FontWeight.Light,
+            )
+            Text(
+                "${pausedSession.phase.focusPhaseLabel()} · en pause",
+                modifier = Modifier.testTag("focus_phase"),
+            )
+            Text(
+                controller.latestMessage ?: "Focus désactivé. La session est en pause.",
+                modifier = Modifier.testTag("focus_disabled_message"),
+            )
+            Text("Réactivez Focus pour reprendre la session.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp),
+                    onClick = controller::cancelFocus,
+                ) { Text("Annuler") }
+                OutlinedButton(
+                    modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp),
+                    onClick = controller::finishFocus,
+                ) { Text("Terminer") }
+            }
+        } else if (!focusEnabled && finishedSession != null) {
+            Text("Session terminée", style = MaterialTheme.typography.headlineSmall)
+            Text(finishedSession.taskTitle ?: controller.directiveTitle(finishedSession.directiveId))
+            Text("${finishedSession.completedWorkCycles} cycle(s) de travail terminés.")
+        } else if (!focusEnabled) {
             Text("Focus désactivé dans les paramètres.")
         } else {
             FocusSessionScreen(

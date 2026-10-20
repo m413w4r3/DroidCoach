@@ -1,0 +1,11 @@
+ACCESS_COARSE_LOCATION=granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+ACCESS_FINE_LOCATION=granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+ACCESS_BACKGROUND_LOCATION=not-requested (test asserted denied)
+POST_NOTIFICATIONS=granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+avd=atlas_v62_disposable_api34
+api=34
+wm_size=Physical size: 1344x2992 Override size: 1080x2400
+wm_density=Physical density: 480
+talkback_packages=package:com.google.android.marvin.talkbackoverlay,package:com.google.android.marvin.talkback
+accessibility_enabled=0
+enabled_accessibility_services=null

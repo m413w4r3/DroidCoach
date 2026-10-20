@@ -1,8 +1,12 @@
-# ATLAS / DroidCoach — préparation V5
+# ATLAS / DroidCoach — V6.2
+
+**V6.2 :** HOME textuel, objectifs locaux, contexte consenti réellement transmis au Coach, observation différée WorkManager, proactivité bornée et localisation foreground. La démonstration locale reste utilisable sans serveur ni secret. Le parcours OpenClaw réel a été vérifié sur AVD Android 14 avec progression Focus simulée par horloge accélérée, acceptation, journal et révocation. Voir le [rapport de livraison V6.2](docs/v6-2/LIVRAISON.md) et le [guide Pixel](docs/v6-2/GUIDE_PIXEL.md).
+
+Les résultats Android 17 des versions précédentes ci-dessous sont historiques. La recette V6.2 utilise un AVD jetable Android 14 ; ses limites Android 17, localisation et accessibilité sont détaillées dans le rapport V6.2. Ne pas effacer ni réutiliser un AVD personnel pour les scripts de recette destructifs.
 
 **V5 :** ATLAS fournit une `LauncherActivity` HOME autonome (heure, date, directive, favoris, tiroir avec recherche) distincte de l'application de gestion (`MainActivity`). Voir [architecture HOME](docs/v5/01-architecture-home.md), [observation hors interface](docs/v5/02-observation-hors-interface.md), [recette émulateur](docs/v5/03-recette-home-emulateur.md) et [recette finale](docs/v5/04-recette-finale.md).
 
-ATLAS est une application Android Compose de coaching personnel, encore au stade de démonstration locale. Elle fonctionne sans compte, abonnement, serveur ni secret. Les propositions locales sont déterministes. Aucun modèle LLM ou agent externe n'est connecté.
+ATLAS est une application Android Compose de coaching personnel. Elle fonctionne localement sans compte, abonnement, serveur ni secret, avec des propositions déterministes. Un backend FastAPI et un agent OpenClaw sont disponibles en option ; les propositions distantes restent soumises au mandat et au vérificateur Android.
 
 La configuration livrée compile avec AGP 9.4.1, Gradle 9.6.0, JDK 21, `compileSdk 37.2` et `targetSdk 36`. La recette finale a été exécutée sur l'AVD Android 17 `Pixel_9_Pro_XL_2` (`emulator-5556`, x86_64, pages mémoire 16 Ko). Aucun téléphone Pixel physique n'a été utilisé. Voir le [rapport de recette V4](docs/v4/03-recette-android17.md) et l'[audit Android 17](docs/v4/04-defauts-et-limites.md).
 
@@ -17,7 +21,7 @@ La configuration livrée compile avec AGP 9.4.1, Gradle 9.6.0, JDK 21, `compileS
 - Sync facultative vers le backend FastAPI. Elle est désactivée par défaut; les catégories partagées sont vides au départ. Le jeton est chiffré par Android Keystore.
 - L'option HOME est activée uniquement après choix du rôle Android par l'utilisateur. Le launcher système reste accessible.
 
-Les contrats d'extension IA sont documentés, mais OpenClaw, un LLM, une action Android pilotée par agent et une curation RSS ne sont pas implémentés. Voir [architecture réalisée](docs/v4/02-architecture-realisee.md) et [suite OpenClaw future](docs/v4/05-suite-openclaw-future.md).
+Les contrats V2 et le raccordement OpenClaw sont implémentés ; la curation RSS reste hors de cette itération. Les documents V4 ci-dessous décrivent l'état historique, pas l'état V6.2.
 
 ## Démonstration sur l'AVD existant
 

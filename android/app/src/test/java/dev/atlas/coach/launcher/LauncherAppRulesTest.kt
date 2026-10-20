@@ -33,6 +33,45 @@ class LauncherAppRulesTest {
     }
 
     @Test
+    fun searchRanksExactThenPrefixThenPartialBeforeAlphabeticalTies() {
+        val candidates = listOf(
+            LauncherAppModel("Desk Clock", "pkg.partial", null),
+            LauncherAppModel("Clockwork", "pkg.prefix", null),
+            LauncherAppModel("Clock", "pkg.exact", null),
+            LauncherAppModel("Alarm Clock", "pkg.other", null),
+        )
+
+        assertEquals(
+            listOf("pkg.exact", "pkg.prefix", "pkg.other", "pkg.partial"),
+            LauncherAppRules.filter(candidates, "clock").map { it.appPackage },
+        )
+    }
+
+    @Test
+    fun favoritesThenOptionalLocalRecencyRankEqualMatches() {
+        val candidates = listOf(
+            LauncherAppModel("Clock C", "pkg.c", null),
+            LauncherAppModel("Clock A", "pkg.a", null),
+            LauncherAppModel("Clock B", "pkg.b", null),
+        )
+
+        assertEquals(
+            listOf("pkg.c", "pkg.b", "pkg.a"),
+            LauncherAppRules.filter(
+                candidates,
+                "clock",
+                pinnedPackages = setOf("pkg.b", "pkg.c"),
+                recentPackages = listOf("pkg.c", "pkg.b"),
+            ).map { it.appPackage },
+        )
+        assertEquals(
+            listOf("pkg.b", "pkg.c", "pkg.a"),
+            LauncherAppRules.filter(candidates, "", pinnedPackages = setOf("pkg.b"), recentPackages = listOf("pkg.c", "pkg.b"))
+                .map { it.appPackage },
+        )
+    }
+
+    @Test
     fun favoritesAreSortedAndToggleWithoutChangingOtherPackages() {
         val favorites = LauncherAppRules.favorites(apps, setOf("com.example.school", "com.example.mail"))
         assertEquals(listOf("com.example.school", "com.example.mail"), favorites.map { it.appPackage })

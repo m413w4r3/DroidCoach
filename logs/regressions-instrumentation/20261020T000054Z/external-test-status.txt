@@ -1,0 +1,4 @@
+UsageFixtureInstrumentationTest#actualAppOpsDenialStopsBeforeQueryingUsageStats_exit=77
+UsageFixtureInstrumentationTest#fourRealFixtureOpensReachTheRuleAfterReturningToAtlas_exit=77
+fixture_build_exit=0
+fixture_install_exit=0

@@ -1,5 +1,11 @@
 package dev.atlas.coach.app
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,23 +29,30 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.sync.agent.AgentMode
+import dev.atlas.coach.coach.proactive.ProactiveEngagementMode
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
 import dev.atlas.coach.sync.agent.inbox.AgentInboxEntry
 import dev.atlas.coach.sync.agent.dispatch.AgentEffectRecord
+import java.util.Locale
+import dev.atlas.coach.sync.agent.context.AgentContextCategory
+import dev.atlas.coach.location.MobilitySessionStatusStore
+import kotlinx.coroutines.launch
 
 private val actionLabels = linkedMapOf(
     "home.set_directive" to "Modifier la directive HOME",
@@ -56,12 +69,36 @@ private val actionLabels = linkedMapOf(
 )
 
 private val dataCategoryLabels = linkedMapOf(
-    "focus" to "Résumé Focus",
+    "focus" to "Focus",
     "habit" to "Résumé des habitudes",
     "content" to "Bibliothèque de contenus",
     "coach_interaction" to "Échanges avec le Coach",
     "app_usage_summary" to "Résumé d'observation des applications",
+    "goals" to "Objectifs",
+    "location_summary" to "Résumé de zone approximative",
 )
+
+private fun readableProvenanceLabel(contextSources: List<String>, fallback: String): String {
+    val sources = contextSources.map { it.lowercase(Locale.ROOT) }
+    return when {
+        sources.any { "local-demo" in it || "adaptateur local" in it || "démonstration locale" in it } -> "Local"
+        sources.any { it.startsWith("version de contexte ") } -> "Coach connecté"
+        else -> fallback
+    }
+}
+
+private fun readableContextCategories(contextSources: List<String>): String? {
+    val categoryKeys = contextSources.flatMap { source ->
+        val marker = source.indexOf("Catégories consenties", ignoreCase = true)
+        if (marker < 0) emptyList() else {
+            source.substring(marker).substringAfter(':', "")
+                .split(',', '·', '|')
+                .map { it.trim().trimEnd('.').lowercase(Locale.ROOT) }
+        }
+    }
+    val labels = categoryKeys.mapNotNull(dataCategoryLabels::get).distinct()
+    return labels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
 
 @Composable
 internal fun AgentCoachScreen(
@@ -71,6 +108,10 @@ internal fun AgentCoachScreen(
 ) {
     var message by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<AgentInboxEntry?>(null) }
+    val pendingProposals = remember(controller, revision) { controller.visibleAgentProposals }
+    val latestProvenance = remember(controller, revision) {
+        HomeAgentState.localDefault(controller).directiveStatusLabel()
+    }
 
     LaunchedEffect(pullOnOpen) {
         if (pullOnOpen) controller.pullAgentInbox()
@@ -83,7 +124,7 @@ internal fun AgentCoachScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            controller.agentStatusMessage.ifBlank { "Agent indisponible — fonctions locales actives" },
+            latestProvenance,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.testTag("agent_connection_status"),
@@ -101,8 +142,14 @@ internal fun AgentCoachScreen(
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(if (entry.role == AgentMessageRole.USER) "Vous" else "Coach", fontWeight = FontWeight.SemiBold)
                             Text(entry.text)
-                            if (entry.contextSources.isNotEmpty()) {
-                                Text("Sources de contexte : ${entry.contextSources.joinToString(" · ")}", style = MaterialTheme.typography.bodySmall)
+                            if (entry.role == AgentMessageRole.ASSISTANT) {
+                                Text(
+                                    "Provenance : ${readableProvenanceLabel(entry.contextSources, latestProvenance)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                readableContextCategories(entry.contextSources)?.let { categories ->
+                                    Text("Catégories : $categories", style = MaterialTheme.typography.bodySmall)
+                                }
                             }
                         }
                     }
@@ -123,28 +170,29 @@ internal fun AgentCoachScreen(
                 ) { Text("Envoyer") }
             }
 
-            key(revision) {
-                val pending = controller.visibleAgentProposals
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Proposition prioritaire", style = MaterialTheme.typography.titleLarge)
-                    val proposal = pending.firstOrNull()
-                    if (proposal == null) Text("Aucune proposition en attente.")
-                    else {
-                        AgentProposalCard(
-                            entry = proposal,
-                            sourceSummary = controller.agentProposalSourceSummary(proposal.proposal),
-                            onAccept = { controller.acceptAgentProposal(proposal.id) },
-                            onEdit = { editing = proposal },
-                            onPostpone = { controller.postponeAgentProposal(proposal.id) },
-                            onReject = { controller.rejectAgentProposal(proposal.id) },
-                        )
-                        if (pending.size > 1) {
-                            Text("${pending.size - 1} autre(s) proposition(s) apparaîtront après celle-ci.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Proposition prioritaire", style = MaterialTheme.typography.titleLarge)
+                val proposal = pendingProposals.firstOrNull()
+                if (proposal == null) Text("Aucune proposition en attente.")
+                else {
+                    val sourceMetadata = listOf(controller.agentProposalSourceSummary(proposal.proposal))
+                    AgentProposalCard(
+                        entry = proposal,
+                        provenanceLabel = readableProvenanceLabel(sourceMetadata, latestProvenance),
+                        contextCategories = readableContextCategories(sourceMetadata),
+                        onAccept = { controller.acceptAgentProposal(proposal.id) },
+                        onEdit = { editing = proposal },
+                        onPostpone = { controller.postponeAgentProposal(proposal.id) },
+                        onReject = { controller.rejectAgentProposal(proposal.id) },
+                    )
+                    if (pendingProposals.size > 1) {
+                        Text("${pendingProposals.size - 1} autre(s) proposition(s) apparaîtront après celle-ci.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
+
+        AgentIntegrationPanels(controller, revision)
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Réglages et historique", style = MaterialTheme.typography.titleMedium)
@@ -173,6 +221,208 @@ internal fun AgentCoachScreen(
             onDismiss = { editing = null },
             onSave = { parameters -> controller.editAgentProposal(entry.id, parameters); editing = null },
         )
+    }
+}
+
+private enum class LocationUiContinuation { CAPTURE, MOBILITY }
+
+@Composable
+private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val scope = rememberCoroutineScope()
+    val mobilityStatus by MobilitySessionStatusStore.status.collectAsState()
+    var pendingLocationAction by remember { mutableStateOf<LocationUiContinuation?>(null) }
+    var locationPermissionResult by remember { mutableStateOf<Boolean?>(null) }
+    var notificationPermissionResult by remember { mutableStateOf<Boolean?>(null) }
+    var showContextPayload by remember { mutableStateOf(false) }
+    var showLastSharedContextPayload by remember { mutableStateOf(false) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        controller.onLocationPermissionResult(granted)
+        locationPermissionResult = granted
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> notificationPermissionResult = granted }
+
+    fun startMobilityIfVisible() {
+        val visibleActivity = activity
+        if (visibleActivity == null) {
+            controller.reportMessage("Le suivi doit démarrer depuis une activité ATLAS visible.")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            pendingLocationAction = LocationUiContinuation.MOBILITY
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            controller.startMobilitySession(visibleActivity)
+        }
+    }
+
+    LaunchedEffect(locationPermissionResult) {
+        val granted = locationPermissionResult ?: return@LaunchedEffect
+        locationPermissionResult = null
+        val action = pendingLocationAction
+        pendingLocationAction = null
+        if (!granted || action == null) return@LaunchedEffect
+        when (action) {
+            LocationUiContinuation.CAPTURE -> scope.launch { controller.captureCoarseLocation() }
+            LocationUiContinuation.MOBILITY -> startMobilityIfVisible()
+        }
+    }
+    LaunchedEffect(notificationPermissionResult) {
+        val granted = notificationPermissionResult ?: return@LaunchedEffect
+        notificationPermissionResult = null
+        if (pendingLocationAction == LocationUiContinuation.MOBILITY) {
+            pendingLocationAction = null
+            if (granted) startMobilityIfVisible()
+            else controller.reportMessage("Notifications refusées; la session de déplacement n'a pas démarré.")
+        }
+    }
+
+    val contextPreview = controller.agentContextPreview
+    val goals = remember(controller, revision) { controller.coachGoals }
+    val focusLinkOptions = remember(controller, revision) { controller.goalFocusLinkOptions }
+    val habitLinkOptions = remember(controller, revision) { controller.goalHabitLinkOptions }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        GoalsPanel(
+            goals = goals,
+            focusSessions = focusLinkOptions,
+            habits = habitLinkOptions,
+            onCreateGoal = controller::createGoal,
+            onUpdateGoal = controller::updateGoal,
+            onStatusChange = controller::changeGoalStatus,
+            onCompleteFromProgress = controller::completeGoalFromProgress,
+            onLinkFocusSession = { goalId, sessionId -> controller.linkFocusToGoal(goalId, sessionId, true) },
+            onUnlinkFocusSession = { goalId, sessionId -> controller.linkFocusToGoal(goalId, sessionId, false) },
+            onLinkHabit = { goalId, habitId -> controller.linkHabitToGoal(goalId, habitId, true) },
+            onUnlinkHabit = { goalId, habitId -> controller.linkHabitToGoal(goalId, habitId, false) },
+            onConfirmManualCompletion = controller::confirmManualGoalCompletion,
+        )
+
+        LocationPanel(
+            state = controller.locationPanelState.copy(mobilitySessionActive = mobilityStatus.active),
+            onCoarseRequestConsentChanged = controller::setLocationRequestConsent,
+            onCoachSummaryConsentChanged = controller::setLocationSummaryConsent,
+            onMobilityConsentChanged = controller::setMobilityConsent,
+            onRequestCoarsePosition = {
+                if (controller.locationPermissionGranted()) scope.launch { controller.captureCoarseLocation() }
+                else {
+                    pendingLocationAction = LocationUiContinuation.CAPTURE
+                    locationPermissionLauncher.launch(controller.initialLocationPermissionRequest().single())
+                }
+            },
+            onStartMobility = {
+                if (controller.locationPermissionGranted()) startMobilityIfVisible()
+                else {
+                    pendingLocationAction = LocationUiContinuation.MOBILITY
+                    locationPermissionLauncher.launch(controller.initialLocationPermissionRequest().single())
+                }
+            },
+            onStopMobility = { controller.stopMobilitySession() },
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Contexte du prochain envoi", style = MaterialTheme.typography.titleLarge)
+            Text("La liste distingue le droit d'inclure une catégorie des données réellement disponibles.")
+            AgentContextCategory.wireValues.forEach { category ->
+                val allowed = category in contextPreview.authorizedCategories
+                val count = contextPreview.includedCategories[category]?.size ?: 0
+                Text(
+                    "${dataCategoryLabels[category] ?: category} · ${if (allowed) "autorisée" else "non autorisée"} · " +
+                        if (count == 0) "aucune donnée disponible" else "$count élément(s) inclus",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            TextButton(
+                modifier = Modifier.testTag("agent_next_context_payload_toggle"),
+                onClick = { showContextPayload = !showContextPayload },
+            ) {
+                Text(
+                    if (showContextPayload) "Masquer le JSON exact du prochain envoi"
+                    else "Afficher le JSON exact du prochain envoi",
+                )
+            }
+            if (showContextPayload) {
+                Card(Modifier.fillMaxWidth().testTag("agent_next_context_payload")) {
+                    Text(contextPreview.serializedPayload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Text("Ce payload est assemblé depuis l'état local au moment de l'envoi et réduit juste avant le transport.", style = MaterialTheme.typography.bodySmall)
+            val sentAt = controller.lastSharedAgentContextAtUtcMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
+            Text(
+                sentAt?.let { "Dernier payload écrit vers le backend · $it" } ?: "Aucun payload n'a encore été envoyé au backend.",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            controller.lastSharedAgentContextJson?.let { payload ->
+                TextButton(
+                    modifier = Modifier.testTag("agent_last_shared_context_payload_toggle"),
+                    onClick = { showLastSharedContextPayload = !showLastSharedContextPayload },
+                ) {
+                    Text(
+                        if (showLastSharedContextPayload) "Masquer le dernier JSON réellement partagé"
+                        else "Afficher le dernier JSON réellement partagé",
+                    )
+                }
+                if (showLastSharedContextPayload) {
+                    Card(Modifier.fillMaxWidth().testTag("agent_last_shared_context_payload")) {
+                        Text(payload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+                onClick = controller::requestAgentPlan,
+                enabled = controller.isAgentEnabled,
+            ) { Text("Demander un plan sans ajouter de message au chat") }
+            controller.latestAgentPlanReply?.let { Text("Plan · $it") }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Tâches en arrière-plan", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Observation UsageStats toutes les 30 minutes au mieux", Modifier.weight(1f))
+                Switch(
+                    checked = controller.capabilities[AtlasController.CAP_USAGE_BACKGROUND] == true,
+                    enabled = controller.usageConsentActive && controller.usagePermissionGranted,
+                    onCheckedChange = { controller.setCapability(AtlasController.CAP_USAGE_BACKGROUND, it) },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Plans proactifs", Modifier.weight(1f))
+                Switch(
+                    checked = controller.capabilities[AtlasController.CAP_AGENT_PROACTIVE] == true,
+                    enabled = controller.isAgentEnabled,
+                    onCheckedChange = { controller.setCapability(AtlasController.CAP_AGENT_PROACTIVE, it) },
+                )
+            }
+            Text("Au plus ${controller.proactiveEngagementMode.notificationLimitPerLocalDay} notifications par jour.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { controller.setProactiveEngagementMode(ProactiveEngagementMode.NORMAL) },
+                    enabled = controller.capabilities[AtlasController.CAP_AGENT_PROACTIVE] == true,
+                ) {
+                    Text(if (controller.proactiveEngagementMode == ProactiveEngagementMode.NORMAL) "✓ Normal · 3/j" else "Normal · 3/j")
+                }
+                OutlinedButton(
+                    onClick = { controller.setProactiveEngagementMode(ProactiveEngagementMode.REINFORCED) },
+                    enabled = controller.capabilities[AtlasController.CAP_AGENT_PROACTIVE] == true,
+                ) {
+                    Text(if (controller.proactiveEngagementMode == ProactiveEngagementMode.REINFORCED) "✓ Renforcé · 5/j" else "Renforcé · 5/j")
+                }
+            }
+        }
     }
 }
 
@@ -208,7 +458,8 @@ internal fun AgentEffectsScreen(controller: AtlasController) {
 @Composable
 private fun AgentProposalCard(
     entry: AgentInboxEntry,
-    sourceSummary: String,
+    provenanceLabel: String,
+    contextCategories: String?,
     onAccept: () -> Unit,
     onEdit: () -> Unit,
     onPostpone: () -> Unit,
@@ -218,7 +469,8 @@ private fun AgentProposalCard(
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(actionLabels[entry.proposal.actionType] ?: entry.proposal.actionType, style = MaterialTheme.typography.titleMedium)
             Text("Motif : ${entry.proposal.reason}")
-            Text("Sources de contexte : $sourceSummary", style = MaterialTheme.typography.bodySmall)
+            Text("Provenance : $provenanceLabel", style = MaterialTheme.typography.bodySmall)
+            contextCategories?.let { Text("Catégories : $it", style = MaterialTheme.typography.bodySmall) }
             Text("État : ${proposalStateLabel(entry)}", style = MaterialTheme.typography.bodySmall)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
@@ -449,7 +701,7 @@ private fun SharedDataPanel(controller: AtlasController) {
     val mandate = controller.agentMandate
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Données partagées avec le coach", style = MaterialTheme.typography.titleLarge)
-        Text("Désactivées au départ. Seules les catégories cochées sont indiquées dans les requêtes v2; les messages ne partent qu'après Envoyer.")
+        Text("Les catégories cochées autorisent le partage correspondant. Le Coach affiche le payload prévu et le dernier payload réellement écrit avant le transport.")
         dataCategoryLabels.forEach { (category, label) ->
             Row(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
@@ -460,9 +712,10 @@ private fun SharedDataPanel(controller: AtlasController) {
             }
         }
         if (mandate.sharedDataCategories.isEmpty()) {
-            Text("Aucune donnée locale partagée.", color = MaterialTheme.colorScheme.primary)
+            Text("Aucune catégorie autorisée.", color = MaterialTheme.colorScheme.primary)
         } else {
-            Text("Catégories consenties : ${mandate.sharedDataCategories.sorted().joinToString(", ")}.")
+            val labels = mandate.sharedDataCategories.mapNotNull(dataCategoryLabels::get).sorted()
+            if (labels.isNotEmpty()) Text("Catégories autorisées : ${labels.joinToString(", ")}.")
         }
         Text("L'observation UsageStats exige son propre consentement Android et ATLAS. Les actions n'accordent aucune permission système.", style = MaterialTheme.typography.bodySmall)
     }

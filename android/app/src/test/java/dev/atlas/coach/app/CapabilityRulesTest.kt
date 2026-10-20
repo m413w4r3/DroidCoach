@@ -28,4 +28,28 @@ class CapabilityRulesTest {
         assertFalse(CapabilityRules.mayRenderLauncherHome(oldInstall, isAndroidHomeRole = false))
         assertTrue(CapabilityRules.mayRenderLauncherHome(mapOf(AtlasController.CAP_LAUNCHER_HOME to true), isAndroidHomeRole = false))
     }
+
+    @Test
+    fun backgroundUsageProactiveLocationAndMobilityRemainIndependentCapabilities() {
+        assertTrue(CapabilityRules.mayObserveUsageInBackground(
+            mapOf(AtlasController.CAP_USAGE_BACKGROUND to true, AtlasController.CAP_APP_TRACKING to true),
+            usageConsentActive = true,
+            osPermissionGranted = true,
+        ))
+        assertFalse(CapabilityRules.mayObserveUsageInBackground(
+            mapOf(AtlasController.CAP_USAGE_BACKGROUND to true, AtlasController.CAP_APP_TRACKING to false),
+            usageConsentActive = false,
+            osPermissionGranted = true,
+        ))
+        assertTrue(CapabilityRules.mayRunProactiveCoach(
+            mapOf(AtlasController.CAP_AGENT_PROACTIVE to true),
+            agentEnabled = true,
+        ))
+        assertFalse(CapabilityRules.mayRunProactiveCoach(
+            mapOf(AtlasController.CAP_AGENT_PROACTIVE to true),
+            agentEnabled = false,
+        ))
+        assertTrue(CapabilityRules.mayUseLocation(mapOf(AtlasController.CAP_LOCATION to true)))
+        assertFalse(CapabilityRules.mayTrackMobility(mapOf(AtlasController.CAP_MOBILITY to false)))
+    }
 }

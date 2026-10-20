@@ -2,6 +2,7 @@ package dev.atlas.coach
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -15,9 +16,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.app.AtlasApplication
+import dev.atlas.coach.app.GoalPanelDraft
 import dev.atlas.coach.app.MainActivity
 import dev.atlas.coach.focus.FakeClock
 import dev.atlas.coach.focus.FocusPlan
+import dev.atlas.coach.focus.FocusStatus
+import dev.atlas.coach.goals.GoalMetric
+import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.launcher.AndroidLauncherCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,10 +39,6 @@ class AtlasLaunchTest {
 
     @Before
     fun clearDemoState() {
-        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
-            InstrumentationRegistry.getInstrumentation().targetContext.packageName,
-            android.Manifest.permission.POST_NOTIFICATIONS,
-        )
         InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
             .edit().clear().commit()
@@ -52,7 +53,7 @@ class AtlasLaunchTest {
     private fun openMore() = composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
     private fun openSettings() { openMore(); composeRule.onNodeWithText("Usage quotidien").performScrollTo().performClick() }
     private fun openLibrary() { openMore(); composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick() }
-    private fun openCoach() { openMore(); composeRule.onNodeWithText("Coach et journal").performScrollTo().performClick() }
+    private fun openCoach() { openMore(); composeRule.onNodeWithText("Coach").performScrollTo().performClick() }
 
     @Test
     fun backReturnsFromDailySettingsToMoreAndTabsSelectTheirRoot() {
@@ -63,7 +64,7 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Autres espaces").assertIsDisplayed()
 
         openFocus()
-        composeRule.onNodeWithText("Un pas à la fois").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_task_title").assertIsDisplayed()
         openHome()
         composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
     }
@@ -74,12 +75,12 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
 
         composeRule.onNodeWithText("Commencer").performClick()
-        composeRule.onNodeWithText("Session liée à : Lis/avance 10 min").assertIsDisplayed()
-        composeRule.onNodeWithText("Mettre en pause").performScrollTo().performClick()
+        composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
+        composeRule.onNodeWithText("Pause").performScrollTo().performClick()
         composeRule.onNodeWithText("Reprendre").performScrollTo().assertIsDisplayed()
         composeRule.activityRule.scenario.recreate()
         composeRule.onNodeWithText("Reprendre").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Session liée à : Lis/avance 10 min").assertIsDisplayed()
+        composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
         composeRule.onNodeWithText("Reprendre").performScrollTo().performClick()
 
         openHome()
@@ -161,14 +162,38 @@ class AtlasLaunchTest {
         openHome()
 
         composeRule.onNodeWithText("Commencer").performClick()
-        composeRule.onNodeWithText("Concentration · En cours").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_phase").assertTextEquals("Concentration · en cours")
         openHome()
         openSettings()
         composeRule.onNodeWithContentDescription("Activer ou désactiver Focus").performClick()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val application = context.applicationContext as AtlasApplication
+        val controller = application.controller
+        assertEquals("Disabling Focus must preserve the running session as paused", FocusStatus.PAUSED, controller.focusSession?.status)
+        val pausedSessionId = checkNotNull(controller.focusSession).id
+        val pausedRemainingSeconds = controller.focusSession!!.remainingSeconds
+        val persistedFocus = org.json.JSONObject(checkNotNull(
+            context.getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
+                .getString("state_v1", null),
+        )).getJSONObject("focus")
+        assertEquals("PAUSED", persistedFocus.getString("status"))
+        application.resetControllerForTesting()
+        composeRule.activityRule.scenario.recreate()
+        val restoredController = application.controller
+        assertEquals(pausedSessionId, restoredController.focusSession?.id)
+        assertEquals(FocusStatus.PAUSED, restoredController.focusSession?.status)
+        assertEquals(pausedRemainingSeconds, restoredController.focusSession?.remainingSeconds)
         openHome()
         openFocus()
-        composeRule.onNodeWithText("Concentration · En pause").assertIsDisplayed()
+        composeRule.onNodeWithText("Concentration · en pause").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_active_task").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_time_remaining").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_disabled_message")
+            .performScrollTo().assertTextEquals("Focus désactivé. La session est en pause.")
+        composeRule.onNodeWithText("Annuler").assertIsDisplayed()
         composeRule.onAllNodesWithText("Reprendre").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Nouvelle session").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Commencer").assertCountEquals(0)
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
 
         openHome()
@@ -183,7 +208,7 @@ class AtlasLaunchTest {
     @Test
     fun focusSessionRestorationSeed() {
         composeRule.onNodeWithText("Commencer").performClick()
-        composeRule.onNodeWithText("Concentration · En cours").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_phase").assertTextEquals("Concentration · en cours")
     }
 
     @Test
@@ -193,17 +218,18 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Choisir ATLAS comme accueil…").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithContentDescription("Activer ou désactiver Accueil ATLAS facultatif").assertCountEquals(0)
         composeRule.onNodeWithText("À propos et licences").performScrollTo().performClick()
-        composeRule.onNodeWithText("Le code source ATLAS est diffusé sous GNU GPL version 3.0.", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Reef par Pranav Purwar", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("github.com/aload0/Reef").assertIsDisplayed()
-        composeRule.onNodeWithText("Olauncher · modèle de liste d'applications").assertIsDisplayed()
-        composeRule.onNodeWithText("Loop Habit Tracker · force d'habitude et CSV").assertIsDisplayed()
+        composeRule.onNodeWithText("Le code source ATLAS est diffusé sous GNU GPL version 3.0.", substring = true)
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Reef par Pranav Purwar", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("github.com/aload0/Reef").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Olauncher · modèle de liste d'applications").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Loop Habit Tracker · force d'habitude et CSV").performScrollTo().assertIsDisplayed()
 
         openHome()
         openMore()
         composeRule.onAllNodesWithText("Accueil et applications favorites").assertCountEquals(0)
         openHome()
-        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
+        composeRule.onNodeWithText("La prochaine étape").performScrollTo().assertIsDisplayed()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertTrue(AndroidLauncherCatalog(context).list().none { it.appPackage == context.packageName })
     }
@@ -211,8 +237,9 @@ class AtlasLaunchTest {
     @Test
     fun finishedFocusHistoryRestoresFromLocalPersistence() {
         openFocus()
-        composeRule.onNodeWithText("Mode démo · 20 secondes").performScrollTo().performClick()
+        composeRule.onNodeWithTag("focus_pomodoro_start").performScrollTo().performClick()
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
+        composeRule.onNodeWithText("Session terminée").assertIsDisplayed()
         composeRule.onNodeWithText("Statistiques de focus").performScrollTo().performClick()
         composeRule.onNodeWithText("1 sessions archivées", substring = true).assertIsDisplayed()
 
@@ -240,8 +267,8 @@ class AtlasLaunchTest {
     fun reefPomodoroSetupStartsAnAtlasSessionWithCycleState() {
         openFocus()
         composeRule.onNodeWithTag("focus_pomodoro_start").performScrollTo().performClick()
-        composeRule.onNodeWithText("Pomodoro démarré · 25 min de concentration, pause courte de 5 min", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Cycle 1 / 4").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_phase").assertIsDisplayed()
+        composeRule.onNodeWithTag("focus_cycles").assertTextEquals("Cycle 1 / 4")
     }
 
     @Test
@@ -255,9 +282,15 @@ class AtlasLaunchTest {
             .resetControllerForTesting()
         composeRule.activityRule.scenario.recreate()
 
-        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
-        composeRule.onNodeWithText("sous-états invalides", substring = true).assertIsDisplayed()
         assertTrueQuarantineContains(prefs.all, raw)
+        val recoveryMessage = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as AtlasApplication)
+            .controller.latestMessage
+        assertTrue(
+            "Controller should expose the quarantined invalid-substate notice; actual=$recoveryMessage",
+            recoveryMessage?.contains("sous-états invalides") == true,
+        )
+        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
+        composeRule.onNodeWithText("sous-états invalides", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -271,8 +304,66 @@ class AtlasLaunchTest {
             .resetControllerForTesting()
         composeRule.activityRule.scenario.recreate()
 
+        assertTrueQuarantineContains(prefs.all, raw)
+        val recoveryMessage = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as AtlasApplication)
+            .controller.latestMessage
+        assertTrue(
+            "Controller should expose the unknown-schema recovery notice; actual=$recoveryMessage",
+            recoveryMessage?.contains("version de schéma inconnue") == true,
+        )
+        val persisted = org.json.JSONObject(checkNotNull(prefs.getString("state_v1", null)))
+        assertEquals(1, persisted.getInt("schemaVersion"))
+        assertEquals(1, persisted.getJSONObject("goals").getInt("schema_version"))
         composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
-        composeRule.onNodeWithText("version de schéma inconnue", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("version de schéma inconnue", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
+        val legacyMandate = AgentMandate.default().copy(sharedDataCategories = setOf("focus", "goals"))
+        val raw = org.json.JSONObject()
+            .put("schemaVersion", 1)
+            .put("agentMandate", legacyMandate.toJson().toString())
+            .put("policy", org.json.JSONObject().put("quietStart", "invalid-time").put("quietEnd", "07:00"))
+            .toString()
+        prefs.edit().putString("state_v1", raw).commit()
+
+        val app = context.applicationContext as AtlasApplication
+        app.resetControllerForTesting()
+        val controller = app.controller
+        assertTrueQuarantineContains(prefs.all, raw)
+        assertTrue(controller.latestMessage?.contains("sous-états invalides") == true)
+        assertTrue(controller.agentContextPreview.authorizedCategories.containsAll(setOf("focus", "goals")))
+
+        val firstPersisted = org.json.JSONObject(checkNotNull(prefs.getString("state_v1", null)))
+        val firstConsentDates = firstPersisted.getJSONObject("agentContextConsentAt")
+        val focusConsentAt = firstConsentDates.getLong("focus")
+        val goalsConsentAt = firstConsentDates.getLong("goals")
+        assertTrue(focusConsentAt > 0L)
+        assertTrue(goalsConsentAt > 0L)
+        assertEquals(1, firstPersisted.getJSONObject("goals").getInt("schema_version"))
+
+        controller.createGoal(
+            GoalPanelDraft(
+                title = "Réviser le cours",
+                metric = GoalMetric.MANUAL,
+                targetValue = 1L,
+                description = "Objectif local de démonstration",
+                nextAction = "Ouvrir le chapitre 1",
+            ),
+        )
+        assertEquals("Réviser le cours", controller.coachGoals.single().record.title)
+
+        app.resetControllerForTesting()
+        val restored = app.controller
+        assertEquals("Réviser le cours", restored.coachGoals.single().record.title)
+        assertTrue(restored.agentContextPreview.authorizedCategories.containsAll(setOf("focus", "goals")))
+        val afterRestart = org.json.JSONObject(checkNotNull(prefs.getString("state_v1", null)))
+            .getJSONObject("agentContextConsentAt")
+        assertEquals(focusConsentAt, afterRestart.getLong("focus"))
+        assertEquals(goalsConsentAt, afterRestart.getLong("goals"))
         assertTrueQuarantineContains(prefs.all, raw)
     }
 

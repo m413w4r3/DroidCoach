@@ -1,0 +1,3 @@
+V62MobilityServiceInstrumentedTest was run directly after the full task stopped before this class. The console returned `OK (2 tests)`; raw stdout was not redirected during that invocation.
+ATLAS_V62_LOCATION logcat is preserved in mobility-location-events-final.log: visible Activity start with coarse granted/fine denied; measurement unavailable after 15000 ms; Arrêter and sharing-revocation stop both left the service inactive and notification absent.
+Thus notification/stop/revocation are proven; a measured mobility position is not.

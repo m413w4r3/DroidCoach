@@ -86,9 +86,12 @@ class LotEUiInstrumentationTest {
             }
         }
 
-        composeRule.onNodeWithText("Prochaine étape").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Directive : Lire quelques pages puis avancer sur une petite étape. Afficher le détail.",
+        ).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("launcher_directive_status").assertIsDisplayed()
-        composeRule.onNodeWithTag("launcher_focus_card_action").assertIsDisplayed()
+        composeRule.onNodeWithText("Voir le Focus")
+            .performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onAllNodesWithText("Suggestion de contenu").assertCountEquals(0)
         composeRule.waitForIdle()
         shell("screencap -p /sdcard/v6-home-dark.png")
@@ -157,11 +160,11 @@ class LotEUiInstrumentationTest {
         }
 
         composeRule.onNodeWithText("Conversation").assertIsDisplayed()
-        composeRule.onNodeWithText("Proposition prioritaire").assertIsDisplayed()
+        composeRule.onNodeWithText("Proposition prioritaire").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("agent_settings_link").performScrollTo().performClick()
         assertEquals(AtlasScreenId.AGENT_SETTINGS, controller.navigationState.current)
         composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
-        composeRule.onNodeWithText("Mandat du Coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Mandat du Coach").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Données partagées avec le coach").assertCountEquals(0)
 
         composeRule.runOnUiThread {
@@ -171,7 +174,7 @@ class LotEUiInstrumentationTest {
         composeRule.onNodeWithTag("agent_sharing_link").performScrollTo().performClick()
         assertEquals(AtlasScreenId.AGENT_SHARING, controller.navigationState.current)
         composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
-        composeRule.onNodeWithText("Données partagées avec le coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Données partagées avec le coach").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Mandat et autonomie").assertCountEquals(0)
 
         composeRule.runOnUiThread {
@@ -181,7 +184,7 @@ class LotEUiInstrumentationTest {
         composeRule.onNodeWithTag("agent_effects_link").performScrollTo().performClick()
         assertEquals(AtlasScreenId.AGENT_EFFECTS, controller.navigationState.current)
         composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
-        composeRule.onNodeWithTag("agent_effect_history_screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("agent_effect_history_screen").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -247,10 +250,14 @@ class LotEUiInstrumentationTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Activer la pause d'urgence hors ligne pendant 30 minutes").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
+        composeRule.onNodeWithContentDescription("Activer la pause d'urgence hors ligne pendant 30 minutes").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_more").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_home_settings").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
-        composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     }
 
     private fun resetIsolatedState() {

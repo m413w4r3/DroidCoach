@@ -1,0 +1,7 @@
+Cumulative follow-up evidence (separate from the Gradle XML aggregate):
+- 15 passing JUnit test executions are present in redirected follow-up logs (14 instrumentation invocations; the two backend-aware no-argument invocations each ran 0 tests).
+- V62MobilityServiceInstrumentedTest returned OK (2 tests) in the earlier direct console run; raw stdout was not redirected. Its event log shows no reliable measurement within 15000 ms, then verified Arrêter and sharing-revocation stops.
+- One UsageFixture method returned OK after reporting GET_USAGE_STATS denied, so its four-launch scenario did not run.
+- UsageFixtureInstrumentationTest#actualAppOpsDenialStopsBeforeQueryingUsageStats was not run because it writes AppOps through appops set.
+- V62RealGatewayContextBridgeTest was excluded as requested; no backend token or model request was supplied.
+- Final capture set: 20 valid PNGs (10 at 320 dp, 10 at 360 dp).

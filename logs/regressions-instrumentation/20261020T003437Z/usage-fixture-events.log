@@ -1,0 +1,9 @@
+--------- beginning of main
+10-20 02:35:52.816 32649 32671 I ATLAS_R3: denied_usage_access status=PERMISSION_REQUIRED queries=0 records=0
+10-20 02:35:55.379 32726 32753 I ATLAS_R3: outside_allowlist_launch=com.android.settings (platform app fallback)
+10-20 02:36:03.992 32726 32753 I ATLAS_R3: fixture_open_to_visible_poll_latency_ms=2414
+10-20 02:36:03.995 32726 32753 I ATLAS_R3: fixture_records=4 consent=true interventions=0
+10-20 02:36:04.000 32726 32753 I ATLAS_R3: friction_notification_active=true
+10-20 02:36:06.914 32726 32753 I ATLAS_R3: intention_activity_visible=true
+10-20 02:36:07.369 32726 32753 I ATLAS_R3: revoke_status=false history=0
+10-20 02:36:07.398 32726 32753 I ATLAS_R3: revocation_verified persisted=true polls_after_revoke=2 history=0

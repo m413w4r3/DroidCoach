@@ -1,0 +1,4 @@
+assembleDebugAndroidTest after the draw-sync test change: BUILD SUCCESSFUL (see assemble-android-test-after-draw-sync.log).
+bash -n scripts/v62-complete-instrumentation.sh: exit 0.
+The 320 dp Coach screenshot was visually inspected after the window OnDraw synchronization; it contains the named offline local fixture.
+Final AVD display override restored to 1080x2400 at density 480.

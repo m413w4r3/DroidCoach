@@ -1,0 +1,18 @@
+started_utc=2026-10-20T05:59:51Z
+wait_for_device_exit=0
+sys.boot_completed=1
+api=37
+sdk_full=37.2
+avd=atlas_v62_android17_gp_auto
+page_size=16384
+screencap_exit=0 bytes=72
+WARNING      | File System is not ext4, disable QuickbootFileBacked feature
+INFO         | Storing crashdata in: /tmp/android-nill/emu-crash-37.2.12.db, detection is enabled for process: 962693
+WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+ERROR        | Setting read-only feature 'GLAsyncSwap' to '0'
+WARNING: cannnot unmap ptr 0x7ec8a6e01000 as it is in the protected range from 0x7ec826e00000 to 0x7ec8a7000000
+WARNING      | adb command '/home/nill/Android/Sdk/platform-tools/adb -s emulator-5582 shell settings put system screen_off_timeout 2147483647 ' failed: 'adb: device offline'
+WARNING      | adb command '/usr/bin/adb -s emulator-5582 shell settings put system screen_off_timeout 2147483647 ' failed: 'adb: device offline'
+WARNING      | adb command '/usr/bin/adb -s emulator-5582 shell settings put system accelerometer_rotation 1 ' failed: 'cmd: Can't find service: settings'
+WARNING      | adb command '/home/nill/Android/Sdk/platform-tools/adb -s emulator-5582 shell settings put system accelerometer_rotation 1 ' failed: 'cmd: Can't find service: settings'
+png_validation=invalid; output contains SurfaceFlinger assertion, not PNG

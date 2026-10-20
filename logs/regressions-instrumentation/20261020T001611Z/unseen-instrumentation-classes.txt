@@ -1,0 +1,2 @@
+dev.atlas.coach.app.V62OpenClawClientInstrumentationTest
+dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest

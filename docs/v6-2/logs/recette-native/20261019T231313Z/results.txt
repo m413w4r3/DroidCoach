@@ -1,0 +1,1 @@
+FAIL location-visible-main-activity (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T231313Z/location-visible-main-activity-instrumentation.log)

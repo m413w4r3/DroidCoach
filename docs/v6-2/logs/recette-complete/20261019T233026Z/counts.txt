@@ -1,0 +1,16 @@
+connectedDebugAndroidTest_exit=1
+native_home_360dp_exit=0
+native_coach_360dp_exit=0
+native_home_320dp_exit=0
+native_coach_320dp_exit=0
+xml_files=1
+instrumented_tests=42
+failures=19
+errors=0
+xml_skipped=0
+backend_arguments_filtered=4
+backend_filter=10-20 01:30:33.546 10364 10397 I ATLAS_TEST_FILTER: Filtered chatUsesRealGoalProgressAndPlanDropsGoalsAfterRevocation(dev.atlas.coach.app.V62OpenClawClientInstrumentationTest): requires the existing local FastAPI adapter connected to OpenClaw
+backend_filter=10-20 01:30:33.549 10364 10397 I ATLAS_TEST_FILTER: Filtered restoredFocusCanPauseResumeAndCancel(dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest): restored real Focus scenario requires scripts/v6-e2e-real.sh
+backend_filter=10-20 01:30:33.549 10364 10397 I ATLAS_TEST_FILTER: Filtered realCoachResponseCreatesDirectiveAndStartsFocus(dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest): real OpenClaw scenario requires scripts/v6-e2e-real.sh
+backend_filter=10-20 01:30:33.556 10364 10397 I ATLAS_TEST_FILTER: Filtered runRequestedBackendScenario(dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest): backend scenario requires scripts/v4-backend-e2e.sh
+capture_png_files_total=20

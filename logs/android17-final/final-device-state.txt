@@ -1,0 +1,14 @@
+captured_utc=2026-10-20T06:29:23Z
+avd=atlas_v62_android17_gp_swangle
+api=37
+sdk_full=37.2
+page_size=16384
+sys.boot_completed=1
+ATLAS package: not_installed
+
+[window focus]
+
+[adb devices]
+List of devices attached
+emulator-5578          device product:sdk_gphone16k_x86_64 model:sdk_gphone16k_x86_64 device:emu64xa16k transport_id:45
+

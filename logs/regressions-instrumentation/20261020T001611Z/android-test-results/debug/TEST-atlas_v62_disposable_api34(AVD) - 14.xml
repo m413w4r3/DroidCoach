@@ -1,0 +1,176 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="48" failures="4" errors="0" skipped="0" time="0.000" timestamp="2026-10-20T00:17:25" hostname="localhost">
+  <testsuite name="dev.atlas.coach.AtlasLaunchTest" tests="11" failures="3" errors="0" skipped="0" time="20.096" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="reefPomodoroSetupStartsAnAtlasSessionWithCycleState" classname="dev.atlas.coach.AtlasLaunchTest" time="1.612" />
+    <testcase name="unknownSchemaIsQuarantinedAndShowsRecoveryMessage" classname="dev.atlas.coach.AtlasLaunchTest" time="0.970">
+      <failure>java.lang.AssertionError: Controller should expose the unknown-schema recovery notice
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at dev.atlas.coach.AtlasLaunchTest.unknownSchemaIsQuarantinedAndShowsRecoveryMessage(AtlasLaunchTest.kt:282)
+</failure>
+    </testcase>
+    <testcase name="malformedPolicyAndRuleSubstatesAreQuarantinedWithoutStartupCrash" classname="dev.atlas.coach.AtlasLaunchTest" time="0.770">
+      <failure>java.lang.AssertionError: Controller should expose the quarantined invalid-substate notice
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at dev.atlas.coach.AtlasLaunchTest.malformedPolicyAndRuleSubstatesAreQuarantinedWithoutStartupCrash(AtlasLaunchTest.kt:261)
+</failure>
+    </testcase>
+    <testcase name="finishedFocusHistoryRestoresFromLocalPersistence" classname="dev.atlas.coach.AtlasLaunchTest" time="1.260" />
+    <testcase name="backReturnsFromDailySettingsToMoreAndTabsSelectTheirRoot" classname="dev.atlas.coach.AtlasLaunchTest" time="1.200" />
+    <testcase name="directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline" classname="dev.atlas.coach.AtlasLaunchTest" time="7.621" />
+    <testcase name="homeRoleSettingsAreSeparateFromTheCoachDashboardAndLicenseAttributionIsVisible" classname="dev.atlas.coach.AtlasLaunchTest" time="1.576" />
+    <testcase name="focusRoutineIsCapabilityGatedAndRequiresExplicitStart" classname="dev.atlas.coach.AtlasLaunchTest" time="1.780" />
+    <testcase name="focusControllerWritesOneCheckpointAfterTwentySecondsOfMonotonicTime" classname="dev.atlas.coach.AtlasLaunchTest" time="0.655" />
+    <testcase name="disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton" classname="dev.atlas.coach.AtlasLaunchTest" time="1.964">
+      <failure>java.lang.AssertionError: Failed to assert the following: (Text + EditableText = [Concentration · en pause])
+Reason: Expected exactly '1' node but could not find any node that satisfies: (TestTag = 'focus_phase')
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.AssertionsKt.assert(Assertions.kt:263)
+	at androidx.compose.ui.test.AssertionsKt.assert$default(Assertions.kt:255)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals(Assertions.kt:185)
+	at androidx.compose.ui.test.AssertionsKt.assertTextEquals$default(Assertions.kt:181)
+	at dev.atlas.coach.AtlasLaunchTest.disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton(AtlasLaunchTest.kt:170)
+</failure>
+    </testcase>
+    <testcase name="focusSessionRestorationSeed" classname="dev.atlas.coach.AtlasLaunchTest" time="0.688" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.FocusIntegrationInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="2.097" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="finiteTwoCyclePomodoroFinishesAndPostsPhaseNotification" classname="dev.atlas.coach.FocusIntegrationInstrumentationTest" time="2.097" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.AtlasPresentationTest" tests="4" failures="0" errors="0" skipped="0" time="2.978" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="homeRemainsReadableAtFontScale13" classname="dev.atlas.coach.app.AtlasPresentationTest" time="0.555" />
+    <testcase name="homeHasOnePrimaryActionAndSecondaryNegotiationMenu" classname="dev.atlas.coach.app.AtlasPresentationTest" time="0.653" />
+    <testcase name="bottomNavigationAndBackFollowTheScreenHistory" classname="dev.atlas.coach.app.AtlasPresentationTest" time="0.998" />
+    <testcase name="homeRemainsScrollableAtFontScale20" classname="dev.atlas.coach.app.AtlasPresentationTest" time="0.772" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.AtlasVisualCaptureTest" tests="6" failures="0" errors="0" skipped="0" time="9.010" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="capturesHomeInBothThemesAndAtFontScaleTwo" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.339" />
+    <testcase name="capturesEverydaySettingsAdvancedDiagnosticsAndOfflineSync" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.906" />
+    <testcase name="capturesObservationInterventionAndLibrary" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.447" />
+    <testcase name="capturesHabitsAndRoutines" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.209" />
+    <testcase name="capturesFocusActivePausedAndFinished" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.540" />
+    <testcase name="capturesLauncherHomeAndSearchableAppsList" classname="dev.atlas.coach.app.AtlasVisualCaptureTest" time="1.569" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.HomeLandscapeFooterInstrumentationTest" tests="2" failures="0" errors="0" skipped="0" time="1.926" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="directiveAndCtaCanScrollAboveTheFixedFooterAtFontScaleTwo" classname="dev.atlas.coach.app.HomeLandscapeFooterInstrumentationTest" time="0.981" />
+    <testcase name="directiveAndCtaCanScrollAboveTheFixedFooterInLandscape" classname="dev.atlas.coach.app.HomeLandscapeFooterInstrumentationTest" time="0.945" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.LauncherPresentationTest" tests="2" failures="0" errors="0" skipped="0" time="1.825" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="homeHasNoCoachChromeAndSwipeSearchPinAndFavoritesWork" classname="dev.atlas.coach.app.LauncherPresentationTest" time="1.190" />
+    <testcase name="emergencyAndLauncherExitActionsStayReachableAtFontScaleTwo" classname="dev.atlas.coach.app.LauncherPresentationTest" time="0.635" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.LotEUiInstrumentationTest" tests="5" failures="1" errors="0" skipped="0" time="6.750" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="proposedFocusRequiresTapAndSupportsPauseResumeFinish" classname="dev.atlas.coach.app.LotEUiInstrumentationTest" time="1.306" />
+    <testcase name="coachConversationLinksToThreeSeparateAdvancedScreens" classname="dev.atlas.coach.app.LotEUiInstrumentationTest" time="1.459" />
+    <testcase name="emergencyAndExitActionsRemainReachableAtFontScaleTwoInLandscape" classname="dev.atlas.coach.app.LotEUiInstrumentationTest" time="2.971" />
+    <testcase name="recreatingControllerRestoresRemoteDirectiveProvenanceAndAppliedEffectMarker" classname="dev.atlas.coach.app.LotEUiInstrumentationTest" time="0.474" />
+    <testcase name="capturesSyntheticHomeInDarkAndAmoledThemes" classname="dev.atlas.coach.app.LotEUiInstrumentationTest" time="0.540">
+      <failure>java.lang.AssertionError: Action performScrollTo() failed.
+Reason: Expected exactly '1' node but could not find any node that satisfies: (TestTag = 'launcher_focus_card_action')
+
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow(SemanticsNodeInteraction.kt:178)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchOneOrThrow$default(SemanticsNodeInteraction.kt:150)
+	at androidx.compose.ui.test.SemanticsNodeInteraction.fetchSemanticsNode(SemanticsNodeInteraction.kt:84)
+	at androidx.compose.ui.test.ActionsKt.performScrollTo(Actions.kt:76)
+	at dev.atlas.coach.app.LotEUiInstrumentationTest.capturesSyntheticHomeInDarkAndAmoledThemes(LotEUiInstrumentationTest.kt:93)
+</failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.V61LandscapeCaptureTest" tests="1" failures="0" errors="0" skipped="0" time="1.508" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="capturesHomeWithDirectiveCtaAboveFixedFooter" classname="dev.atlas.coach.app.V61LandscapeCaptureTest" time="1.508" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.V61PortraitCaptureTest" tests="1" failures="0" errors="0" skipped="0" time="1.499" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="capturesSyncConsentAndUserFacingDirectiveEdit" classname="dev.atlas.coach.app.V61PortraitCaptureTest" time="1.499" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.V62NativeUiCaptureTest" tests="4" failures="0" errors="0" skipped="0" time="6.631" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="coachScreenShowsNamedLocalFixtureWithoutRawProvenanceHash" classname="dev.atlas.coach.app.V62NativeUiCaptureTest" time="0.878" />
+    <testcase name="landscapeHomeKeepsPauseAndFooterOutsideScrollableContent" classname="dev.atlas.coach.app.V62NativeUiCaptureTest" time="1.226" />
+    <testcase name="focusScreenAndContrastTokensAreVerifiableWithoutGateway" classname="dev.atlas.coach.app.V62NativeUiCaptureTest" time="0.763" />
+    <testcase name="nativeHomeMatrixAtRequestedWidth" classname="dev.atlas.coach.app.V62NativeUiCaptureTest" time="3.764" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.651" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="limitedMandatePreauthorizesFocusPlanOnAndroid" classname="dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest" time="0.651" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.launcher.LauncherFavoriteOpenInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.252" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="favoriteFocusAndHabitStateSurviveControllerRecreationAndLaunchSettings" classname="dev.atlas.coach.launcher.LauncherFavoriteOpenInstrumentationTest" time="0.252" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" tests="3" failures="0" errors="0" skipped="0" time="0.106" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="deniedPermissionStateReturnsFunctionalErrorWithoutCrashing" classname="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" time="0.003" />
+    <testcase name="api26Through29UseListenerAndReturnTimeoutOrUnavailableCodes" classname="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" time="0.096" />
+    <testcase name="permissionRevocationDuringAcquisitionIsRecheckedBeforeReturningFix" classname="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" time="0.007" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.location.V62MobilityServiceInstrumentedTest" tests="2" failures="0" errors="0" skipped="0" time="10.273" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail" classname="dev.atlas.coach.location.V62MobilityServiceInstrumentedTest" time="9.445" />
+    <testcase name="prepareSharingConsentBeforeHostInjectsFreshMobilityFix" classname="dev.atlas.coach.location.V62MobilityServiceInstrumentedTest" time="0.828" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.sync.AndroidTokenStoreInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.033" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="tokenIsEncryptedAtRestAndCanBeRevoked" classname="dev.atlas.coach.sync.AndroidTokenStoreInstrumentationTest" time="0.033" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.sync.SyncSettingsScreenCaptureTest" tests="1" failures="0" errors="0" skipped="0" time="1.048" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="captureRequestedState" classname="dev.atlas.coach.sync.SyncSettingsScreenCaptureTest" time="1.048" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.sync.agent.AgentContractsInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.007" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="proposalAndHomeStateRoundTripOnAndroidRuntime" classname="dev.atlas.coach.sync.agent.AgentContractsInstrumentationTest" time="0.007" />
+  </testsuite>
+  <testsuite name="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.002" timestamp="2026-10-20T00:17:25" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="notificationPresenterReportsMissingManifestPermissionInsteadOfPosting" classname="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" time="0.002" />
+  </testsuite>
+</testsuites>

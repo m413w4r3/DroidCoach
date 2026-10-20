@@ -69,7 +69,10 @@ class LauncherPresentationTest {
         }
 
         composeRule.onNodeWithText("Coach").assertIsDisplayed()
-        composeRule.onNodeWithText("Pause d'urgence · 30 min").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_open_drawer").assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_coach").assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_more").assertHeightIsAtLeast(48.dp)
         composeRule.onAllNodesWithContentDescription("Ouvrir Tableau").assertCountEquals(0)
         composeRule.onNodeWithTag("launcher_swipe_header").performTouchInput { swipeUp() }
         composeRule.onNodeWithTag("launcher_search").performScrollTo().assertIsDisplayed().performTextInput(appLabel)
@@ -106,7 +109,9 @@ class LauncherPresentationTest {
                 }
             }
         }
-        composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_drawer").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_more").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_home_settings").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)

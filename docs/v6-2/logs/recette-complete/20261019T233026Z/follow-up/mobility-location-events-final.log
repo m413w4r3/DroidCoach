@@ -1,0 +1,4 @@
+--------- beginning of main
+10-20 01:35:32.248 12387 12387 I ATLAS_V62_LOCATION: MOBILITY_SERVICE_START_REQUEST activity=ComponentActivity coarse_granted=true fine_granted=false device_utc_ms=1792452932247 device_uptime_ms=3111454
+10-20 01:35:47.298 12387 12409 W ATLAS_V62_LOCATION: MOBILITY_MEASUREMENT_UNAVAILABLE reason=no_reliable_coarse_fix_within_15000ms session_remained_active=true
+10-20 01:35:47.337 12387 12409 I ATLAS_V62_LOCATION: MOBILITY_SHARING_REVOCATION_STOPPED active=false notification_present=false

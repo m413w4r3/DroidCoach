@@ -1,0 +1,13 @@
+--------- beginning of main
+10-20 02:58:04.431 12609 12633 I ATLAS_R3: denied_usage_access status=PERMISSION_REQUIRED queries=0 records=0
+10-20 02:58:07.200 12688 12713 I ATLAS_R3: outside_allowlist_launch=com.android.settings (platform app fallback)
+10-20 02:58:16.538 12688 12713 I ATLAS_R3: fixture_open_to_visible_poll_latency_ms=2674
+10-20 02:58:16.540 12688 12713 I ATLAS_R3: fixture_effective_policy rule=app-open-frequency threshold=4 window_ms=1500000 cooldown_ms=900000 quiet_hours=false paused=false allowlist_count=1
+10-20 02:58:16.541 12688 12713 I ATLAS_R3: fixture_records=4 consent=true interventions=1
+10-20 02:58:16.542 12688 12713 I ATLAS_R3: fixture_event_timestamps_utc=[1792457888213, 1792457889820, 1792457891422, 1792457893291]
+10-20 02:58:16.542 12688 12713 I ATLAS_R3: fixture_intervention_timestamps_utc=[1792457893291]
+10-20 02:58:16.544 12688 12713 I ATLAS_R3: friction_notification_active=true
+10-20 02:58:19.617 12688 12713 I ATLAS_R3: intention_activity_visible=true
+10-20 02:58:20.163 12688 12713 I ATLAS_R3: revoke_status=false history=0
+10-20 02:58:20.176 12688 12713 I ATLAS_R3: revocation_verified persisted=true polls_after_revoke=2 history=0
+10-20 02:58:52.180 13817 13839 E ATLAS.Controller: Unable to write local state (IllegalStateException)

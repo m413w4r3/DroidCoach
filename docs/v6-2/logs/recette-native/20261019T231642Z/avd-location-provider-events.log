@@ -1,0 +1,20 @@
+    10-20 01:10:45.516: passive provider delivered location[1] to 10128/com.google.android.gms[network_location_provider]/CCA264ED
+    10-20 01:10:45.517: passive provider delivered location[1] to 10128/com.google.android.gms[fused_location_provider]/77ADD184
+    10-20 01:10:45.523: fused provider received location[1]
+    10-20 01:10:45.524: passive provider delivered location[1] to 10128/com.google.android.gms[network_location_provider]/CCA264ED
+    10-20 01:10:45.524: passive provider delivered location[1] to 10128/com.google.android.gms[fused_location_provider]/77ADD184
+    10-20 01:10:45.524: passive provider delivered location[1] to 1000/android[SensorNotificationService]/3D0E7F34
+    10-20 01:13:22.016: network provider +registration 10192/dev.atlas.coach/821F8BA8 -> Request[@0 BALANCED, duration=+30s0ms, WorkSource{10192 dev.atlas.coach}]
+    10-20 01:13:27.009: network provider -registration 10192/dev.atlas.coach/821F8BA8
+    10-20 01:13:27.010: gps provider +registration 10192/dev.atlas.coach/1A1A293C -> Request[@0 BALANCED, duration=+30s0ms, WorkSource{10192 dev.atlas.coach}]
+    10-20 01:13:32.008: gps provider -registration 10192/dev.atlas.coach/1A1A293C
+    10-20 01:15:45.512: gps provider +registration 10192/dev.atlas.coach/72BE57B4 -> Request[@0 HIGH_ACCURACY, WorkSource{10192 dev.atlas.coach}]
+    10-20 01:15:45.514: gps provider delivered location[1] to 10192/dev.atlas.coach/72BE57B4
+    10-20 01:15:45.623: network provider +registration 10192/dev.atlas.coach/BE017B57 -> Request[@0 BALANCED, duration=+30s0ms, WorkSource{10192 dev.atlas.coach}]
+    10-20 01:15:50.623: network provider -registration 10192/dev.atlas.coach/BE017B57
+    10-20 01:15:50.625: gps provider +registration 10192/dev.atlas.coach/BBB7BAF0 -> Request[@0 BALANCED, duration=+30s0ms, WorkSource{10192 dev.atlas.coach}]
+    10-20 01:15:55.622: gps provider -registration 10192/dev.atlas.coach/BBB7BAF0
+    10-20 01:15:56.284: gps provider -registration 10192/dev.atlas.coach/72BE57B4
+    10-20 01:16:48.245: gps provider +registration 10192/dev.atlas.coach/2C9178DC -> Request[@0 HIGH_ACCURACY, WorkSource{10192 dev.atlas.coach}]
+    10-20 01:16:48.246: gps provider delivered location[1] to 10192/dev.atlas.coach/2C9178DC
+    10-20 01:16:59.041: gps provider -registration 10192/dev.atlas.coach/2C9178DC

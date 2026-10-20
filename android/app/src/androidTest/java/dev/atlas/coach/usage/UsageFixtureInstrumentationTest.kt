@@ -1,6 +1,5 @@
 package dev.atlas.coach.usage
 
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -18,6 +17,9 @@ import dev.atlas.coach.usage.android.AndroidProtectedPackages
 import dev.atlas.coach.usage.android.AndroidUsageAccessStatus
 import dev.atlas.coach.usage.android.SharedPreferencesUsageStores
 import dev.atlas.coach.app.AtlasController
+import dev.atlas.coach.app.AtlasApplication
+import dev.atlas.coach.test.BackendArgumentsAwareRunner
+import dev.atlas.coach.test.RequiresBackendArguments
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.time.ZoneId
@@ -26,13 +28,16 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 
-/** Runs only on the declared Android 17 emulator. Fixture launches are issued as shell `am start`s. */
-@RunWith(AndroidJUnit4::class)
+/** External AppOps and fixture-launch scenarios run only with explicit disposable-AVD harness keys. */
+@RunWith(BackendArgumentsAwareRunner::class)
 class UsageFixtureInstrumentationTest {
     @Test
+    @RequiresBackendArguments(
+        keys = ["usage_appops_denied"],
+        reason = "requires the disposable AVD host to set GET_USAGE_STATS to ignore before instrumentation",
+    )
     fun actualAppOpsDenialStopsBeforeQueryingUsageStats() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val access = AndroidUsageAccessStatus(context)
@@ -59,9 +64,6 @@ class UsageFixtureInstrumentationTest {
         observer.revokeConsent()
         observer.acceptConsent(ObservationConsent.grant(ObservationPurpose.GENTLE_FRICTION, setOf(FIXTURE_PACKAGE), now), now)
         try {
-            // A prior Settings grant may be stored at UID scope on Android 17.
-            // Override that scope too so this isolated denial check stays hermetic.
-            shell("appops set --uid ${context.packageName} GET_USAGE_STATS ignore")
             assertTrue("GET_USAGE_STATS should be denied for this isolated check", !access.isAllowed())
             assertEquals(UsagePollStatus.PERMISSION_REQUIRED, observer.poll(now + 1_000L).status)
             assertEquals(0, queried)
@@ -69,8 +71,6 @@ class UsageFixtureInstrumentationTest {
             Log.i(TAG, "denied_usage_access status=PERMISSION_REQUIRED queries=$queried records=0")
         } finally {
             observer.revokeConsent()
-            shell("appops set --uid ${context.packageName} GET_USAGE_STATS default")
-            shell("appops set ${context.packageName} GET_USAGE_STATS allow")
         }
     }
 
@@ -88,22 +88,25 @@ class UsageFixtureInstrumentationTest {
     }
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["usage_fixture_ready"],
+        reason = "requires the disposable AVD host to install the synthetic fixture APK and allow GET_USAGE_STATS",
+    )
     fun fourRealFixtureOpensReachTheRuleAfterReturningToAtlas() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
-        Log.i(TAG, "POST_NOTIFICATIONS granted for the isolated AVD integration run")
-        if (!AndroidUsageAccessStatus(context).isAllowed()) {
-            Log.w(TAG, "BLOCKED: GET_USAGE_STATS is not allowed; four real fixture launches were not queried")
-            return
-        }
-        if (!isFixtureInstalled(context)) {
-            Log.w(TAG, "BLOCKED: distraction fixture APK is not installed")
-            return
-        }
+        assertEquals(
+            "The ADB harness must grant POST_NOTIFICATIONS on the disposable AVD",
+            PackageManager.PERMISSION_GRANTED,
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS),
+        )
+        assertTrue("The ADB harness must allow GET_USAGE_STATS before fixture launches", AndroidUsageAccessStatus(context).isAllowed())
+        assertTrue("The ADB harness must install the synthetic distraction fixture", isFixtureInstalled(context))
 
         context.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
-        val controller = AtlasController(context)
+        val application = context.applicationContext as AtlasApplication
+        application.resetControllerForTesting()
+        val controller = application.controller
         controller.revokeUsageObservation()
         val dialerPackage = context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
         assertTrue("Fixture must appear in the launched-app picker", controller.selectableUsageApps.any { it.packageName == FIXTURE_PACKAGE })
@@ -152,15 +155,31 @@ class UsageFixtureInstrumentationTest {
 
         // Returning to ATLAS starts the visible Activity poll loop; background observation is not claimed.
         shell("am start -n ${context.packageName}/dev.atlas.coach.app.MainActivity")
-        val deadline = SystemClock.elapsedRealtime() + 8_000L
-        while (controller.usageHistoryCount < 4 && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(250)
+        val deadline = SystemClock.elapsedRealtime() + 12_000L
+        while ((controller.usageHistoryCount < 4 || controller.interventions.none { it.packageName == FIXTURE_PACKAGE }) &&
+            SystemClock.elapsedRealtime() < deadline
+        ) SystemClock.sleep(250)
         val detectionLatency = SystemClock.elapsedRealtime() - fourthLaunchAt
         Log.i(TAG, "fixture_open_to_visible_poll_latency_ms=$detectionLatency")
         assertEquals(4, controller.usageHistoryCount)
         assertTrue(controller.usageConsentActive)
-        Log.i(TAG, "fixture_records=${controller.usageHistoryCount} consent=${controller.usageConsentActive} interventions=${controller.interventions.size}")
-
         val records = SharedPreferencesUsageStores(context).allRecords()
+        val fixtureRecords = records.filter { it.packageName == FIXTURE_PACKAGE }
+        val effectivePolicy = LocalPolicy(allowlistedPackageNames = setOf(FIXTURE_PACKAGE))
+        Log.i(
+            TAG,
+            "fixture_effective_policy rule=${effectivePolicy.ruleId} threshold=${effectivePolicy.openThreshold} " +
+                "window_ms=${effectivePolicy.windowMillis} cooldown_ms=${effectivePolicy.cooldownMillis} " +
+                "quiet_hours=${effectivePolicy.quietHours != null} paused=${effectivePolicy.pauseUntil != null} allowlist_count=1",
+        )
+        Log.i(TAG, "fixture_records=${controller.usageHistoryCount} consent=${controller.usageConsentActive} interventions=${controller.interventions.size}")
+        Log.i(TAG, "fixture_event_timestamps_utc=${fixtureRecords.map { it.timestampUtc }}")
+        Log.i(TAG, "fixture_intervention_timestamps_utc=${controller.interventions.map { it.createdAtUtc }}")
+        assertTrue(
+            "Visible polling updated usage records without refreshing the intervention snapshot",
+            controller.interventions.any { it.packageName == FIXTURE_PACKAGE },
+        )
+
         assertEquals(4, records.count { it.packageName == FIXTURE_PACKAGE })
         assertTrue("An app outside the explicit allowlist was recorded", records.none { it.packageName == outsidePackageName })
         if (!dialerPackage.isNullOrBlank()) assertTrue(records.none { it.packageName == dialerPackage })

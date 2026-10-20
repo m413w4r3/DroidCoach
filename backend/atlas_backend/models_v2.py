@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -29,13 +30,27 @@ ActionType = Literal[
     "content.recommend",
 ]
 ContextCategory = Literal[
+    "focus",
+    "habit",
+    "content",
+    "coach_interaction",
+    "app_usage_summary",
     "goals",
+    "location_summary",
     "projects",
     "availability",
     "preferences",
     "package_names",
     "urls",
     "habit_titles",
+]
+MAX_CONTEXT_CATEGORIES = len(ContextCategory.__args__)
+MAX_CONTEXT_ITEMS_PER_CATEGORY = 10
+MAX_CONTEXT_ITEM_CHARACTERS = 200
+MAX_ANDROID_CONTEXT_BYTES = 8 * 1024
+ContextCategoryItem = Annotated[StrictStr, Field(max_length=MAX_CONTEXT_ITEM_CHARACTERS)]
+ContextCategoryItems = Annotated[
+    list[ContextCategoryItem], Field(max_length=MAX_CONTEXT_ITEMS_PER_CATEGORY)
 ]
 
 
@@ -318,8 +333,12 @@ class AgentOutputEnvelope(StrictV2Model):
 
 
 class SharedContext(StrictV2Model):
-    consented_categories: list[ContextCategory] = Field(default_factory=list, max_length=7)
-    categories: dict[ContextCategory, list[StrictStr]] = Field(default_factory=dict, max_length=7)
+    consented_categories: list[ContextCategory] = Field(
+        default_factory=list, max_length=MAX_CONTEXT_CATEGORIES
+    )
+    categories: dict[ContextCategory, ContextCategoryItems] = Field(
+        default_factory=dict, max_length=MAX_CONTEXT_CATEGORIES
+    )
 
     @field_validator("consented_categories")
     @classmethod
@@ -328,20 +347,27 @@ class SharedContext(StrictV2Model):
             raise ValueError("consented_categories must not repeat")
         return value
 
-    @field_validator("categories")
-    @classmethod
-    def bounded_values(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
-        if any(len(items) > 20 or any(len(item) > 300 for item in items) for items in value.values()):
-            raise ValueError("shared context values exceed their limits")
-        return value
+    @model_validator(mode="after")
+    def minimized_context_fits_android_budget(self) -> SharedContext:
+        encoded = json.dumps(
+            {
+                "consented_categories": self.consented_categories,
+                "categories": self.minimized(),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(encoded) > MAX_ANDROID_CONTEXT_BYTES:
+            raise ValueError("minimized shared_context envelope exceeds the 8192-byte budget")
+        return self
 
     def minimized(self) -> dict[str, list[str]]:
-        consented = set(self.consented_categories)
-        all_categories = set(ContextCategory.__args__)
-        return {
-            category: list(self.categories.get(category, [])) if category in consented else []
-            for category in sorted(all_categories)
-        }
+        minimized: dict[str, list[str]] = {}
+        for category in self.consented_categories:
+            items = [item for item in self.categories.get(category, []) if item]
+            if items:
+                minimized[category] = items
+        return minimized
 
 
 class FocusWindow(StrictV2Model):

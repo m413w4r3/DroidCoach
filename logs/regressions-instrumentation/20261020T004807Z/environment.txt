@@ -1,0 +1,19 @@
+ATLAS V6.2 complete instrumentation recipe
+run_id=20261020T004807Z
+AVD=atlas_v62_disposable_api34
+serial=emulator-5554
+API=34
+model=sdk_gphone64_x86_64
+host_utc=2026-10-20T00:48:07.436Z
+openjdk version "21.0.12.1" 2026-08-18
+Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)
+ee1e7b5
+initial_coarse_location=granted
+initial_fine_location=denied
+initial_notifications=granted
+initial_usage_appop_uid=default
+initial_usage_appop_package=default
+initial_location_enabled=true
+initial_wm_size=1080x2400
+initial_wm_density=physical-default
+fixture_installed=0

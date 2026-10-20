@@ -1,0 +1,13 @@
+Capture date: 2026-10-20
+JDK: OpenJDK 21.0.12.1
+Python: 3.12.3
+Gradle: 9.6.0 (version command only; no build/test run)
+Host adb: /usr/bin/adb 34.0.4
+Installed emulator: 37.2.12.0
+Installed SDK command-line tools: 16.0
+Installed platform-tools package: 35.0.2; repository lists 37.0.1 available
+Installed platform android-37.2: revision 1
+Installed build-tools: 37.0.0
+Installed Google Play image: system-images;android-37.2;google_apis_playstore_ps16k;x86_64 revision 6
+Official sdkmanager listing (sdkmanager-list.txt): latest emulator 37.2.12 and the same Google Play image revision 6; no newer Android 37.2 emulator/image revision was available. No SDK update was installed. The repository query also lists command-line tools 23.0; these were not installed.
+sdkmanager reports SDK XML v4 while this command-line-tools version understands through v3; package listing still completed successfully.

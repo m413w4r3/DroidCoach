@@ -1,0 +1,12 @@
+avd=atlas_v62_disposable_api34 serial=emulator-5554 api=34
+initial_enabled_accessibility_services=null
+initial_accessibility_enabled=0
+talkback_package=com.google.android.marvin.talkback (installed)
+activation=Android Settings > Accessibility > TalkBack; temporary, user interface only
+keyboard=ADB KEYCODE_TAB on ATLAS HOME; Compose accessibility tree showed focusable nav targets and content descriptions; focused target moved from Focus to Plus navigation
+speech_output=not captured; no claim of spoken announcement validation
+stop=Android Settings TalkBack Stop confirmation
+final_enabled_accessibility_services=empty
+final_accessibility_enabled=0
+talkback_POST_NOTIFICATIONS=denied; POST_NOTIFICATION app-op=ignore (no grant)
+note=OS TalkBack notification prompt was denied; effective permission remains denied, user-fixed prompt flag set

@@ -1,6 +1,7 @@
 package dev.atlas.coach.sync
 
 import dev.atlas.coach.sync.agent.AgentMandate
+import dev.atlas.coach.sync.agent.AgentFocusWindow
 import dev.atlas.coach.sync.agent.DeterministicMockDecisionProvider
 import dev.atlas.coach.sync.agent.InMemoryProposalJournal
 import dev.atlas.coach.sync.agent.JsonProposalJournal
@@ -69,7 +70,7 @@ class AgentContractsTest {
     private fun mandate() = AgentMandate(
         id = "personal-coach-v1",
         allowedActionTypes = setOf("focus_session", "suggest_break", "open_content"),
-    )
+    ).copy(focusWindow = AgentFocusWindow(start = "00:00", end = "23:59", timezone = "UTC"))
 
     private class MemoryStorage : OutboxStorage {
         private var value: String? = null

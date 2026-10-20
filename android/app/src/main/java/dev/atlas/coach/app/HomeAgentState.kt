@@ -3,10 +3,6 @@ package dev.atlas.coach.app
 import dev.atlas.coach.focus.FocusStatus
 import dev.atlas.coach.sync.agent.AgentBackendState
 import dev.atlas.coach.sync.agent.DirectiveProvenance
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /** UI contract for HOME. Lot D can provide this state without coupling HOME to its transport layer. */
 data class HomeAgentState(
@@ -33,6 +29,7 @@ data class HomeAgentState(
                         "${session.remainingSeconds / 60} min restantes dans cette phase.",
                     actionLabel = "Ouvrir Focus",
                     action = HomeCardAction.OPEN_FOCUS,
+                    isActiveFocus = true,
                 )
             }
             val content = controller.contentItems.firstOrNull()?.takeIf {
@@ -114,34 +111,14 @@ data class HomeAgentState(
     }
 }
 
-internal fun HomeAgentState.directiveStatusLabel(
-    nowUtcMillis: Long = System.currentTimeMillis(),
-    zoneId: ZoneId = ZoneId.systemDefault(),
-): String = when (directiveProvenance) {
-    DirectiveProvenance.REMOTE_AI -> {
-        val availability = when (backendState) {
-            AgentBackendState.REACHABLE -> "backend joignable"
-            AgentBackendState.UNAVAILABLE -> "backend indisponible"
-            AgentBackendState.UNVERIFIED -> "statut backend inconnu"
-        }
-        val lastContact = lastSuccessfulContactAtUtcMillis?.let {
-            "dernier contact ${Instant.ofEpochMilli(it).atZone(zoneId).format(DateTimeFormatter.ofPattern("dd/MM HH:mm", Locale.FRANCE))}"
-        } ?: "aucun contact réussi"
-        "Directive OpenClaw · $availability · $lastContact"
+internal fun HomeAgentState.directiveStatusLabel(): String = when (directiveProvenance) {
+    DirectiveProvenance.REMOTE_AI -> if (backendState == AgentBackendState.REACHABLE) {
+        "Coach connecté"
+    } else {
+        "Dernière directive conservée"
     }
-    DirectiveProvenance.LOCAL_DEMO -> "Directive de démonstration locale · ${backendState.label()} · ${lastSuccessfulContactAtUtcMillis.contactLabel(zoneId)}"
-    DirectiveProvenance.MANUAL_ENTRY -> "Directive locale · ${backendState.label()} · ${lastSuccessfulContactAtUtcMillis.contactLabel(zoneId)}"
+    DirectiveProvenance.LOCAL_DEMO, DirectiveProvenance.MANUAL_ENTRY -> "Local"
 }
-
-private fun AgentBackendState.label(): String = when (this) {
-    AgentBackendState.REACHABLE -> "backend joignable"
-    AgentBackendState.UNAVAILABLE -> "backend indisponible"
-    AgentBackendState.UNVERIFIED -> "statut backend inconnu"
-}
-
-private fun Long?.contactLabel(zoneId: ZoneId): String = this?.let {
-    "dernier contact ${Instant.ofEpochMilli(it).atZone(zoneId).format(DateTimeFormatter.ofPattern("dd/MM HH:mm", Locale.FRANCE))}"
-} ?: "aucun contact réussi"
 
 internal fun homeAgentStatusFor(
     directiveProvenance: DirectiveProvenance,
@@ -167,6 +144,7 @@ data class HomeAgentCard(
     val body: String,
     val actionLabel: String,
     val action: HomeCardAction,
+    val isActiveFocus: Boolean = false,
 )
 
 enum class HomePrimaryAction { START_FOCUS, OPEN_COACH, NONE }

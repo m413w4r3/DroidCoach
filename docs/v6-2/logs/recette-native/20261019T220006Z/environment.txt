@@ -1,0 +1,5 @@
+ATLAS V6.2 native recipe · 20261019T220006Z UTC
+AVD=atlas_v62_disposable_api34 serial=emulator-5560 API=34
+Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)
+openjdk version "21.0.12.1" 2026-08-18
+ee1e7b5

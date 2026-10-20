@@ -1,0 +1,14 @@
+location-api26-29_exit=0
+location-permission-revocation_exit=0
+location-denied-state_exit=0
+sync-token-store_exit=0
+sync-settings-disabled_exit=0
+agent-contracts_exit=0
+openclaw-no-token-filter_exit=0
+remote-backend-no-token-filter_exit=0
+usage-notification-permission_exit=0
+usage-fixture-precondition_exit=0
+native-full-class-360dp_exit=0
+native-home-matrix-320dp_exit=0
+native-coach-fixture-320dp_exit=0
+native-coach-fixture-320dp-final_exit=0

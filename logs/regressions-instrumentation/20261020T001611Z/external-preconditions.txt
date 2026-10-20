@@ -1,0 +1,2 @@
+V62LocationCaptureInstrumentedTest#prepareSharingConsentBeforeHostInjectsFreshEmulatorFix=filtered(no location_fix_injection harness key)
+V62LocationCaptureInstrumentedTest#injectedCoarseFixIsMinimizedAndStoredOnlyAsAZoneSummary=filtered(no location_fix_injection harness key; S11 proof retained)

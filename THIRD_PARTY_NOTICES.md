@@ -10,6 +10,9 @@ ATLAS is a public source repository distributed under GNU GPL version 3; see [LI
 | Olauncher | https://github.com/tanujnotes/Olauncher/tree/f8e8d6497c457734c7a3171d36374157678e1f33 | GNU GPL v3.0 | `android/app/src/main/java/dev/atlas/coach/launcher/LauncherAppModel.kt`; `android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt` |
 | Loop Habit Tracker / uhabits-core | https://github.com/iSoron/uhabits/tree/c06b682f6b7b9c09eb278a06ffb57a42f0cddd38 | GNU GPL v3.0 or later, per source headers and README | `android/app/src/main/java/dev/atlas/coach/habits/thirdparty/loop/` |
 | Lawnchair | https://github.com/LawnchairLauncher/lawnchair/tree/fc100ae9095a83b8b51c447a3b0a4ce2b399ad59 | Apache License 2.0 at repository root | No source files used. |
+| OpenClaw | https://github.com/openclaw/openclaw/tree/e3fe108378f6eca2d4e2a4333fd08bf81bb87105 | MIT, © 2026 OpenClaw Foundation | V6.2 localization adaptations listed below. |
+| AndyClaw | https://github.com/EthereumPhone/AndyClaw/tree/fd4a9af917f51d7b1c10e09e6496f54a290b253b | GNU GPL v3.0 | V6.2 `ProactiveTriggerGate.kt`, listed below. |
+| AOSP LocationFudger | https://android.googlesource.com/platform/frameworks/base/+/81f52b053da6/services/core/java/com/android/server/location/fudger/LocationFudger.java | Apache License 2.0 | Offset-plus-grid location coarsening approach adapted in `LocationCoarsener.kt`; attribution below. |
 
 Lot G refactored the Compose presentation in `android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt`. Its historical Olauncher adaptation remains attributed to `app/src/main/java/app/olauncher/ui/HomeFragment.kt` at `f8e8d6497c457734c7a3171d36374157678e1f33` under GPLv3; Lot G adds no new Olauncher source or assets. `docs/AUDIT_CIBLE.md` records the same provenance.
 
@@ -19,7 +22,7 @@ Reef’s README requires every derivative work or redistribution to show a promi
 
 ## Apache-2.0 components
 
-No Lawnchair source or other Apache-2.0 component was copied into ATLAS. The Apache notice is recorded here because Lawnchair was audited as a reference; no additional Apache license text or NOTICE file is needed for the current source set.
+Lawnchair remains a reference only. `LocationCoarsener.kt` adapts the offset-plus-grid approach attributed by OpenClaw to Android Open Source Project's `frameworks/base/services/core/java/com/android/server/location/fudger/LocationFudger.java`, revision `81f52b053da6`. The ATLAS implementation does not copy the AOSP Java class or its Android framework dependencies; it keeps a process-wide 2 km summary, drops other fix fields, and applies ATLAS disclosure and retention rules. Copyright attribution: Copyright (c) 2020 Android Open Source Project. The Apache-2.0 license text is included below.
 
 ## MIT License — Reef
 
@@ -49,9 +52,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## GNU General Public License, version 3 — Olauncher and uhabits-core
+## MIT License — OpenClaw
 
-Olauncher’s `LICENSE` supplies the GPLv3 terms below. Loop Habit Tracker’s source headers and README permit version 3 or (at the recipient’s option) any later version; the same GPLv3 text below is the version used by the adapted files. The canonical license URL is <https://www.gnu.org/licenses/gpl-3.0.html>.
+The following required notice and license text are reproduced from `references/repos/openclaw/LICENSE` at `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` and apply to the V6.2 adaptations listed below:
+
+```text
+MIT License
+
+Copyright (c) 2026 OpenClaw Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## GNU General Public License, version 3 — Olauncher, uhabits-core, and AndyClaw
+
+Olauncher’s `LICENSE` supplies the GPLv3 terms below. Loop Habit Tracker’s source headers and README permit version 3 or (at the recipient’s option) any later version. AndyClaw's README and root `LICENSE` specify GNU GPL version 3; its adapted policy file has no overriding per-file license header. The same GPLv3 text below applies. The canonical license URL is <https://www.gnu.org/licenses/gpl-3.0.html>.
 
 ```text
 GNU GENERAL PUBLIC LICENSE
@@ -746,3 +777,242 @@ Le lot B a évalué les candidats ci-dessous sans ajouter de code à l’applica
 | Miniflux | API REST documentée; dépôt serveur miniflux/v2 Apache-2.0 | Aucune intégration Android; piste de curation backend facultative pour plus tard. |
 
 Les fichiers de recherche et copies temporaires sont sous _research/ ignoré par Git et ne sont pas des composants distribués par ATLAS. Aucun texte de licence supplémentaire n’est requis pour le code de l’application au titre du seul lot B.
+
+## V6.2 S0 — sources examinées, non intégrées
+
+Les révisions ci-dessous ont été clonées de façon partielle et sparse afin de vérifier la provenance et les licences des fichiers imposés par le prompt V6.2. Cette inscription est un registre d’audit; elle ne signifie pas que ces sources sont déjà incorporées dans ATLAS. Aucun code OpenClaw ou AndyClaw n’a été copié à la baseline `ee1e7b58c06531f6fdc631a42cdd7522d8ee90e1`.
+
+| Source et révision | Fichiers source examinés | Cible ATLAS prévue | Licence vérifiée et état S0 |
+|---|---|---|---|
+| [OpenClaw](https://github.com/openclaw/openclaw/tree/e3fe108378f6eca2d4e2a4333fd08bf81bb87105), `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` | `apps/android/app/src/main/java/ai/openclaw/app/node/{LocationCaptureManager,LocationCoarsener,LocationDisclosure}.kt`; `apps/android/app/src/main/java/ai/openclaw/app/LocationMode.kt` | `android/app/src/main/java/dev/atlas/coach/location/` — adaptation planifiée, non présente au baseline | MIT, `LICENSE` racine, © 2026 OpenClaw Foundation. Ajouter l’avis MIT et le texte de licence lorsque le code adapté sera réellement ajouté. `LocationCoarsener.kt` cite aussi l’algorithme AOSP `frameworks/base/services/core/java/com/android/server/location/fudger/LocationFudger.java` (`81f52b053da6`), sous Apache-2.0; cette provenance secondaire doit être comparée avant toute adaptation de l’algorithme. |
+| [AndyClaw](https://github.com/EthereumPhone/AndyClaw/tree/fd4a9af917f51d7b1c10e09e6496f54a290b253b), `fd4a9af917f51d7b1c10e09e6496f54a290b253b` | `app/src/main/java/org/ethereumphone/andyclaw/heartbeat/NotificationTriggerPolicy.kt` | `android/app/src/main/java/dev/atlas/coach/coach/proactive/ProactiveTriggerGate.kt` — adaptation planifiée, non présente au baseline | GNU GPL version 3, README et `LICENSE` racine. Le texte GPLv3 ci-dessus s’applique; identifier les fichiers modifiés lors de la reprise. |
+
+Les fichiers OpenClaw `LocationHandler.kt`, `PermissionRequester.kt`, `NodeForegroundService.kt`, `docs/nodes/location-command.md` et les tests de localisation, ainsi que les fichiers AndyClaw `LocationSkill.kt`, `ScreenTimeSkill.kt`, `ToolAttenuation.kt` et le test de politique, sont des références de consultation seulement. Ils ne sont pas enregistrés comme du code repris. Le fichier AOSP cité est une provenance à vérifier pour l’algorithme de coarsening; il n’a pas été cloné dans `references/repos/` ni incorporé.
+
+Le registre S0 ci-dessus reste un constat historique à la baseline; il ne décrit pas l’état actuel d’intégration. Les adaptations présentes, leurs chemins source/cible, leurs licences, leurs changements et leur date figurent dans la section V6.2 ci-dessous.
+
+## V6.2 — adaptations livrées le 2026-10-19
+
+Les lignes ci-dessous distinguent les adaptations intégrées des clones de consultation décrits dans le registre S0.
+
+| Source et révision | Fichier source | Cible ATLAS | Licence | Modification |
+|---|---|---|---|---|
+| OpenClaw `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` | `apps/android/app/src/main/java/ai/openclaw/app/node/LocationCaptureManager.kt` | `android/app/src/main/java/dev/atlas/coach/location/LocationCaptureManager.kt` | MIT, © 2026 OpenClaw Foundation | Port vers le fournisseur ATLAS; compatibilité API 26–29, contrôle de fraîcheur/timeout/annulation et revalidation des permissions. |
+| OpenClaw `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` | `apps/android/app/src/main/java/ai/openclaw/app/node/LocationCoarsener.kt` | `android/app/src/main/java/dev/atlas/coach/location/LocationCoarsener.kt` | MIT, © 2026 OpenClaw Foundation | Grille de 2 km et offset aléatoire conservés avec partage au processus et drift lent; sortie limitée au résumé ATLAS. Voir aussi l’attribution AOSP ci-dessous. |
+| OpenClaw `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` | `apps/android/app/src/main/java/ai/openclaw/app/node/LocationDisclosure.kt` | `android/app/src/main/java/dev/atlas/coach/location/LocationDisclosure.kt` | MIT, © 2026 OpenClaw Foundation | Frontière fix brut → résumé; séparation du consentement de partage et de la permission OS; résumé automatique toujours coarse. |
+| OpenClaw `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` | `apps/android/app/src/main/java/ai/openclaw/app/LocationMode.kt` | `android/app/src/main/java/dev/atlas/coach/location/LocationMode.kt` | MIT, © 2026 OpenClaw Foundation | Modes adaptés à V6.2; aucun mode Always ou accès arrière-plan. |
+| AndyClaw `fd4a9af917f51d7b1c10e09e6496f54a290b253b` | `app/src/main/java/org/ethereumphone/andyclaw/heartbeat/NotificationTriggerPolicy.kt` | `android/app/src/main/java/dev/atlas/coach/coach/proactive/ProactiveTriggerGate.kt` | GNU GPL version 3 | Déduplication et écart minimum adaptés aux événements typés et motifs Coach; hooks de notifications, filtres de paquets et dépendances runtime retirés. |
+| Android Open Source Project `platform/frameworks/base`, `81f52b053da6` | `services/core/java/com/android/server/location/fudger/LocationFudger.java` | `android/app/src/main/java/dev/atlas/coach/location/LocationCoarsener.kt` | Apache-2.0, Copyright (c) 2020 Android Open Source Project | Attribution conservée pour l’approche offset-plus-grille citée par OpenClaw; ATLAS n’inclut pas la classe Java ni les dépendances framework. Le texte Apache-2.0 est reproduit plus bas. |
+
+Tests dérivés de tests de référence OpenClaw, réécrits pour les contrats et fakes ATLAS à la même date : `apps/android/app/src/test/java/ai/openclaw/app/node/LocationHandlerTest.kt` → `android/app/src/test/java/dev/atlas/coach/location/LocationRepositoryTest.kt`, et `apps/android/app/src/test/java/ai/openclaw/app/node/LocationPrivacyTest.kt` → `android/app/src/test/java/dev/atlas/coach/location/LocationPrivacyTest.kt`. `LocationRepository.kt` est un raccordement ATLAS original qui stocke et relit tel quel le résumé déjà minimisé.
+
+Le texte MIT OpenClaw ci-dessus est le texte requis de son `LICENSE` racine et s’applique aux quatre fichiers source adaptés ainsi qu’aux tests adaptés. L’entrée GPLv3 AndyClaw s’appuie sur le texte GPLv3 complet reproduit dans la section licence précédente.
+
+## Apache License 2.0 — AOSP LocationFudger
+
+Le texte ci-dessous accompagne l’attribution à Android Open Source Project et l’adaptation offset-plus-grille décrite ci-dessus. Source : `platform/frameworks/base/services/core/java/com/android/server/location/fudger/LocationFudger.java`, révision `81f52b053da6`.
+
+```text
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+```

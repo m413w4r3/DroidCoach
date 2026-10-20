@@ -1,0 +1,6 @@
+app_install=0
+test_apk_install=0
+fine_permission=0
+coarse_permission=0
+notification_permission=0
+location_enabled=0

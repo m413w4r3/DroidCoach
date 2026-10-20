@@ -1,0 +1,5 @@
+event=COARSE_CAPTURE_MANAGER_CALL host_injection_utc_ms=1792452473583 device_wall_utc_ms=1792452473000 host_minus_device_ms=583
+Broadcasting: Intent { act=dev.atlas.coach.location.V62_HOST_FIX_INJECTED flg=0x400000 pkg=dev.atlas.coach (has extras) }
+Broadcast completed: result=0
+OK
+geo_fix_exit_code=0

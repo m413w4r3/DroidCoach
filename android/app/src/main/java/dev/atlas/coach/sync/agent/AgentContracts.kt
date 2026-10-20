@@ -147,6 +147,7 @@ data class AgentMandate(
         const val DEFAULT_MANDATE_EXPIRY_UTC_MILLIS = 4_102_444_800_000L // 2100-01-01T00:00:00Z
         val ALLOWED_SHARED_CATEGORIES = setOf(
             "focus", "habit", "content", "coach_interaction", "app_usage_summary",
+            "goals", "location_summary",
         )
 
         fun default(id: String = "agent-local-v2"): AgentMandate = AgentMandate(

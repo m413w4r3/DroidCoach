@@ -1,0 +1,41 @@
+INSTRUMENTATION_STATUS: class=dev.atlas.coach.usage.UsageFixtureInstrumentationTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+dev.atlas.coach.usage.UsageFixtureInstrumentationTest:
+INSTRUMENTATION_STATUS: test=fourRealFixtureOpensReachTheRuleAfterReturningToAtlas
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=dev.atlas.coach.usage.UsageFixtureInstrumentationTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Four fixture opens did not post a friction notification
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at dev.atlas.coach.usage.UsageFixtureInstrumentationTest.fourRealFixtureOpensReachTheRuleAfterReturningToAtlas(UsageFixtureInstrumentationTest.kt:172)
+
+INSTRUMENTATION_STATUS: stream=
+Error in fourRealFixtureOpensReachTheRuleAfterReturningToAtlas(dev.atlas.coach.usage.UsageFixtureInstrumentationTest):
+java.lang.AssertionError: Four fixture opens did not post a friction notification
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at dev.atlas.coach.usage.UsageFixtureInstrumentationTest.fourRealFixtureOpensReachTheRuleAfterReturningToAtlas(UsageFixtureInstrumentationTest.kt:172)
+
+INSTRUMENTATION_STATUS: test=fourRealFixtureOpensReachTheRuleAfterReturningToAtlas
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 10.73
+There was 1 failure:
+1) fourRealFixtureOpensReachTheRuleAfterReturningToAtlas(dev.atlas.coach.usage.UsageFixtureInstrumentationTest)
+java.lang.AssertionError: Four fixture opens did not post a friction notification
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at dev.atlas.coach.usage.UsageFixtureInstrumentationTest.fourRealFixtureOpensReachTheRuleAfterReturningToAtlas(UsageFixtureInstrumentationTest.kt:172)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

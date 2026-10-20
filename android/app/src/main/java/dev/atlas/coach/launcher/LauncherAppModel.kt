@@ -22,13 +22,30 @@ object LauncherAppRules {
     fun sort(apps: Iterable<LauncherAppModel>): List<LauncherAppModel> =
         apps.distinctBy(LauncherAppModel::appPackage).sortedWith(::compare)
 
-    fun filter(apps: Iterable<LauncherAppModel>, query: String): List<LauncherAppModel> {
+    fun filter(
+        apps: Iterable<LauncherAppModel>,
+        query: String,
+        pinnedPackages: Set<String> = emptySet(),
+        recentPackages: List<String> = emptyList(),
+    ): List<LauncherAppModel> {
         val normalizedQuery = normalize(query)
-        val sorted = sort(apps)
-        if (normalizedQuery.isEmpty()) return sorted
-        return sorted.filter { app ->
-            normalize(app.appLabel).contains(normalizedQuery) || normalize(app.appPackage).contains(normalizedQuery)
-        }
+        val recentRank = recentPackages.withIndex().associate { it.value to it.index }
+        return apps.distinctBy(LauncherAppModel::appPackage)
+            .filter { app ->
+                normalizedQuery.isEmpty() || matchRank(app, normalizedQuery) >= 0
+            }
+            .sortedWith { left, right ->
+                val byMatch = matchRank(left, normalizedQuery).compareTo(matchRank(right, normalizedQuery))
+                if (byMatch != 0) return@sortedWith byMatch
+
+                val byFavorite = (left.appPackage !in pinnedPackages).compareTo(right.appPackage !in pinnedPackages)
+                if (byFavorite != 0) return@sortedWith byFavorite
+
+                val byRecent = (recentRank[left.appPackage] ?: Int.MAX_VALUE)
+                    .compareTo(recentRank[right.appPackage] ?: Int.MAX_VALUE)
+                if (byRecent != 0) return@sortedWith byRecent
+                compare(left, right)
+            }
     }
 
     fun favorites(apps: Iterable<LauncherAppModel>, pinnedPackages: Set<String>): List<LauncherAppModel> =
@@ -43,6 +60,18 @@ object LauncherAppRules {
         val collator = Collator.getInstance(Locale.getDefault()).apply { strength = Collator.PRIMARY }
         val byLabel = collator.compare(left.appLabel, right.appLabel)
         return if (byLabel != 0) byLabel else left.appPackage.compareTo(right.appPackage)
+    }
+
+    private fun matchRank(app: LauncherAppModel, query: String): Int {
+        if (query.isEmpty()) return 0
+        val label = normalize(app.appLabel)
+        val packageName = normalize(app.appPackage)
+        return when {
+            label == query || packageName == query -> 0
+            label.startsWith(query) || packageName.startsWith(query) -> 1
+            label.contains(query) || packageName.contains(query) -> 2
+            else -> -1
+        }
     }
 
     private fun normalize(value: String): String = Normalizer.normalize(value.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)

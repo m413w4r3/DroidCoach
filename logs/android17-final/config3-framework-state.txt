@@ -1,0 +1,16 @@
+sys.boot_completed=1
+api=37
+sdk_full=37.2
+page_size=16384
+zygote=running
+surfaceflinger=running
+
+--- HOME/input ---
+cmd: Can't find service: input
+
+--- Window focus ---
+  mCurrentFocus=Window{c70bad3 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+  mFocusedApp=ActivityRecord{147073698 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t6}
+
+--- ATLAS installation ---
+dev.atlas.coach=not_installed

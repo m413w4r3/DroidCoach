@@ -1,0 +1,1 @@
+BLOCKED: could not read the initial runtime permission state from the disposable AVD.

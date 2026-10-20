@@ -1,0 +1,2 @@
+Attempt 2: Google Play API 37.2 rev 6, Pixel 8 Pro, 4 CPU / 2048 MiB / 1344x2992@480, GPU lavapipe.
+`emulator -gpu lavapipe` selected Vulkan lavapipe / GLES swangle. Emulator log says `Boot completed in 61401 ms`, but `adb -s emulator-5584 wait-for-device` timed out after 45 s; a second bounded 40 s wait also timed out. Device stayed offline. No SDK properties, HOME, capture, APK install, or tests were obtained.

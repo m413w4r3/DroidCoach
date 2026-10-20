@@ -137,7 +137,7 @@ class AtlasVisualCaptureTest {
         val fontScale = mutableStateOf(1f)
         show(controller, screen, night, fontScale)
         capture("G-focus-active.png")
-        composeRule.onNodeWithText("Mettre en pause").performScrollTo().performClick()
+        composeRule.onNodeWithText("Pause").performScrollTo().performClick()
         capture("G-focus-pause.png")
         composeRule.onNodeWithText("Reprendre").performScrollTo().performClick()
         composeRule.onNodeWithText("Terminer").performScrollTo().performClick()
@@ -185,7 +185,7 @@ class AtlasVisualCaptureTest {
         select(screen, CaptureScreen.SYNC)
         capture("G-sync-offline.png")
         composeRule.runOnUiThread { night.intValue = Configuration.UI_MODE_NIGHT_YES }
-        composeRule.onNodeWithText("Désactivé · LocalMock").assertIsDisplayed()
+        composeRule.onNodeWithText("Désactivée").performScrollTo().assertIsDisplayed()
         capture("H3-sync-disabled-dark.png")
     }
 
@@ -201,7 +201,7 @@ class AtlasVisualCaptureTest {
             composeRule.onAllNodesWithTag("launcher_open_drawer").fetchSemanticsNodes().isNotEmpty()
         }
         capture("G-launcher-home.png")
-        composeRule.onNodeWithTag("launcher_open_drawer").performScrollTo().performClick()
+        composeRule.onNodeWithTag("launcher_open_drawer").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("launcher_search").fetchSemanticsNodes().isNotEmpty() &&
                 (composeRule.onAllNodesWithText("Épingler").fetchSemanticsNodes().isNotEmpty() ||

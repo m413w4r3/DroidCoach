@@ -1,0 +1,10 @@
+android.permission.ACCESS_COARSE_LOCATION=granted
+android.permission.ACCESS_FINE_LOCATION=denied
+android.permission.POST_NOTIFICATIONS=granted
+appops_uid_GET_USAGE_STATS=default
+appops_package_GET_USAGE_STATS=default
+location_enabled=true
+wm_size=1080x2400
+wm_density=reset
+Success
+fixture_package=uninstalled_after_run

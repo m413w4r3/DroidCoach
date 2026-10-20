@@ -1,0 +1,2 @@
+Removed task-created intermediate disposable AVDs and their isolated registration files: atlas_v62_android17_gp_auto.avd, atlas_v62_android17_gp_auto.ini, atlas_v62_android17_gp_lavapipe.avd, atlas_v62_android17_gp_lavapipe.ini
+Retained only the dedicated swangle AVD at /tmp/atlas-v62-android17/avd/atlas_v62_android17_gp_swangle.avd; no personal AVD data was accessed.

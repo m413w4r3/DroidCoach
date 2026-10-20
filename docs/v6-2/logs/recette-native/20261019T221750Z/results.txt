@@ -1,0 +1,12 @@
+PASS native-ui-360dp
+PASS native-ui-320dp
+PASS native-landscape
+PASS native-focus-screen
+PASS location-prepare-sharing-consent
+FAIL location-injected-coarse (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T221750Z/location-injected-coarse.log)
+PASS location-permission-refused
+PASS location-api26-timeout-unavailable
+PASS location-revoke-during-capture
+PASS mobility-prepare-sharing-consent
+PASS mobility-visible-service
+BLOCKED: Gateway model was not called because at least one non-Gateway Android instrumentation check failed.

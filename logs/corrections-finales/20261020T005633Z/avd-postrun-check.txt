@@ -1,0 +1,17 @@
+List of devices attached
+emulator-5554          device product:sdk_gphone64_x86_64 model:sdk_gphone64_x86_64 device:emu64xa transport_id:40
+
+atlas_v62_disposable_api34
+OK
+34
+package:dev.atlas.coach.test
+package:dev.atlas.coach
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.ACCESS_FINE_LOCATION: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.ACCESS_COARSE_LOCATION: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+GET_USAGE_STATS: default; time=+3m42s1ms ago
+GET_USAGE_STATS: default; time=+3m42s28ms ago
+true
+Physical size: 1344x2992
+Override size: 1080x2400
+Physical density: 480

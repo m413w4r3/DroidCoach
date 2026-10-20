@@ -11,6 +11,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,7 +29,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -147,11 +150,15 @@ private fun LauncherHomeContent(
     var clock by remember { mutableStateOf(currentClockText()) }
     var search by remember { mutableStateOf("") }
     var drawerOpen by remember { mutableStateOf(false) }
+    var showHomeMenu by remember { mutableStateOf(false) }
     var launcherMessage by remember { mutableStateOf<String?>(null) }
     var showDirectiveDetails by remember { mutableStateOf(false) }
 
     BackHandler(enabled = true) {
-        if (drawerOpen) drawerOpen = false
+        when {
+            showHomeMenu -> showHomeMenu = false
+            drawerOpen -> drawerOpen = false
+        }
         // Android HOME stays open when Back is pressed while its drawer is closed.
     }
 
@@ -179,7 +186,7 @@ private fun LauncherHomeContent(
     }
 
     val pinnedApps = LauncherAppRules.favorites(apps, controller.launcherPinnedPackages)
-    val filteredApps = LauncherAppRules.filter(apps, search)
+    val filteredApps = LauncherAppRules.filter(apps, search, controller.launcherPinnedPackages)
     val onToggleDrawer = { drawerOpen = !drawerOpen }
     val onLaunchApp: (LauncherAppModel) -> Unit = { app ->
         if (!catalog.launch(app)) {
@@ -196,69 +203,88 @@ private fun LauncherHomeContent(
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 12.dp),
     ) {
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds().verticalScroll(rememberScrollState())
-                .testTag("launcher_home_scroll_region")
-                .padding(top = 18.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            if (drawerOpen) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
-                        .testTag("launcher_drawer_header"),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("Applications", style = MaterialTheme.typography.headlineMedium)
-                    Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth().testTag("launcher_search"),
-                    value = search,
-                    onValueChange = { search = it },
-                    label = { Text("Rechercher une application") },
-                    placeholder = { Text("Nom ou paquet") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
-                )
-                when {
-                    loading -> Text("Chargement des applications…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    loadError -> Text("La liste n'a pas pu être chargée. Revenez ici pour réessayer.", color = MaterialTheme.colorScheme.error)
-                    apps.isEmpty() -> Text("Aucune application avec un raccourci d'accueil n'est visible.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    filteredApps.isEmpty() -> Text("Aucune application ne correspond à cette recherche.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else -> filteredApps.forEach { app ->
-                        LauncherAppRow(
-                            app = app,
-                            pinned = app.appPackage in controller.launcherPinnedPackages,
-                            onLaunch = { onLaunchApp(app) },
-                            onTogglePin = { controller.toggleLauncherPin(app.appPackage) },
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val favoriteLimit = when {
+                configuration.orientation == Configuration.ORIENTATION_LANDSCAPE || density.fontScale >= 1.75f || maxHeight < 460.dp -> 4
+                density.fontScale >= 1.3f || maxHeight < 620.dp -> 5
+                else -> 6
+            }
+            val activeFocus = agentState.focusCard?.takeIf(HomeAgentCard::isActiveFocus)
+
+            Column(
+                modifier = Modifier.fillMaxSize().clipToBounds().verticalScroll(rememberScrollState())
+                    .testTag("launcher_home_scroll_region")
+                    .padding(top = 18.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (drawerOpen) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
+                            .testTag("launcher_drawer_header"),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Applications", style = MaterialTheme.typography.headlineMedium)
+                        Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth().testTag("launcher_search"),
+                        value = search,
+                        onValueChange = { search = it },
+                        label = { Text("Rechercher une application") },
+                        placeholder = { Text("Nom ou paquet") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
+                    )
+                    when {
+                        loading -> Text("Chargement des applications…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        loadError -> Text("La liste n'a pas pu être chargée. Revenez ici pour réessayer.", color = MaterialTheme.colorScheme.error)
+                        apps.isEmpty() -> Text("Aucune application avec un raccourci d'accueil n'est visible.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        filteredApps.isEmpty() -> Text("Aucune application ne correspond à cette recherche.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> filteredApps.forEach { app ->
+                            LauncherAppRow(
+                                app = app,
+                                pinned = app.appPackage in controller.launcherPinnedPackages,
+                                onLaunch = { onLaunchApp(app) },
+                                onTogglePin = { controller.toggleLauncherPin(app.appPackage) },
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
+                            .testTag("launcher_swipe_header"),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("ATLAS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 2.sp)
+                        Text(
+                            clock,
+                            style = MaterialTheme.typography.headlineLarge.copy(fontSize = 46.sp),
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.sp,
+                        )
+                        Text(
+                            LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRANCE))
+                                .replaceFirstChar { it.uppercase(Locale.FRANCE) },
+                            style = MaterialTheme.typography.bodyLarge,
                         )
                     }
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
-                        .testTag("launcher_swipe_header"),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("ATLAS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, letterSpacing = 2.sp)
-                    Text(clock, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Light, letterSpacing = 1.sp)
-                    Text(
-                        LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRANCE))
-                            .replaceFirstChar { it.uppercase(Locale.FRANCE) },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_open_drawer"), onClick = { drawerOpen = true }) {
-                        Text("Applications et recherche")
-                    }
-                }
 
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Prochaine étape", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    activeFocus?.let { card ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("FOCUS ACTIF", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(card.body, style = MaterialTheme.typography.bodyLarge)
+                            Button(
+                                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_focus_card_action"),
+                                onClick = { openFocus() },
+                            ) { Text(card.actionLabel) }
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("AUJOURD'HUI", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
                             agentState.directiveStatusLabel(),
                             modifier = Modifier.testTag("launcher_directive_status"),
@@ -275,7 +301,8 @@ private fun LauncherHomeContent(
                             Text(
                                 truncateHomeDirectiveTitle(agentState.directive.title),
                                 modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -285,93 +312,122 @@ private fun LauncherHomeContent(
                                 agentState.directive.body,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 3,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Button(
-                            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("launcher_directive_cta"),
-                            onClick = {
+                        val directiveAction: @Composable () -> Unit = {
+                            val action: () -> Unit = {
                                 when (agentState.directive.primaryAction) {
                                     HomePrimaryAction.START_FOCUS -> openFocus()
                                     HomePrimaryAction.OPEN_COACH -> openCoach()
                                     HomePrimaryAction.NONE -> showDirectiveDetails = true
                                 }
-                            },
-                            enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
-                        ) {
-                            Text(agentState.directive.primaryAction.homeActionLabel())
+                            }
+                            if (activeFocus == null) {
+                                Button(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
+                                    onClick = action,
+                                    enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                                ) { Text(agentState.directive.primaryAction.homeActionLabel()) }
+                            } else {
+                                TextButton(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
+                                    onClick = action,
+                                    enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                                ) { Text(agentState.directive.primaryAction.homeActionLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                        directiveAction()
+                    }
+
+                    agentState.focusCard?.takeUnless(HomeAgentCard::isActiveFocus)?.let { card ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(card.title, style = MaterialTheme.typography.titleSmall)
+                            Text(card.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = {
+                                openHomeCard(card.action, openFocus, openCoach, openLibrary)
+                            }) { Text(card.actionLabel, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
-                }
 
-                agentState.focusCard?.let { card ->
-                    HomeAgentCardView(card) { openHomeCard(card.action, openFocus, openCoach, openLibrary) }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Applications favorites", style = MaterialTheme.typography.titleMedium)
-                    if (pinnedApps.isEmpty()) {
-                        Text(
-                            "Aucun favori.",
-                            modifier = Modifier.testTag("launcher_favorites_empty"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        pinnedApps.forEach { app ->
-                            TextButton(
-                                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_favorite_${app.appPackage}")
-                                    .semantics {
-                                        contentDescription = "Ouvrir l'application favorite ${app.appLabel}"
-                                        customActions = listOf(CustomAccessibilityAction("Retirer ${app.appLabel} des favoris") {
-                                            controller.toggleLauncherPin(app.appPackage)
-                                            true
-                                        })
-                                    },
-                                onClick = { onLaunchApp(app) },
-                            ) {
-                                Text(app.appLabel, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("APPLICATIONS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (pinnedApps.isEmpty()) {
+                            Text(
+                                "Aucun favori.",
+                                modifier = Modifier.testTag("launcher_favorites_empty"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            pinnedApps.take(favoriteLimit).forEach { app ->
+                                TextButton(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_favorite_${app.appPackage}")
+                                        .semantics {
+                                            contentDescription = "Ouvrir l'application favorite ${app.appLabel}"
+                                            customActions = listOf(CustomAccessibilityAction("Retirer ${app.appLabel} des favoris") {
+                                                controller.toggleLauncherPin(app.appPackage)
+                                                true
+                                            })
+                                        },
+                                    onClick = { onLaunchApp(app) },
+                                ) {
+                                    Text(app.appLabel, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                                }
                             }
                         }
                     }
                 }
+                launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
-            launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
 
-        val compactFooter = density.fontScale >= 1.5f ||
-            configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
-            configuration.screenHeightDp < 620
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).testTag("launcher_fixed_footer"),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).testTag("launcher_fixed_footer"),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Button(
-                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp)
-                    .testTag("launcher_emergency_pause")
-                    .semantics { contentDescription = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes" },
+            HomeFooterAction(
+                label = "Apps",
+                description = if (drawerOpen) "Revenir à l'accueil ATLAS" else "Ouvrir Applications et recherche",
+                tag = "launcher_open_drawer",
+                modifier = Modifier.weight(1f),
+                onClick = onToggleDrawer,
+            )
+            HomeFooterAction(
+                label = "Coach",
+                description = "Ouvrir le Coach",
+                tag = "launcher_open_coach",
+                modifier = Modifier.weight(1f),
+                onClick = openCoach,
+            )
+            HomeFooterAction(
+                label = if (controller.isEmergencyPaused) "Fin" else "Pause",
+                description = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes",
+                tag = "launcher_emergency_pause",
+                modifier = Modifier.weight(1f),
                 onClick = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
-            ) {
-                Text(
-                    text = when {
-                        controller.isEmergencyPaused && compactFooter -> "Fin de pause"
-                        controller.isEmergencyPaused -> "Terminer la pause d'urgence"
-                        compactFooter -> "Pause · 30 min"
-                        else -> "Pause d'urgence · 30 min"
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            )
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                HomeFooterAction(
+                    label = "Plus",
+                    description = "Plus d'options HOME",
+                    tag = "launcher_more",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showHomeMenu = true },
                 )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().testTag("launcher_compact_footer"),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                val footerLabelStyle = if (compactFooter) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge
-                CompactHomeAction("Launcher", "Ouvrir le launcher précédent", footerLabelStyle, Modifier.weight(1f).testTag("launcher_previous_launcher"), openPreviousLauncher)
-                CompactHomeAction("Réglages", "Ouvrir les réglages HOME", footerLabelStyle, Modifier.weight(1f).testTag("launcher_home_settings"), openHomeSettings)
-                CompactHomeAction("Coach", "Ouvrir le Coach", footerLabelStyle, Modifier.weight(1f).testTag("launcher_open_coach"), openCoach)
+                DropdownMenu(expanded = showHomeMenu, onDismissRequest = { showHomeMenu = false }) {
+                    DropdownMenuItem(
+                        modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_previous_launcher"),
+                        text = { Text("Launcher précédent") },
+                        onClick = { showHomeMenu = false; openPreviousLauncher() },
+                    )
+                    DropdownMenuItem(
+                        modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_home_settings"),
+                        text = { Text("Réglages HOME") },
+                        onClick = { showHomeMenu = false; openHomeSettings() },
+                    )
+                }
             }
         }
     }
@@ -393,24 +449,14 @@ private fun LauncherHomeContent(
 }
 
 @Composable
-private fun HomeAgentCardView(card: HomeAgentCard, onAction: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(card.title, style = MaterialTheme.typography.titleSmall)
-            Text(card.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_focus_card_action"), onClick = onAction) { Text(card.actionLabel) }
-        }
-    }
-}
-
-@Composable
-private fun CompactHomeAction(label: String, description: String, labelStyle: androidx.compose.ui.text.TextStyle, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun HomeFooterAction(label: String, description: String, tag: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     TextButton(
-        modifier = modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-            .semantics { contentDescription = description },
+        modifier = modifier.fillMaxWidth().sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics { contentDescription = description }
+            .testTag(tag),
         onClick = onClick,
     ) {
-        Text(label, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -457,14 +503,14 @@ private fun LauncherAppRow(
                     })
                 },
             onClick = onLaunch,
-        ) { Text(app.appLabel, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyLarge) }
+        ) { Text(app.appLabel, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface) }
         TextButton(
             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 .semantics {
                     contentDescription = if (pinned) "Retirer ${app.appLabel} des favoris" else "Épingler ${app.appLabel} parmi les favoris"
                 },
             onClick = onTogglePin,
-        ) { Text(if (pinned) "Favori" else "Épingler") }
+        ) { Text(if (pinned) "Favori" else "Épingler", color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

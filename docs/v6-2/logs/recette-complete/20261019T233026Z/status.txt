@@ -1,0 +1,1 @@
+connectedDebugAndroidTest returned 1; failures are retained, follow-up UI recaptures were still run.

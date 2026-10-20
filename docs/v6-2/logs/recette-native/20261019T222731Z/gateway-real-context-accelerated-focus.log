@@ -1,0 +1,100 @@
+INSTRUMENTATION_STATUS: class=dev.atlas.coach.app.V62RealGatewayContextBridgeTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+dev.atlas.coach.app.V62RealGatewayContextBridgeTest:
+INSTRUMENTATION_STATUS: test=realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=dev.atlas.coach.app.V62RealGatewayContextBridgeTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=java.lang.ArrayIndexOutOfBoundsException: length=10240; index=-636
+	at androidx.compose.runtime.SlotTableKt.dataAnchor(SlotTable.kt:4003)
+	at androidx.compose.runtime.SlotTableKt.access$dataAnchor(SlotTable.kt:1)
+	at androidx.compose.runtime.SlotWriter.moveSlotGapTo(SlotTable.kt:2989)
+	at androidx.compose.runtime.SlotWriter.removeSlots(SlotTable.kt:3198)
+	at androidx.compose.runtime.SlotWriter.removeGroup(SlotTable.kt:2266)
+	at androidx.compose.runtime.ComposerKt.removeCurrentGroup(Composer.kt:4182)
+	at androidx.compose.runtime.CompositionImpl.dispose(Composition.kt:783)
+	at androidx.compose.ui.layout.LayoutNodeSubcompositionsState.disposeCurrentNodes(SubcomposeLayout.kt:609)
+	at androidx.compose.ui.layout.LayoutNodeSubcompositionsState.onRelease(SubcomposeLayout.kt:423)
+	at androidx.compose.ui.node.LayoutNode.onRelease(LayoutNode.kt:1439)
+	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1350)
+	at androidx.compose.runtime.CompositionImpl.dispose(Composition.kt:787)
+	at androidx.compose.ui.platform.WrappedComposition.dispose(Wrapper.android.kt:169)
+	at androidx.compose.ui.platform.WrappedComposition.onStateChanged(Wrapper.android.kt:177)
+	at androidx.lifecycle.LifecycleRegistry$ObserverWithState.dispatchEvent(LifecycleRegistry.jvm.kt:320)
+	at androidx.lifecycle.LifecycleRegistry.backwardPass(LifecycleRegistry.jvm.kt:272)
+	at androidx.lifecycle.LifecycleRegistry.sync(LifecycleRegistry.jvm.kt:289)
+	at androidx.lifecycle.LifecycleRegistry.moveToState(LifecycleRegistry.jvm.kt:142)
+	at androidx.lifecycle.LifecycleRegistry.handleLifecycleEvent(LifecycleRegistry.jvm.kt:124)
+	at androidx.lifecycle.ReportFragment$Companion.dispatch$lifecycle_runtime_release(ReportFragment.android.kt:190)
+	at androidx.lifecycle.ReportFragment$LifecycleCallbacks.onActivityPreDestroyed(ReportFragment.android.kt:146)
+	at android.app.Activity.dispatchActivityPreDestroyed(Activity.java:1602)
+	at android.app.Activity.performDestroy(Activity.java:8871)
+	at android.app.Instrumentation.callActivityOnDestroy(Instrumentation.java:1491)
+	at androidx.test.runner.MonitoringInstrumentation.callActivityOnDestroy(MonitoringInstrumentation.java:753)
+	at android.app.ActivityThread.performDestroyActivity(ActivityThread.java:5600)
+	at android.app.ActivityThread.handleDestroyActivity(ActivityThread.java:5645)
+	at android.app.servertransaction.DestroyActivityItem.execute(DestroyActivityItem.java:47)
+	at android.app.servertransaction.ActivityTransactionItem.execute(ActivityTransactionItem.java:45)
+	at android.app.servertransaction.TransactionExecutor.executeLifecycleState(TransactionExecutor.java:180)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:98)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.app.ActivityThread.main(ActivityThread.java:8177)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:552)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:971)
+
+INSTRUMENTATION_STATUS: stream=
+Process crashed while executing realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal(dev.atlas.coach.app.V62RealGatewayContextBridgeTest):
+java.lang.ArrayIndexOutOfBoundsException: length=10240; index=-636
+	at androidx.compose.runtime.SlotTableKt.dataAnchor(SlotTable.kt:4003)
+	at androidx.compose.runtime.SlotTableKt.access$dataAnchor(SlotTable.kt:1)
+	at androidx.compose.runtime.SlotWriter.moveSlotGapTo(SlotTable.kt:2989)
+	at androidx.compose.runtime.SlotWriter.removeSlots(SlotTable.kt:3198)
+	at androidx.compose.runtime.SlotWriter.removeGroup(SlotTable.kt:2266)
+	at androidx.compose.runtime.ComposerKt.removeCurrentGroup(Composer.kt:4182)
+	at androidx.compose.runtime.CompositionImpl.dispose(Composition.kt:783)
+	at androidx.compose.ui.layout.LayoutNodeSubcompositionsState.disposeCurrentNodes(SubcomposeLayout.kt:609)
+	at androidx.compose.ui.layout.LayoutNodeSubcompositionsState.onRelease(SubcomposeLayout.kt:423)
+	at androidx.compose.ui.node.LayoutNode.onRelease(LayoutNode.kt:1439)
+	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1350)
+	at androidx.compose.runtime.CompositionImpl.dispose(Composition.kt:787)
+	at androidx.compose.ui.platform.WrappedComposition.dispose(Wrapper.android.kt:169)
+	at androidx.compose.ui.platform.WrappedComposition.onStateChanged(Wrapper.android.kt:177)
+	at androidx.lifecycle.LifecycleRegistry$ObserverWithState.dispatchEvent(LifecycleRegistry.jvm.kt:320)
+	at androidx.lifecycle.LifecycleRegistry.backwardPass(LifecycleRegistry.jvm.kt:272)
+	at androidx.lifecycle.LifecycleRegistry.sync(LifecycleRegistry.jvm.kt:289)
+	at androidx.lifecycle.LifecycleRegistry.moveToState(LifecycleRegistry.jvm.kt:142)
+	at androidx.lifecycle.LifecycleRegistry.handleLifecycleEvent(LifecycleRegistry.jvm.kt:124)
+	at androidx.lifecycle.ReportFragment$Companion.dispatch$lifecycle_runtime_release(ReportFragment.android.kt:190)
+	at androidx.lifecycle.ReportFragment$LifecycleCallbacks.onActivityPreDestroyed(ReportFragment.android.kt:146)
+	at android.app.Activity.dispatchActivityPreDestroyed(Activity.java:1602)
+	at android.app.Activity.performDestroy(Activity.java:8871)
+	at android.app.Instrumentation.callActivityOnDestroy(Instrumentation.java:1491)
+	at androidx.test.runner.MonitoringInstrumentation.callActivityOnDestroy(MonitoringInstrumentation.java:753)
+	at android.app.ActivityThread.performDestroyActivity(ActivityThread.java:5600)
+	at android.app.ActivityThread.handleDestroyActivity(ActivityThread.java:5645)
+	at android.app.servertransaction.DestroyActivityItem.execute(DestroyActivityItem.java:47)
+	at android.app.servertransaction.ActivityTransactionItem.execute(ActivityTransactionItem.java:45)
+	at android.app.servertransaction.TransactionExecutor.executeLifecycleState(TransactionExecutor.java:180)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:98)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.app.ActivityThread.main(ActivityThread.java:8177)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:552)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:971)
+
+INSTRUMENTATION_STATUS: test=realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: shortMsg=Process crashed.
+INSTRUMENTATION_CODE: 0

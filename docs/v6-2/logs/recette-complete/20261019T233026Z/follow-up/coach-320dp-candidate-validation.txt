@@ -1,0 +1,1 @@
+png_ok=true bytes=161188 width_px=960 height_px=2400

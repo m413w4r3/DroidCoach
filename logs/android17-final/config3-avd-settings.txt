@@ -1,0 +1,13 @@
+PlayStore.enabled=yes
+abi.type=x86_64
+hw.device.name=pixel_8_pro
+hw.gpu.enabled=yes
+hw.gpu.mode=swangle
+hw.ramSize=2048
+hw.cpu.ncore=4
+hw.lcd.width=1344
+hw.lcd.height=2992
+hw.lcd.density=480
+image.sysdir.1=system-images/android-37.2/google_apis_playstore_ps16k/x86_64/
+tag.id=google_apis_playstore
+tag.ids=google_apis_playstore,page_size_16kb

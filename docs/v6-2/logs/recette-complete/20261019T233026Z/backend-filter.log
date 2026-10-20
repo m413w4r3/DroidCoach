@@ -1,0 +1,5 @@
+--------- beginning of main
+10-20 01:30:33.546 10364 10397 I ATLAS_TEST_FILTER: Filtered chatUsesRealGoalProgressAndPlanDropsGoalsAfterRevocation(dev.atlas.coach.app.V62OpenClawClientInstrumentationTest): requires the existing local FastAPI adapter connected to OpenClaw
+10-20 01:30:33.549 10364 10397 I ATLAS_TEST_FILTER: Filtered restoredFocusCanPauseResumeAndCancel(dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest): restored real Focus scenario requires scripts/v6-e2e-real.sh
+10-20 01:30:33.549 10364 10397 I ATLAS_TEST_FILTER: Filtered realCoachResponseCreatesDirectiveAndStartsFocus(dev.atlas.coach.app.V6RealAgentE2eInstrumentationTest): real OpenClaw scenario requires scripts/v6-e2e-real.sh
+10-20 01:30:33.556 10364 10397 I ATLAS_TEST_FILTER: Filtered runRequestedBackendScenario(dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest): backend scenario requires scripts/v4-backend-e2e.sh

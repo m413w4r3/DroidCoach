@@ -1,0 +1,17 @@
+ATLAS V6.2 targeted visible coarse recipe
+AVD=atlas_v62_disposable_api34 API=34 serial=emulator-5554
+
+Five isolated attempts of the single coarse test were made while correcting the test signature and host/device synchronization:
+1. 20261019T230911Z: 1 test, 1 JUnit initialization failure (test method inferred Int; no injection).
+2. 20261019T231012Z: 1 test, 1 assertion failure (old assertion compared the OS-coarsened fix to its summary; host injection followed the marker by 18163 ms).
+3. 20261019T231313Z: 1 test, 1 LOCATION_TIMEOUT after 10000 ms.
+4. 20261019T231540Z: 1 test, 1 LOCATION_TIMEOUT after 10000 ms; the only GPS callback was an older cached fix before injection.
+5. 20261019T231642Z: 1 test, 1 failure; no timestamp-new GPS callback arrived after geo fix within 10 s.
+
+Targeted attempts total: 5 tests, 0 passed, 5 failed, 0 skipped.
+The last AVD log shows the GPS listener registered at 01:16:48.245 and receiving a cached fix at 01:16:48.246; host injection started at 01:16:48.372. No later GPS delivery appears before listener removal at 01:16:59.041. `adb emu geo fix` returned OK.
+
+Mobility step: not launched (coarse prerequisite failed), 0 tests executed, 0 failures, 0 skipped.
+Complete instrumentation suite: not launched (gated on successful coarse and measured mobility), 0 tests executed, 0 failures, 0 skipped.
+Final AndroidTest Kotlin compile: BUILD SUCCESSFUL in 1 s; see compile-visible-location-final.log.
+No production source was modified and no model call was made.

@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.focus.FocusStatus
+import dev.atlas.coach.location.MobilitySessionStatusStore
 import dev.atlas.coach.habits.Habit
 import dev.atlas.coach.app.ui.AtlasRoutes
 import dev.atlas.coach.app.ui.AtlasScreenFrame
@@ -42,6 +44,7 @@ fun AtlasApp(
     var showLinkChoices by remember { mutableStateOf(false) }
     var selectedHabit by remember { mutableStateOf<Habit?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val mobilityStatus by MobilitySessionStatusStore.status.collectAsState()
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         controller.onNotificationPermissionResult(granted)
     }
@@ -75,11 +78,15 @@ fun AtlasApp(
         }
     }
 
+    LaunchedEffect(mobilityStatus.lastCompletion) {
+        controller.onMobilitySessionCompletion(mobilityStatus.lastCompletion)
+    }
+
     LaunchedEffect(activityStarted, controller.capabilities[AtlasController.CAP_APP_TRACKING]) {
         if (!activityStarted) return@LaunchedEffect
         controller.onHostResumed()
         while (activityStarted && controller.capabilities[AtlasController.CAP_APP_TRACKING] == true) {
-            controller.pollUsageObservation()
+            controller.pollVisibleUsageObservation()
             delay(dev.atlas.coach.usage.UsageRetention.VISIBLE_POLL_INTERVAL_MILLIS)
         }
     }

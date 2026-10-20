@@ -92,3 +92,10 @@
 - En paysage, avec texte agrandi ou sous une hauteur d’écran de 620 dp, la pause d’urgence reste une action pleine largeur distincte et les trois accès secondaires restent sur une seule rangée compacte. Chaque cible reste au moins 48 dp; la zone de contenu est bornée et séparée du pied par 8 dp. Ce choix maintient les accès persistants sans recouvrir le CTA.
 - Le badge Sync est dérivé des contrôles de consentement/configuration, de l’état transport et de l’observation backend Lot C (TTL de cinq minutes). Sans URL ou jeton, il annonce la configuration requise et précise que la file reste locale; une observation périmée devient « contact à vérifier », jamais « joignable ».
 - Les propositions conservent leurs IDs d’action. L’éditeur traduit `open_coach` et `focus.start` en libellés français et reconvertit une valeur modifiée en ID avant sauvegarde; aucun changement de contrat n’est introduit.
+
+## V6.2 — orchestration (2026-10-19)
+
+- Base vérifiée : `main`, `ee1e7b58c06531f6fdc631a42cdd7522d8ee90e1`. Le prompt maître non suivi est conservé intact. Aucun push, merge ni commit automatique.
+- Les sous-sessions Nimbalyst utilisent `openai-codex:gpt-6-luna`, effort `xhigh`, notification de fin; au plus trois exécutants. Le checkout est partagé avec propriété exclusive des fichiers; les fichiers globaux sont réservés à S6.
+- Toute catégorie autorisée héritée sans date de consentement reçoit la date de migration, jamais une date ancienne implicite. Le contexte est réassemblé puis minimisé contre le consentement courant avant transport.
+- L’AVD personnel `Pixel_9_Pro_XL_2` est signalé invalide par avdmanager et reste intact. La recette utilise uniquement `atlas_v62_disposable_api37`, créé pour cette mission (API 37.2, x86_64, port 5580). Sa partition initiale de 774 Mio était saturée dès le démarrage; ce seul AVD neuf a été réinitialisé avec une partition de 4096 Mio avant toute installation ATLAS.

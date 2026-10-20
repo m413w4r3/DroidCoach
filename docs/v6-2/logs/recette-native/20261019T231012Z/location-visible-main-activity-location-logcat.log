@@ -1,0 +1,2 @@
+--------- beginning of main
+10-20 01:10:36.218  7803  7849 I ATLAS_V62_LOCATION: COARSE_CAPTURE_ACTIVE activity=MainActivity coarse_granted=true fine_granted=false max_age_ms=15000 started_utc_ms=1792451436218

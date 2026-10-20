@@ -1,0 +1,4 @@
+--------- beginning of main
+10-20 01:42:07.545 13378 13400 I ATLAS_R3: friction_notification_denied status=PERMISSION_REQUIRED
+10-20 01:42:08.259 13422 13444 I ATLAS_R3: POST_NOTIFICATIONS granted for the isolated AVD integration run
+10-20 01:42:08.259 13422 13444 W ATLAS_R3: BLOCKED: GET_USAGE_STATS is not allowed; four real fixture launches were not queried

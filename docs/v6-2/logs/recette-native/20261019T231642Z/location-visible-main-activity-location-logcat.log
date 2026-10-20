@@ -1,0 +1,2 @@
+--------- beginning of main
+10-20 01:16:48.275  8548  8595 I ATLAS_V62_LOCATION: COARSE_LOCATION_LISTENER_ACTIVE activity=MainActivity provider=gps coarse_granted=true fine_granted=false awaiting_host_fix=true

@@ -1,0 +1,7 @@
+No API 37 AVD reached the required boot + HOME + valid PNG capture state. The final APK was not installed and no dangerous runtime permission was granted. Targeted instrumentation was therefore not run:
+- AtlasLaunchTest (12 tests)
+- V62NativeUiCaptureTest#nativeHomeMatrixAtRequestedWidth (320 dp and 360 dp)
+- AgentContractsInstrumentationTest#proposalAndHomeStateRoundTripOnAndroidRuntime
+- V62MobilityServiceInstrumentedTest#visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail
+- V62LocationCaptureInstrumentedTest#api26Through29UseListenerAndReturnTimeoutOrUnavailableCodes
+No Gateway or model was contacted.

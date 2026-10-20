@@ -3,6 +3,7 @@ package dev.atlas.coach.app
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Configuration
+import android.content.pm.ActivityInfo
 import android.os.ParcelFileDescriptor
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
@@ -11,23 +12,29 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.ui.AtlasTheme
+import dev.atlas.coach.test.BackendArgumentsAwareRunner
+import dev.atlas.coach.test.RequiresBackendArguments
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
 
-@RunWith(AndroidJUnit4::class)
+@RunWith(BackendArgumentsAwareRunner::class)
 class V61LandscapeCaptureTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["landscape_display_ready"],
+        reason = "requires the disposable AVD display to be rotated by the host to landscape before capture",
+    )
     fun capturesHomeWithDirectiveCtaAboveFixedFooter() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val appContext = instrumentation.targetContext
@@ -47,6 +54,9 @@ class V61LandscapeCaptureTest {
             ),
         )
         val orientation = AtomicInteger(Configuration.ORIENTATION_UNDEFINED)
+        composeRule.runOnUiThread {
+            composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
 
         composeRule.setContent {
             val configuration = LocalConfiguration.current
@@ -65,15 +75,14 @@ class V61LandscapeCaptureTest {
             }
         }
 
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            orientation.get() == Configuration.ORIENTATION_LANDSCAPE
-        }
+        composeRule.waitUntil(timeoutMillis = 10_000) { orientation.get() == Configuration.ORIENTATION_LANDSCAPE }
         composeRule.onNodeWithTag("launcher_directive_cta").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
-        composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
-        composeRule.onNodeWithTag("launcher_home_settings").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         capture("16-home-landscape.png")
+        composeRule.onNodeWithTag("launcher_more").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
+        composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_home_settings").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     }
 
     private fun capture(fileName: String) {

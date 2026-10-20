@@ -1,0 +1,22 @@
+PNG_OK v62-home-dark-focus-360dp.png bytes=132864
+PNG_OK v62-home-s4-accent-360dp.png bytes=132864
+PNG_OK v62-home-amoled-focus-360dp.png bytes=128664
+PNG_OK v62-home-no-remote-directive-360dp.png bytes=112990
+PNG_OK v62-home-five-favorites-360dp.png bytes=112990
+PNG_OK v62-app-drawer-360dp.png bytes=117722
+PNG_OK v62-app-search-360dp.png bytes=138870
+PNG_OK v62-home-font-1_5-360dp.png bytes=149116
+PNG_OK v62-home-font-2_0-360dp.png bytes=162460
+INVALID_OR_MISSING_PNG v62-home-landscape.png
+PNG_OK v62-coach-local-fixture-360dp.png bytes=166441
+INVALID_OR_MISSING_PNG v62-focus-active.png
+PNG_OK v62-home-dark-focus-320dp.png bytes=136667
+PNG_OK v62-home-s4-accent-320dp.png bytes=136667
+PNG_OK v62-home-amoled-focus-320dp.png bytes=131722
+PNG_OK v62-home-no-remote-directive-320dp.png bytes=113849
+PNG_OK v62-home-five-favorites-320dp.png bytes=113849
+PNG_OK v62-app-drawer-320dp.png bytes=116199
+PNG_OK v62-app-search-320dp.png bytes=139803
+PNG_OK v62-home-font-1_5-320dp.png bytes=156910
+PNG_OK v62-home-font-2_0-320dp.png bytes=165270
+PNG_OK v62-coach-local-fixture-320dp.png bytes=21688

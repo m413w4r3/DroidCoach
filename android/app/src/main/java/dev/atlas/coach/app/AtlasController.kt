@@ -33,6 +33,10 @@ import dev.atlas.coach.data.StateReadResult
 import dev.atlas.coach.data.localPolicyFromStorage
 import dev.atlas.coach.data.ruleEvaluatorStateFromStorage
 import dev.atlas.coach.data.toStorageMap
+import dev.atlas.coach.goals.GoalMetric
+import dev.atlas.coach.goals.GoalRecord
+import dev.atlas.coach.goals.GoalRepository
+import dev.atlas.coach.goals.GoalStatus
 import dev.atlas.coach.focus.Clock
 import dev.atlas.coach.focus.FocusEngine
 import dev.atlas.coach.focus.FocusPlan
@@ -67,6 +71,7 @@ import dev.atlas.coach.usage.android.AndroidProtectedPackages
 import dev.atlas.coach.usage.android.AndroidUsageAccessStatus
 import dev.atlas.coach.usage.android.AndroidUsageStatsEventSource
 import dev.atlas.coach.usage.android.SharedPreferencesUsageStores
+import dev.atlas.coach.usage.android.UsageObservationWorkScheduler
 import dev.atlas.coach.usage.android.usageAccessSettingsIntent as systemUsageAccessSettingsIntent
 import dev.atlas.coach.rules.AppEventSimulator
 import dev.atlas.coach.rules.AppOpenEvent
@@ -122,9 +127,27 @@ import dev.atlas.coach.sync.agent.dispatch.cooldownHistoryByActionType
 import dev.atlas.coach.sync.agent.withRemoteDirective
 import dev.atlas.coach.sync.agent.coach.AgentApiClient
 import dev.atlas.coach.sync.agent.coach.AgentApiException
+import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.coach.AgentConversationMessage
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
 import dev.atlas.coach.sync.agent.coach.AgentStatus
+import dev.atlas.coach.coach.proactive.CoachTrigger
+import dev.atlas.coach.coach.proactive.CoachTriggerReliability
+import dev.atlas.coach.coach.proactive.CoachTriggerSource
+import dev.atlas.coach.coach.proactive.ProactiveConsentSnapshot
+import dev.atlas.coach.coach.proactive.ProactiveEngagementMode
+import dev.atlas.coach.coach.proactive.ProactiveNotificationContent
+import dev.atlas.coach.coach.proactive.ProactivePlanRequest
+import dev.atlas.coach.coach.proactive.ProactivePlanResponse
+import dev.atlas.coach.location.MobilitySessionCompletion
+import dev.atlas.coach.location.MobilitySessionStatusStore
+import dev.atlas.coach.sync.agent.context.AgentContextCategory
+import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
+import dev.atlas.coach.sync.agent.context.AgentContextPreview
+import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
+import dev.atlas.coach.location.LocationSummary
+import dev.atlas.coach.location.MobilitySessionStopReason
+import dev.atlas.coach.usage.ObservationRecord
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.LocalTime
@@ -140,6 +163,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedQueue
 import org.json.JSONObject
 
 /** Owns the small, synchronous local graph used by the Compose demo. */
@@ -158,6 +183,9 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
     private val syncRunning = AtomicBoolean(false)
     private val syncGeneration = AtomicLong(0L)
+    private val proactiveEffectGeneration = AtomicLong(0L)
+    private val proactiveDrainScheduled = AtomicBoolean(false)
+    private val pendingProactiveEvents = ConcurrentLinkedQueue<CoachTrigger>()
     private val effectiveConsent = AtomicReference(SyncConsent.DISABLED)
     @Volatile private var remoteBackend: RemoteBackendGateway? = null
     @Volatile private var syncRetryFuture: ScheduledFuture<*>? = null
@@ -281,6 +309,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     )
     private var agentConversationId: String? = restored["agentConversationId"] as? String
     @Volatile private var agentApiClient: AgentApiClient? = null
+    private val agentRequestGeneration = AtomicLong(0L)
     private val agentVerifier = MandateVerifier()
     private val agentDispatcher by lazy {
         ActionDispatcher(
@@ -335,10 +364,86 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     )
         private set
 
+    private var goalsSubdocument: Map<String, Any?>? = restored["goals"].asMap()
+    private var contentActivityTimestamps = restored["agentContentActivity"].asList()
+        .mapNotNull { (it as? Number)?.toLong() }
+        .filter { it > 0L }
+        .takeLast(MAX_AGENT_CONTENT_ACTIVITY)
+    private var agentConsentMigrationPending = !restored.containsKey(KEY_AGENT_CONTEXT_CONSENT_DATES)
+    private var stateGraphReady = false
+    private var persistRequestedDuringInitialization = false
+    private var lastSharedAgentContextJsonSnapshot by mutableStateOf(restored["lastAgentSharedContext"] as? String)
+    private var lastSharedAgentContextAtUtcMillisSnapshot by mutableStateOf(
+        (restored["lastAgentSharedContextAt"] as? Number)?.toLong(),
+    )
+    private var agentPlanReply by mutableStateOf(restored["agentPlanReply"] as? String)
+    private var proactiveEngagementModeSnapshot by mutableStateOf(ProactiveEngagementMode.NORMAL)
+    @Volatile private var proactiveCoachStateValue: Any? = restored["proactiveCoach"]
+
+    private val locationPanelCoordinator = LocationPanelCoordinator(appContext)
+    private val agentContextCoordinator = AgentContextCoordinator(
+        initialConsentAtUtcMillis = restored[KEY_AGENT_CONTEXT_CONSENT_DATES].asMap()?.mapNotNull { (key, value) ->
+            val timestamp = (value as? Number)?.toLong()
+            if (key in AgentContextCategory.wireValueSet && timestamp != null && timestamp > 0L) key to timestamp else null
+        }?.toMap().takeIf { restored.containsKey(KEY_AGENT_CONTEXT_CONSENT_DATES) },
+        legacyConsentedCategories = agentMandateStore.current().sharedDataCategories,
+        mandateProvider = agentMandateStore::current,
+        domainsProvider = ::agentContextDomainViews,
+        nowUtcMillis = clock::nowMillis,
+        persistConsentDates = {
+            agentConsentMigrationPending = false
+            persistAfterInitialization()
+        },
+        additionalConsentDates = {
+            locationPanelCoordinator.consentStore.locationSummarySharingConsentAtUtcMillis()
+                ?.let { mapOf(AgentContextCategory.LOCATION_SUMMARY.wireValue to it) }
+                .orEmpty()
+        },
+    )
+    private val goalPanelCoordinator = GoalPanelCoordinator(
+        readSubdocument = { goalsSubdocument },
+        persistSubdocument = { subdocument ->
+            goalsSubdocument = subdocument
+            persistAfterInitialization()
+        },
+        nowUtcMillis = clock::nowMillis,
+        focusSessions = ::goalFocusSessions,
+        habits = habits::list,
+        habitCheckIns = ::allHabitCheckIns,
+    )
+    private val proactiveNotificationPublisher = ProactiveCoachNotificationPublisher(appContext)
+    private val proactiveCoachCoordinator = ProactiveCoachCoordinator(
+        readStateJson = {
+            when (val stored = proactiveCoachStateValue) {
+                null -> null
+                is String -> stored
+                else -> throw IllegalStateException("Persisted proactive coach state is not a JSON string")
+            }
+        },
+        writeStateJson = ::persistProactiveCoachState,
+        currentConsent = ::proactiveConsentSnapshot,
+        isEnabled = { isProactiveCoachEnabled() },
+        nowUtcMillis = clock::nowMillis,
+        mandateZoneId = ::currentMandateZoneId,
+        requestPlan = ::requestProactivePlan,
+        showNotification = proactiveNotificationPublisher::show,
+    )
+
     init {
+        stateGraphReady = true
+        proactiveEngagementModeSnapshot = proactiveCoachCoordinator.mode()
         policy = AndroidEmergencyPauseStore.apply(appContext, policy, clock.nowMillis())
         restored["focus"].asMap()?.let { saved ->
             runCatching { focusEngine.restore(FocusSession.fromMap(saved)) }
+        }
+        if (capabilities[CAP_FOCUS] != true) {
+            focusEngine.currentSession()?.takeIf { it.status == FocusStatus.RUNNING }?.let { running ->
+                focusSnapshot = focusEngine.pause(running.id)
+                phaseAlarms.cancel(running.id)
+                focusNotifications.cancel(running.id)
+                latestMessage = "Focus désactivé. La session est en pause."
+                persistRequestedDuringInitialization = true
+            }
         }
         focusSnapshot = focusEngine.currentSession()
         if (focusSnapshot?.status == FocusStatus.RUNNING && capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
@@ -363,16 +468,24 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         if (capabilities[CAP_HABIT_REMINDERS] == true) habitReminderScheduler.rescheduleAll()
         refreshSyncRuntime()
         refreshAgentApiRuntime()
+        refreshBackgroundUsageWork()
         pruneExpiredAgentInbox()
         reconcilePersistedBackendObservation()
         val interruptedEffects = agentDispatcher.reconcileInterrupted()
         if (interruptedEffects.any { it.status == dev.atlas.coach.sync.agent.dispatch.DispatchStatus.NEEDS_RECONCILIATION }) {
             latestMessage = "Un effet local reste en attente de réconciliation; aucune répétition incertaine n'a été lancée."
         }
+        val deferredPersistenceRequested = persistRequestedDuringInitialization
+        persistRequestedDuringInitialization = false
         when {
             recoveryReason != null && persistenceAllowed -> persist()
             recoveryReason != null -> touch()
+            agentConsentMigrationPending && persistenceAllowed -> {
+                agentConsentMigrationPending = false
+                persist()
+            }
             stateReadResult == StateReadResult.Missing -> persist()
+            deferredPersistenceRequested && persistenceAllowed -> persist()
         }
         if (canUseRemoteSync() && syncOutbox.size() > 0) scheduleSync(0L)
     }
@@ -407,9 +520,19 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val inboxObservation = agentInboxRepository.backendObservation()
         val homeChecked = homeObservation.checkedAtUtcMillis ?: -1L
         val inboxChecked = inboxObservation.checkedAtUtcMillis ?: -1L
-        return if (inboxChecked > homeChecked) {
+        val current = if (inboxChecked > homeChecked) {
             agentHomeStateSnapshot.copy(backendObservation = inboxObservation)
         } else agentHomeStateSnapshot
+        val nextAction = nextPriorityGoalAction
+        return if (current.directive == null && nextAction != null) current.copy(
+            directive = AgentHomeDirective(
+                title = nextAction,
+                body = "",
+                primaryAction = "open_coach",
+                focusProposalId = null,
+                provenance = dev.atlas.coach.sync.agent.DirectiveProvenance.MANUAL_ENTRY,
+            ),
+        ) else current
     }
     val agentConversation: List<AgentConversationMessage> get() = agentConversationSnapshot
     val agentInbox: List<AgentInboxEntry> get() = agentInboxRepository.all()
@@ -417,9 +540,138 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     val agentEffectHistory: List<AgentEffectRecord> get() = agentEffectJournal.entries().asReversed()
     val agentSuggestions: List<String> get() = agentSuggestionsSnapshot
     val isAgentEnabled: Boolean get() = capabilities[CAP_AGENT] == true && !agentMandate.revoked && !agentMandate.suspended
+    val coachGoals: List<GoalsPanelEntry> get() = goalPanelCoordinator.entries()
+    val goalFocusLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.focusLinkOptions()
+    val goalHabitLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.habitLinkOptions()
+    val nextPriorityGoalAction: String? get() = goalPanelCoordinator.nextPriorityAction()
+    val agentContextPreview: AgentContextPreview get() = agentContextCoordinator.preview()
+    val lastSharedAgentContextJson: String? get() = lastSharedAgentContextJsonSnapshot
+    val lastSharedAgentContextAtUtcMillis: Long? get() = lastSharedAgentContextAtUtcMillisSnapshot
+    val latestAgentPlanReply: String? get() = agentPlanReply
+    val proactiveEngagementMode: ProactiveEngagementMode get() = proactiveEngagementModeSnapshot
+    val locationPanelState: LocationPanelState
+        get() = locationPanelCoordinator.panelState(
+            locationCapability = capabilities[CAP_LOCATION] == true,
+            mobilityCapability = capabilities[CAP_MOBILITY] == true,
+        )
 
     val canLinkCompletedFocusToHabit: Boolean
         get() = focusSession?.let { FocusHabitLinkCondition.AllWorkCyclesCompleted.isSatisfiedBy(it) } == true
+
+    fun createGoal(draft: GoalPanelDraft) = goalAction("Objectif enregistré.") {
+        goalPanelCoordinator.create(draft)
+    }
+
+    fun updateGoal(goalId: String, draft: GoalPanelDraft) = goalAction("Modifications de l'objectif enregistrées.") {
+        goalPanelCoordinator.update(goalId, draft)
+    }
+
+    fun changeGoalStatus(goalId: String, status: GoalStatus) = goalAction("Statut de l'objectif mis à jour.") {
+        goalPanelCoordinator.changeStatus(goalId, status)
+    }
+
+    fun completeGoalFromProgress(goalId: String) = goalAction("Objectif terminé selon sa progression réelle.") {
+        goalPanelCoordinator.completeFromProgress(goalId)
+    }
+
+    fun confirmManualGoalCompletion(goalId: String) = goalAction("Accomplissement confirmé manuellement.") {
+        goalPanelCoordinator.confirmManualCompletion(goalId)
+    }
+
+    fun linkFocusToGoal(goalId: String, focusSessionId: String, linked: Boolean) = goalAction("Lien Focus mis à jour.") {
+        goalPanelCoordinator.linkFocus(goalId, focusSessionId, linked)
+    }
+
+    fun linkHabitToGoal(goalId: String, habitId: String, linked: Boolean) = goalAction("Lien d'habitude mis à jour.") {
+        goalPanelCoordinator.linkHabit(goalId, habitId, linked)
+    }
+
+    private inline fun goalAction(successMessage: String, operation: () -> Any?) {
+        runCatching(operation)
+            .onSuccess {
+                latestMessage = successMessage
+                persist()
+                recordDueGoalReviews()
+            }
+            .onFailure { error -> latestMessage = error.message?.take(180) ?: "Modification de l'objectif impossible."; touch() }
+    }
+
+    fun setLocationRequestConsent(enabled: Boolean) {
+        locationPanelCoordinator.setCoarseRequestConsent(enabled)
+        capabilities = capabilities + (CAP_LOCATION to enabled)
+        if (!enabled) locationPanelCoordinator.onLocationCapabilityDisabled()
+        persist()
+    }
+
+    fun setLocationSummaryConsent(enabled: Boolean) {
+        if (!enabled) agentRequestGeneration.incrementAndGet()
+        locationPanelCoordinator.setCoachSummaryConsent(enabled)
+        if (!enabled) locationPanelCoordinator.stopMobility(MobilitySessionStopReason.SHARING_REVOKED)
+        queueProactivePurgeRevoked()
+        persist()
+    }
+
+    fun setMobilityConsent(enabled: Boolean) {
+        locationPanelCoordinator.setMobilityConsent(enabled)
+        capabilities = capabilities + (CAP_MOBILITY to enabled)
+        if (!enabled) locationPanelCoordinator.stopMobility(MobilitySessionStopReason.CAPABILITY_DISABLED)
+        persist()
+    }
+
+    suspend fun captureCoarseLocation(): LocationSummary? = locationPanelCoordinator.captureCoarsePosition()
+        .also { touch() }
+
+    fun startMobilitySession(activity: android.app.Activity): Boolean = locationPanelCoordinator.startMobility(
+        activity,
+        capabilityEnabled = capabilities[CAP_MOBILITY] == true,
+    ).also { touch() }
+
+    fun stopMobilitySession(reason: MobilitySessionStopReason = MobilitySessionStopReason.MANUAL) =
+        locationPanelCoordinator.stopMobility(reason).also { touch() }
+
+    /** Called by the app lifecycle bridge when S3 reports a measured session completion. */
+    fun onMobilitySessionCompletion(completion: MobilitySessionCompletion?) {
+        if (completion == null || !completion.shouldEmitCompletedEvent) return
+        if (completion.stopReason !in setOf(MobilitySessionStopReason.MANUAL, MobilitySessionStopReason.DURATION_LIMIT)) return
+        recordProactiveEvents(listOf(
+            CoachTrigger(
+                eventId = "mobility:${completion.startedAtUtcMillis}",
+                source = CoachTriggerSource.MOBILITY_SESSION_COMPLETED,
+                occurredAtUtcMillis = completion.stoppedAtUtcMillis,
+                reliability = CoachTriggerReliability.VERIFIED,
+            ),
+        ))
+    }
+
+    fun setProactiveEngagementMode(mode: ProactiveEngagementMode) {
+        syncWorker.execute {
+            val saved = proactiveCoachCoordinator.setMode(mode)
+            mainHandler.post {
+                if (saved) {
+                    proactiveEngagementModeSnapshot = mode
+                    latestMessage = if (mode == ProactiveEngagementMode.REINFORCED) {
+                        "Mode renforcé activé · au plus 5 notifications par jour."
+                    } else {
+                        "Mode normal activé · au plus 3 notifications par jour."
+                    }
+                    touch()
+                } else {
+                    latestMessage = "Mode proactif non enregistré."
+                    touch()
+                }
+            }
+        }
+    }
+
+    fun initialLocationPermissionRequest(): Array<String> = locationPanelCoordinator.initialPermissionRequest()
+
+    fun locationPermissionGranted(): Boolean = locationPanelCoordinator.permissionGranted()
+
+    fun onLocationPermissionResult(granted: Boolean) {
+        locationPanelCoordinator.handlePermissionResult(granted)
+        if (!granted) locationPanelCoordinator.onLocationPermissionRevoked()
+        touch()
+    }
 
     fun notificationPermissionGranted(): Boolean =
         (Build.VERSION.SDK_INT < 33 || appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
@@ -612,6 +864,19 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             effectiveConsent.get().enabledCategories.isNotEmpty() &&
             isAllowedBackendUrl(syncBaseUrl) && remoteBackend != null
 
+    private fun refreshBackgroundUsageWork() {
+        val enabled = CapabilityRules.mayObserveUsageInBackground(
+            capabilities = capabilities,
+            usageConsentActive = usageConsentActive,
+            osPermissionGranted = usagePermissionGranted,
+        )
+        runCatching {
+            if (enabled) UsageObservationWorkScheduler.enqueueUniquePeriodicWork(appContext)
+            else UsageObservationWorkScheduler.cancel(appContext)
+        }
+            .onFailure { latestMessage = "La planification UsageStats n'est pas disponible; l'observation visible reste active." }
+    }
+
     private fun scheduleSync(delayMillis: Long) {
         if (!canUseRemoteSync()) return
         val generation = syncGeneration.get()
@@ -714,16 +979,294 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
     }
 
+    private fun agentContextDomainViews(): AgentContextDomainViews {
+        val usageConsent = usageStores.currentConsent().takeIf { usageConsentActive && usagePermissionGranted }
+        val habitIds = (habits.list().map(Habit::id) + goalPanelCoordinator.repository.all().flatMap { it.linkedHabitIds })
+            .distinct()
+        val summaries = locationPanelCoordinator.recentSummaries(clock.nowMillis())
+        return AgentContextDomainViews(
+            focusSessions = goalFocusSessions(),
+            habits = habits.list(),
+            habitCheckIns = habitIds.flatMap(habits::checkIns),
+            usageConsent = usageConsent,
+            usageRecords = if (usageConsent != null) usageStores.allRecords() else emptyList(),
+            contentActivity = contentActivityTimestamps.map { timestamp ->
+                SyncEvent(
+                    clientEventId = UUID.nameUUIDFromBytes("atlas-content-$timestamp".toByteArray()).toString(),
+                    eventType = SyncEventType.CONTENT_OPENED,
+                    occurredAtUtcMillis = timestamp,
+                    category = SyncDataCategory.CONTENT,
+                    dataScope = DataScope.SHAREABLE,
+                )
+            },
+            coachMessages = agentConversationSnapshot,
+            goals = goalPanelCoordinator.repository.all(),
+            locationSummarySharingEnabled = locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled(),
+            locationSummaries = summaries,
+        )
+    }
+
+    private fun goalFocusSessions(): List<FocusSession> = buildList {
+        addAll(focusHistoryEntries)
+        focusSnapshot?.takeIf { it.status in setOf(FocusStatus.FINISHED, FocusStatus.CANCELLED) }?.let(::add)
+    }.distinctBy(FocusSession::id)
+
+    private fun allHabitCheckIns(): List<dev.atlas.coach.habits.HabitCheckIn> {
+        val habitIds = (habits.list().map(Habit::id) + goalPanelCoordinator.repository.all().flatMap { it.linkedHabitIds })
+            .distinct()
+        return habitIds.flatMap(habits::checkIns)
+    }
+
     private fun refreshAgentApiRuntime() {
         val configured = capabilities[CAP_AGENT] == true && syncTokenStore.token() != null &&
             syncBaseUrl.isNotBlank() && isAllowedAgentBackendUrl(syncBaseUrl)
         agentApiClient = if (configured) runCatching {
-            AgentApiClient(syncBaseUrl, syncTokenStore)
+            AgentApiClient(
+                baseUrl = syncBaseUrl,
+                tokenProvider = syncTokenStore,
+                freshRequestContext = agentContextCoordinator::requestContext,
+                onContextWritten = { snapshot ->
+                    check(runOnMainAndWait {
+                        lastSharedAgentContextJsonSnapshot = snapshot.toJsonString()
+                        lastSharedAgentContextAtUtcMillisSnapshot = clock.nowMillis()
+                        persist()
+                        true
+                    }) { "Could not persist the exact shared context" }
+                },
+            )
         }.getOrNull() else null
         if (!configured || agentApiClient == null) {
             agentStatus = AgentStatus.UNAVAILABLE
             agentStatusMessage = "Agent indisponible — fonctions locales actives"
         }
+    }
+
+    private fun isProactiveCoachEnabled(): Boolean =
+        CapabilityRules.mayRunProactiveCoach(capabilities, isAgentEnabled) && !isEmergencyPaused
+
+    private fun currentMandateZoneId(): ZoneId = ZoneId.of(agentMandateStore.current().focusWindow.timezone)
+
+    private fun proactiveConsentSnapshot(): ProactiveConsentSnapshot {
+        val mandate = agentMandateStore.current()
+        if (mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis) {
+            return ProactiveConsentSnapshot.EMPTY
+        }
+        val dates = agentContextCoordinator.consentDates().toMutableMap()
+        locationPanelCoordinator.consentStore.locationSummarySharingConsentAtUtcMillis()?.let { grantedAt ->
+            dates[AgentContextCategory.LOCATION_SUMMARY.wireValue] = maxOf(
+                dates[AgentContextCategory.LOCATION_SUMMARY.wireValue] ?: 0L,
+                grantedAt,
+            )
+        }
+        val grants = mandate.sharedDataCategories
+            .intersect(AgentContextCategory.wireValueSet)
+            .mapNotNull { category ->
+                val grantedAt = dates[category]?.takeIf { it > 0L } ?: return@mapNotNull null
+                if (category == AgentContextCategory.APP_USAGE_SUMMARY.wireValue && !usageConsentActive) return@mapNotNull null
+                if (category == AgentContextCategory.LOCATION_SUMMARY.wireValue &&
+                    !locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled()
+                ) return@mapNotNull null
+                category to grantedAt
+            }.toMap()
+        return ProactiveConsentSnapshot(grants)
+    }
+
+    private fun recordProactiveEvents(events: Iterable<CoachTrigger>) {
+        if (!isProactiveCoachEnabled()) return
+        val batch = events.toList()
+        if (batch.isEmpty()) return
+        pendingProactiveEvents.addAll(batch)
+        scheduleProactiveEventDrain()
+    }
+
+    private fun queueProactiveRun() {
+        if (!isProactiveCoachEnabled()) return
+        syncWorker.schedule(
+            { if (isProactiveCoachEnabled()) runCatching { proactiveCoachCoordinator.runDue() } },
+            PROACTIVE_EVENT_DEBOUNCE_MILLIS,
+            TimeUnit.MILLISECONDS,
+        )
+    }
+
+    private fun scheduleProactiveEventDrain() {
+        if (!proactiveDrainScheduled.compareAndSet(false, true)) return
+        syncWorker.schedule({
+            try {
+                val eventBatch = buildList {
+                    while (true) {
+                        val event = pendingProactiveEvents.poll() ?: break
+                        add(event)
+                    }
+                }
+                if (eventBatch.isNotEmpty() && isProactiveCoachEnabled()) {
+                    val recorded = proactiveCoachCoordinator.recordAll(eventBatch)
+                    if (recorded.any { it == dev.atlas.coach.coach.proactive.CoachTriggerRecordStatus.RECORDED }) {
+                        runCatching { proactiveCoachCoordinator.runDue() }
+                    }
+                }
+            } finally {
+                proactiveDrainScheduled.set(false)
+                if (pendingProactiveEvents.isNotEmpty()) scheduleProactiveEventDrain()
+            }
+        }, PROACTIVE_EVENT_DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS)
+    }
+
+    private fun queueProactivePurgeRevoked() {
+        syncWorker.execute { runCatching { proactiveCoachCoordinator.purgeRevoked() } }
+    }
+
+    private fun queueProactiveDisableAndPurge() {
+        syncWorker.execute { runCatching { proactiveCoachCoordinator.disableAndPurgePending() } }
+    }
+
+    private fun requestProactivePlan(request: ProactivePlanRequest): ProactivePlanResponse? {
+        if (!isProactiveCoachEnabled()) return null
+        val client = agentApiClient ?: return null
+        val mandate = agentMandateStore.current()
+        val context = agentContextCoordinator.assembleCurrent()
+        val requestGeneration = agentRequestGeneration.get()
+        val proactiveGeneration = proactiveEffectGeneration.get()
+        val requestStillAuthorized = {
+            requestGeneration == agentRequestGeneration.get() &&
+                proactiveGeneration == proactiveEffectGeneration.get() &&
+                agentApiClient === client && isProactiveCoachEnabled() &&
+                request.triggers.all(proactiveConsentSnapshot()::allows)
+        }
+        val response = try {
+            client.plan(
+                conversationId = agentConversationId ?: UUID.randomUUID().toString().also { agentConversationId = it },
+                mandate = mandate,
+                context = context,
+                request = request,
+                allowSend = requestStillAuthorized,
+            )
+        } catch (_: Exception) {
+            return null
+        }
+        if (!requestStillAuthorized() || !applyProactivePlanResponse(
+                response,
+                client,
+                requestGeneration,
+                proactiveGeneration,
+                request,
+            )
+        ) return null
+        val notificationBody = response.reply.trim().take(ProactiveNotificationContent.MAX_BODY_LENGTH)
+            .ifBlank { "Ouvrez ATLAS pour consulter votre prochaine étape." }
+        return ProactivePlanResponse(
+            ProactiveNotificationContent("Votre plan ATLAS est prêt", notificationBody),
+        )
+    }
+
+    private fun applyProactivePlanResponse(
+        response: dev.atlas.coach.sync.agent.coach.AgentChatResponse,
+        client: AgentApiClient,
+        requestGeneration: Long,
+        proactiveGeneration: Long,
+        request: ProactivePlanRequest,
+    ): Boolean = runOnMainAndWait {
+        if (requestGeneration != agentRequestGeneration.get() ||
+            proactiveGeneration != proactiveEffectGeneration.get() ||
+            !isAgentEnabled || !isProactiveCoachEnabled() || agentApiClient !== client ||
+            request.triggers.any { !proactiveConsentSnapshot().allows(it) }
+        ) return@runOnMainAndWait false
+        agentPlanReply = response.reply
+        agentStatus = response.status
+        agentStatusMessage = if (response.status == AgentStatus.CONNECTED) "Agent connecté"
+            else "Agent indisponible — fonctions locales actives"
+        agentInboxRepository.mergePulled(response.proposals, null)
+        recordBackendContactSucceeded(inboxAlreadyMarked = true)
+        dispatchPreauthorizedInbox()
+        persist()
+        syncWorker.execute { sendPendingAgentAcks(client) }
+        true
+    }
+
+    private fun runOnMainAndWait(action: () -> Boolean): Boolean {
+        if (Looper.myLooper() == Looper.getMainLooper()) return action()
+        val result = CompletableFuture<Boolean>()
+        mainHandler.post {
+            runCatching(action).fold(result::complete, result::completeExceptionally)
+        }
+        return runCatching { result.get(20, TimeUnit.SECONDS) }.getOrDefault(false)
+    }
+
+    private fun persistProactiveCoachState(json: String) {
+        val write = {
+            proactiveCoachStateValue = json
+            persist()
+            true
+        }
+        check(runOnMainAndWait(write)) { "Proactive state could not be persisted" }
+    }
+
+    private fun recordDueGoalReviews(nowUtcMillis: Long = clock.nowMillis()) {
+        val dueGoals = goalPanelCoordinator.repository.all().filter { goal ->
+            goal.status == GoalStatus.ACTIVE && goal.dueAt != null && goal.dueAt <= nowUtcMillis
+        }
+        recordProactiveEvents(dueGoals.map { goal ->
+            val dueAt = requireNotNull(goal.dueAt)
+            CoachTrigger(
+                eventId = "goal-review:${goal.id}:$dueAt",
+                source = CoachTriggerSource.GOAL_REVIEW_DUE,
+                occurredAtUtcMillis = dueAt,
+                reliability = CoachTriggerReliability.VERIFIED,
+            )
+        })
+    }
+
+    private fun recordFocusCompletion(session: FocusSession) {
+        if (session.status != FocusStatus.FINISHED) return
+        recordProactiveEvents(listOf(
+            CoachTrigger(
+                eventId = "focus:${session.id}",
+                source = CoachTriggerSource.FOCUS_COMPLETED,
+                occurredAtUtcMillis = session.updatedAtUtcMillis,
+                reliability = CoachTriggerReliability.VERIFIED,
+            ),
+        ))
+    }
+
+    private fun recordDueHabitReminders(nowUtcMillis: Long = clock.nowMillis()) {
+        if (capabilities[CAP_HABITS] != true || capabilities[CAP_HABIT_REMINDERS] != true) return
+        val zone = currentMandateZoneId()
+        val now = Instant.ofEpochMilli(nowUtcMillis).atZone(zone)
+        val date = now.toLocalDate()
+        val due = habits.list().mapNotNull { habit ->
+            val reminder = habit.reminder?.takeIf(HabitReminder::enabled) ?: return@mapNotNull null
+            if (date.dayOfWeek !in reminder.days || now.toLocalTime().isBefore(LocalTime.of(reminder.hour, reminder.minute))) {
+                return@mapNotNull null
+            }
+            val checkIns = habits.checkIns(habit.id)
+            if (!habit.schedule.isDueOn(date, checkIns) || checkIns.any { it.date == date }) return@mapNotNull null
+            val dueAt = date.atTime(reminder.hour, reminder.minute).atZone(zone).toInstant().toEpochMilli()
+            CoachTrigger(
+                eventId = "habit-reminder:${habit.id}:${date}",
+                source = CoachTriggerSource.HABIT_REMINDER_DUE,
+                occurredAtUtcMillis = dueAt,
+                reliability = CoachTriggerReliability.VERIFIED,
+            )
+        }
+        recordProactiveEvents(due)
+    }
+
+    private fun recordDailyPlanDue(nowUtcMillis: Long = clock.nowMillis()) {
+        val zone = currentMandateZoneId()
+        val now = Instant.ofEpochMilli(nowUtcMillis).atZone(zone)
+        if (now.toLocalTime() < DAILY_PLAN_DUE_TIME || now.toLocalTime() >= PROACTIVE_QUIET_HOURS_START) return
+        val dueAt = now.toLocalDate().atTime(DAILY_PLAN_DUE_TIME).atZone(zone).toInstant().toEpochMilli()
+        recordProactiveEvents(listOf(
+            CoachTrigger(
+                eventId = "daily-plan:${now.toLocalDate()}",
+                source = CoachTriggerSource.DAILY_PLAN_DUE,
+                occurredAtUtcMillis = dueAt,
+                reliability = CoachTriggerReliability.VERIFIED,
+            ),
+        ))
+    }
+
+    private fun recordMobilityCompletionIfPresent() {
+        onMobilitySessionCompletion(MobilitySessionStatusStore.status.value.lastCompletion)
     }
 
     /** Called when Coach opens and by its explicit refresh button. No background worker is required. */
@@ -744,9 +1287,11 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         }
         agentStatusMessage = "Connexion à l'agent…"
         touch()
+        val requestGeneration = agentRequestGeneration.get()
         syncWorker.execute {
             runCatching { client.pullInbox(agentInboxRepository.cursor()) }
                 .onSuccess { response -> mainHandler.post {
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
                     agentInboxRepository.mergePulled(response.proposals, response.cursor)
                     recordBackendContactSucceeded(inboxAlreadyMarked = true)
                     agentStatus = AgentStatus.CONNECTED
@@ -792,9 +1337,12 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             return
         }
         val mandate = agentMandateStore.current()
+        val initialContext = agentContextCoordinator.assembleCurrent()
+        val requestGeneration = agentRequestGeneration.get()
         syncWorker.execute {
-            runCatching { client.chat(conversationId, message, mandate) }
+            runCatching { client.chat(conversationId, message, mandate, initialContext) }
                 .onSuccess { response -> mainHandler.post {
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
                     agentStatus = response.status
                     agentStatusMessage = if (response.status == AgentStatus.CONNECTED) "Agent connecté"
                         else "Agent indisponible — fonctions locales actives"
@@ -813,6 +1361,9 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
                 .onFailure { error -> mainHandler.post {
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
+                        (error as? AgentApiException)?.statusCode == 403
+                    ) return@post
                     val statusCode = (error as? dev.atlas.coach.sync.agent.coach.AgentApiException)?.statusCode ?: 0
                     android.util.Log.w(
                         "ATLAS_AGENT",
@@ -822,6 +1373,54 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                     agentStatusMessage = "Agent indisponible — fonctions locales actives"
                     recordBackendContactFailed()
                     addLocalAgentReply(conversationId)
+                    persist()
+                } }
+        }
+    }
+
+    /** Requests a programmatic plan without adding an artificial message to chat history. */
+    fun requestAgentPlan() {
+        if (!isAgentEnabled) {
+            agentPlanReply = "Réactivez le Coach et son mandat pour demander un plan."
+            touch()
+            return
+        }
+        val mandate = agentMandateStore.current()
+        val context = agentContextCoordinator.assembleCurrent()
+        val conversationId = agentConversationId ?: UUID.randomUUID().toString().also { agentConversationId = it }
+        val requestGeneration = agentRequestGeneration.get()
+        val client = agentApiClient
+        if (client == null) {
+            agentPlanReply = nextPriorityGoalAction?.let { "Prochaine étape locale : $it" }
+                ?: "Aucune prochaine étape prioritaire n'est définie."
+            persist()
+            return
+        }
+        agentPlanReply = "Préparation du plan…"
+        touch()
+        syncWorker.execute {
+            runCatching { client.plan(conversationId, mandate, context) }
+                .onSuccess { response -> mainHandler.post {
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
+                    agentPlanReply = response.reply
+                    agentStatus = response.status
+                    agentStatusMessage = if (response.status == AgentStatus.CONNECTED) "Agent connecté"
+                        else "Agent indisponible — fonctions locales actives"
+                    agentInboxRepository.mergePulled(response.proposals, null)
+                    recordBackendContactSucceeded(inboxAlreadyMarked = true)
+                    dispatchPreauthorizedInbox()
+                    persist()
+                    syncWorker.execute { sendPendingAgentAcks(client) }
+                } }
+                .onFailure { error -> mainHandler.post {
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
+                        (error as? AgentApiException)?.statusCode == 403
+                    ) return@post
+                    agentPlanReply = nextPriorityGoalAction?.let { "Prochaine étape locale : $it" }
+                        ?: "La planification distante est indisponible; aucune proposition locale n'a été créée."
+                    agentStatus = AgentStatus.UNAVAILABLE
+                    agentStatusMessage = "Agent indisponible — fonctions locales actives"
+                    recordBackendContactFailed()
                     persist()
                 } }
         }
@@ -1034,7 +1633,10 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun disableAgent() {
+        proactiveEffectGeneration.incrementAndGet()
+        queueProactiveDisableAndPurge()
         capabilities = capabilities + (CAP_AGENT to false)
+        agentRequestGeneration.incrementAndGet()
         agentMandateStore.revoke()
         cancelPendingAgentWork("Agent désactivé")
         agentApiClient = null
@@ -1046,8 +1648,10 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
 
     fun enableAgent() {
         capabilities = capabilities + (CAP_AGENT to true)
-        if (agentMandateStore.current().revoked || agentMandateStore.current().suspended) {
-            replaceAgentMandate(agentMandateStore.current().copy(revoked = false, suspended = false))
+        val current = agentMandateStore.current()
+        if (current.revoked || current.suspended) {
+            agentContextCoordinator.resetCategoryConsents(current.sharedDataCategories)
+            replaceAgentMandate(current.copy(revoked = false, suspended = false))
         }
         refreshAgentApiRuntime()
         latestMessage = "Agent réactivé en mode propositions seulement."
@@ -1055,19 +1659,26 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun suspendAgentMandate() {
+        proactiveEffectGeneration.incrementAndGet()
         replaceAgentMandate(agentMandateStore.current().copy(suspended = true))
+        queueProactiveDisableAndPurge()
         cancelPendingAgentWork("Mandat suspendu")
         latestMessage = "Mandat suspendu. Les planifications de l'agent sont annulées."
         persist()
     }
 
     fun resumeAgentMandate() {
-        replaceAgentMandate(agentMandateStore.current().copy(suspended = false, revoked = false))
+        val current = agentMandateStore.current()
+        agentContextCoordinator.resetCategoryConsents(current.sharedDataCategories)
+        replaceAgentMandate(current.copy(suspended = false, revoked = false))
         latestMessage = "Mandat réactivé en mode propositions seulement."
         persist()
     }
 
     fun revokeAgentMandate() {
+        proactiveEffectGeneration.incrementAndGet()
+        queueProactiveDisableAndPurge()
+        agentRequestGeneration.incrementAndGet()
         agentMandateStore.revoke()
         cancelPendingAgentWork("Mandat révoqué")
         latestMessage = "Mandat révoqué. Les actions en attente sont annulées."
@@ -1081,7 +1692,15 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
     }
 
     fun setAgentSharedCategory(category: String, allowed: Boolean) = updateAgentMandate { mandate ->
-        mandate.copy(sharedDataCategories = if (allowed) mandate.sharedDataCategories + category else mandate.sharedDataCategories - category)
+        val next = mandate.copy(
+            sharedDataCategories = if (allowed) mandate.sharedDataCategories + category else mandate.sharedDataCategories - category,
+        )
+        agentContextCoordinator.setCategoryConsent(category, allowed)
+        if (!allowed) queueProactivePurgeRevoked()
+        if (!allowed && category == AgentContextCategory.LOCATION_SUMMARY.wireValue) {
+            locationPanelCoordinator.setCoachSummaryConsent(false)
+        }
+        next
     }
 
     fun setAgentFocusWindow(
@@ -1128,6 +1747,9 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
 
     private fun replaceAgentMandate(mandate: AgentMandate) {
         agentMandateStore.replace(mandate.copy(id = agentMandateStore.current().id))
+        agentRequestGeneration.incrementAndGet()
+        if (mandate.revoked || mandate.suspended) queueProactiveDisableAndPurge()
+        else queueProactivePurgeRevoked()
         refreshAgentApiRuntime()
     }
 
@@ -1553,6 +2175,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                 SyncDataCategory.FOCUS,
                 mapOf("completed_work_cycles" to current.completedWorkCycles),
             )
+            recordFocusCompletion(current)
         }
         if (transitioned && capabilities[CAP_FOCUS_NOTIFICATIONS] == true) {
             if (current.status == FocusStatus.RUNNING) phaseAlarms.schedule(current) else phaseAlarms.cancel(current.id)
@@ -1609,7 +2232,8 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
 
     fun finishFocus() {
         focusSession?.let { phaseAlarms.cancel(it.id); focusNotifications.cancel(it.id) }
-        focusSession?.let { focusEngine.finish(it.id)?.let(::archiveFocusSession) }
+        val finished = focusSession?.let { focusEngine.finish(it.id) }
+        finished?.let(::archiveFocusSession)
         focusSnapshot = focusEngine.currentSession()
         if (focusSnapshot?.status == FocusStatus.FINISHED) {
             enqueueSyncEvent(
@@ -1617,6 +2241,7 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                 SyncDataCategory.FOCUS,
                 mapOf("completed_work_cycles" to (focusSnapshot?.completedWorkCycles ?: 0)),
             )
+            recordFocusCompletion(checkNotNull(focusSnapshot))
         }
         latestMessage = if (focusSnapshot?.completedWorkCycles ?: 0 >= (focusSnapshot?.totalWorkCycles ?: Int.MAX_VALUE) && focusSnapshot?.continuous != true) {
             "Session terminée. Voulez-vous la relier à une habitude ?"
@@ -1875,12 +2500,21 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             return ContentOpenResult(dev.atlas.coach.content.ContentOpenStatus.INVALID_CONTENT, "La bibliothèque est désactivée dans les paramètres.")
                 .also { latestMessage = it.message; touch() }
         }
+        val countedByUser = catalog.items.firstOrNull { it.id == id }?.openCountingEnabled == true
         val result = catalog.open(id, AndroidContentOpener(context))
         if (result.status in setOf(
                 dev.atlas.coach.content.ContentOpenStatus.OPENED_CHOOSER,
                 dev.atlas.coach.content.ContentOpenStatus.OPENED_DIRECT_FALLBACK,
             )
-        ) enqueueSyncEvent(SyncEventType.CONTENT_OPENED, SyncDataCategory.CONTENT)
+        ) {
+            if (countedByUser) {
+                val now = clock.nowMillis()
+                contentActivityTimestamps = (contentActivityTimestamps + now)
+                    .filter { it in (now - 30L * 24L * 60L * 60L * 1_000L).coerceAtLeast(0L)..now }
+                    .takeLast(MAX_AGENT_CONTENT_ACTIVITY)
+            }
+            enqueueSyncEvent(SyncEventType.CONTENT_OPENED, SyncDataCategory.CONTENT)
+        }
         latestMessage = result.message
         persist()
         return result
@@ -1909,37 +2543,80 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val pending = pendingUsagePreferences.getStringSet(KEY_PENDING_USAGE_PACKAGES, emptySet()).orEmpty()
         if (usageAccessStatus.isAllowed()) {
             if (pending.isNotEmpty()) grantPendingUsageObservation(pending)
-            return
+        } else {
+            if (pending.isNotEmpty()) {
+                pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
+                latestMessage = "Accès à l'utilisation non accordé. Aucune observation n'est active."
+                touch()
+            }
+            if (usageConsentActive) {
+                revokeUsageObservation("Accès à l'utilisation a été retiré. L'observation est arrêtée et son historique a été purgé.")
+            }
         }
-        if (pending.isNotEmpty()) {
-            pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
-            latestMessage = "Accès à l'utilisation non accordé. Aucune observation n'est active."
-            touch()
-        }
-        if (usageConsentActive) {
-            revokeUsageObservation("Accès à l'utilisation a été retiré. L'observation est arrêtée et son historique a été purgé.")
-        }
+        refreshBackgroundUsageWork()
+        locationPanelCoordinator.onLocationPermissionRevoked()
+        recordMobilityCompletionIfPresent()
+        recordDueGoalReviews()
+        recordDueHabitReminders()
+        recordDailyPlanDue()
+        queueProactiveRun()
     }
 
     fun usageAccessSettingsIntent(): Intent = systemUsageAccessSettingsIntent()
 
+    /** S5 WorkManager entry point: an off switch or revoked AppOp prevents every background read. */
     fun pollUsageObservation() {
+        if (!CapabilityRules.mayObserveUsageInBackground(
+                capabilities = capabilities,
+                usageConsentActive = usageConsentActive,
+                osPermissionGranted = usagePermissionGranted,
+            )
+        ) return
+        pollUsageObservationWithCurrentConsent()
+    }
+
+    /** Visible Activity polling remains available when the optional background capability is off. */
+    fun pollVisibleUsageObservation() {
+        if (!usageConsentActive) return
+        pollUsageObservationWithCurrentConsent()
+    }
+
+    private fun pollUsageObservationWithCurrentConsent() {
         if (!usageConsentActive) return
         if (!usageAccessStatus.isAllowed()) {
             revokeUsageObservation("Accès à l'utilisation n'est plus autorisé. L'observation est arrêtée et son historique a été purgé.")
             return
         }
         val result = usageObserver.poll(clock.nowMillis())
+        refreshDomainSnapshots()
         if (result.status == UsagePollStatus.PERMISSION_REQUIRED) {
             revokeUsageObservation("Accès à l'utilisation n'est plus autorisé. L'observation est arrêtée et son historique a été purgé.")
         } else if (result.interventions.isNotEmpty()) {
             latestMessage = "Une proposition de pause est disponible dans la notification. ATLAS n'a pas bloqué l'application."
             touch()
+            recordProactiveEvents(result.interventions.map { intervention ->
+                val eventId = UUID.nameUUIDFromBytes(intervention.interventionId.toByteArray()).toString()
+                CoachTrigger(
+                    eventId = "distraction:$eventId",
+                    source = CoachTriggerSource.DISTRACTION_THRESHOLD_REACHED,
+                    occurredAtUtcMillis = intervention.createdAtUtc,
+                    motifKey = "distraction_threshold",
+                    reliability = CoachTriggerReliability.VERIFIED,
+                )
+            })
         }
     }
 
+    /** WorkManager invokes the same singleton observer after the same current consent checks. */
+    fun pollUsageObservationFromWorker() {
+        pollUsageObservation()
+    }
+
     fun revokeUsageObservation(message: String = "Observation désactivée. L'historique et les données de déduplication ont été supprimés.") {
+        runCatching { UsageObservationWorkScheduler.cancel(appContext) }
         usageObserver.revokeConsent()
+        agentRequestGeneration.incrementAndGet()
+        queueProactivePurgeRevoked()
         pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
         policy = policy.copy(allowlistedPackageNames = emptySet())
         capabilities = capabilities + (CAP_APP_TRACKING to false)
@@ -1970,7 +2647,12 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
             policy = policy.copy(allowlistedPackageNames = selected, excludedPackageNames = policy.excludedPackageNames + protectedUsagePackages)
             capabilities = capabilities + (CAP_APP_TRACKING to true)
-            latestMessage = "Observation activée pour ${selected.size} application(s) sélectionnée(s). Les ouvertures sont lues uniquement quand ATLAS est visible."
+            refreshBackgroundUsageWork()
+            latestMessage = if (capabilities[CAP_USAGE_BACKGROUND] == true) {
+                "Observation activée pour ${selected.size} application(s); le traitement visible et le contrôle périodique sont autorisés."
+            } else {
+                "Observation activée pour ${selected.size} application(s). Le traitement hors interface reste désactivé."
+            }
             persist()
             true
         } catch (error: IllegalArgumentException) {
@@ -2068,6 +2750,9 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         val now = clock.nowMillis()
         AndroidEmergencyPauseStore.pauseForThirtyMinutes(appContext, now)
         policy = policy.withEmergencyPause(now)
+        locationPanelCoordinator.onEmergencyPause()
+        proactiveEffectGeneration.incrementAndGet()
+        queueProactiveDisableAndPurge()
         cancelPendingAgentWork("Pause d'urgence locale; action annulée")
         latestMessage = "Pause d'urgence active pendant 30 minutes."
         persist()
@@ -2098,14 +2783,43 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             }
             return
         }
+        if (name == CAP_USAGE_BACKGROUND && enabled &&
+            !CapabilityRules.mayObserveUsageInBackground(capabilities + (name to true), usageConsentActive, usagePermissionGranted)
+        ) {
+            latestMessage = "L'observation en arrière-plan requiert d'abord le consentement et l'accès Android existants."
+            touch()
+            return
+        }
+        if (name == CAP_AGENT_PROACTIVE && enabled && !CapabilityRules.mayRunProactiveCoach(capabilities + (name to true), isAgentEnabled)) {
+            latestMessage = "La proactivité requiert un agent actif et un mandat valide."
+            touch()
+            return
+        }
         capabilities = capabilities + (name to enabled)
+        if (name == CAP_USAGE_BACKGROUND) refreshBackgroundUsageWork()
+        if (name == CAP_AGENT_PROACTIVE && !enabled) {
+            proactiveEffectGeneration.incrementAndGet()
+            queueProactiveDisableAndPurge()
+        }
+        if (name == CAP_AGENT_PROACTIVE && enabled) {
+            recordDueGoalReviews()
+            recordDueHabitReminders()
+            recordDailyPlanDue()
+            recordMobilityCompletionIfPresent()
+            queueProactiveRun()
+        }
+        if (name == CAP_LOCATION && !enabled) locationPanelCoordinator.onLocationCapabilityDisabled()
+        if (name == CAP_MOBILITY) {
+            locationPanelCoordinator.setMobilityConsent(enabled)
+            if (!enabled) locationPanelCoordinator.stopMobility(MobilitySessionStopReason.CAPABILITY_DISABLED)
+        }
         if (name == CAP_FOCUS && !enabled) {
             val current = focusEngine.currentSession()
             if (current != null && CapabilityRules.mustPauseFocusOnDisable(enabled, current.status)) {
                 focusSnapshot = focusEngine.pause(current.id)
                 phaseAlarms.cancel(current.id)
                 focusNotifications.cancel(current.id)
-                latestMessage = "Focus désactivé. La session a été mise en pause; réactivez Focus pour la reprendre."
+                latestMessage = "Focus désactivé. La session est en pause."
             }
         }
         if (name == CAP_FOCUS_NOTIFICATIONS) {
@@ -2170,13 +2884,30 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             touch()
             return
         }
+        val snapshot = try {
+            stateMap()
+        } catch (error: Exception) {
+            android.util.Log.e("ATLAS.Controller", "Unable to prepare local state (${error.javaClass.simpleName})")
+            latestMessage = "Impossible de préparer l'état local. La session reste disponible en mémoire."
+            touch()
+            return
+        }
         try {
-            store.write(stateMap(), durable = durable)
+            store.write(snapshot, durable = durable)
             lastFocusCheckpointAtElapsed = clock.monotonicMillis()
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            android.util.Log.e("ATLAS.Controller", "Unable to write local state (${error.javaClass.simpleName})")
             latestMessage = "Impossible d'enregistrer l'état local. La session reste disponible en mémoire."
         }
         touch()
+    }
+
+    private fun persistAfterInitialization() {
+        if (!stateGraphReady) {
+            persistRequestedDuringInitialization = true
+            return
+        }
+        persist()
     }
 
     private fun stateMap(): Map<String, Any?> {
@@ -2212,6 +2943,13 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
             "agentConversationId" to agentConversationId,
             "agentSuggestions" to agentSuggestionsSnapshot,
             "appliedLocalAgentEffectKeys" to appliedLocalAgentEffectKeys.toList(),
+            "goals" to goalsSubdocument,
+            "agentContentActivity" to contentActivityTimestamps,
+            KEY_AGENT_CONTEXT_CONSENT_DATES to agentContextCoordinator.consentDates(),
+            "lastAgentSharedContext" to lastSharedAgentContextJsonSnapshot,
+            "lastAgentSharedContextAt" to lastSharedAgentContextAtUtcMillisSnapshot,
+            "agentPlanReply" to agentPlanReply,
+            "proactiveCoach" to proactiveCoachStateValue,
         )
     }
 
@@ -2256,12 +2994,21 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
         const val CAP_HABIT_REMINDERS = "habitReminders"
         const val CAP_SYNC = "sync"
         const val CAP_AGENT = "agent"
+        const val CAP_USAGE_BACKGROUND = "usageBackground"
+        const val CAP_AGENT_PROACTIVE = "agentProactive"
+        const val CAP_LOCATION = "locationCapture"
+        const val CAP_MOBILITY = "mobilityTracking"
         const val FOCUS_CHECKPOINT_INTERVAL_MILLIS = 20_000L
         const val MAX_FOCUS_HISTORY = 100
         const val MAX_FOCUS_ROUTINES = 100
         const val MAX_AGENT_MESSAGE_LENGTH = 2_000
         const val MAX_AGENT_CONVERSATION_MESSAGES = 80
+        private const val MAX_AGENT_CONTENT_ACTIVITY = 200
+        private const val KEY_AGENT_CONTEXT_CONSENT_DATES = "agentContextConsentAt"
         private const val KEY_PENDING_USAGE_PACKAGES = "pending_allowlist"
+        private val DAILY_PLAN_DUE_TIME: LocalTime = LocalTime.of(8, 0)
+        private val PROACTIVE_QUIET_HOURS_START: LocalTime = LocalTime.of(22, 0)
+        private const val PROACTIVE_EVENT_DEBOUNCE_MILLIS = 100L
 
         private fun readCapabilities(values: Map<String, Any?>?): Map<String, Boolean> {
             val defaults = mapOf(
@@ -2277,6 +3024,10 @@ class AtlasController(context: Context, private val clock: Clock = object : Cloc
                 CAP_HABIT_REMINDERS to false,
                 CAP_SYNC to false,
                 CAP_AGENT to true,
+                CAP_USAGE_BACKGROUND to false,
+                CAP_AGENT_PROACTIVE to false,
+                CAP_LOCATION to false,
+                CAP_MOBILITY to false,
             )
             return defaults + values.orEmpty().mapNotNull { (key, value) -> (value as? Boolean)?.let { key to it } }
         }

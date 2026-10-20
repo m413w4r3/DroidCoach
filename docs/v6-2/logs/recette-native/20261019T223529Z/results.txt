@@ -1,0 +1,12 @@
+PASS native-ui-360dp
+FAIL native-ui-320dp (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/native-ui-320dp.log)
+FAIL native-landscape (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/native-landscape.log)
+FAIL native-focus-screen (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/native-focus-screen.log)
+FAIL location-prepare-sharing-consent (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/location-prepare-sharing-consent.log)
+FAIL location-injected-coarse (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/location-injected-coarse.log)
+FAIL location-permission-refused (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/location-permission-refused.log)
+FAIL location-api26-timeout-unavailable (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/location-api26-timeout-unavailable.log)
+FAIL location-revoke-during-capture (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223529Z/location-revoke-during-capture.log)
+PASS mobility-prepare-sharing-consent
+PASS mobility-visible-service
+BLOCKED: Gateway model was not called because a UI/Focus/local-capture Android prerequisite failed.

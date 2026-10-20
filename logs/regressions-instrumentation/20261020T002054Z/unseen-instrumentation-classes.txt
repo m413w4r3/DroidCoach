@@ -1,0 +1,3 @@
+dev.atlas.coach.app.V61LandscapeCaptureTest
+dev.atlas.coach.app.V62OpenClawClientInstrumentationTest
+dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest

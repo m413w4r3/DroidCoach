@@ -1,0 +1,3 @@
+--------- beginning of main
+10-20 01:42:06.104 13292 13314 I ATLAS_TEST_FILTER: Filtered chatUsesRealGoalProgressAndPlanDropsGoalsAfterRevocation(dev.atlas.coach.app.V62OpenClawClientInstrumentationTest): requires the existing local FastAPI adapter connected to OpenClaw
+10-20 01:42:06.830 13335 13357 I ATLAS_TEST_FILTER: Filtered runRequestedBackendScenario(dev.atlas.coach.sync.RemoteBackendE2eInstrumentationTest): backend scenario requires scripts/v4-backend-e2e.sh
