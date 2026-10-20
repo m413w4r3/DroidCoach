@@ -143,7 +143,7 @@ class AgentPersistenceFailureInstrumentationTest {
 
     private class MemoryBarrierStorage : RevocationBarrierStorage {
         @Volatile var state = RevocationBarrierState()
-        val blocked: Boolean get() = state.isBlocked
+        val blocked: Boolean get() = state.agentBlocked || state.blockedCategories.isNotEmpty()
         override fun readState(): RevocationBarrierState = state
         override fun writeState(state: RevocationBarrierState): Boolean {
             this.state = state

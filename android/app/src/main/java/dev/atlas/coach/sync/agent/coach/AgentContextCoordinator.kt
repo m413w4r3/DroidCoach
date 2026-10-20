@@ -20,6 +20,7 @@ class AgentContextCoordinator(
     private val assembler: AgentContextAssembler = AgentContextAssembler(),
     private val agentAccessAllowed: () -> Boolean = { true },
     private val showConsentedContext: () -> Boolean = agentAccessAllowed,
+    private val blockedCategories: () -> Set<String> = { emptySet() },
 ) {
     private val consentAt = linkedMapOf<String, Long>().apply {
         initialConsentAtUtcMillis.orEmpty()
@@ -35,6 +36,10 @@ class AgentContextCoordinator(
 
     @Synchronized
     fun consentDates(): Map<String, Long> = consentAt.toMap()
+
+    /** Applies the independent revocation barrier to a restored or current mandate. */
+    fun effectiveMandate(mandate: AgentMandate = mandateProvider()): AgentMandate =
+        effectiveMandate(mandate, blockedCategories())
 
     @Synchronized
     fun setCategoryConsent(category: String, enabled: Boolean) {
@@ -71,8 +76,10 @@ class AgentContextCoordinator(
     fun assembleCurrent(): AgentContextSnapshot {
         val now = nowUtcMillis().coerceAtLeast(1L)
         val currentMandate = mandateProvider()
-        val mandate = if (showConsentedContext()) currentMandate else currentMandate.copy(sharedDataCategories = emptySet())
-        val dates = currentConsentDates()
+        val visibleMandate = if (showConsentedContext()) currentMandate else currentMandate.copy(sharedDataCategories = emptySet())
+        val blocked = blockedCategories()
+        val mandate = effectiveMandate(visibleMandate, blocked)
+        val dates = currentConsentDates(blocked)
         val categoriesWithDates = mandate.sharedDataCategories.filterTo(linkedSetOf()) { category ->
             dates[category]?.let { it in 1L..now } == true
         }
@@ -88,10 +95,13 @@ class AgentContextCoordinator(
         val now = nowUtcMillis().coerceAtLeast(1L)
         val currentMandate = mandateProvider()
         if (currentMandate.revoked || currentMandate.suspended || now >= currentMandate.expiresAtUtcMillis) return null
-        val dates = currentConsentDates()
+        val blocked = blockedCategories()
+        val filteredMandate = effectiveMandate(currentMandate, blocked)
+        val dates = currentConsentDates(blocked)
         val domains = domainsProvider()
-        val consentBoundMandate = currentMandate.copy(
-            sharedDataCategories = currentMandate.sharedDataCategories.filterTo(linkedSetOf()) { category ->
+        val consentBoundMandate = filteredMandate.copy(
+            sharedDataCategories = filteredMandate.sharedDataCategories.filterTo(linkedSetOf()) { category ->
+                category !in blocked &&
                 dates[category]?.let { it in 1L..now } == true
             },
         )
@@ -104,8 +114,11 @@ class AgentContextCoordinator(
             snapshot = latestSnapshot,
             consentAtUtcMillis = dates,
             domainConsent = AgentContextDomainConsent(
-                usageConsent = domains.usageConsent,
-                locationSummarySharingEnabled = domains.locationSummarySharingEnabled,
+                usageConsent = domains.usageConsent.takeUnless {
+                    AgentContextCategory.APP_USAGE_SUMMARY.wireValue in blocked
+                },
+                locationSummarySharingEnabled = domains.locationSummarySharingEnabled &&
+                    AgentContextCategory.LOCATION_SUMMARY.wireValue !in blocked,
             ),
             nowUtcMillis = now,
         )
@@ -117,11 +130,15 @@ class AgentContextCoordinator(
                 .migrateLegacyConsentDatesToNow(categories, nowUtcMillis)
     }
 
-    private fun currentConsentDates(): Map<String, Long> = consentDates().toMutableMap().apply {
+    private fun effectiveMandate(mandate: AgentMandate, blocked: Set<String>): AgentMandate = mandate.copy(
+        sharedDataCategories = mandate.sharedDataCategories - blocked,
+    )
+
+    private fun currentConsentDates(blocked: Set<String> = blockedCategories()): Map<String, Long> = consentDates().toMutableMap().apply {
         additionalConsentDates().forEach { (category, timestamp) ->
             if (category in AgentContextCategory.wireValueSet && timestamp > 0L) {
                 this[category] = maxOf(this[category] ?: 0L, timestamp)
             }
         }
-    }
+    }.filterKeys { it !in blocked }
 }

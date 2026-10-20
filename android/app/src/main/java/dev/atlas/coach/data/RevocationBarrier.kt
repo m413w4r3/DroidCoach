@@ -11,15 +11,15 @@ interface RevocationBarrierStorage {
 data class RevocationBarrierState(
     val agentBlocked: Boolean = false,
     val blockedCategories: Set<String> = emptySet(),
-) {
-    val isBlocked: Boolean get() = agentBlocked || blockedCategories.isNotEmpty()
-}
+)
 
 class RevocationBarrier(private val storage: RevocationBarrierStorage) {
     @Volatile
     private var state = runCatching(storage::readState).getOrDefault(RevocationBarrierState(agentBlocked = true))
 
-    fun isBlocked(): Boolean = state.isBlocked
+    fun isAgentBlocked(): Boolean = state.agentBlocked
+
+    fun blockedCategories(): Set<String> = state.blockedCategories.toSet()
 
     /** Latch in memory before I/O so a failed marker write still disables this process. */
     @Synchronized
@@ -31,10 +31,12 @@ class RevocationBarrier(private val storage: RevocationBarrierStorage) {
     @Synchronized
     fun blockCategory(category: String): Boolean {
         require(category.isNotBlank())
-        return writeBlockedState(
+        val written = writeBlockedState(
             state.copy(blockedCategories = state.blockedCategories + category),
             latchBeforeWrite = true,
         )
+        if (!written) state = state.copy(agentBlocked = true)
+        return written
     }
 
     /** Only a completed, explicit agent opt-in may clear the global agent deny bit. */

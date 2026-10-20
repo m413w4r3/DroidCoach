@@ -428,6 +428,7 @@ class AtlasController(
         },
         agentAccessAllowed = ::isAgentRequestAllowed,
         showConsentedContext = ::isAgentContextVisible,
+        blockedCategories = revocationBarrier::blockedCategories,
     )
     private val goalPanelCoordinator = GoalPanelCoordinator(
         readSubdocument = { goalsSubdocument },
@@ -670,17 +671,21 @@ class AtlasController(
             if (!enabled) {
                 val stateStored = runCatching { persistOrThrow("agent.location_consent") }.isSuccess
                 latestMessage = if (barrierStored && stateStored) {
-                    "Partage de localisation retiré; l'agent est bloqué jusqu'à une nouvelle activation."
+                    "Partage de localisation retiré; cette catégorie est exclue jusqu'à une nouvelle activation."
+                } else if (revocationBarrier.isAgentBlocked()) {
+                    "Agent bloqué dans cette session; stockage en échec, le retrait n'est pas confirmé."
                 } else {
-                    "Partage retiré dans cette session; stockage en échec, l'agent reste bloqué et la révocation n'est pas confirmée."
+                    "Partage retiré dans cette session; cette catégorie reste exclue, mais son enregistrement durable a échoué."
                 }
             } else {
                 persistOrThrow("agent.location_consent")
                 if (!revocationBarrier.clearCategoryAfterDurableOptIn(locationCategory, true)) {
                     recordPersistenceFailure("agent.location_consent", PersistFailureKind.STORAGE_IO)
-                    latestMessage = "Consentement enregistré, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
-                } else if (revocationBarrier.isBlocked()) {
-                    latestMessage = "Consentement de localisation enregistré; l'agent reste bloqué par une autre révocation en attente."
+                    latestMessage = "Consentement enregistré, mais la catégorie localisation reste exclue car la barrière locale n'a pas pu être levée."
+                } else if (revocationBarrier.isAgentBlocked()) {
+                    latestMessage = "Consentement de localisation enregistré; l'agent reste bloqué par une révocation générale en attente."
+                } else if (revocationBarrier.blockedCategories().isNotEmpty()) {
+                    latestMessage = "Consentement de localisation enregistré; les autres catégories retirées restent exclues jusqu'à leur réactivation."
                 } else {
                     latestMessage = "Partage du résumé de localisation activé."
                 }
@@ -1127,26 +1132,28 @@ class AtlasController(
     }
 
     private fun isAgentRequestAllowed(): Boolean {
-        if (agentAuthorizationCommitInProgress.get() || !agentConsentMigrationReady.get() || revocationBarrier.isBlocked()) return false
+        if (agentAuthorizationCommitInProgress.get() || !agentConsentMigrationReady.get() || revocationBarrier.isAgentBlocked()) return false
         val mandate = agentMandateStore.current()
         val now = clock.nowMillis()
         if (capabilities[CAP_AGENT] != true || mandate.revoked || mandate.suspended || now >= mandate.expiresAtUtcMillis) return false
         val dates = agentContextCoordinator.consentDates()
-        if (mandate.sharedDataCategories.any { dates[it]?.let { at -> at in 1L..now } != true }) return false
-        if (AgentContextCategory.APP_USAGE_SUMMARY.wireValue in mandate.sharedDataCategories && !usageConsentActive) return false
-        if (AgentContextCategory.LOCATION_SUMMARY.wireValue in mandate.sharedDataCategories &&
+        val effectiveCategories = agentContextCoordinator.effectiveMandate(mandate).sharedDataCategories
+        if (effectiveCategories.any { dates[it]?.let { at -> at in 1L..now } != true }) return false
+        if (AgentContextCategory.APP_USAGE_SUMMARY.wireValue in effectiveCategories && !usageConsentActive) return false
+        if (AgentContextCategory.LOCATION_SUMMARY.wireValue in effectiveCategories &&
             !locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled()
         ) return false
         return true
     }
 
     private fun isAgentContextVisible(): Boolean {
-        if (!agentConsentMigrationReady.get() || revocationBarrier.isBlocked()) return false
+        if (!agentConsentMigrationReady.get() || revocationBarrier.isAgentBlocked()) return false
         val mandate = agentMandateStore.current()
         val now = clock.nowMillis()
         if (mandate.revoked || mandate.suspended || now >= mandate.expiresAtUtcMillis) return false
         val dates = agentContextCoordinator.consentDates()
-        return mandate.sharedDataCategories.all { dates[it]?.let { at -> at in 1L..now } == true }
+        val effectiveCategories = agentContextCoordinator.effectiveMandate(mandate).sharedDataCategories
+        return effectiveCategories.all { dates[it]?.let { at -> at in 1L..now } == true }
     }
 
     private fun canExplicitOptInClearBarrier(): Boolean {
@@ -1185,7 +1192,7 @@ class AtlasController(
                 grantedAt,
             )
         }
-        val grants = mandate.sharedDataCategories
+        val grants = agentContextCoordinator.effectiveMandate(mandate).sharedDataCategories
             .intersect(AgentContextCategory.wireValueSet)
             .mapNotNull { category ->
                 val grantedAt = dates[category]?.takeIf { it > 0L } ?: return@mapNotNull null
@@ -1835,8 +1842,10 @@ class AtlasController(
                 latestMessage = "Activation enregistrée, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
             } else if (!eligible) {
                 latestMessage = "Agent activé localement; le mandat est encore suspendu ou expiré."
-            } else if (revocationBarrier.isBlocked()) {
-                latestMessage = "Agent activé; les autorisations retirées restent bloquées jusqu'à leur nouvelle activation."
+            } else if (revocationBarrier.isAgentBlocked()) {
+                latestMessage = "Agent activé, mais une révocation générale reste en attente."
+            } else if (revocationBarrier.blockedCategories().isNotEmpty()) {
+                latestMessage = "Agent activé; les catégories retirées restent exclues jusqu'à leur nouvelle activation."
             } else {
                 latestMessage = "Agent réactivé en mode propositions seulement."
             }
@@ -1892,8 +1901,12 @@ class AtlasController(
             if (!barrierWriteSucceeded) {
                 recordPersistenceFailure("agent.resume", PersistFailureKind.STORAGE_IO)
                 latestMessage = "Mandat enregistré, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
-            } else if (eligible && !revocationBarrier.isBlocked()) {
-                latestMessage = "Mandat réactivé en mode propositions seulement."
+            } else if (eligible && !revocationBarrier.isAgentBlocked()) {
+                latestMessage = if (revocationBarrier.blockedCategories().isEmpty()) {
+                    "Mandat réactivé en mode propositions seulement."
+                } else {
+                    "Mandat réactivé; les catégories retirées restent exclues jusqu'à leur nouvelle activation."
+                }
             } else {
                 latestMessage = "Mandat enregistré, mais l'agent reste bloqué."
             }
@@ -1947,7 +1960,7 @@ class AtlasController(
             operation = "agent.category_consent",
             explicitOptIn = allowed,
             revocation = !allowed,
-            optInCategory = category.takeIf { allowed },
+            optInCategory = category,
         ) { mandate ->
             val next = mandate.copy(
                 sharedDataCategories = if (allowed) mandate.sharedDataCategories + category else mandate.sharedDataCategories - category,
@@ -2000,7 +2013,11 @@ class AtlasController(
             } catch (error: Exception) {
                 if (!revocation) replaceAgentMandate(current, refreshRuntime = false)
                 latestMessage = if (revocation) {
-                    "Agent bloqué dans cette session; stockage en échec, le retrait n'est pas confirmé."
+                    if (revocationBarrier.isAgentBlocked()) {
+                        "Agent bloqué dans cette session; stockage en échec, le retrait n'est pas confirmé."
+                    } else {
+                        "Cette catégorie reste exclue dans cette session; son retrait n'a pas pu être enregistré durablement."
+                    }
                 } else {
                     "Impossible d'enregistrer la modification du mandat."
                 }
@@ -2011,18 +2028,28 @@ class AtlasController(
                 !revocationBarrier.clearCategoryAfterDurableOptIn(optInCategory, true)
             ) {
                 recordPersistenceFailure(operation, PersistFailureKind.STORAGE_IO)
-                latestMessage = "Consentement enregistré, mais l'agent reste bloqué car la barrière locale n'a pas pu être levée."
-            } else if (revocation && revocationBarrier.isBlocked()) {
+                latestMessage = "Consentement enregistré, mais cette catégorie reste exclue car la barrière locale n'a pas pu être levée."
+            } else if (revocation && revocationBarrier.isAgentBlocked()) {
                 latestMessage = "Autorisation retirée durablement; l'agent reste bloqué jusqu'à une nouvelle activation explicite."
-            } else if (explicitOptIn && revocationBarrier.isBlocked()) {
-                latestMessage = "Consentement enregistré; l'agent reste bloqué par une autre révocation en attente."
+            } else if (revocation && optInCategory != null) {
+                latestMessage = "Autorisation retirée durablement; cette catégorie reste exclue jusqu'à une nouvelle activation explicite."
+            } else if (explicitOptIn && revocationBarrier.isAgentBlocked()) {
+                latestMessage = "Consentement enregistré, mais l'agent reste bloqué par une révocation générale en attente."
+            } else if (explicitOptIn && revocationBarrier.blockedCategories().isNotEmpty()) {
+                latestMessage = "Consentement enregistré; les autres catégories retirées restent exclues jusqu'à leur réactivation."
             } else {
                 latestMessage = "Mandat enregistré · ${agentMandate.version}."
             }
             touch()
         } catch (error: Exception) {
             latestMessage = if (error is PersistOperationException) {
-                "Impossible d'enregistrer le changement; l'agent reste bloqué et le retrait n'est pas confirmé."
+                if (revocationBarrier.isAgentBlocked()) {
+                    "Impossible d'enregistrer le changement; l'agent reste bloqué et le retrait n'est pas confirmé."
+                } else if (revocation) {
+                    "Cette catégorie reste exclue dans cette session; le retrait n'a pas pu être enregistré durablement."
+                } else {
+                    "Impossible d'enregistrer la modification du mandat."
+                }
             } else {
                 "Modification du mandat invalide."
             }
