@@ -147,6 +147,7 @@ import dev.atlas.coach.coach.proactive.CoachTriggerReliability
 import dev.atlas.coach.coach.proactive.CoachTriggerSource
 import dev.atlas.coach.coach.proactive.ProactiveConsentSnapshot
 import dev.atlas.coach.coach.proactive.ProactiveEngagementMode
+import dev.atlas.coach.coach.proactive.ProactiveNotification
 import dev.atlas.coach.coach.proactive.ProactiveNotificationContent
 import dev.atlas.coach.coach.proactive.ProactivePlanRequest
 import dev.atlas.coach.coach.proactive.ProactivePlanResponse
@@ -544,7 +545,7 @@ class AtlasController(
         nowUtcMillis = clock::nowMillis,
         mandateZoneId = ::currentMandateZoneId,
         requestPlan = ::requestProactivePlan,
-        showNotification = proactiveNotificationPublisher::show,
+        showNotification = ::showProactiveNotificationIfStillAllowed,
     )
 
     init {
@@ -1390,6 +1391,15 @@ class AtlasController(
         CapabilityRules.mayRunProactiveCoach(capabilities, isAgentEnabled) && !isEmergencyPaused
 
     private fun currentMandateZoneId(): ZoneId = ZoneId.of(agentMandateStore.current().focusWindow.timezone)
+
+    /** Last boundary before Android shows a late plan: every trigger category must still be consented. */
+    private fun showProactiveNotificationIfStillAllowed(notification: ProactiveNotification) {
+        val grants = proactiveConsentSnapshot().grantedAtUtcMillisByCategory
+        check(isProactiveCoachEnabled() && notification.triggerSources.all { source ->
+            source.defaultConsentCategory?.let(grants::containsKey) ?: true
+        }) { "Proactive consent changed before notification" }
+        proactiveNotificationPublisher.show(notification)
+    }
 
     private fun proactiveConsentSnapshot(): ProactiveConsentSnapshot {
         if (!isAgentRequestAllowed()) return ProactiveConsentSnapshot.EMPTY
