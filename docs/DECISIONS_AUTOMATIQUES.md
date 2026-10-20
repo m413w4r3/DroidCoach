@@ -106,3 +106,7 @@
 - La barrière agent est indépendante du document ATLAS (`atlas_agent_revocation_barrier`, clés `agent_blocked_v1` et `blocked_categories_v1`, `SharedPreferences.commit()`). Une révocation globale exige un nouvel opt-in agent durable; le retrait d’une catégorie ou du résumé de localisation exige le consentement durable de la même catégorie. Le client agent et le dispatcher relisent cette barrière avant chaque requête ou exécution.
 - Le journal de persistance vit dans `atlas_persistence_diagnostics`, séparé du document métier; il ne garde que le code d’opération, le type de panne et l’horodatage, sur 20 lignes au plus.
 - Si le stockage racine et le commit de la barrière échouent tous deux, le latch mémoire bloque les requêtes jusqu’à la fin du processus et l’interface signale que la révocation n’est pas confirmée. Aucun mécanisme local ne peut garantir la survie de cette panne totale après arrêt forcé; une nouvelle installation reste bloquée seulement si un des stockages indépendants a accepté le marqueur.
+
+## 2026-10-20 — V6.2.1 Lot D
+
+- Le tiroir d'applications Compose utilise `appPackage` comme clé stable et unique de `LazyColumn`; la règle de filtrage déduplique déjà les applications par package. La liste prend la hauteur restante au-dessus du footer permanent, tandis que le HOME text-first garde son scroll actuel. | Évite une clé d'index instable quand la recherche ou l'épinglage modifie la liste et maintient le footer séparé du contenu paresseux.
