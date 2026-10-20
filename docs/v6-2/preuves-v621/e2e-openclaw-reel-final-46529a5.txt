@@ -1,12 +1,10 @@
 PASS: local FastAPI status reports adapter=openclaw.
 PASS: Android instrumentation method realCoachResponseCreatesDirectiveAndStartsFocus.
-PASS: LauncherActivity HOME displays the real directive: Réviser maintenant
+PASS: LauncherActivity HOME displays the real directive: Réviser un thème
 PASS: Android instrumentation method restoredFocusCanPauseResumeAndCancel.
 PASS: Android instrumentation method limitedMandatePreauthorizesFocusPlanOnAndroid.
 PASS: grep -F confirmed OpenClaw Gateway token is absent from repository files.
 PASS: grep -F confirmed random ATLAS bearer token is absent from repository files.
-PASS: Android 17 E2E artifacts saved in /tmp/v621/e2e-real and /home/nill/perso/AndroCoach/atlas-preparation/docs/v6/captures.
-INSTRUMENTATION_CODE: -1
-INSTRUMENTATION_STATUS: class=dev.atlas.coach.app.V62OpenClawClientInstrumentationTest
-INSTRUMENTATION_STATUS: test=chatUsesRealGoalProgressAndPlanDropsGoalsAfterRevocation
+PASS: Android 17 E2E artifacts saved in /tmp/v621/e2e-real-2 and /home/nill/perso/AndroCoach/atlas-preparation/docs/v6/captures.
 OK (1 test)
+INSTRUMENTATION_CODE: -1
