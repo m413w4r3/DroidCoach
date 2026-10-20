@@ -17,6 +17,8 @@ import java.time.Instant
 import java.time.ZoneId
 
 class ProactiveCoachCoordinatorTest {
+    private val localProposalId = "10000000-0000-4000-8000-000000000001"
+
     @Test
     fun reliableLocalTriggerUsesPlanCallbackAndPersistsVersionedState() {
         val now = Instant.parse("2026-10-19T12:00:00Z").toEpochMilli()
@@ -33,9 +35,12 @@ class ProactiveCoachCoordinatorTest {
             mandateZoneId = { ZoneId.of("UTC") },
             requestPlan = { request ->
                 requests += request.triggers.single().source.wireValue
-                ProactivePlanResponse(ProactiveNotificationContent("Plan prêt", "Ouvrez ATLAS."))
+                ProactivePlanResponse(
+                    notification = ProactiveNotificationContent("Plan prêt", "Ouvrez ATLAS."),
+                    localProposalId = localProposalId,
+                )
             },
-            showNotification = { notifications += it.title },
+            showNotification = { notifications += "${it.title}:${it.localProposalId}" },
         )
 
         val recorded = coordinator.record(
@@ -51,7 +56,7 @@ class ProactiveCoachCoordinatorTest {
         assertEquals(dev.atlas.coach.coach.proactive.CoachTriggerRecordStatus.RECORDED, recorded)
         assertEquals(ProactiveRunStatus.REQUESTED, result.status)
         assertEquals(listOf("focus_completed"), requests)
-        assertEquals(listOf("Plan prêt"), notifications)
+        assertEquals(listOf("Plan prêt:$localProposalId"), notifications)
         assertEquals(ProactiveCoachState.CURRENT_SCHEMA_VERSION, ProactiveCoachState.fromJsonString(requireNotNull(stateJson)).schemaVersion)
     }
 
@@ -101,7 +106,13 @@ class ProactiveCoachCoordinatorTest {
             isEnabled = { true },
             nowUtcMillis = { now },
             mandateZoneId = { ZoneId.of("UTC") },
-            requestPlan = { requests++; ProactivePlanResponse(ProactiveNotificationContent("Plan", "Texte")) },
+            requestPlan = {
+                requests++
+                ProactivePlanResponse(
+                    notification = ProactiveNotificationContent("Plan", "Texte"),
+                    localProposalId = localProposalId,
+                )
+            },
             showNotification = { notifications++ },
         )
 
@@ -139,7 +150,13 @@ class ProactiveCoachCoordinatorTest {
             isEnabled = { true },
             nowUtcMillis = { now },
             mandateZoneId = { ZoneId.of("UTC") },
-            requestPlan = { requests++; ProactivePlanResponse(ProactiveNotificationContent("Plan", "Action")) },
+            requestPlan = {
+                requests++
+                ProactivePlanResponse(
+                    notification = ProactiveNotificationContent("Plan", "Action"),
+                    localProposalId = localProposalId,
+                )
+            },
             showNotification = { notifications++ },
         )
         coordinator.record(

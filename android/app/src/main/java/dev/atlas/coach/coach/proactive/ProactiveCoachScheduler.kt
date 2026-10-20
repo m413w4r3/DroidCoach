@@ -253,6 +253,8 @@ data class ProactivePlanRequest(
 /** The S6 `/v2/agent/plan` adapter supplies notification copy only after a successful plan response. */
 data class ProactivePlanResponse(
     val notification: ProactiveNotificationContent? = null,
+    /** Local inbox proposal selected by the app after validating and persisting the plan response. */
+    val localProposalId: String? = null,
 )
 
 data class ProactiveNotificationContent(
@@ -272,11 +274,21 @@ data class ProactiveNotificationContent(
 
 data class ProactiveNotification(
     val notificationId: String,
+    val localProposalId: String,
     val title: String,
     val body: String,
     val mode: ProactiveEngagementMode,
     val triggerSources: Set<CoachTriggerSource>,
-)
+) {
+    init {
+        require(isLocalProposalId(localProposalId))
+    }
+}
+
+/** Proposal IDs follow the UUID contract used by ProposalV2. */
+fun isLocalProposalId(value: String): Boolean = runCatching {
+    java.util.UUID.fromString(value).toString() == value
+}.getOrDefault(false)
 
 enum class ProactiveRunStatus {
     REQUESTED,
@@ -397,6 +409,8 @@ class ProactiveCoachScheduler(
         val content = response.notification ?: return ProactiveRunResult(
             ProactiveRunStatus.REQUESTED, request.reservationId, request.triggers.size,
         )
+        val localProposalId = response.localProposalId?.takeIf(::isLocalProposalId)
+            ?: return ProactiveRunResult(ProactiveRunStatus.REQUESTED, request.reservationId, request.triggers.size)
         val latestConsent = runCatching(currentConsent).getOrElse {
             return ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED, request.reservationId, request.triggers.size)
         }
@@ -406,7 +420,7 @@ class ProactiveCoachScheduler(
 
         val notification = synchronized(PROCESS_STATE_LOCK) {
             val notificationAt = maxOf(nowUtcMillis, runCatching(clockUtcMillis).getOrDefault(nowUtcMillis))
-            reserveNotification(request, content, notificationAt, mandateZoneId)
+            reserveNotification(request, content, localProposalId, notificationAt, mandateZoneId)
         }
         if (notification.result.status != ProactiveRunStatus.REQUESTED) return notification.result
         val delivery = requireNotNull(notification.notification)
@@ -567,6 +581,7 @@ class ProactiveCoachScheduler(
     private fun reserveNotification(
         request: ProactivePlanRequest,
         content: ProactiveNotificationContent,
+        localProposalId: String,
         nowUtcMillis: Long,
         zoneId: ZoneId,
     ): NotificationOutcome {
@@ -607,6 +622,7 @@ class ProactiveCoachScheduler(
             ProactiveRunResult(ProactiveRunStatus.REQUESTED, request.reservationId, request.triggers.size, notificationReserved = true),
             ProactiveNotification(
                 notificationId = notificationId,
+                localProposalId = localProposalId,
                 title = content.title,
                 body = content.body,
                 mode = modeNow,

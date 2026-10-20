@@ -11,6 +11,7 @@ import org.junit.Test
 
 class ProactiveCoachSchedulerTest {
     private val utc = ZoneId.of("UTC")
+    private val localProposalId = "20000000-0000-4000-8000-000000000002"
     private val allConsents = ProactiveConsentSnapshot(
         mapOf(
             "focus" to 1L,
@@ -362,13 +363,31 @@ class ProactiveCoachSchedulerTest {
         val result = scheduler.runDue(
             NOW,
             utc,
-            requestPlan = { ProactivePlanResponse(ProactiveNotificationContent("Conseil", "Action proposée")) },
+            requestPlan = { responseWithLocalProposal() },
             showNotification = { notifications++ },
         )
         assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
         assertEquals(0, notifications)
         assertTrue(state.notificationReservations.isEmpty())
         assertEquals(ProactiveRequestStatus.SUCCEEDED, state.requestReservations.single().status)
+    }
+
+    @Test
+    fun `notification is not posted without a validated local proposal id`() {
+        val h = Harness(allConsents)
+        h.record(trigger("unlinked-notification"))
+        var notifications = 0
+
+        val result = h.scheduler.runDue(
+            NOW,
+            utc,
+            requestPlan = { ProactivePlanResponse(ProactiveNotificationContent("Conseil", "Action proposée")) },
+            showNotification = { notifications++ },
+        )
+
+        assertEquals(ProactiveRunStatus.REQUESTED, result.status)
+        assertEquals(0, notifications)
+        assertTrue(h.state.notificationReservations.isEmpty())
     }
 
     @Test
@@ -379,7 +398,7 @@ class ProactiveCoachSchedulerTest {
         val first = h.scheduler.runDue(
             NOW,
             utc,
-            requestPlan = { requests++; ProactivePlanResponse(ProactiveNotificationContent("Conseil", "Action proposée")) },
+            requestPlan = { requests++; responseWithLocalProposal() },
             showNotification = { throw IllegalStateException("notification unavailable") },
         )
         assertEquals(ProactiveRunStatus.NOTIFICATION_FAILED, first.status)
@@ -422,7 +441,7 @@ class ProactiveCoachSchedulerTest {
             val result = h.scheduler.runDue(
                 NOW + index,
                 utc,
-                requestPlan = { ProactivePlanResponse(ProactiveNotificationContent("Conseil", "Action proposée")) },
+                requestPlan = { responseWithLocalProposal() },
                 showNotification = {},
             )
             if (index < expectedLimit) assertEquals(ProactiveRunStatus.REQUESTED, result.status)
@@ -430,6 +449,11 @@ class ProactiveCoachSchedulerTest {
         }
         assertEquals(expectedLimit, h.state.notificationReservations.size)
     }
+
+    private fun responseWithLocalProposal() = ProactivePlanResponse(
+        notification = ProactiveNotificationContent("Conseil", "Action proposée"),
+        localProposalId = localProposalId,
+    )
 
     private fun trigger(
         id: String,
