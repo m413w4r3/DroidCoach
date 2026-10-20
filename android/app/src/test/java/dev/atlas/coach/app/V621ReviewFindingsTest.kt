@@ -29,6 +29,7 @@ import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
+import org.junit.Ignore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -55,6 +56,23 @@ class V621ReviewFindingsTest {
         assertTrue(envelope.getLong("at_utc_millis") > 0L)
         assertTrue(envelope.getInt("raw_length_bytes") > 0)
         assertEquals(64, envelope.getString("raw_sha256").length)
+    }
+
+    @Test
+    @Ignore("V621-REVIEW: R4")
+    fun malformedLegacyContextWithEscapedKeyMustBeRemovedBeforeQuarantine() {
+        val secret = "private escaped-key objective"
+        // JSON permits escaped characters in property names; the document is malformed only
+        // after the legacy field, so the redaction gate must still recognize the decoded key.
+        val raw = """{"schemaVersion":1,"lastAgentSharedCon\u0074ext":"$secret","broken": }"""
+        val backend = MemoryStateBackend(raw)
+        val store = LocalStateStore(backend)
+        val initial = unsafeController().apply { setField("store", store) }
+            .readInitialStateForReview()
+        val corrupt = initial.readField("readResult") as StateReadResult.Corrupt
+
+        assertTrue(store.quarantine(corrupt.rawJson, corrupt.reason))
+        assertFalse("the quarantine still contains the old shared goal", backend.quarantined.orEmpty().contains(secret))
     }
 
     @Test
