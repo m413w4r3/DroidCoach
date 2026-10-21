@@ -618,7 +618,7 @@ internal fun SettingsScreen(
             CapabilityRow("Bibliothèque", controller, AtlasController.CAP_CONTENT)
             CapabilityRow("Coach local", controller, AtlasController.CAP_COACH)
             CapabilityRow("Routines de focus locales", controller, AtlasController.CAP_FOCUS_ROUTINES,
-                onChanged = { enabled -> controller.setCapability(AtlasController.CAP_FOCUS_ROUTINES, enabled) })
+                onChanged = { enabled -> controller.setCapability(AtlasController.CAP_FOCUS_ROUTINES, enabled); if (enabled) requestNotifications() })
         }
         AtlasSection("Apparence") {
             dev.atlas.coach.app.ui.ThemePreferenceSection()
