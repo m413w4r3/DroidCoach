@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.atlas.coach.app.ui.AtlasRule
 
 /** Coarse display projection only; raw coordinates never enter this UI contract. */
 data class LocationPanelState(
@@ -44,6 +45,7 @@ fun LocationPanel(
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Localisation", style = MaterialTheme.typography.titleLarge)
+        AtlasRule()
         Text("Une position approximative n'est demandée qu'après votre action. Aucun point précis n'est affiché ici.")
 
         ConsentRow(
@@ -59,6 +61,7 @@ fun LocationPanel(
 
         Text(state.coarseSummaryLabel ?: "Aucun résumé approximatif disponible.")
         state.measuredAtLabel?.let { Text("Mesure : $it", style = MaterialTheme.typography.bodySmall) }
+        AtlasRule()
         ConsentRow(
             checked = state.coachSummaryConsent,
             label = "Autoriser séparément le partage du résumé avec le Coach",
@@ -66,6 +69,7 @@ fun LocationPanel(
         )
 
         Text("Suivi de déplacement temporaire", style = MaterialTheme.typography.titleMedium)
+        AtlasRule()
         Text("Le suivi démarre sur demande, reste visible et peut durer au plus une heure.")
         ConsentRow(
             checked = state.mobilityConsent,

@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.goals.GoalMetric
@@ -36,6 +38,7 @@ import dev.atlas.coach.goals.GoalStatus
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import dev.atlas.coach.app.ui.AtlasRule
 
 /** Display data supplied by the caller; the panel never reads or mutates a repository. */
 data class GoalsPanelEntry(val record: GoalRecord, val progress: GoalProgress)
@@ -90,9 +93,11 @@ fun GoalsPanel(
     val parsedTarget = targetText.toLongOrNull()
     val parsedDueAt = parseGoalDueDate(dueDateText)
     val dueDateValid = dueDateText.isBlank() || parsedDueAt != null
+    val compactActions = LocalConfiguration.current.screenWidthDp <= 360 || LocalDensity.current.fontScale >= 1.4f
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Objectifs", style = MaterialTheme.typography.titleLarge)
+        AtlasRule()
         if (visibleGoals.isEmpty()) {
             Text("Aucun objectif enregistré.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -109,26 +114,50 @@ fun GoalsPanel(
                 if (goal.description.isNotBlank()) Text(goal.description)
                 goal.nextAction?.takeIf(String::isNotBlank)?.let { Text("Prochaine action : $it") }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = {
-                            editingGoal = goal
-                            title = goal.title
-                            description = goal.description
-                            nextAction = goal.nextAction.orEmpty()
-                            dueDateText = goal.dueAt?.let(::formatGoalDueDate).orEmpty()
-                            targetText = goal.targetValue.toString()
-                            metric = goal.metric
-                            creating = false
-                        },
-                    ) { Text("Modifier") }
-                    GoalStatusActions(
-                        goal = goal,
-                        progress = entry.progress,
-                        onStatusChange = { onStatusChange(goal.id, it) },
-                        onCompleteFromProgress = { onCompleteFromProgress(goal.id) },
-                    )
+                if (compactActions) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            onClick = {
+                                editingGoal = goal
+                                title = goal.title
+                                description = goal.description
+                                nextAction = goal.nextAction.orEmpty()
+                                dueDateText = goal.dueAt?.let(::formatGoalDueDate).orEmpty()
+                                targetText = goal.targetValue.toString()
+                                metric = goal.metric
+                                creating = false
+                            },
+                        ) { Text("Modifier") }
+                        GoalStatusActions(
+                            goal = goal,
+                            progress = entry.progress,
+                            onStatusChange = { onStatusChange(goal.id, it) },
+                            onCompleteFromProgress = { onCompleteFromProgress(goal.id) },
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                editingGoal = goal
+                                title = goal.title
+                                description = goal.description
+                                nextAction = goal.nextAction.orEmpty()
+                                dueDateText = goal.dueAt?.let(::formatGoalDueDate).orEmpty()
+                                targetText = goal.targetValue.toString()
+                                metric = goal.metric
+                                creating = false
+                            },
+                        ) { Text("Modifier") }
+                        GoalStatusActions(
+                            goal = goal,
+                            progress = entry.progress,
+                            onStatusChange = { onStatusChange(goal.id, it) },
+                            onCompleteFromProgress = { onCompleteFromProgress(goal.id) },
+                        )
+                    }
                 }
 
                 if (goal.status == GoalStatus.ACTIVE) {
@@ -156,6 +185,7 @@ fun GoalsPanel(
                     }
                 }
             }
+            AtlasRule()
         }
 
         if (activeCount >= 3) {

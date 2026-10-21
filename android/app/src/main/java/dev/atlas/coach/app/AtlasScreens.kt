@@ -74,6 +74,7 @@ import dev.atlas.coach.habits.HabitScheduleKind
 import dev.atlas.coach.content.ContentItem
 import dev.atlas.coach.content.ContentKind
 import dev.atlas.coach.app.ui.AtlasPrimaryButton
+import dev.atlas.coach.app.ui.AtlasRule
 import dev.atlas.coach.app.ui.AtlasSettingRow
 import dev.atlas.coach.app.ui.AtlasSection
 import dev.atlas.coach.app.ui.AtlasSpacing
@@ -94,46 +95,42 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
     val totalHabits = controller.activeHabits.size
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("La prochaine étape", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(controller.directive.title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-                Text(controller.directive.reason, style = MaterialTheme.typography.bodyLarge)
-                AtlasStatus("Proposition locale · disponible hors ligne", AtlasStatusKind.SIMULATED)
-                val canStartDirective = controller.capabilities[AtlasController.CAP_COACH] == true &&
-                    controller.capabilities[AtlasController.CAP_FOCUS] == true && !controller.isCoachPaused
-                AtlasPrimaryButton(
-                    label = when {
-                        canStartDirective -> "Commencer"
-                        controller.capabilities[AtlasController.CAP_FOCUS] == true -> "Voir l'état du Focus"
-                        else -> "Activer Focus"
-                    },
-                    onClick = {
-                        if (canStartDirective) controller.respond(DirectiveChoice.START)
-                        else if (controller.capabilities[AtlasController.CAP_FOCUS] == true) controller.navigationState.selectTab(AtlasScreenId.FOCUS)
-                        else controller.navigationState.navigate(AtlasScreenId.SETTINGS)
-                    },
-                )
-                AtlasTertiaryButton(
-                    label = if (showResponses) "Masquer les autres réponses" else "Autres réponses à la directive",
-                    onClick = { showResponses = !showResponses },
-                )
-                if (showResponses) {
-                    val coachActive = controller.capabilities[AtlasController.CAP_COACH] == true && !controller.isCoachPaused
-                    Row(horizontalArrangement = Arrangement.spacedBy(AtlasSpacing.small)) {
-                        AtlasSecondaryButton("Discuter", { controller.respond(DirectiveChoice.DISCUSS) }, Modifier.weight(1f), coachActive)
-                        AtlasSecondaryButton("Alternative", { controller.respond(DirectiveChoice.ALTERNATIVE) }, Modifier.weight(1f), coachActive)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(AtlasSpacing.small)) {
-                        AtlasSecondaryButton("Reporter", { controller.respond(DirectiveChoice.POSTPONE) }, Modifier.weight(1f), coachActive)
-                        AtlasSecondaryButton("Pause coach", { controller.respond(DirectiveChoice.PAUSE) }, Modifier.weight(1f), coachActive)
-                    }
-                    if (controller.isCoachPaused) {
-                        Text("Le coach est en pause. Vous pouvez le réactiver depuis Plus → Coach et journal.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("La prochaine étape", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AtlasRule()
+            Text(controller.directive.title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+            Text(controller.directive.reason, style = MaterialTheme.typography.bodyLarge)
+            AtlasStatus("Proposition locale · disponible hors ligne", AtlasStatusKind.SIMULATED)
+            val canStartDirective = controller.capabilities[AtlasController.CAP_COACH] == true &&
+                controller.capabilities[AtlasController.CAP_FOCUS] == true && !controller.isCoachPaused
+            AtlasPrimaryButton(
+                label = when {
+                    canStartDirective -> "Commencer"
+                    controller.capabilities[AtlasController.CAP_FOCUS] == true -> "Voir l'état du Focus"
+                    else -> "Activer Focus"
+                },
+                onClick = {
+                    if (canStartDirective) controller.respond(DirectiveChoice.START)
+                    else if (controller.capabilities[AtlasController.CAP_FOCUS] == true) controller.navigationState.selectTab(AtlasScreenId.FOCUS)
+                    else controller.navigationState.navigate(AtlasScreenId.SETTINGS)
+                },
+            )
+            AtlasTertiaryButton(
+                label = if (showResponses) "Masquer les autres réponses" else "Autres réponses à la directive",
+                onClick = { showResponses = !showResponses },
+            )
+            if (showResponses) {
+                val coachActive = controller.capabilities[AtlasController.CAP_COACH] == true && !controller.isCoachPaused
+                Row(horizontalArrangement = Arrangement.spacedBy(AtlasSpacing.small)) {
+                    AtlasSecondaryButton("Discuter", { controller.respond(DirectiveChoice.DISCUSS) }, Modifier.weight(1f), coachActive)
+                    AtlasSecondaryButton("Alternative", { controller.respond(DirectiveChoice.ALTERNATIVE) }, Modifier.weight(1f), coachActive)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(AtlasSpacing.small)) {
+                    AtlasSecondaryButton("Reporter", { controller.respond(DirectiveChoice.POSTPONE) }, Modifier.weight(1f), coachActive)
+                    AtlasSecondaryButton("Pause coach", { controller.respond(DirectiveChoice.PAUSE) }, Modifier.weight(1f), coachActive)
+                }
+                if (controller.isCoachPaused) {
+                    Text("Le coach est en pause. Vous pouvez le réactiver depuis Plus → Coach et journal.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

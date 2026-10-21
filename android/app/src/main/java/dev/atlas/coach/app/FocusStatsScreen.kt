@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -25,6 +24,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import dev.atlas.coach.app.ui.AtlasRule
 
 @Composable
 internal fun FocusStatsScreen(controller: AtlasController) {
@@ -38,17 +38,16 @@ internal fun FocusStatsScreen(controller: AtlasController) {
         if (sessions.isEmpty()) Text("Terminez ou annulez une session pour alimenter l'historique.")
         sessions.forEach { session ->
             val stats = ReefFocusStats.from(session)
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(session.status.displayLabel(), style = MaterialTheme.typography.titleMedium)
-                    Text("${stats.focusTimeMillis / 60_000L} min · ${stats.completedCycles} cycles · ${controller.directiveTitle(session.directiveId)}")
-                    val startedAt = Instant.ofEpochMilli(session.createdAtUtcMillis)
-                        .atZone(ZoneId.systemDefault())
-                        .format(DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.FRENCH))
-                    Text("${session.workSeconds / 60L} min de concentration par phase · $startedAt", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (session.status == FocusStatus.CANCELLED) Text("Session interrompue", style = MaterialTheme.typography.bodySmall)
-                }
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(session.status.displayLabel(), style = MaterialTheme.typography.titleMedium)
+                Text("${stats.focusTimeMillis / 60_000L} min · ${stats.completedCycles} cycles · ${controller.directiveTitle(session.directiveId)}")
+                val startedAt = Instant.ofEpochMilli(session.createdAtUtcMillis)
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.FRENCH))
+                Text("${session.workSeconds / 60L} min de concentration par phase · $startedAt", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (session.status == FocusStatus.CANCELLED) Text("Session interrompue", style = MaterialTheme.typography.bodySmall)
             }
+            AtlasRule()
         }
         OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { controller.navigationState.navigate(AtlasScreenId.FOCUS) }) {
             Text("Retour au focus")

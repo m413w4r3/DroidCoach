@@ -1,4 +1,4 @@
 <resources>
     <!-- Dark by default while Android creates each Activity and before Compose is attached. -->
-    <color name="atlas_window_background">#111318</color>
+    <color name="atlas_window_background">#11100F</color>
 </resources>

@@ -1,5 +1,7 @@
 package dev.atlas.coach.app
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.sync.SyncDataCategory
+import dev.atlas.coach.app.ui.AtlasRule
 
 @Composable
 fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
@@ -46,8 +48,13 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             "ATLAS reste local par défaut. Aucune connexion n'est ouverte avant l'activation de Sync et le choix d'au moins une catégorie.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Card(modifier = Modifier.fillMaxWidth().testTag("sync_status_card")) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(
+            Modifier.fillMaxWidth().border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
+                MaterialTheme.shapes.medium,
+            ).testTag("sync_status_card").padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
                 val status = syncStatusPresentation(
                     enabled = syncEnabled,
                     hasConsent = controller.selectedSyncCategories.isNotEmpty(),
@@ -63,7 +70,6 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
                 Text(status.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Text(status.detail, style = MaterialTheme.typography.bodySmall)
                 Text("File locale : ${controller.syncPendingCount} événement(s)", style = MaterialTheme.typography.bodySmall)
-            }
         }
         Row(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp),
@@ -83,6 +89,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text("Catégories partagées", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        AtlasRule()
         SyncCategoryRow("Focus", "Démarrages, pauses et fins; sans nom de tâche.", SyncDataCategory.FOCUS, controller)
         SyncCategoryRow("Habitudes", "Validations seulement; sans nom d'habitude.", SyncDataCategory.HABIT, controller)
         SyncCategoryRow("Bibliothèque", "Ouverture seulement; sans titre ni URL.", SyncDataCategory.CONTENT, controller)
@@ -96,6 +103,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             }
         }
         Text("Backend", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        AtlasRule()
         Text("URL du backend", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth().testTag("sync_backend_url"),

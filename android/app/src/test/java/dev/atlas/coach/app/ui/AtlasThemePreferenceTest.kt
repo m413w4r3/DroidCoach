@@ -47,7 +47,7 @@ class AtlasThemePreferenceTest {
     fun amoledPaletteUsesBlackAndNearBlackSurfaces() {
         assertEquals(0xFF000000.toInt(), AtlasThemePalettes.amoled.background)
         assertEquals(0xFF000000.toInt(), AtlasThemePalettes.amoled.surface)
-        assertEquals(0xFF0A0A0A.toInt(), AtlasThemePalettes.amoled.surfaceContainerLow)
-        assertEquals(0xFF202020.toInt(), AtlasThemePalettes.amoled.surfaceContainerHighest)
+        assertEquals(0xFF0B0A08.toInt(), AtlasThemePalettes.amoled.surfaceContainerLow)
+        assertEquals(0xFF24221D.toInt(), AtlasThemePalettes.amoled.surfaceContainerHighest)
     }
 }

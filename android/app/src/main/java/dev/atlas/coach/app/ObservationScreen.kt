@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -24,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.atlas.coach.app.ui.AtlasRule
 
 @Composable
 internal fun ObservationScreen(controller: AtlasController, context: Context, requestNotifications: () -> Unit) {
@@ -62,11 +62,10 @@ internal fun ObservationScreen(controller: AtlasController, context: Context, re
             }
         }
         Text("Apps système, HOME, téléphone, services de sécurité et ATLAS sont exclus par une denylist non modifiable.", style = MaterialTheme.typography.titleSmall)
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                controller.protectedUsagePackages.sorted().forEach { packageName ->
-                    Text("Exclue · $packageName", style = MaterialTheme.typography.bodySmall)
-                }
+        AtlasRule()
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            controller.protectedUsagePackages.sorted().forEach { packageName ->
+                Text("Exclue · $packageName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text("Allowlist active : ${if (controller.usageConsentActive) controller.selectedUsagePackages.sorted().joinToString() else "aucune"}")

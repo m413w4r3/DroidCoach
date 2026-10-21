@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,8 +21,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -40,7 +41,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -54,6 +57,7 @@ import dev.atlas.coach.sync.agent.dispatch.AgentEffectRecord
 import java.util.Locale
 import dev.atlas.coach.sync.agent.context.AgentContextCategory
 import dev.atlas.coach.location.MobilitySessionStatusStore
+import dev.atlas.coach.app.ui.AtlasRule
 import kotlinx.coroutines.launch
 
 private val actionLabels = linkedMapOf(
@@ -149,20 +153,28 @@ internal fun AgentCoachScreen(
                     Text("Écrivez un message pour démarrer. Sans serveur configuré, la démonstration locale reste disponible.")
                 }
                 controller.agentConversation.forEach { entry ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(if (entry.role == AgentMessageRole.USER) "Vous" else "Coach", fontWeight = FontWeight.SemiBold)
-                            Text(entry.text)
-                            if (entry.role == AgentMessageRole.ASSISTANT) {
-                                Text(
-                                    "Provenance : ${readableProvenanceLabel(entry.contextSources, latestProvenance)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                readableContextCategories(entry.contextSources)?.let { categories ->
-                                    Text("Catégories : $categories", style = MaterialTheme.typography.bodySmall)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.padding(top = 3.dp).sizeIn(minWidth = 2.dp, minHeight = 18.dp)
+                                    .background(if (entry.role == AgentMessageRole.ASSISTANT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+                            )
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(if (entry.role == AgentMessageRole.USER) "Vous" else "Coach", style = MaterialTheme.typography.labelLarge)
+                                Text(entry.text, style = MaterialTheme.typography.bodyLarge)
+                                if (entry.role == AgentMessageRole.ASSISTANT) {
+                                    Text(
+                                        "Provenance : ${readableProvenanceLabel(entry.contextSources, latestProvenance)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    readableContextCategories(entry.contextSources)?.let { categories ->
+                                        Text("Catégories : $categories", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
                         }
+                        AtlasRule()
                     }
                 }
                 OutlinedTextField(
@@ -354,7 +366,7 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
 
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Contexte du prochain envoi", style = MaterialTheme.typography.titleLarge)
-            Text("La liste distingue le droit d'inclure une catégorie des données réellement disponibles.")
+            Text("Vérifiez les catégories autorisées et les données disponibles avant un envoi.")
             AgentContextCategory.wireValues.forEach { category ->
                 val allowed = category in contextPreview.authorizedCategories
                 val count = contextPreview.includedCategories[category]?.size ?: 0
@@ -375,14 +387,20 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                     )
                 }
                 if (showContextPayload) {
-                    Card(Modifier.fillMaxWidth().testTag("agent_next_context_payload")) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth()
+                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)), MaterialTheme.shapes.small)
+                            .testTag("agent_next_context_payload"),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        shape = MaterialTheme.shapes.small,
+                    ) {
                         Text(contextPreview.serializedPayload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             } else {
                 Text("Le détail du prochain contexte s'affichera pendant un consentement actif.", style = MaterialTheme.typography.bodySmall)
             }
-            Text("Ce payload est assemblé depuis l'état local au moment de l'envoi et réduit juste avant le transport.", style = MaterialTheme.typography.bodySmall)
+            Text("Seules les catégories autorisées et les données disponibles sont incluses avant l'envoi.", style = MaterialTheme.typography.bodySmall)
             val audit = controller.lastContextDisclosureAudit
             val sentAt = audit?.sentAtUtcMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
             Text(
@@ -409,7 +427,13 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                         )
                     }
                     if (showLastSharedContextPayload) {
-                        Card(Modifier.fillMaxWidth().testTag("agent_last_shared_context_payload")) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth()
+                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)), MaterialTheme.shapes.small)
+                                .testTag("agent_last_shared_context_payload"),
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            shape = MaterialTheme.shapes.small,
+                        ) {
                             Text(payload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -514,14 +538,18 @@ private fun AgentProposalCard(
     onPostpone: () -> Unit,
     onReject: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().testTag("agent_priority_proposal_${entry.id}"),
-        colors = CardDefaults.cardColors(
-            containerColor = if (highlighted) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant,
-        ),
+    val compactActions = LocalConfiguration.current.screenWidthDp <= 360 || LocalDensity.current.fontScale >= 1.4f
+    Column(
+        Modifier.fillMaxWidth()
+            .border(
+                BorderStroke(1.dp, if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)),
+                MaterialTheme.shapes.medium,
+            )
+            .testTag("agent_priority_proposal_${entry.id}")
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("Proposition", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(actionLabels[entry.proposal.actionType] ?: entry.proposal.actionType, style = MaterialTheme.typography.titleMedium)
             Text("Motif : ${entry.proposal.reason}")
             if (highlighted) Text("Ouverte depuis une notification", style = MaterialTheme.typography.labelMedium)
@@ -529,16 +557,25 @@ private fun AgentProposalCard(
             contextCategories?.let { Text("Catégories : $it", style = MaterialTheme.typography.bodySmall) }
             Text("État : ${proposalStateLabel(entry)}", style = MaterialTheme.typography.bodySmall)
             if (showActions) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
-                    OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
-                    TextButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
+                Text("Action à confirmer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (compactActions) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
+                        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
+                        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
+                        TextButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
+                    }
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
+                        OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
+                        TextButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
+                    }
                 }
             }
-        }
     }
 }
 
@@ -677,6 +714,9 @@ internal object ProposalActionLabels {
 @Composable
 private fun MandatePanel(controller: AtlasController) {
     val mandate = controller.agentMandate
+    val fontScale = LocalDensity.current.fontScale
+    val compactControls = fontScale >= 1.4f || LocalConfiguration.current.screenWidthDp <= 360
+    val dayColumns = if (fontScale >= 1.4f) 3 else 4
     var start by remember(mandate.version) { mutableStateOf(mandate.focusWindow.start) }
     var end by remember(mandate.version) { mutableStateOf(mandate.focusWindow.end) }
     var maxMinutes by remember(mandate.version) { mutableStateOf(mandate.focusWindow.maxMinutesPerSession.toString()) }
@@ -685,6 +725,7 @@ private fun MandatePanel(controller: AtlasController) {
     var days by remember(mandate.version) { mutableStateOf(mandate.focusWindow.days) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Mandat et autonomie", style = MaterialTheme.typography.titleLarge)
+        AtlasRule()
         Text("Mandat v2 · ${mandate.id} · version ${mandate.version}")
         if (mandate.revoked || mandate.suspended) {
             Text(if (mandate.revoked) "Mandat révoqué." else "Mandat suspendu.")
@@ -704,6 +745,7 @@ private fun MandatePanel(controller: AtlasController) {
         Text(if (mandate.mode == AgentMode.PROPOSALS_ONLY) "Mode : Propositions seulement" else "Mode : Actions préautorisées dans les bornes locales")
 
         Text("Actions autorisées", style = MaterialTheme.typography.titleMedium)
+        AtlasRule()
         actionLabels.forEach { (wire, label) ->
             Row(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
@@ -715,29 +757,58 @@ private fun MandatePanel(controller: AtlasController) {
         }
 
         Text("Fenêtre et quotas Focus", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            listOf("L" to 1, "Ma" to 2, "Me" to 3, "J" to 4, "V" to 5, "S" to 6, "D" to 7).forEach { (label, day) ->
-                Row(modifier = Modifier.sizeIn(minHeight = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = day in days, onCheckedChange = { checked ->
-                        days = if (checked) days + day else days - day
-                    })
-                    Text(label, style = MaterialTheme.typography.labelSmall)
+        AtlasRule()
+        val mandateDays = listOf("L" to 1, "Ma" to 2, "Me" to 3, "J" to 4, "V" to 5, "S" to 6, "D" to 7)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            mandateDays.chunked(dayColumns).forEach { dayRow ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    dayRow.forEach { (label, day) ->
+                        Row(
+                            modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = day in days, onCheckedChange = { checked ->
+                                days = if (checked) days + day else days - day
+                            })
+                            Text(label, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(start, { start = it }, modifier = Modifier.weight(1f), label = { Text("Début HH:mm") }, singleLine = true)
-            OutlinedTextField(end, { end = it }, modifier = Modifier.weight(1f), label = { Text("Fin HH:mm") }, singleLine = true)
+        if (compactControls) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(start, { start = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Début HH:mm") }, singleLine = true)
+                OutlinedTextField(end, { end = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Fin HH:mm") }, singleLine = true)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(start, { start = it }, modifier = Modifier.weight(1f), label = { Text("Début HH:mm") }, singleLine = true)
+                OutlinedTextField(end, { end = it }, modifier = Modifier.weight(1f), label = { Text("Fin HH:mm") }, singleLine = true)
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                maxMinutes, { maxMinutes = it }, modifier = Modifier.weight(1f), label = { Text("Minutes/session") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-            OutlinedTextField(
-                maxSessions, { maxSessions = it }, modifier = Modifier.weight(1f), label = { Text("Sessions/jour") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
+        if (compactControls) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    maxMinutes, { maxMinutes = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Minutes/session") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    maxSessions, { maxSessions = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Sessions/jour") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    maxMinutes, { maxMinutes = it }, modifier = Modifier.weight(1f), label = { Text("Minutes/session") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    maxSessions, { maxSessions = it }, modifier = Modifier.weight(1f), label = { Text("Sessions/jour") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
         }
         OutlinedTextField(
             maxChanges, { maxChanges = it }, modifier = Modifier.fillMaxWidth(),
@@ -760,6 +831,7 @@ private fun SharedDataPanel(controller: AtlasController) {
     val authorizedCategories = controller.agentContextPreview.authorizedCategories
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Données partagées avec le coach", style = MaterialTheme.typography.titleLarge)
+        AtlasRule()
         Text("Les catégories cochées autorisent les prochains envois. Les décocher arrête le partage de cette catégorie.")
         dataCategoryLabels.forEach { (category, label) ->
             Row(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -811,13 +883,12 @@ private fun EffectHistoryPanel(entries: List<AgentEffectRecord>) {
         Text("Journal des effets", style = MaterialTheme.typography.titleLarge)
         if (entries.isEmpty()) Text("Aucun effet d'agent enregistré.")
         entries.take(20).forEach { entry ->
-            Surface(tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(actionLabels[entry.actionType] ?: entry.actionType, fontWeight = FontWeight.Medium)
-                    Text("${entry.state.wireValue} · ${entry.displayTimestamp()}")
-                    Text(entry.effect, style = MaterialTheme.typography.bodySmall)
-                }
+            Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(actionLabels[entry.actionType] ?: entry.actionType, style = MaterialTheme.typography.titleSmall)
+                Text("${entry.state.wireValue} · ${entry.displayTimestamp()}")
+                Text(entry.effect, style = MaterialTheme.typography.bodySmall)
             }
+            AtlasRule()
         }
     }
 }

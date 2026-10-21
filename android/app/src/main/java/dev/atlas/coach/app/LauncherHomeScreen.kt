@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -59,6 +61,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Density
@@ -69,6 +72,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.atlas.coach.app.ui.AtlasPrimaryButton
+import dev.atlas.coach.app.ui.AtlasEngravingMark
 import dev.atlas.coach.launcher.AndroidLauncherCatalog
 import dev.atlas.coach.launcher.LauncherAppModel
 import dev.atlas.coach.launcher.LauncherAppRules
@@ -285,6 +289,155 @@ private fun LauncherHomeContent(
                         }
                     }
                 }
+            } else if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                Row(
+                    modifier = Modifier.fillMaxSize().clipToBounds()
+                        .testTag("launcher_home_scroll_region")
+                        .padding(top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().verticalHomeSwipe(density, drawerOpen, onToggleDrawer)
+                                .testTag("launcher_swipe_header"),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text("ATLAS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 2.sp)
+                                AtlasEngravingMark()
+                            }
+                            Text(
+                                clock,
+                                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Serif, fontSize = 32.sp, lineHeight = 36.sp),
+                                fontWeight = FontWeight.Light,
+                                letterSpacing = 1.sp,
+                            )
+                            Text(
+                                LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRANCE))
+                                    .replaceFirstChar { it.uppercase(Locale.FRANCE) },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+
+                        activeFocus?.let { card ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("FOCUS ACTIF", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(card.body, style = MaterialTheme.typography.bodyMedium)
+                                Button(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_focus_card_action"),
+                                    onClick = { openFocus() },
+                                ) { Text(card.actionLabel) }
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("AUJOURD'HUI", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                agentState.directiveStatusLabel(),
+                                modifier = Modifier.testTag("launcher_directive_status"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(
+                                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
+                                    .semantics {
+                                        contentDescription = "Directive : ${truncateHomeDirectiveTitle(agentState.directive.title)}. Afficher le détail."
+                                    },
+                                onClick = { showDirectiveDetails = true },
+                            ) {
+                                Text(
+                                    truncateHomeDirectiveTitle(agentState.directive.title),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (agentState.directive.body.isNotBlank()) {
+                                Text(
+                                    agentState.directive.body,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            val directiveAction: @Composable () -> Unit = {
+                                val action: () -> Unit = {
+                                    when (agentState.directive.primaryAction) {
+                                        HomePrimaryAction.START_FOCUS -> openFocus()
+                                        HomePrimaryAction.OPEN_COACH -> openCoach()
+                                        HomePrimaryAction.NONE -> showDirectiveDetails = true
+                                    }
+                                }
+                                if (activeFocus == null) {
+                                    Button(
+                                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
+                                        onClick = action,
+                                        enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                                    ) { Text(agentState.directive.primaryAction.homeActionLabel()) }
+                                } else {
+                                    TextButton(
+                                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
+                                        onClick = action,
+                                        enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                                    ) { Text(agentState.directive.primaryAction.homeActionLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                            }
+                            directiveAction()
+                        }
+
+                        agentState.focusCard?.takeUnless(HomeAgentCard::isActiveFocus)?.let { card ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(card.title, style = MaterialTheme.typography.titleSmall)
+                                Text(card.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = {
+                                    openHomeCard(card.action, openFocus, openCoach, openLibrary)
+                                }) { Text(card.actionLabel, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                        launcherMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("APPLICATIONS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (pinnedApps.isEmpty()) {
+                            Text(
+                                "Aucun favori.",
+                                modifier = Modifier.testTag("launcher_favorites_empty"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            pinnedApps.take(favoriteLimit).forEach { app ->
+                                TextButton(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_favorite_${app.appPackage}")
+                                        .semantics {
+                                            contentDescription = "Ouvrir l'application favorite ${app.appLabel}"
+                                            customActions = listOf(CustomAccessibilityAction("Retirer ${app.appLabel} des favoris") {
+                                                controller.toggleLauncherPin(app.appPackage)
+                                                true
+                                            })
+                                        },
+                                    onClick = { onLaunchApp(app) },
+                                ) {
+                                    Text(app.appLabel, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
                 Column(
                     modifier = Modifier.fillMaxSize().clipToBounds()
@@ -298,10 +451,17 @@ private fun LauncherHomeContent(
                             .testTag("launcher_swipe_header"),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("ATLAS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 2.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("ATLAS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 2.sp)
+                            AtlasEngravingMark()
+                        }
                         Text(
                             clock,
-                            style = MaterialTheme.typography.headlineLarge.copy(fontSize = 46.sp),
+                            style = MaterialTheme.typography.headlineLarge.copy(fontFamily = FontFamily.Serif, fontSize = 46.sp),
                             fontWeight = FontWeight.Light,
                             letterSpacing = 1.sp,
                         )
@@ -494,6 +654,7 @@ private fun HomeFooterAction(label: String, description: String, tag: String, mo
         modifier = modifier.fillMaxWidth().sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .semantics { contentDescription = description }
             .testTag(tag),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
         onClick = onClick,
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)

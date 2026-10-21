@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +49,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
+import dev.atlas.coach.app.ui.AtlasRule
 
 /** Agent input contract for a proposed, still user-confirmed local Focus session. */
 data class ProposedFocusSession(
@@ -399,6 +401,7 @@ internal fun FocusRoutinesScreen(controller: AtlasController) {
         }
     }
     val activeIds = controller.activeFocusRoutines(now).mapTo(mutableSetOf()) { it.id }
+    val compactInputs = LocalConfiguration.current.screenWidthDp <= 360 || LocalDensity.current.fontScale >= 1.4f
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Une routine envoie une proposition. Elle ne démarre jamais un focus automatiquement; aucun usage d'app n'est lu.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -407,9 +410,16 @@ internal fun FocusRoutinesScreen(controller: AtlasController) {
             return@Column
         }
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nom de la routine") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = start, onValueChange = { start = it }, label = { Text("Début · HH:mm") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(value = end, onValueChange = { end = it }, label = { Text("Fin · HH:mm") }, singleLine = true, modifier = Modifier.weight(1f))
+        if (compactInputs) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = start, onValueChange = { start = it }, label = { Text("Début · HH:mm") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = end, onValueChange = { end = it }, label = { Text("Fin · HH:mm") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = start, onValueChange = { start = it }, label = { Text("Début · HH:mm") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = end, onValueChange = { end = it }, label = { Text("Fin · HH:mm") }, singleLine = true, modifier = Modifier.weight(1f))
+            }
         }
         OutlinedTextField(value = minutes, onValueChange = { minutes = it }, label = { Text("Durée du focus · minutes") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -453,6 +463,7 @@ internal fun FocusRoutinesScreen(controller: AtlasController) {
                     weekdaysOnly = routine.schedule.type == RoutineSchedule.ScheduleType.WEEKLY
                 },
             )
+            AtlasRule()
         }
     }
 }
@@ -466,20 +477,27 @@ private fun RoutineCard(
     onEdit: () -> Unit,
 ) {
     val schedule = routine.schedule
+    val compactActions = LocalConfiguration.current.screenWidthDp <= 360 || LocalDensity.current.fontScale >= 1.4f
     val timeRange = if (schedule.type == RoutineSchedule.ScheduleType.MANUAL) "Manuelle" else {
         "${schedule.time?.format(DateTimeFormatter.ofPattern("HH:mm"))}–${schedule.endTime?.format(DateTimeFormatter.ofPattern("HH:mm"))}"
     }
     val days = if (schedule.type == RoutineSchedule.ScheduleType.WEEKLY) " · lundi–vendredi" else " · chaque jour"
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(routine.name, style = MaterialTheme.typography.titleMedium)
-            Text("$timeRange$days · ${routine.focusMinutes} min")
-            Text("Prochain déclenchement : ${nextTrigger ?: "aucun (désactivée ou horaire manuel)"}", style = MaterialTheme.typography.bodySmall)
-            Text(if (isActive) "Plage active · action à confirmer" else if (routine.isEnabled) "En attente de sa plage" else "Routine désactivée", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Routine active")
-                Switch(checked = routine.isEnabled, onCheckedChange = { controller.setFocusRoutineEnabled(routine.id, it) })
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(routine.name, style = MaterialTheme.typography.titleMedium)
+        Text("$timeRange$days · ${routine.focusMinutes} min")
+        Text("Prochain déclenchement : ${nextTrigger ?: "aucun (désactivée ou horaire manuel)"}", style = MaterialTheme.typography.bodySmall)
+        Text(if (isActive) "Plage active · action à confirmer" else if (routine.isEnabled) "En attente de sa plage" else "Routine désactivée", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Routine active")
+            Switch(checked = routine.isEnabled, onCheckedChange = { controller.setFocusRoutineEnabled(routine.id, it) })
+        }
+        if (compactActions) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (isActive && routine.isEnabled) Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { controller.startFocusRoutine(routine.id) }) { Text("Démarrer") }
+                OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = onEdit) { Text("Modifier") }
+                OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = { controller.deleteFocusRoutine(routine.id) }) { Text("Supprimer") }
             }
+        } else {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (isActive && routine.isEnabled) Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = { controller.startFocusRoutine(routine.id) }) { Text("Démarrer") }
                 OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = onEdit) { Text("Modifier") }

@@ -1,6 +1,9 @@
 package dev.atlas.coach.app.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBars
@@ -40,14 +44,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import android.app.Activity
 import android.content.Context
@@ -68,23 +78,18 @@ enum class AtlasStatusKind { ACTIVE, SIMULATED, AUTHORIZED, UNAVAILABLE }
 @Composable
 fun AtlasStatus(label: String, kind: AtlasStatusKind, modifier: Modifier = Modifier) {
     val colors = androidx.compose.material3.MaterialTheme.colorScheme
-    val background = when (kind) {
-        AtlasStatusKind.ACTIVE, AtlasStatusKind.AUTHORIZED -> colors.primaryContainer
-        AtlasStatusKind.SIMULATED -> colors.surfaceVariant
-        AtlasStatusKind.UNAVAILABLE -> colors.errorContainer
-    }
     val foreground = when (kind) {
-        AtlasStatusKind.ACTIVE, AtlasStatusKind.AUTHORIZED -> colors.onPrimaryContainer
+        AtlasStatusKind.ACTIVE, AtlasStatusKind.AUTHORIZED -> colors.primary
         AtlasStatusKind.SIMULATED -> colors.onSurfaceVariant
-        AtlasStatusKind.UNAVAILABLE -> colors.onErrorContainer
+        AtlasStatusKind.UNAVAILABLE -> colors.error
     }
-    Surface(
+    Row(
         modifier = modifier.semantics { contentDescription = "État : $label" },
-        color = background,
-        contentColor = foreground,
-        shape = androidx.compose.material3.MaterialTheme.shapes.small,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+        Box(Modifier.size(width = 2.dp, height = 16.dp).background(foreground))
+        Text(label, style = androidx.compose.material3.MaterialTheme.typography.labelMedium, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -92,7 +97,61 @@ fun AtlasStatus(label: String, kind: AtlasStatusKind, modifier: Modifier = Modif
 fun AtlasSection(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AtlasSpacing.small)) {
         Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+        AtlasRule()
         content()
+    }
+}
+
+@Composable
+fun AtlasRule(modifier: Modifier = Modifier, color: Color = androidx.compose.material3.MaterialTheme.colorScheme.outline.copy(alpha = 0.42f)) {
+    Spacer(modifier.fillMaxWidth().height(1.dp).background(color))
+}
+
+/** An original, small botanical line drawing used as ATLAS's engraved signature. */
+@Composable
+fun AtlasEngravingMark(modifier: Modifier = Modifier) {
+    val ink = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+    Canvas(modifier.size(44.dp).semantics { invisibleToUser() }) {
+        val strokeWidth = 0.9.dp.toPx()
+        val stem = Path().apply {
+            moveTo(size.width * 0.18f, size.height * 0.87f)
+            cubicTo(size.width * 0.43f, size.height * 0.66f, size.width * 0.51f, size.height * 0.34f, size.width * 0.79f, size.height * 0.12f)
+        }
+        drawPath(stem, ink, style = Stroke(width = strokeWidth))
+
+        fun leaf(startX: Float, startY: Float, tipX: Float, tipY: Float, width: Float, side: Float) {
+            val dx = tipX - startX
+            val dy = tipY - startY
+            val length = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
+            val nx = -dy / length * width * side
+            val ny = dx / length * width * side
+            val leafPath = Path().apply {
+                moveTo(startX, startY)
+                cubicTo(startX + dx * 0.28f + nx, startY + dy * 0.28f + ny, startX + dx * 0.68f + nx, startY + dy * 0.68f + ny, tipX, tipY)
+                cubicTo(startX + dx * 0.72f - nx * 0.65f, startY + dy * 0.72f - ny * 0.65f, startX + dx * 0.30f - nx * 0.45f, startY + dy * 0.30f - ny * 0.45f, startX, startY)
+                close()
+            }
+            drawPath(leafPath, ink, style = Stroke(width = strokeWidth))
+            drawLine(ink, androidx.compose.ui.geometry.Offset(startX, startY), androidx.compose.ui.geometry.Offset(tipX, tipY), strokeWidth * 0.75f)
+            for (index in 1..3) {
+                val t = index / 4f
+                val x = startX + dx * t
+                val y = startY + dy * t
+                val hatch = width * (1f - t) * 0.28f
+                drawLine(
+                    ink.copy(alpha = 0.78f),
+                    androidx.compose.ui.geometry.Offset(x - dy / length * hatch, y + dx / length * hatch),
+                    androidx.compose.ui.geometry.Offset(x + dy / length * hatch * 0.6f, y - dx / length * hatch * 0.6f),
+                    strokeWidth * 0.55f,
+                )
+            }
+        }
+
+        leaf(size.width * 0.39f, size.height * 0.64f, size.width * 0.15f, size.height * 0.53f, size.width * 0.16f, 1f)
+        leaf(size.width * 0.48f, size.height * 0.51f, size.width * 0.73f, size.height * 0.54f, size.width * 0.14f, -1f)
+        leaf(size.width * 0.59f, size.height * 0.36f, size.width * 0.36f, size.height * 0.23f, size.width * 0.14f, 1f)
+        leaf(size.width * 0.69f, size.height * 0.23f, size.width * 0.91f, size.height * 0.29f, size.width * 0.12f, -1f)
+        drawCircle(ink, radius = strokeWidth * 1.2f, center = androidx.compose.ui.geometry.Offset(size.width * 0.79f, size.height * 0.12f))
     }
 }
 
@@ -106,7 +165,7 @@ fun AtlasSettingRow(
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val cardModifier = modifier.fillMaxWidth().sizeIn(minHeight = 56.dp)
-    val cardColors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant)
+    val cardColors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow)
     val cardContent: @Composable ColumnScope.() -> Unit = {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = AtlasSpacing.medium, vertical = 10.dp),
@@ -225,6 +284,24 @@ private fun AtlasTopBar(
     onBack: () -> Unit,
     onEmergencyPause: () -> Unit,
 ) {
+    val configuration = LocalConfiguration.current
+    val compactForLargeText = configuration.screenWidthDp <= 320 && configuration.fontScale >= 1.5f
+    val compactControlStyle = androidx.compose.material3.MaterialTheme.typography.labelLarge.copy(
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+    )
+    val titleStyle = androidx.compose.material3.MaterialTheme.typography.titleMedium.let { style ->
+        if (compactForLargeText) style.copy(fontSize = 9.sp, lineHeight = 14.sp) else style
+    }
+    val compactTitle = when (title) {
+        "Tableau de bord" -> "Tableau"
+        "Mandat du Coach" -> "Mandat"
+        "Données partagées" -> "Données"
+        "Journal des effets" -> "Journal"
+        "Diagnostic avancé" -> "Diag."
+        "Partage backend" -> "Sync"
+        else -> title
+    }
     Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
         Row(
             modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
@@ -233,14 +310,19 @@ private fun AtlasTopBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (canGoBack) {
-                TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) { Text("Retour") }
+                TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                    Text("Retour", maxLines = 1, style = if (compactForLargeText) compactControlStyle else androidx.compose.material3.MaterialTheme.typography.labelLarge)
+                }
             }
             Text(
-                title,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                if (compactForLargeText) compactTitle else title,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics {
+                    if (compactForLargeText) contentDescription = title
+                },
+                style = titleStyle,
                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
+                maxLines = if (compactForLargeText) 1 else 2,
+                softWrap = !compactForLargeText,
                 overflow = TextOverflow.Clip,
             )
             TextButton(
@@ -249,7 +331,13 @@ private fun AtlasTopBar(
                     contentDescription = if (emergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence de 30 minutes"
                 },
                 colors = ButtonDefaults.textButtonColors(contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant),
-            ) { Text(if (emergencyPaused) "Fin" else "Urgence", maxLines = 1) }
+            ) {
+                Text(
+                    if (emergencyPaused) "Fin" else "Urgence",
+                    maxLines = 1,
+                    style = if (compactForLargeText) compactControlStyle else androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                )
+            }
         }
     }
 }
