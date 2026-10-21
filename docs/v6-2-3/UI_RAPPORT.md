@@ -51,47 +51,53 @@ Captures supplémentaires après refonte : [Coach à l'état initial](captures/a
 
 La comparaison des captures réelles montre que le grand CTA plein du HOME devient un libellé souligné; l'état Focus suit le même traitement. Le Coach garde les actions en texte, distingue l'acceptation du refus et place un filet sous l'en-tête et au-dessus des onglets. À 320 dp et 2×, Apps, Coach, Pause et Plus occupent deux lignes lisibles.
 
-## Vérifications et sorties
+## Revue corrective UI-R2 — 2026-10-21
+
+Base de cette correction : commit `8e94802` (UI-R1). Aucun fichier `androidTest` n'a été modifié.
+
+- Dans [AtlasScreens.kt](../../android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt), le titre de chaque habitude et son action de validation sont maintenant sur la même ligne. L'action garde ses libellés exacts, sa description accessible, son callback et une cible minimale de 48 dp. Cela maintient l'action dans la zone visible quand Compose restaure le défilement à hauteur du titre.
+- Activer « Routines de focus locales » ne lance plus immédiatement l'activité système de permission Android, qui masquait l'interface Compose au test suivant. La demande de permission reste disponible dans « Notifications facultatives » et par les commandes dédiées aux notifications; aucune capacité ni permission n'est retirée.
+- Aucun tag de test n'a changé. La recherche de `habit_input`, « Valider aujourd'hui », « Annuler aujourd'hui », `CAP_FOCUS_ROUTINES` et « Routines de focus » dans `androidTest` trouve [AtlasLaunchTest.kt](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt), [AtlasVisualCaptureTest.kt](../../android/app/src/androidTest/java/dev/atlas/coach/app/AtlasVisualCaptureTest.kt) et [V6RealAgentE2eInstrumentationTest.kt](../../android/app/src/androidTest/java/dev/atlas/coach/app/V6RealAgentE2eInstrumentationTest.kt). `LauncherPresentationTest` est également demandé explicitement pour cette revue.
 
 | Vérification | Statut | Résultat observé |
 | --- | --- | --- |
-| HEAD de base | PASS | `aa9b2daf703d7653b33d6433e3d97b915c955731` |
-| Compilation et APK debug | PASS | La commande combinée ci-dessous a exécuté `assembleDebug`; `compileDebugKotlin` exécuté et APK installé sur l'AVD. |
-| Tests JVM | PASS | Commande combinée ci-dessous; 317 tests, 0 échec, 0 erreur, 0 ignoré. |
-| Android lint | PASS | Commande combinée ci-dessous; 0 erreur et 53 avertissements non bloquants dans le [rapport Lint](../../android/app/build/reports/lint-results-debug.html). |
-| Propreté du diff | PASS | `git diff --check`; aucune sortie. |
-| Contrôle visuel HOME/Coach/mandat/partage | PASS | Captures réelles comparées sur l'AVD indiqué ci-dessous. |
-| Largeurs 320 dp et 360 dp | PASS | HOME contrôlé en 1×; le pied garde ses quatre accès sans chevauchement. Les listes longues restent défilables. |
-| Police système 2× | PASS | Captures HOME 320 et 360 dp; le pied passe sur deux lignes et les quatre accès restent lisibles. Les actions Coach sont empilées. |
-| Rotation paysage | PASS | HOME contrôlé à 800 × 360 dp; date, état, prochaine étape, CTA et trois favoris apparaissent sans troncature bloquante. |
-| `LauncherPresentationTest` | PASS | AVD `emulator-5582`; 2 tests, 0 échec. Le test de police 2× confirme aussi les cibles HOME ≥ 48 dp. |
-| `AtlasLaunchTest` | FAIL | AVD `emulator-5582`; 12 tests, 10 réussis, 2 échecs. Détails ci-dessous; aucun fichier `androidTest` n'a été changé. |
-| Téléphone physique | NOT_RUN | Aucun téléphone n'a été utilisé; aucun résultat Pixel n'est revendiqué. |
+| Compilation debug et APK AndroidTest | PASS | `assembleDebug` et `assembleDebugAndroidTest` terminés dans le lot Gradle courant. |
+| Tests JVM | PASS | 317 tests, 0 échec, 0 erreur, 0 ignoré. |
+| Android lint | PASS | 0 erreur, 53 avertissements. |
+| `git diff --check` | PASS | Aucune sortie. |
+| `AtlasLaunchTest` avant correction, sur 8e94802 | FAIL | Rapport pré-correction : 12 tests, 10 réussis, 2 échecs aux lignes 137 et 290. |
+| `AtlasLaunchTest` après correction | BLOCKED | Pas relancé : l'image API 34 ATD a forcé 2560 Mo malgré `-memory 2048`; le garde-fou a arrêté le lot avant instrumentation. |
+| `LauncherPresentationTest` après correction | BLOCKED | Même blocage de capacité AVD; aucune instrumentation après correction. |
+| Classes UI repérées par `rg` (`AtlasVisualCaptureTest`, `V6RealAgentE2eInstrumentationTest`) | BLOCKED | Même blocage de capacité AVD; aucune instrumentation après correction. |
+| Vérification de la régression sur la base aa9b2da | BLOCKED | Le test de comparaison n'a pas démarré, pour le même blocage mémoire. Aucune attribution au harnais n'est affirmée. |
+| Scénarios instrumentés avec comptes réels | NOT_RUN | Aucun test instrumenté après correction n'a été exécuté et aucun compte réel n'a été utilisé. |
+| Arrêt et nettoyage de l'AVD | PASS | Le lot a arrêté et supprimé son AVD temporaire; `adb devices -l` sous le verrou affiche uniquement « List of devices attached », sans appareil. |
+| Arrêt des démons Gradle | PASS | `./gradlew --stop` a indiqué `1 Daemon stopped`. |
 
-Commandes principales lancées depuis `android/` :
+Commandes lancées depuis `android/` :
 
 ```text
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-BUILD SUCCESSFUL in 50s
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug --max-workers=1 --console=plain
+BUILD SUCCESSFUL in 1m 36s
+81 actionable tasks: 15 executed, 66 up-to-date
+JVM XML: 57 fichiers, 317 tests, 0 failure, 0 error, 0 skipped
+Lint XML: 53 issues, 53 warnings, 0 errors
 
-ANDROID_SERIAL=emulator-5582 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.app.LauncherPresentationTest
-BUILD SUCCESSFUL; 2 tests, 0 failure
-
-ANDROID_SERIAL=emulator-5582 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.AtlasLaunchTest
-BUILD FAILED; 12 tests, 2 failures
-
-ANDROID_SERIAL=emulator-5582 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.AtlasLaunchTest#directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline
-BUILD FAILED; the assertion at line 137 reproduces in isolation
+./gradlew --stop
+Stopping Daemon(s)
+1 Daemon stopped
 ```
 
-Échecs `AtlasLaunchTest` observés sur le code final : `directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline` ne trouve pas « Valider aujourd'hui » après recreation ([AtlasLaunchTest.kt:137](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:137)); `focusRoutineIsCapabilityGatedAndRequiresExplicitStart` ne retrouve ensuite aucune hiérarchie Compose lorsqu'il sélectionne Plus ([AtlasLaunchTest.kt:290](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:290)). Le premier échec a aussi été relancé seul et reste reproductible. Le second est rapporté séparément sans conclure sur sa cause.
+Tentative instrumentée exécutée sous `flock -x /tmp/v623-emulator.lock` avec l'AVD `atlas_v623_ui_api34_atd` sur le port 5582 et le paramètre `-memory 2048`. Le journal `/tmp/v623-emulator-5582-atd.log` indique `Increasing RAM size to 2560MB`; l'instrumentation n'a donc pas été lancée. L'AVD temporaire a été arrêté et supprimé par le nettoyage du lot. Aucun autre AVD n'était actif et le port 5583 n'a pas été utilisé.
 
-Contrôle UI effectué avec `adb -s emulator-5582`, AVD Android API 34 `atlas_v623_ui_api34`, écran 1080 × 2400 à 480 dpi (360 dp), 960 × 2400 (320 dp), puis 2400 × 1080 (800 × 360 dp). Police réglée à `font_scale=2.0` pour les captures agrandies. L'APK installé a répondu `Success`. Le port réservé 5583 n'a pas été utilisé. L'AVD personnel n'a pas été démarré.
+Le rapport XML pré-correction de `AtlasLaunchTest` montre que le premier échec était « The component is not displayed! » après recreation ([AtlasLaunchTest.kt:137](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:137)). Pour le second, le logcat montre l'ouverture de `GrantPermissionsActivity` juste après l'activation de la capacité et avant l'échec « No compose hierarchies found » à [AtlasLaunchTest.kt:290](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:290). La correction retire ce lancement automatique de permission de cette capacité; faute de pouvoir lancer l'AVD sous la limite demandée, le résultat n'a pas été confirmé par instrumentation. Aucun résultat identique sur `aa9b2da` n'est revendiqué.
+
+Les captures R1 déjà relues restent dans `captures/apres/`; cette correction touche l'écran Habitudes et le moment de demande de permission, sans modifier les vues HOME ou Coach capturées. Aucune nouvelle capture n'a été prise pendant cette revue bloquée par la limite de mémoire.
 
 ## Limites
 
-- `lintDebug` réussit avec 53 avertissements et 0 erreur. Le `UseKtx` d'[AtlasScreens.kt:668](../../android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt:668) est inchangé; les autres avertissements concernent la configuration Gradle/manifest et des fichiers hors périmètre UI.
-- `AtlasLaunchTest` conserve deux échecs décrits ci-dessus. Les tests instrumentés n'ont pas été modifiés.
-- À 320 dp et 2×, la zone HOME est défilable; les contenus sous le pied fixe s'atteignent par défilement. Le pied reste visible sur deux lignes.
-- L'accessibilité a été contrôlée visuellement et par les assertions de hauteur de `LauncherPresentationTest`; aucune session TalkBack n'a été exécutée.
-- Pas de vérification sur matériel physique. Le rendu réel peut varier selon densité, police système et constructeur.
+- Les changements UI-R2 compilent et passent les tests JVM et lint. Le passage de l'AVD a été limité par son augmentation automatique à 2560 Mo; les tests instrumentés après correction restent donc `BLOCKED`.
+- Les deux échecs pré-correction sont conservés comme historique de la régression; aucune suite après correction ni comparaison `aa9b2da` n'a été exécutée.
+- Aucun téléphone physique ni compte réel n'a été utilisé. Aucun résultat Pixel n'est revendiqué.
+- `lintDebug` passe avec 53 avertissements et 0 erreur. Le `UseKtx` d'[AtlasScreens.kt](../../android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt) est inchangé; les autres avertissements concernent la configuration Gradle/manifest et des fichiers hors périmètre UI.
+- Les captures HOME/Coach/Mandat acceptées en R1 n'ont pas été régénérées. Aucune session TalkBack n'a été exécutée.

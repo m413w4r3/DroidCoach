@@ -394,7 +394,26 @@ internal fun HabitsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMET
             val history = controller.habits.history(habit.id, LocalDate.now(), controller.historyDays)
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(habit.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            habit.name,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        OutlinedButton(
+                            modifier = Modifier.weight(0.8f).sizeIn(minHeight = 48.dp).semantics {
+                                contentDescription = if (checked) "Annuler la validation de ${habit.name}" else "Valider ${habit.name} aujourd'hui"
+                            },
+                            onClick = { controller.toggleHabitToday(habit) },
+                        ) {
+                            Text(if (checked) "Annuler aujourd'hui" else "Valider aujourd'hui")
+                        }
+                    }
                     Text(habit.schedule.summaryLabel(), style = MaterialTheme.typography.bodySmall)
                     Text(controller.habitHistorySummary(habit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Calendrier récent · " + history.days.takeLast(7).joinToString("  ") { day ->
@@ -413,9 +432,6 @@ internal fun HabitsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMET
                             editingHabitId = habit.id
                         }) { Text("Modifier") }
                         OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = { controller.archiveHabit(habit.id) }) { Text("Supprimer") }
-                    }
-                    OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).semantics { contentDescription = if (checked) "Annuler la validation de ${habit.name}" else "Valider ${habit.name} aujourd'hui" }, onClick = { controller.toggleHabitToday(habit) }) {
-                        Text(if (checked) "Annuler aujourd'hui" else "Valider aujourd'hui")
                     }
                 }
             }
@@ -602,7 +618,7 @@ internal fun SettingsScreen(
             CapabilityRow("Bibliothèque", controller, AtlasController.CAP_CONTENT)
             CapabilityRow("Coach local", controller, AtlasController.CAP_COACH)
             CapabilityRow("Routines de focus locales", controller, AtlasController.CAP_FOCUS_ROUTINES,
-                onChanged = { enabled -> controller.setCapability(AtlasController.CAP_FOCUS_ROUTINES, enabled); if (enabled) requestNotifications() })
+                onChanged = { enabled -> controller.setCapability(AtlasController.CAP_FOCUS_ROUTINES, enabled) })
         }
         AtlasSection("Apparence") {
             dev.atlas.coach.app.ui.ThemePreferenceSection()
