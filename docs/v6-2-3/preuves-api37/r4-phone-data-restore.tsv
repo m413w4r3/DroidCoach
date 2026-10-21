@@ -1,0 +1,8 @@
+step	status	files	sha256_or_count	evidence
+backup	PASS	20 tar entries; 8 regular files	archive=06c1e2d64e8d394d1adc1178bb184cbef82b51e89a8618b17ba7e49bec62f7d5; size=179712	Outside repo: /tmp/v623-qa/phone-backup/20261021T161242Z/atlas-data.tar; tar -tf succeeded
+restore_before_launch	PASS	8/8 regular file contents identical	manifest=17a531c43d948929f39eaf54745e465903262c8ae5a64494918b76dcc715b5e5	Run-as tar extraction completed; two test-created prefs absent from backup were removed before comparison
+launch_verification	PASS	MainActivity foreground	Status: ok; topResumedActivity=MainActivity	adb am start -W succeeded after data restore
+after_launch_compare	FAIL	8 files present; 3 contents changed	manifest=bb6cfb2e899234b10d6f9abf26ae75bf568645a6fab2ba9de4bf8f52586d6880	Only files/profileInstalled and no_backup/androidx.work.workdb-shm / no_backup/androidx.work.workdb-wal differed
+final_reapply	NOT_RUN	-	-	Device disconnected before force-stop/reapply; no final content equality claim
+test_package	PASS	dev.atlas.coach.test absent; dev.atlas.coach present	pm list packages returned one package:dev.atlas.coach	Uninstall command printed DELETE_FAILED_INTERNAL_ERROR; post-command inventory verified desired package state
+device_final_connection	BLOCKED	-	-	adb devices -l empty after user unplugged Pixel

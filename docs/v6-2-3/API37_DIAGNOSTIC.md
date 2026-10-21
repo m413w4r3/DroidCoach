@@ -1,6 +1,49 @@
 # Diagnostic Android 17 — ATLAS V6.2.3
 
-Date : 21 octobre 2026. Les logs complets restent hors dépôt sous `/tmp/v623-qa/`. **La section QA-R3 ci-dessous est le résultat courant sur la branche intégrée `53ba3a629b68d87749f04a05c34b62a1ec0ab1f3`; les résultats QA-R2 plus bas sont historiques et ne qualifient pas ce code.**
+Date : 21 octobre 2026. Les logs complets restent hors dépôt sous `/tmp/v623-qa/`. **La qualification courante est QA-R4 sur le commit intégré `7c12ad17f8340d775924a0b986dd44ac35b79722`. Les résultats QA-R3 ci-dessous décrivent le commit `53ba3a629b68d87749f04a05c34b62a1ec0ab1f3`; les résultats QA-R2 plus bas sont historiques.**
+
+## Requalification QA-R4 — commit intégré 7c12ad1
+
+### Pré-vol, sauvegarde et installation sur le Pixel
+
+Le premier contrôle avait vu `45301FDAS001QT` puis perdu la connexion après la lecture batterie (`75 %`). Après le signalement utilisateur et un nouvel `adb devices -l`, le Pixel est revenu en état `device`. Le pré-vol repris, toujours en lecture seule, a obtenu : batterie 82 %, écran `SCREEN_STATE_ON`, état interactif `AWAKE`, `showing=false`, `inputRestricted=false`, Android 17/API 37 (`CP3A.260905.009`, correctif `2026-09-05`), HOME `com.google.android.apps.nexuslauncher`, ATLAS `0.1.0`, debuggable, version de signature v2. `stay_on_while_plugged_in=7`; USB stay-awake était déjà actif et `svc power stayon usb` n'a pas été nécessaire.
+
+Le SHA-256 du certificat installé, de l'APK intégré et de l'APK androidTest était identique : `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`. L'inventaire ciblé ne contenait que `dev.atlas.coach` avant l'installation. La sauvegarde a précédé toute écriture : `/tmp/v623-qa/phone-backup/20261021T161242Z/atlas-data.tar`, 179 712 octets, archive valide, 20 entrées, SHA-256 `06c1e2d64e8d394d1adc1178bb184cbef82b51e89a8618b17ba7e49bec62f7d5`. L'archive et les captures restent hors dépôt.
+
+`adb install -r -d` de l'APK app intégré et `adb install -r -t` de l'APK androidTest ont tous deux rendu `Success`. L'APK baseline `aa9b2da` a ensuite été compilé dans un worktree temporaire, certifié avec le même SHA-256, installé par remplacement, puis remplacé à nouveau par l'APK intégré. Aucun `dev.atlas.coach` n'a été désinstallé; aucun `pm clear`, changement de rôle HOME, réglage système de police/rotation ou installation d'app tierce n'a été effectué.
+
+### Résultats instrumentés et échec isolé
+
+Les appels `adb -s 45301FDAS001QT shell am instrument -w -r -e class … dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner` ont été parsés en XML réels. Première exécution intégrée de `AtlasLaunchTest` : **12 tests, 11 réussis, 1 échoué, 0 ignoré**. `focusRoutineIsCapabilityGatedAndRequiresExplicitStart` a échoué à `AtlasLaunchTest.kt:290` dans `openMore()` avec `IllegalStateException: No compose hierarchies found in the app`. L'APK baseline `aa9b2da` a passé cette méthode (1/1); une reprise isolée intégrée a aussi passé (1/1). Ces reprises montrent que l'échec n'est pas reproductible de façon stable et ne prouvent pas un défaut produit.
+
+Le commutateur des routines appelle également `requestNotifications()` lorsque la capacité s'active; le test ne fixait pas l'état de cette précondition. Le correctif QA dans `android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt` accorde `POST_NOTIFICATIONS` dans ce seul test de capacité, afin qu'il vérifie la navigation et l'absence de démarrage automatique sans laisser une demande de permission asynchrone perturber l'arbre Compose. Il ne supprime aucun test et ne touche pas `src/main`. Après reconstruction de l'APK androidTest, `AtlasLaunchTest` a passé **12/12**, et `LauncherPresentationTest` **2/2**. Classification des deux échecs initiaux du même cas : **`TEST_HARNESS_BUG`** (précondition permission non isolée; manifestation Compose transitoire). La cause instantanée de l'arbre Compose absent lors de ces occurrences reste non démontrée; aucune erreur fatale application n'apparaît dans la capture filtrée. Il n'y a pas de `APP_BUG` établi et donc pas de demande produit.
+
+La campagne a compté 29 cas exécutés sur l'ensemble des diagnostics : 27 réussites, 2 échecs observés, 0 skip. La qualification finale après correction du harnais couvre 14 cas (les deux classes) : 14 réussites, 0 échec, 0 skip. Les autres classes et scénarios non lancés restent `NOT_RUN`, notamment Goal-Focus complet, notifications système, permissions runtime dédiées, location, mobilité et rotation; les tests qui nécessitent une injection GPS hôte sont explicitement non exécutés sur l'appareil réel. Les détails et XML sont résumés dans [api37-r4-class-results.tsv](preuves-api37/api37-r4-class-results.tsv). La capture du cas en échec (SHA-256 `ad72183a91bce61565ecda087829fdf849bc3a6b561ebb0e37e1ebd66faef6d6`) et les logs bruts sont sous `/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/`.
+
+Au contrôle local de clôture, `ps` a montré un AVD distinct `atlas_v623_ui_api34` sur le port 5582, réservé à une autre session. Il n'a pas été arrêté ni utilisé; aucun AVD QA-R4 ni démon Gradle/Kotlin appartenant à cette campagne ne restait actif. Le verrou `/tmp/v623-emulator.lock` était disponible.
+
+### Restauration et interruption par déconnexion
+
+Après les tests, les états permissions étaient `POST_NOTIFICATIONS=false`, coarse/fine location refusées, `ACCESS_LOCAL_NETWORK=true`. L'octroi de notification fait par le test de capacité a été révoqué avec `pm revoke dev.atlas.coach android.permission.POST_NOTIFICATIONS`, puis l'état initial a été relu et correspondait. HOME Pixel Launcher, police système `1.0`, `accelerometer_rotation=0`, `user_rotation=0` et stay-awake `7` étaient inchangés.
+
+L'archive a été restaurée lorsque l'app était arrêtée. Une extraction canonique a confirmé les 8 fichiers réguliers avec contenus identiques à la sauvegarde (manifest SHA-256 `17a531c43d948929f39eaf54745e465903262c8ae5a64494918b76dcc715b5e5`). Les tests avaient ajouté deux préférences sans équivalent dans la sauvegarde; ces deux fichiers de test ont été supprimés avant ce contrôle. ATLAS a ensuite démarré : `am start -W -n dev.atlas.coach/.app.MainActivity` a rendu `Status: ok`, `LaunchState: COLD`, `Activity: dev.atlas.coach/.app.MainActivity`; `topResumedActivity` était bien `MainActivity`.
+
+Après ce lancement de vérification, trois fichiers internes avaient un contenu différent de l'archive : `files/profileInstalled`, `no_backup/androidx.work.workdb-shm` et `no_backup/androidx.work.workdb-wal`. La commande `adb uninstall dev.atlas.coach.test` a affiché `Failure [DELETE_FAILED_INTERNAL_ERROR]`, mais l'inventaire suivant a montré uniquement `package:dev.atlas.coach` : le package de test était absent et ATLAS toujours installé. Le téléphone a ensuite été débranché : `adb devices -l` était vide et même `am force-stop dev.atlas.coach` a répondu `device not found`. La seconde restauration exacte et la vérification finale téléphone sont donc **`NOT_RUN / DEVICE_ENVIRONMENT`**. La dernière mesure batterie disponible était 90 %; le dernier état observé de l'app était `MainActivity` au premier plan. Ne pas lire « données finales bit à bit restaurées » : leur équivalence avait été vérifiée avant le lancement, pas après.
+
+### API 34/API 37 AVD et classification R4
+
+Première tentative API 34 : serveur ADB isolé 5038 en échec (`exit=255`, `ADB server didn't ACK`, `LIBUSB_ERROR_BUSY` sur l'interface USB tenue par ADB partagé), sans boot AVD. Reprise `ADB_LIBUSB=0`, APK précompilés, instrumentation directe, `-memory 2048` et verrou `/tmp/v623-emulator.lock` : gardes pré-boot à `6 543 116` et `6 679 948 KiB`, seuil `5 242 880 KiB`; durant le boot la mémoire est tombée à `4 890 744 KiB` à `2026-10-21T16:07:35Z`. Le garde a arrêté l'AVD. Statut **`NOT_RUN / HOST_ENVIRONMENT`**, zéro installation, zéro runner, zéro XML/test; Android 14 n'est pas vert. Aucun AVD API 37 supplémentaire n'a été tenté dans R4; sa matrice demeure `NOT_RUN`.
+
+| Observation / échec | Statut | Classification | Preuve / limite |
+|---|---|---|---|
+| `focusRoutineIsCapabilityGatedAndRequiresExplicitStart`, arbre Compose absent une fois en exécution intégrée | FAIL observé, puis correction du harnais et PASS | `TEST_HARNESS_BUG` | 11/12 initial; baseline 1/1; reprise intégrée isolée 1/1; classe intégrée finale 12/12 après permission fixée. La cause instantanée reste incertaine; aucun défaut produit établi. |
+| Tests Goals-Focus, notifications système, permissions runtime, localisation, mobilité, rotation non lancés | NOT_RUN | Sans classement d'échec | Interruption volontaire des essais quand le téléphone devait être débranché; GPS hôte absent pour location/mobilité. |
+| Retrait de `dev.atlas.coach.test` retourne une erreur interne mais package absent à l'inventaire suivant | PASS pour l'absence du package; sortie de commande à signaler | Environnement package-manager, résultat final observé | `pm list packages` ne renvoyait que `dev.atlas.coach`; aucun retrait d'ATLAS. |
+| Restauration exacte après lancement de vérification | NOT_RUN | `DEVICE_ENVIRONMENT` | Déconnexion avant la réapplication; trois métadonnées/work files différaient à la dernière archive. |
+| Boot API 34 arrêté sous le seuil mémoire | NOT_RUN | `HOST_ENVIRONMENT` | `MemAvailable=4 890 744 KiB`, zéro test/XML. |
+| Échec produit Android reproduit | Aucun `APP_BUG` établi | — | Aucun changement `src/main`; la seule assertion ratée a disparu après correction de précondition du harnais. |
+
+Les pré-vols, sorties, empreintes et restaurations sont dans [r4-phone-preflight.tsv](preuves-api37/r4-phone-preflight.tsv), [r4-phone-data-restore.tsv](preuves-api37/r4-phone-data-restore.tsv) et [r4-execution-summary.tsv](preuves-api37/r4-execution-summary.tsv). Les résultats des matrices sont dans [API37_MATRICE.md](API37_MATRICE.md). Les logs complets et les archives privées restent sous `/tmp/v623-qa/`; aucune donnée personnelle ni archive ATLAS n'est versionnée.
 
 ## Requalification QA-R3 — branche intégrée
 

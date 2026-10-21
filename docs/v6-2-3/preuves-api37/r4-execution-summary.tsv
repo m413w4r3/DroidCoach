@@ -1,0 +1,28 @@
+step	command	status	observed_output
+integrated_revision	git rev-parse HEAD	PASS	7c12ad17f8340d775924a0b986dd44ac35b79722 before QA test-harness edit
+api34_attempt_1	ATLAS_V623_PREBUILT_APKS=1 ATLAS_V623_DIRECT_INSTRUMENTATION=1 ATLAS_V623_EMULATOR_MEMORY_MB=2048 ./scripts/v623-android-qa.sh api34	BLOCKED	ADB server 5038 exit 255; ADB server didn't ACK; LIBUSB_ERROR_BUSY; no AVD started
+api34_attempt_2	ADB_LIBUSB=0 ATLAS_V623_PREBUILT_APKS=1 ATLAS_V623_DIRECT_INSTRUMENTATION=1 ATLAS_V623_EMULATOR_MEMORY_MB=2048 ./scripts/v623-android-qa.sh api34	NOT_RUN	MemAvailable pre-build 6543116 KiB, pre-boot 6679948 KiB; guard stopped boot at 4890744 KiB on 2026-10-21T16:07:35Z (<5242880 KiB)
+api34_instrumentation	adb install / am instrument -w	NOT_RUN	Runner never started; 0 tests and 0 XML files; all 13 scenarios NOT_RUN
+first_phone_connection	adb devices -l; battery read	BLOCKED	Pixel first listed, battery 75%, then returned device not found; later user reported it present again
+phone_preflight_resume	adb devices -l; read-only preflight commands	PASS	Pixel visible; battery 82%; unlocked/awake; Android 17/API 37; Pixel Launcher HOME; app debug/version/certificate checked
+phone_backup	adb exec-out run-as dev.atlas.coach tar -cf - .	PASS	179712 bytes; 20 tar entries; verified archive SHA-256 06c1e2d64e8d394d1adc1178bb184cbef82b51e89a8618b17ba7e49bec62f7d5 outside repository
+current_apk_build	GRADLE_USER_HOME=/tmp/v623-qa/gradle-home ./gradlew --no-daemon --project-cache-dir /tmp/v623-qa/project-cache :app:assembleDebug :app:assembleDebugAndroidTest	PASS	Build successful before and after test fixture edit; final app SHA d6f8d4d9c94523a94759fe7a4343bafd12cd6c4ba143b946f8af7020e0189feb; final androidTest SHA 2166bf8264c418a04516b1e8b820acf4b417ec5cf310345005f585c17264da33
+baseline_build	GRADLE_USER_HOME=/tmp/v623-qa/gradle-home ./gradlew --no-daemon --project-cache-dir /tmp/v623-qa/baseline-project-cache :app:assembleDebug :app:assembleDebugAndroidTest	PASS	Temporary detached worktree at aa9b2da; BUILD SUCCESSFUL in 1m; 67 tasks
+signature_comparison	apksigner verify --print-certs	PASS	Installed/current/baseline app and test APK certificate SHA-256 all equal da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee
+integrated_install	adb install -r -d app-debug.apk; adb install -r -t app-debug-androidTest.apk	PASS	Both streamed installs printed Success
+instrumentation_initial	adb shell am instrument -w -r -e class AtlasLaunchTest; LauncherPresentationTest	FAIL	AtlasLaunchTest 11/12 pass, 1 TEST_HARNESS_BUG; LauncherPresentationTest 2/2 pass; runner complete, no skips
+focus_baseline_compare	adb shell am instrument -w -r -e class AtlasLaunchTest#focusRoutineIsCapabilityGatedAndRequiresExplicitStart	PASS	APK aa9b2da: 1/1; method passes
+focus_integrated_retry	adb shell am instrument -w -r -e class AtlasLaunchTest#focusRoutineIsCapabilityGatedAndRequiresExplicitStart	PASS	Integrated APK retry: 1/1; original permission state still denied
+test_harness_change	AtlasLaunchTest fixture grants POST_NOTIFICATIONS for capability test	PASS	No production code changed and no test removed; final androidTest APK rebuilt
+instrumentation_after_fix	adb shell am instrument -w -r -e class AtlasLaunchTest	PASS	12/12 passed, 0 failed, 0 skipped; XML parser runner_complete=true, aborted=false
+instrumentation_final_class	adb shell am instrument -w -r -e class LauncherPresentationTest	PASS	2/2 passed, 0 failed, 0 skipped
+phone_permission_restore	adb shell pm revoke dev.atlas.coach android.permission.POST_NOTIFICATIONS	PASS	Permission state matches initial: notifications/coarse/fine denied; local-network granted
+phone_data_restore_prelaunch	run-as tar extraction; compare canonical file-content manifests	PASS	8/8 regular files match backup; manifest SHA 17a531c43d948929f39eaf54745e465903262c8ae5a64494918b76dcc715b5e5
+phone_app_launch	adb shell am start -W -n dev.atlas.coach/.app.MainActivity	PASS	Status: ok; MainActivity topResumed
+phone_test_uninstall	adb uninstall dev.atlas.coach.test	FAIL	Printed Failure [DELETE_FAILED_INTERNAL_ERROR]
+phone_test_package_absent	adb shell pm list packages	PASS	Follow-up inventory showed only dev.atlas.coach; app package remained installed
+phone_data_compare_after_launch	run-as tar; compare canonical manifests	FAIL	8 files, 3 changed after launch (profileInstalled and WorkManager wal/shm); other five content unchanged
+phone_final_data_restore	am force-stop and reapply archive	NOT_RUN	Phone disconnected; force-stop returned device not found before reapply
+phone_final_connection	adb devices -l	BLOCKED	Empty list after user disconnected phone
+avd_cleanup_at_qa_check	ps -eo pid,args; flock -n /tmp/v623-emulator.lock -c true	PASS	No QA-owned QEMU/emulator or Gradle/Kotlin daemon remained; emulator lock available
+other_session_avd_at_wrapup	ps -eo pid,args | rg '[q]emu-system|[e]mulator.*-avd|[G]radleDaemon|[K]otlinCompileDaemon'	OBSERVED	One separate UI AVD atlas_v623_ui_api34 on port 5582 was running; reserved to another session and left untouched; no owned Gradle/Kotlin daemon observed

@@ -1,5 +1,6 @@
 package dev.atlas.coach
 
+import android.Manifest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
@@ -285,6 +286,13 @@ class AtlasLaunchTest {
 
     @Test
     fun focusRoutineIsCapabilityGatedAndRequiresExplicitStart() {
+        // Isolate the routine capability check from the Android permission dialog.
+        // Notification permission behavior is exercised by RuntimePermissionInstrumentationTest.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.uiAutomation.grantRuntimePermission(
+            instrumentation.targetContext.packageName,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
         openSettings()
         composeRule.onNodeWithContentDescription("Activer ou désactiver Routines de focus locales").performScrollTo().performClick()
         openMore()
