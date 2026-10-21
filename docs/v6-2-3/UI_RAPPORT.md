@@ -112,7 +112,7 @@ Base intégrée utilisée : `e690323` sur `feat/atlas-v6-2-3`. Le code R3 compil
 - La revue confirme que les paires de texte/fond vérifiées dépassent AA : minima rapportés de 6,19:1 en sombre, 6,19:1 en AMOLED et 5,13:1 en clair. Aucune palette n'a été modifiée.
 - Les 110 chaînes `testTag`/textes attendues examinées dans `androidTest` étaient présentes; aucune n'a été changée pour cette correction. Aucun fichier `androidTest` n'a été modifié.
 - Le rapport UI ne contient plus de chemin de worktree, nom de compte ou chemin local. Les captures R3 ajoutées sont des écrans de démonstration avec données synthétiques; elles ne montrent pas de donnée personnelle.
-- Le signalement de chemins hôte et de numéros de série dans les preuves API37 hors UI est conservé sans édition : ces pièces sont des preuves QA partagées, hors propriété UI, et leur réécriture risquerait d'altérer l'historique de test. Le point est signalé à QA.
+- Les chemins hôte et numéros de série des preuves API37 hors UI ne sont pas expurgés : ces pièces sont des preuves QA partagées, hors propriété UI, et leur réécriture risquerait d'altérer l'historique de test. Seuls les blancs finaux P3 explicitement demandés ont été retirés; le contenu des preuves reste intact. Ce point reste à transmettre à QA.
 - Les constats sur la classification du harnais QA et la couverture de la frontière de crash du contrôleur ne sont pas corrigés ici : ils concernent des scripts QA et la logique métier/tests hors propriété UI. La revue indépendante reste le point de suivi.
 - Les espaces de fin relevés pour P3 ont été retirés de `STABILISATION_RAPPORT.md` et des trois preuves `r3-*` nommées dans la revue.
 
