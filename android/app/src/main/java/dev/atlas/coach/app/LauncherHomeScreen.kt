@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -330,10 +332,13 @@ private fun LauncherHomeContent(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text("FOCUS ACTIF", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(card.body, style = MaterialTheme.typography.bodyMedium)
-                                Button(
-                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_focus_card_action"),
-                                    onClick = { openFocus() },
-                                ) { Text(card.actionLabel) }
+                                HomeDirectiveAction(
+                                    label = card.actionLabel,
+                                    onClick = openFocus,
+                                    enabled = true,
+                                    emphasized = true,
+                                    testTag = "launcher_focus_card_action",
+                                )
                             }
                         }
 
@@ -378,19 +383,12 @@ private fun LauncherHomeContent(
                                         HomePrimaryAction.NONE -> showDirectiveDetails = true
                                     }
                                 }
-                                if (activeFocus == null) {
-                                    Button(
-                                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
-                                        onClick = action,
-                                        enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
-                                    ) { Text(agentState.directive.primaryAction.homeActionLabel()) }
-                                } else {
-                                    TextButton(
-                                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
-                                        onClick = action,
-                                        enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
-                                    ) { Text(agentState.directive.primaryAction.homeActionLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                }
+                                HomeDirectiveAction(
+                                    label = agentState.directive.primaryAction.homeActionLabel(),
+                                    onClick = action,
+                                    enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                                    emphasized = activeFocus == null,
+                                )
                             }
                             directiveAction()
                         }
@@ -476,10 +474,13 @@ private fun LauncherHomeContent(
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("FOCUS ACTIF", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(card.body, style = MaterialTheme.typography.bodyLarge)
-                            Button(
-                                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_focus_card_action"),
-                                onClick = { openFocus() },
-                            ) { Text(card.actionLabel) }
+                            HomeDirectiveAction(
+                                label = card.actionLabel,
+                                onClick = openFocus,
+                                enabled = true,
+                                emphasized = true,
+                                testTag = "launcher_focus_card_action",
+                            )
                         }
                     }
 
@@ -524,19 +525,12 @@ private fun LauncherHomeContent(
                                     HomePrimaryAction.NONE -> showDirectiveDetails = true
                                 }
                             }
-                            if (activeFocus == null) {
-                                Button(
-                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
-                                    onClick = action,
-                                    enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
-                                ) { Text(agentState.directive.primaryAction.homeActionLabel()) }
-                            } else {
-                                TextButton(
-                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_directive_cta"),
-                                    onClick = action,
-                                    enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
-                                ) { Text(agentState.directive.primaryAction.homeActionLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            }
+                            HomeDirectiveAction(
+                                label = agentState.directive.primaryAction.homeActionLabel(),
+                                onClick = action,
+                                enabled = agentState.directive.primaryAction != HomePrimaryAction.NONE,
+                                emphasized = activeFocus == null,
+                            )
                         }
                         directiveAction()
                     }
@@ -583,50 +577,55 @@ private fun LauncherHomeContent(
             }
         }
 
-        Row(
+        val compactFooter = configuration.screenWidthDp <= 320 ||
+            (configuration.screenWidthDp <= 360 && density.fontScale >= 1.5f)
+        Column(
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).testTag("launcher_fixed_footer"),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            HomeFooterAction(
-                label = "Apps",
-                description = if (drawerOpen) "Revenir à l'accueil ATLAS" else "Ouvrir Applications et recherche",
-                tag = "launcher_open_drawer",
-                modifier = Modifier.weight(1f),
-                onClick = onToggleDrawer,
-            )
-            HomeFooterAction(
-                label = "Coach",
-                description = "Ouvrir le Coach",
-                tag = "launcher_open_coach",
-                modifier = Modifier.weight(1f),
-                onClick = openCoach,
-            )
-            HomeFooterAction(
-                label = if (controller.isEmergencyPaused) "Fin" else "Pause",
-                description = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes",
-                tag = "launcher_emergency_pause",
-                modifier = Modifier.weight(1f),
-                onClick = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
-            )
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (compactFooter) 8.dp else 0.dp),
+            ) {
                 HomeFooterAction(
-                    label = "Plus",
-                    description = "Plus d'options HOME",
-                    tag = "launcher_more",
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { showHomeMenu = true },
+                    label = "Apps",
+                    description = if (drawerOpen) "Revenir à l'accueil ATLAS" else "Ouvrir Applications et recherche",
+                    tag = "launcher_open_drawer",
+                    modifier = Modifier.weight(1f),
+                    onClick = onToggleDrawer,
                 )
-                DropdownMenu(expanded = showHomeMenu, onDismissRequest = { showHomeMenu = false }) {
-                    DropdownMenuItem(
-                        modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_previous_launcher"),
-                        text = { Text("Launcher précédent") },
-                        onClick = { showHomeMenu = false; openPreviousLauncher() },
+                HomeFooterAction(
+                    label = "Coach",
+                    description = "Ouvrir le Coach",
+                    tag = "launcher_open_coach",
+                    modifier = Modifier.weight(1f),
+                    onClick = openCoach,
+                )
+                if (!compactFooter) {
+                    HomeFooterAction(
+                        label = if (controller.isEmergencyPaused) "Fin" else "Pause",
+                        description = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes",
+                        tag = "launcher_emergency_pause",
+                        modifier = Modifier.weight(1f),
+                        onClick = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
                     )
-                    DropdownMenuItem(
-                        modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_home_settings"),
-                        text = { Text("Réglages HOME") },
-                        onClick = { showHomeMenu = false; openHomeSettings() },
+                    HomeFooterMore(showHomeMenu, { showHomeMenu = true }, { showHomeMenu = false }, openPreviousLauncher, openHomeSettings, Modifier.weight(1f))
+                }
+            }
+            if (compactFooter) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    HomeFooterAction(
+                        label = if (controller.isEmergencyPaused) "Fin" else "Pause",
+                        description = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes",
+                        tag = "launcher_emergency_pause",
+                        modifier = Modifier.weight(1f),
+                        onClick = { if (controller.isEmergencyPaused) controller.endEmergencyPause() else controller.setEmergencyPause() },
                     )
+                    HomeFooterMore(showHomeMenu, { showHomeMenu = true }, { showHomeMenu = false }, openPreviousLauncher, openHomeSettings, Modifier.weight(1f))
                 }
             }
         }
@@ -645,6 +644,63 @@ private fun LauncherHomeContent(
                 TextButton(onClick = { showDirectiveDetails = false }) { Text("Fermer") }
             },
         )
+    }
+}
+
+@Composable
+private fun HomeDirectiveAction(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    emphasized: Boolean,
+    testTag: String = "launcher_directive_cta",
+) {
+    val ink = if (emphasized) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    TextButton(
+        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag(testTag),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
+        onClick = onClick,
+        enabled = enabled,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.titleSmall, color = ink, fontWeight = if (emphasized) FontWeight.Medium else FontWeight.Normal)
+            Box(
+                Modifier.width(if (emphasized) 96.dp else 52.dp).height(1.dp)
+                    .background(if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeFooterMore(
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onDismiss: () -> Unit,
+    openPreviousLauncher: () -> Unit,
+    openHomeSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        HomeFooterAction(
+            label = "Plus",
+            description = "Plus d'options HOME",
+            tag = "launcher_more",
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onExpand,
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+            DropdownMenuItem(
+                modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_previous_launcher"),
+                text = { Text("Launcher précédent") },
+                onClick = { onDismiss(); openPreviousLauncher() },
+            )
+            DropdownMenuItem(
+                modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("launcher_home_settings"),
+                text = { Text("Réglages HOME") },
+                onClick = { onDismiss(); openHomeSettings() },
+            )
+        }
     }
 }
 

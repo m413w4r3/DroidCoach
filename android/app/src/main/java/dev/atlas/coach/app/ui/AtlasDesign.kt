@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -240,8 +241,8 @@ fun AtlasScreenFrame(
             AtlasTopBar(title, canGoBack, emergencyPaused, onBack, onEmergencyPause)
         },
         bottomBar = {
-            Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.surface) {
-                Column(modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
+            Column(modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
+                    AtlasRule(color = androidx.compose.material3.MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
                     if (fontScale >= 1.6f) {
                         Row(Modifier.fillMaxWidth()) {
                             AtlasNavItem("Tableau", AtlasRoutes.HOME, activeDestination, onNavigate)
@@ -259,7 +260,6 @@ fun AtlasScreenFrame(
                             AtlasNavItem("Plus", AtlasRoutes.MORE, activeDestination, onNavigate)
                         }
                     }
-                }
             }
         },
     ) { innerPadding ->
@@ -290,7 +290,7 @@ private fun AtlasTopBar(
         fontSize = 12.sp,
         lineHeight = 16.sp,
     )
-    val titleStyle = androidx.compose.material3.MaterialTheme.typography.titleMedium.let { style ->
+    val titleStyle = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Serif).let { style ->
         if (compactForLargeText) style.copy(fontSize = 9.sp, lineHeight = 14.sp) else style
     }
     val compactTitle = when (title) {
@@ -302,7 +302,7 @@ private fun AtlasTopBar(
         "Partage backend" -> "Sync"
         else -> title
     }
-    Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -339,6 +339,10 @@ private fun AtlasTopBar(
                 )
             }
         }
+        AtlasRule(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            color = androidx.compose.material3.MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+        )
     }
 }
 
@@ -358,11 +362,17 @@ private fun RowScope.AtlasNavItem(label: String, destination: String, active: St
             role = Role.Tab
             selected = active == destination
         },
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = if (active == destination) androidx.compose.material3.MaterialTheme.colorScheme.primary else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        colors = ButtonDefaults.textButtonColors(contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurface),
     ) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Clip, fontWeight = if (active == destination) FontWeight.SemiBold else FontWeight.Normal)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Clip, fontWeight = if (active == destination) FontWeight.SemiBold else FontWeight.Normal)
+            androidx.compose.foundation.layout.Box(
+                Modifier.width(20.dp).height(1.dp).background(
+                    if (active == destination) androidx.compose.material3.MaterialTheme.colorScheme.primary
+                    else Color.Transparent,
+                ),
+            )
+        }
     }
 }
 

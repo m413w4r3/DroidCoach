@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +47,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -538,12 +541,11 @@ private fun AgentProposalCard(
     onPostpone: () -> Unit,
     onReject: () -> Unit,
 ) {
-    val compactActions = LocalConfiguration.current.screenWidthDp <= 360 || LocalDensity.current.fontScale >= 1.4f
     Column(
         Modifier.fillMaxWidth()
             .border(
                 BorderStroke(1.dp, if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)),
-                MaterialTheme.shapes.medium,
+                RectangleShape,
             )
             .testTag("agent_priority_proposal_${entry.id}")
             .padding(14.dp),
@@ -558,24 +560,32 @@ private fun AgentProposalCard(
             Text("État : ${proposalStateLabel(entry)}", style = MaterialTheme.typography.bodySmall)
             if (showActions) {
                 Text("Action à confirmer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (compactActions) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
-                        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
-                        OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
-                        TextButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
-                    }
-                } else {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Button(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_accept"), onClick = onAccept) { Text("Accepter") }
-                        OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_edit"), onClick = onEdit) { Text("Modifier") }
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_postpone"), onClick = onPostpone) { Text("Plus tard") }
-                        TextButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("agent_proposal_reject"), onClick = onReject) { Text("Refuser") }
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    ProposalEditorialAction("Accepter", "agent_proposal_accept", emphasized = true, onClick = onAccept)
+                    ProposalEditorialAction("Modifier", "agent_proposal_edit", onClick = onEdit)
+                    ProposalEditorialAction("Plus tard", "agent_proposal_postpone", onClick = onPostpone)
+                    ProposalEditorialAction("Refuser", "agent_proposal_reject", onClick = onReject)
                 }
             }
+    }
+}
+
+@Composable
+private fun ProposalEditorialAction(label: String, tag: String, emphasized: Boolean = false, onClick: () -> Unit) {
+    val ruleColor = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.62f)
+    TextButton(
+        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag(tag),
+        onClick = onClick,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (emphasized) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            Spacer(Modifier.fillMaxWidth().height(if (emphasized) 1.5.dp else 1.dp).background(ruleColor))
+        }
     }
 }
 
