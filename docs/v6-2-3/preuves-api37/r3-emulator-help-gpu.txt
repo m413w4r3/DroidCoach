@@ -11,5 +11,3 @@
                              and Vulkan.
      swangle              -> Use ANGLE with Swiftshader backend for GLES and
                              Swiftshader for Vulkan.
-
-

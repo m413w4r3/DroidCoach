@@ -44,7 +44,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.invisibleToUser
@@ -58,7 +57,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import android.app.Activity
 import android.content.Context
@@ -284,65 +282,76 @@ private fun AtlasTopBar(
     onBack: () -> Unit,
     onEmergencyPause: () -> Unit,
 ) {
-    val configuration = LocalConfiguration.current
-    val compactForLargeText = configuration.screenWidthDp <= 320 && configuration.fontScale >= 1.5f
-    val compactControlStyle = androidx.compose.material3.MaterialTheme.typography.labelLarge.copy(
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-    )
-    val titleStyle = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Serif).let { style ->
-        if (compactForLargeText) style.copy(fontSize = 9.sp, lineHeight = 14.sp) else style
-    }
-    val compactTitle = when (title) {
-        "Tableau de bord" -> "Tableau"
-        "Mandat du Coach" -> "Mandat"
-        "Données partagées" -> "Données"
-        "Journal des effets" -> "Journal"
-        "Diagnostic avancé" -> "Diag."
-        "Partage backend" -> "Sync"
-        else -> title
-    }
+    val largeSystemText = LocalDensity.current.fontScale >= 1.5f
+    val titleStyle = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Serif)
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (canGoBack) {
-                TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
-                    Text("Retour", maxLines = 1, style = if (compactForLargeText) compactControlStyle else androidx.compose.material3.MaterialTheme.typography.labelLarge)
-                }
-            }
-            Text(
-                if (compactForLargeText) compactTitle else title,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics {
-                    if (compactForLargeText) contentDescription = title
-                },
-                style = titleStyle,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
-                maxLines = if (compactForLargeText) 1 else 2,
-                softWrap = !compactForLargeText,
-                overflow = TextOverflow.Clip,
-            )
-            TextButton(
-                onClick = onEmergencyPause,
-                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
-                    contentDescription = if (emergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence de 30 minutes"
-                },
-                colors = ButtonDefaults.textButtonColors(contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant),
+        if (largeSystemText) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    if (emergencyPaused) "Fin" else "Urgence",
-                    maxLines = 1,
-                    style = if (compactForLargeText) compactControlStyle else androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                    title,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    style = titleStyle,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                    softWrap = true,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (canGoBack) {
+                        TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                            Text("Retour")
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    EmergencyPauseButton(emergencyPaused, onEmergencyPause)
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (canGoBack) {
+                    TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                        Text("Retour")
+                    }
+                }
+                Text(
+                    title,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    style = titleStyle,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                    softWrap = true,
+                )
+                EmergencyPauseButton(emergencyPaused, onEmergencyPause)
             }
         }
         AtlasRule(
             modifier = Modifier.padding(horizontal = 14.dp),
             color = androidx.compose.material3.MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
         )
+    }
+}
+
+@Composable
+private fun EmergencyPauseButton(emergencyPaused: Boolean, onEmergencyPause: () -> Unit) {
+    TextButton(
+        onClick = onEmergencyPause,
+        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
+            contentDescription = if (emergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence de 30 minutes"
+        },
+        colors = ButtonDefaults.textButtonColors(contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant),
+    ) {
+        Text(if (emergencyPaused) "Fin" else "Urgence")
     }
 }
 

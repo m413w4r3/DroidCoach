@@ -2,8 +2,8 @@
 
 ## Base et périmètre
 
-- HEAD vérifié avant modification : `aa9b2daf703d7653b33d6433e3d97b915c955731`, conforme à la base attendue. Le dossier `docs/v6-2` était présent; aucun rebase n'a été nécessaire.
-- Branche de ce worktree : `worktree/frosty-hollow`. La branche `feat/atlas-v6-2-3` est déjà attachée au worktree `/home/nill/perso/AndroCoach/atlas-preparation` à HEAD `fb8b4452`; je n'ai pas changé de worktree ni modifié cette branche.
+- Base initiale de l'implémentation : `aa9b2daf703d7653b33d6433e3d97b915c955731`; la révision intégrée UI-R3 examinée est `e690323` sur `feat/atlas-v6-2-3`.
+- Le travail UI reste dans son worktree isolé; aucun chemin hôte ou nom de compte local n'est consigné dans ce rapport.
 - Les captures « avant » ont été prises depuis l'APK construit à cette base, avant les modifications UI, sur l'AVD dédié.
 - Aucun fichier métier, [AtlasApp.kt](../../android/app/src/main/java/dev/atlas/coach/app/AtlasApp.kt), [MainActivity.kt](../../android/app/src/main/java/dev/atlas/coach/app/MainActivity.kt), manifeste, fichier Gradle ou `androidTest` n'a été modifié.
 
@@ -19,7 +19,7 @@
 - Coach distingue message, provenance locale, proposition et « Action à confirmer ». Accepter, Modifier, Plus tard et Refuser deviennent des actions textuelles séparées par filets; Accepter garde le poids et l'accent les plus forts. La carte de proposition a un contour rectangulaire fin.
 - L'en-tête Coach garde Retour et Urgence, ajoute un filet inférieur et emploie un titre sérif. La navigation conserve ses quatre destinations et rôles d'onglet, sur fond transparent, avec un filet supérieur et un court soulignement pour l'onglet actif.
 - Mandat et données partagées utilisent les mêmes couleurs et règles; suspension, révocation, pause d'urgence et consentements restent accessibles.
-- À 320 dp avec police 2×, l'en-tête compacte certains titres visibles tout en exposant le titre complet comme description d'accessibilité; les commandes Retour et Urgence restent visibles.
+- À partir de 1,5×, l'en-tête place le titre complet sur une ligne puis Retour et Urgence sur une seconde; aucune taille de texte n'est réduite sous l'échelle système.
 
 ## Fichiers concernés
 
@@ -56,15 +56,15 @@ La comparaison des captures réelles montre que le grand CTA plein du HOME devie
 Base de cette correction : commit `8e94802` (UI-R1). Aucun fichier `androidTest` n'a été modifié.
 
 - Dans [AtlasScreens.kt](../../android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt), le titre de chaque habitude et son action de validation sont maintenant sur la même ligne. L'action garde ses libellés exacts, sa description accessible, son callback et une cible minimale de 48 dp. Cela maintient l'action dans la zone visible quand Compose restaure le défilement à hauteur du titre.
-- Activer « Routines de focus locales » ne lance plus immédiatement l'activité système de permission Android, qui masquait l'interface Compose au test suivant. La demande de permission reste disponible dans « Notifications facultatives » et par les commandes dédiées aux notifications; aucune capacité ni permission n'est retirée.
+- La tentative R2 de déplacer la demande de permission hors de l'activation des routines a été révertée par le commit `53ba3a6`, qui restaure `requestNotifications()`. Cette décision utilisateur est conservée en UI-R3; ce parcours n'est pas modifié.
 - Aucun tag de test n'a changé. La recherche de `habit_input`, « Valider aujourd'hui », « Annuler aujourd'hui », `CAP_FOCUS_ROUTINES` et « Routines de focus » dans `androidTest` trouve [AtlasLaunchTest.kt](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt), [AtlasVisualCaptureTest.kt](../../android/app/src/androidTest/java/dev/atlas/coach/app/AtlasVisualCaptureTest.kt) et [V6RealAgentE2eInstrumentationTest.kt](../../android/app/src/androidTest/java/dev/atlas/coach/app/V6RealAgentE2eInstrumentationTest.kt). `LauncherPresentationTest` est également demandé explicitement pour cette revue.
 
 | Vérification | Statut | Résultat observé |
 | --- | --- | --- |
-| Compilation debug et APK AndroidTest | PASS | `assembleDebug` et `assembleDebugAndroidTest` terminés dans le lot Gradle courant. |
-| Tests JVM | PASS | 317 tests, 0 échec, 0 erreur, 0 ignoré. |
-| Android lint | PASS | 0 erreur, 53 avertissements. |
-| `git diff --check` | PASS | Aucune sortie. |
+| Compilation debug et APK AndroidTest (source de R2) | PASS | Code ensuite consigné dans `25ca41c` (intégré comme `78d55cf`). |
+| Tests JVM (source de R2) | PASS | 317 tests, 0 échec, 0 erreur, 0 ignoré; code ensuite consigné dans `25ca41c`. |
+| Android lint (source de R2) | PASS | 0 erreur, 53 avertissements; code ensuite consigné dans `25ca41c`. |
+| `git diff --check` (revue R2) | PASS | Aucune sortie pour le diff de travail UI. |
 | `AtlasLaunchTest` avant correction, sur 8e94802 | FAIL | Rapport pré-correction : 12 tests, 10 réussis, 2 échecs aux lignes 137 et 290. |
 | `AtlasLaunchTest` après correction | BLOCKED | Pas relancé : l'image API 34 ATD a forcé 2560 Mo malgré `-memory 2048`; le garde-fou a arrêté le lot avant instrumentation. |
 | `LauncherPresentationTest` après correction | BLOCKED | Même blocage de capacité AVD; aucune instrumentation après correction. |
@@ -88,9 +88,9 @@ Stopping Daemon(s)
 1 Daemon stopped
 ```
 
-Tentative instrumentée exécutée sous `flock -x /tmp/v623-emulator.lock` avec l'AVD `atlas_v623_ui_api34_atd` sur le port 5582 et le paramètre `-memory 2048`. Le journal `/tmp/v623-emulator-5582-atd.log` indique `Increasing RAM size to 2560MB`; l'instrumentation n'a donc pas été lancée. L'AVD temporaire a été arrêté et supprimé par le nettoyage du lot. Aucun autre AVD n'était actif et le port 5583 n'a pas été utilisé.
+Tentative instrumentée exécutée sous le verrou exclusif partagé de l'AVD avec `atlas_v623_ui_api34_atd`, port 5582 et `-memory 2048`. Le journal de cette tentative indique `Increasing RAM size to 2560MB`; l'instrumentation n'a donc pas été lancée. L'AVD temporaire a été arrêté et supprimé par le nettoyage du lot. Aucun autre AVD n'était actif et le port 5583 n'a pas été utilisé.
 
-Le rapport XML pré-correction de `AtlasLaunchTest` montre que le premier échec était « The component is not displayed! » après recreation ([AtlasLaunchTest.kt:137](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:137)). Pour le second, le logcat montre l'ouverture de `GrantPermissionsActivity` juste après l'activation de la capacité et avant l'échec « No compose hierarchies found » à [AtlasLaunchTest.kt:290](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:290). La correction retire ce lancement automatique de permission de cette capacité; faute de pouvoir lancer l'AVD sous la limite demandée, le résultat n'a pas été confirmé par instrumentation. Aucun résultat identique sur `aa9b2da` n'est revendiqué.
+Le rapport XML pré-correction de `AtlasLaunchTest` montre que le premier échec était « The component is not displayed! » après recreation ([AtlasLaunchTest.kt:137](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:137)). Pour le second, le logcat montre l'ouverture de `GrantPermissionsActivity` juste après l'activation de la capacité et avant l'échec « No compose hierarchies found » à [AtlasLaunchTest.kt:290](../../android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt:290). La suppression de cette demande a été révertée par `53ba3a6`; le diagnostic n'est pas attribué au harnais sans comparaison instrumentée sur `aa9b2da`.
 
 Les captures R1 déjà relues restent dans `captures/apres/`; cette correction touche l'écran Habitudes et le moment de demande de permission, sans modifier les vues HOME ou Coach capturées. Aucune nouvelle capture n'a été prise pendant cette revue bloquée par la limite de mémoire.
 
@@ -101,3 +101,47 @@ Les captures R1 déjà relues restent dans `captures/apres/`; cette correction t
 - Aucun téléphone physique ni compte réel n'a été utilisé. Aucun résultat Pixel n'est revendiqué.
 - `lintDebug` passe avec 53 avertissements et 0 erreur. Le `UseKtx` d'[AtlasScreens.kt](../../android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt) est inchangé; les autres avertissements concernent la configuration Gradle/manifest et des fichiers hors périmètre UI.
 - Les captures HOME/Coach/Mandat acceptées en R1 n'ont pas été régénérées. Aucune session TalkBack n'a été exécutée.
+
+## Revue corrective UI-R3 — 2026-10-21
+
+Base intégrée utilisée : `e690323` sur `feat/atlas-v6-2-3`. La modification ne touche que [AtlasDesign.kt](../../android/app/src/main/java/dev/atlas/coach/app/ui/AtlasDesign.kt) côté application. Le retour de `requestNotifications()` lors de l'activation des routines Focus, restauré par `53ba3a6`, a été conservé.
+
+### Corrections et décisions
+
+- `AtlasTopBar` ne remplace plus la taille système par des valeurs compactes. À partir de `fontScale >= 1.5`, le titre complet occupe une première rangée et Retour/Urgence une seconde; sous ce seuil, le titre peut se replier dans la rangée sans taille de police ni nombre de lignes imposés. Les deux commandes gardent des cibles minimales de 48 dp et leurs descriptions/callbacks. Les captures à 320 dp et 360 dp, police 2×, montrent les trois libellés entiers en portrait.
+- La revue confirme que les paires de texte/fond vérifiées dépassent AA : minima rapportés de 6,19:1 en sombre, 6,19:1 en AMOLED et 5,13:1 en clair. Aucune palette n'a été modifiée.
+- Les 110 chaînes `testTag`/textes attendues examinées dans `androidTest` étaient présentes; aucune n'a été changée pour cette correction. Aucun fichier `androidTest` n'a été modifié.
+- Le rapport UI ne contient plus de chemin de worktree, nom de compte ou chemin local. Les captures R3 ajoutées sont des écrans de démonstration avec données synthétiques; elles ne montrent pas de donnée personnelle.
+- Le signalement de chemins hôte et de numéros de série dans les preuves API37 hors UI est conservé sans édition : ces pièces sont des preuves QA partagées, hors propriété UI, et leur réécriture risquerait d'altérer l'historique de test. Le point est signalé à QA.
+- Les constats sur la classification du harnais QA et la couverture de la frontière de crash du contrôleur ne sont pas corrigés ici : ils concernent des scripts QA et la logique métier/tests hors propriété UI. La revue indépendante reste le point de suivi.
+- Les espaces de fin relevés pour P3 ont été retirés de `STABILISATION_RAPPORT.md` et des trois preuves `r3-*` nommées dans la revue.
+
+### Captures et vérifications
+
+| Vérification | Statut | Résultat réel |
+| --- | --- | --- |
+| En-tête, portrait 320 dp, police 2× | PASS | [14 — PNG 960 × 2400](captures/apres/14-topbar-320dp-2x-portrait.png); le titre se replie, Retour et Urgence restent visibles. |
+| En-tête, portrait 360 dp, police 2× | PASS | [15 — PNG 1080 × 2400](captures/apres/15-topbar-360dp-2x-portrait.png); titre, Retour et Urgence visibles. |
+| En-tête, paysage, 320/360 dp de hauteur courte, police 2× | NOT_RUN | Le premier lot a conservé une surface portrait et ses images ne sont pas conservées comme preuves paysage. Au second démarrage, `MemAvailable` est tombé à 4 522 072 kB après boot, sous le seuil requis de 5 242 880 kB; arrêt avant toute capture paysage. |
+| Compilation debug et APK AndroidTest | PASS | `BUILD SUCCESSFUL in 2m 54s`; 81 tâches, 20 exécutées et 61 à jour. |
+| Tests JVM | PASS | 58 fichiers XML, 321 tests, 0 failure, 0 error, 0 skipped. |
+| Android lint | PASS | 53 avertissements, 0 erreur. |
+| `git diff --check aa9b2da` après nettoyage P3 | PASS | Aucune sortie. |
+| AndroidTest | NOT_RUN | Aucun test instrumenté UI-R3 n'a été lancé. |
+| Arrêt de l'AVD et de Gradle | PASS | AVD 5582 arrêté sous le verrou partagé; `adb` ne signale plus d'AVD. `./gradlew --stop` a répondu « No Gradle daemons are running. » |
+| Téléphone physique | NOT_RUN | Aucun test ni commande ADB n'a visé un téléphone physique. |
+
+Commande Gradle exécutée depuis `android/` :
+
+```text
+./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug --max-workers=1 --console=plain
+BUILD SUCCESSFUL in 2m 54s
+81 actionable tasks: 20 executed, 61 up-to-date
+JVM XML: 58 fichiers, 321 tests, 0 failure, 0 error, 0 skipped
+Lint XML: 53 warnings, 0 errors
+
+./gradlew --stop
+No Gradle daemons are running.
+```
+
+Les nouvelles captures paysage restent `NOT_RUN`; elles ne sont pas simulées ni remplacées par des captures portrait. Les captures précédentes conservent leur statut historique et ne prouvent pas le nouvel en-tête en paysage.
