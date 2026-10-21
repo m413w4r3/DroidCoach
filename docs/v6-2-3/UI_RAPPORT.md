@@ -104,7 +104,7 @@ Les captures R1 déjà relues restent dans `captures/apres/`; cette correction t
 
 ## Revue corrective UI-R3 — 2026-10-21
 
-Base intégrée utilisée : `e690323` sur `feat/atlas-v6-2-3`. La modification ne touche que [AtlasDesign.kt](../../android/app/src/main/java/dev/atlas/coach/app/ui/AtlasDesign.kt) côté application. Le retour de `requestNotifications()` lors de l'activation des routines Focus, restauré par `53ba3a6`, a été conservé.
+Base intégrée utilisée : `e690323` sur `feat/atlas-v6-2-3`. Le code R3 compilé, testé JVM/lint et capturé en portrait est consigné dans `1760bc7fab28f501ff1041eddff3c796b433f8c5`; cette ligne de rapport est un ajout documentaire postérieur, sans changement au code testé. La modification applicative ne touche que [AtlasDesign.kt](../../android/app/src/main/java/dev/atlas/coach/app/ui/AtlasDesign.kt). Le retour de `requestNotifications()` lors de l'activation des routines Focus, restauré par `53ba3a6`, a été conservé.
 
 ### Corrections et décisions
 
