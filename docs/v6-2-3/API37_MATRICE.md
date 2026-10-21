@@ -1,30 +1,35 @@
 # Matrice Android 14 / Android 17 — V6.2.3
 
-Statuts utilisés : `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN` uniquement. Cette matrice décrit le résultat le plus récent disponible par scénario, avec les preuves partielles antérieures conservées dans la colonne de raison.
-
-La requalification demandée a atteint le **gate hôte** avant tout démarrage AVD : `MemAvailable` est resté entre 6,85 et 6,96 GiB pour les sept variantes, sous le seuil de 8 GiB. Le run API 34 distinct a également rendu `NOT_RUN` avant installation et sans XML. Le critère d’acceptation « Android 14 reste vert » n’est donc pas atteint par une suite complète. Deux vérifications API 34 partielles déjà exécutées restent des `PASS` valides pour leurs seuls scénarios.
+Statuts employés : `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN` uniquement. Un scénario non exécuté n'est jamais `PASS`. Pour API 34, deux vérifications partielles d'un ancien run restent `PASS`; elles ne certifient pas la suite complète. Pour API 37, tous les scénarios sont `BLOCKED` avant installation, car aucune configuration n'a gardé `system_server` stable jusqu'aux sondes.
 
 | Scénario | Android 14 — API 34 | Android 17 — API 37 | Preuve / raison |
 |---|---|---|---|
-| Installation et lancement | PASS | NOT_RUN | API 34 partiel : `adb install` → `Success`, `am start -W` → `Status: ok`. La nouvelle reprise a été arrêtée au gate mémoire. API 37 : aucune variante n’a booté. |
-| Rôle HOME ATLAS | PASS | NOT_RUN | API 34 partiel : choix via Réglages et ouverture par HOME vérifiés. API 37 : aucune variante n’a booté. |
-| Retour au launcher précédent | NOT_RUN | NOT_RUN | API 34 précédent : cette action n’a pas été tentée. Aucun run récent n’a dépassé le gate hôte. |
-| Focus | NOT_RUN | NOT_RUN | Aucun résultat instrumenté XML dans les reprises. API 37 : aucune configuration lancée. |
-| Objectifs | NOT_RUN | NOT_RUN | Aucun résultat instrumenté XML dans les reprises. API 37 : aucune configuration lancée. |
-| Notifications | NOT_RUN | NOT_RUN | Aucun résultat instrumenté XML dans les reprises. API 37 : aucune configuration lancée. |
-| Localisation ponctuelle | NOT_RUN | NOT_RUN | Aucune permission ni injection de fix exécutée dans les reprises. |
-| Mobilité visible | NOT_RUN | NOT_RUN | Aucun service de mobilité démarré dans les reprises. |
-| Permissions runtime | NOT_RUN | NOT_RUN | Aucun état runtime piloté dans les reprises. |
-| Révocation | NOT_RUN | NOT_RUN | Aucune révocation testée dans les reprises. |
-| Rotation | NOT_RUN | NOT_RUN | Aucun résultat XML instrumenté dans les reprises. |
-| Police système à 2× | NOT_RUN | NOT_RUN | Aucun changement de police exécuté dans les reprises. |
-| Hors ligne | NOT_RUN | NOT_RUN | Aucun parcours hors ligne exécuté dans les reprises. |
+| Installation et lancement | PASS | BLOCKED | API 34 partiel : `adb install` → `Success`, `am start -W` → `Status: ok` dans `/tmp/v623-qa/api34-20261021T134714Z/`. API 37 : les six variantes redémarrent `system_server` avant installation. |
+| Rôle HOME | PASS | BLOCKED | API 34 partiel : sélection ATLAS via Réglages et ouverture par HOME vérifiées. API 37 : aucun variant stable avant installation. |
+| Retour au launcher précédent | NOT_RUN | BLOCKED | Le parcours menu « Launcher précédent » n'a pas été exécuté sur API 34. API 37 bloqué au garde Framework. |
+| Focus | NOT_RUN | BLOCKED | Aucun XML de suite API 34 complète. Aucun test ATLAS exécuté en API 37. |
+| Objectifs | NOT_RUN | BLOCKED | Aucun XML de suite API 34 complète. Aucun test ATLAS exécuté en API 37. |
+| Notifications | NOT_RUN | BLOCKED | Aucun XML de suite API 34 complète. Aucun test ATLAS exécuté en API 37. |
+| Localisation ponctuelle | NOT_RUN | BLOCKED | Aucun fix de localisation synchronisé dans les reprises API 34. API 37 bloqué avant installation. |
+| Mobilité visible | NOT_RUN | BLOCKED | Aucun parcours visible de mobilité exécuté en API 34. API 37 bloqué avant installation. |
+| Permissions runtime | NOT_RUN | BLOCKED | Aucun résultat instrumenté API 34. API 37 bloqué avant installation. |
+| Révocation | NOT_RUN | BLOCKED | Aucune révocation observée dans un test API 34. API 37 bloqué avant installation. |
+| Rotation | NOT_RUN | BLOCKED | Aucun résultat XML instrumenté API 34. API 37 bloqué avant installation. |
+| Police système à 2× | NOT_RUN | BLOCKED | Aucun changement de police exécuté en API 34. API 37 bloqué avant installation. |
+| Hors ligne | NOT_RUN | BLOCKED | Aucun parcours hors ligne exécuté en API 34. API 37 bloqué avant installation. |
 
-## Preuves et historique
+## Exécution API 34
 
-- La reprise API 34 la plus récente est `NOT_RUN` : [matrice du gate API 34](preuves-api37/scenario-matrix-api34-host-gate.tsv), log `/tmp/v623-qa/api34-20261021T144403Z/recipe.console.log`, sortie `MemAvailable=7498600 KiB`, seuil `8388608 KiB`. Elle n’a ni démarré l’AVD ni produit d’XML.
-- La campagne différentielle API 37/API 35 est consignée dans [experiences-differentielles-api37.tsv](preuves-api37/experiences-differentielles-api37.tsv) et `/tmp/v623-qa/android17-differentials-20261021T144352Z/`. Les sept variantes sont `NOT_RUN` au gate mémoire, donc il n’existe pas de mesure de stabilité des services pour ces variantes.
-- Une tentative API 37 antérieure a bien démarré l’AVD, puis perdu les services Framework avant installation. Elle est conservée séparément dans [la matrice brute de cette exécution](preuves-api37/scenario-matrix-api37-run-raw.tsv), le [diagnostic](API37_DIAGNOSTIC.md) et les logs `/tmp/v623-qa/api37-20261021T141112Z/`. Son statut environnemental historique est `BLOCKED`; il ne prouve pas le résultat de la campagne différentielle courante.
-- La tentative API 34 partielle ayant fourni les deux `PASS` ci-dessus est sous `/tmp/v623-qa/api34-20261021T134714Z/` : [installation/lancement](/tmp/v623-qa/api34-20261021T134714Z/install-launch.result.txt), [rôle HOME](/tmp/v623-qa/api34-20261021T134714Z/home-roundtrip.result.txt) et [restauration du launcher](/tmp/v623-qa/api34-20261021T134714Z/home-restore.result.txt). Sa suite Gradle n’a exécuté aucun test (`XML_FILES=0 TESTS=0`) et avait été faussement marquée `PASS`; cette erreur est `TEST_HARNESS_BUG`.
+Deux reprises dédiées API 34 se sont arrêtées au garde mémoire. À 15:11:18 UTC, `MemAvailable=7187064 kB`, donc aucun build/boot. À 15:14:36 UTC, le pré-boot était à `9234572 kB`; pendant le démarrage, le surveillant a relevé `8348180 kB`, inférieur au seuil `8388608 kB`, et la recette a arrêté l'AVD via ADB. Les deux reprises ont 0 test XML. Cette campagne n'atteint pas le critère « Android 14 reste vert ».
 
-Le téléphone `45301FDAS001QT` était absent de `adb devices -l` au dernier contrôle; statut `NOT_RUN`. Aucun changement de rôle HOME ou de données ne lui a été envoyé. L’AVD d’une autre session sur 5582 est resté intact.
+Les deux `PASS` ci-dessus proviennent d'un run partiel précédent, pas d'une suite instrumentée complète. La tentative Gradle qui avait été marquée `PASS` avec `XML_FILES=0 TESTS=0` reste classée `TEST_HARNESS_BUG`; elle ne valide aucun autre scénario. Voir [scenario-matrix-api34.tsv](preuves-api37/scenario-matrix-api34.tsv), [api34-r2-host-memory.tsv](preuves-api37/api34-r2-host-memory.tsv) et [le rapport de reprise R2](preuves-api37/run-20261021-r2.md).
+
+## Exécution API 37
+
+Les variantes API 37.2 Google APIs, GPU SwiftShader, RAM 3072/4096 Mo et API 37.1/37.2 Play Store ont chacune atteint le boot Android, puis observé 2 ou 3 événements `system_server_start` avant la fenêtre de sondes. Les 30 réponses positives exigées ne sont jamais atteintes; aucun APK ATLAS n'a été installé, aucun test instrumenté n'a été lancé et aucun XML n'a été produit. Les 13 lignes API 37 sont donc `BLOCKED / AVD_ENVIRONMENT_BLOCKED`, et non `PASS` ou `FAIL` produit.
+
+Pendant le diagnostic du variant Play Store API 37.2, `MemAvailable` est aussi tombé à `8352724 kB` avec son QEMU actif. Le statut de ce variant est `NOT_RUN / HOST_ENVIRONMENT`; son blocage AVD avait été capturé avant cette baisse. Les cinq autres variantes ont chacune fourni un échec de stabilité indépendant et restent `BLOCKED / AVD_ENVIRONMENT_BLOCKED`. Le témoin API 35 s'est arrêté avant les sondes lorsque la mémoire hôte est descendue à `6853228 kB`; son statut est `NOT_RUN / HOST_ENVIRONMENT`. Ni ce témoin ni les suites API 37 ne permettent de trancher complètement API 37 contre pages 16 Ko / Goldfish. Le détail par variante est dans [la table différentielle](preuves-api37/experiences-differentielles-api37.tsv); les 13 lignes API 37 sont dans [la matrice de scénarios](preuves-api37/scenario-matrix-api37.tsv).
+
+Le téléphone réel `45301FDAS001QT` n'apparaissait pas dans `adb devices -l`; ses scénarios sont `NOT_RUN`. Aucune commande destructive ou de changement de rôle HOME n'a été envoyée à un téléphone.
+
+Les captures, événements et journaux complets sont hors dépôt sous `/tmp/v623-qa/`. Leur synthèse horodatée est dans [run-20261021-r2.md](preuves-api37/run-20261021-r2.md). L'historique de la matrice d'un ancien run API 37 reste dans [scenario-matrix-api37-run-raw.tsv](preuves-api37/scenario-matrix-api37-run-raw.tsv).

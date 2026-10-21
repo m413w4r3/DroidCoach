@@ -1,8 +1,8 @@
-variant	variable	api	image	gpu	ram_mb	status	cause	memavailable_kib	positive_service_probes	system_server_start_count	run_dir
-api37-baseline	baseline	37	android-37.2/google_apis_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7297852	0	UNKNOWN	/tmp/v623-qa/api37-baseline-20261021T144352Z
-api37-gpu-swiftshader	gpu	37	android-37.2/google_apis_ps16k	swiftshader_indirect	2048	NOT_RUN	HOST_ENVIRONMENT	7277424	0	UNKNOWN	/tmp/v623-qa/api37-gpu-swiftshader-20261021T144352Z
-api37-memory-3072	memory	37	android-37.2/google_apis_ps16k	auto	3072	NOT_RUN	HOST_ENVIRONMENT	7239940	0	UNKNOWN	/tmp/v623-qa/api37-memory-3072-20261021T144353Z
-api37-memory-4096	memory	37	android-37.2/google_apis_ps16k	auto	4096	NOT_RUN	HOST_ENVIRONMENT	7234152	0	UNKNOWN	/tmp/v623-qa/api37-memory-4096-20261021T144353Z
-api37-image-37-1-playstore	image_version	37	android-37.1/google_apis_playstore_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7203680	0	UNKNOWN	/tmp/v623-qa/api37-image-37-1-playstore-20261021T144353Z
-api37-image-37-2-playstore	image_version	37	android-37.2/google_apis_playstore_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7183368	0	UNKNOWN	/tmp/v623-qa/api37-image-37-2-playstore-20261021T144353Z
-api35-control	api_control	35	android-35/google_apis_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7184052	0	UNKNOWN	/tmp/v623-qa/api35-control-20261021T144353Z
+variant	variable	api	image	gpu	ram_mb	status	cause	memavailable_preboot_kib	host_memavailable_min_observed_kib	positive_service_responses	system_server_start_count	screenshot_status	screenshot_detail	avd_observation	run_dir
+api37-baseline	baseline	37	android-37.2/google_apis_ps16k	auto	2048	BLOCKED	AVD_ENVIRONMENT_BLOCKED	19353760	NOT_CAPTURED	0	3	BLOCKED	adb_exit_124	AVD_ENVIRONMENT_BLOCKED	/tmp/v623-qa/api37-baseline-20261021T145945Z
+api37-gpu-swiftshader	gpu	37	android-37.2/google_apis_ps16k	swiftshader_indirect	2048	BLOCKED	AVD_ENVIRONMENT_BLOCKED	19969688	NOT_CAPTURED	0	2	BLOCKED	72_bytes_assertion_text	AVD_ENVIRONMENT_BLOCKED	/tmp/v623-qa/api37-gpu-swiftshader-20261021T150103Z
+api37-memory-3072	memory	37	android-37.2/google_apis_ps16k	auto	3072	BLOCKED	AVD_ENVIRONMENT_BLOCKED	17965868	NOT_CAPTURED	0	2	BLOCKED	72_bytes_assertion_text	AVD_ENVIRONMENT_BLOCKED	/tmp/v623-qa/api37-memory-3072-20261021T150219Z
+api37-memory-4096	memory	37	android-37.2/google_apis_ps16k	auto	4096	BLOCKED	AVD_ENVIRONMENT_BLOCKED	16717664	NOT_CAPTURED	0	3	BLOCKED	adb_exit_124	AVD_ENVIRONMENT_BLOCKED	/tmp/v623-qa/api37-memory-4096-20261021T150410Z
+api37-image-37-1-playstore	image_version	37	android-37.1/google_apis_playstore_ps16k	auto	2048	BLOCKED	AVD_ENVIRONMENT_BLOCKED	15946384	NOT_CAPTURED	0	2	BLOCKED	72_bytes_assertion_text	AVD_ENVIRONMENT_BLOCKED	/tmp/v623-qa/api37-image-37-1-playstore-20261021T150546Z
+api37-image-37-2-playstore	image_version	37	android-37.2/google_apis_playstore_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	11810472	8352724	0	3	BLOCKED	adb_exit_124	AVD_ENVIRONMENT_BLOCKED_before_host_floor	/tmp/v623-qa/api37-image-37-2-playstore-20261021T150710Z
+api35-control	api_control	35	android-35/google_apis_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	11089748	6853228	NOT_RUN	NOT_RUN	NOT_RUN	host_gate_below_8388608_at_20261021T150925Z	NOT_RUN	/tmp/v623-qa/api35-control-20261021T150840Z

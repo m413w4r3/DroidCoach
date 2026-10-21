@@ -56,14 +56,33 @@ for variant in "${variants[@]}"; do
     else
         result_file="$variant_run_dir/recipe.result.txt"
         result_line="$(head -n 1 "$result_file" 2>/dev/null || true)"
+        framework_line="$(head -n 1 "$variant_run_dir/framework-runtime-gate.result.txt" 2>/dev/null || true)"
+        gate_status="$(sed -n 's/^status=//p' "$variant_run_dir/framework-gate-counts.txt" 2>/dev/null | tail -n 1 || true)"
+        [[ -n "$result_line" ]] || result_line="$framework_line"
         if [[ "$result_line" == suite_status=* ]]; then
             status="${result_line#suite_status=}"
             classification="$(sed -n 's/^suite_cause=//p' "$result_file" | head -n 1)"
+        elif [[ "$result_line" == BLOCKED* ]]; then
+            status=BLOCKED
+            case "$gate_status" in
+                AVD_ENVIRONMENT_BLOCKED) classification=AVD_ENVIRONMENT_BLOCKED ;;
+                UNKNOWN) classification=UNKNOWN ;;
+                *)
+                    if [[ "$result_line" == *system_server* || "$result_line" == *framework* ]]; then
+                        classification=AVD_ENVIRONMENT_BLOCKED
+                    else
+                        classification=UNKNOWN
+                    fi
+                    ;;
+            esac
+        elif [[ "$result_line" == NOT_RUN* ]]; then
+            status=NOT_RUN
+            classification=HOST_ENVIRONMENT
         else
-            status="${result_line%% *}"
+            status=NOT_RUN
             classification=UNKNOWN
         fi
-        [[ "$status" =~ ^(PASS|FAIL|BLOCKED|NOT_RUN)$ ]] || status=UNKNOWN
+        [[ "$status" =~ ^(PASS|FAIL|BLOCKED|NOT_RUN)$ ]] || status=NOT_RUN
         available="$(sed -n 's/.*memavailable_kib=\([0-9][0-9]*\).*/\1/p' "$variant_run_dir/host-memory-gate.txt" 2>/dev/null | head -n 1)"
         available="${available:-0}"
         positives="$(sed -n 's/^positive_service_responses=//p' "$variant_run_dir/framework-gate-counts.txt" 2>/dev/null | head -n 1 || true)"

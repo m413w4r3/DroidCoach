@@ -222,7 +222,7 @@ run_host() {
     printf '[%s] command=' "$label"
     printf '%q ' "$@"
     printf '\n'
-    if timeout --foreground --signal=TERM --kill-after=5s "${timeout_seconds}s" "$@" \
+    if timeout --foreground --signal=TERM --kill-after=5s "${timeout_seconds}s" "$@" 9>&- \
         >"$RUN_DIR/$label.stdout.log" 2>"$RUN_DIR/$label.stderr.log"; then
         status=0
     else
@@ -246,7 +246,7 @@ run_target() {
     printf '%q ' "$ADB" -s "$SERIAL" "$@"
     printf '\n'
     if timeout --foreground --signal=TERM --kill-after=3s "${timeout_seconds}s" \
-        "$ADB" -s "$SERIAL" "$@" \
+        "$ADB" -s "$SERIAL" "$@" 9>&- \
         >"$RUN_DIR/$label.stdout.log" 2>"$RUN_DIR/$label.stderr.log"; then
         status=0
     else
@@ -353,7 +353,7 @@ run_synchronized_instrumentation() {
         return 0
     fi
     timeout --foreground --signal=TERM --kill-after=3s "$TEST_TIMEOUT" \
-        "$ADB" -s "$SERIAL" logcat -v threadtime -s ATLAS_V62_LOCATION:V \
+        "$ADB" -s "$SERIAL" logcat -v threadtime -s ATLAS_V62_LOCATION:V 9>&- \
         >"$RUN_DIR/$label.logcat.log" 2>"$RUN_DIR/$label.logcat.stderr.log" &
     logcat_pid=$!
     run_target "$label" shell am instrument -w -r -e class "$target" -e location_fix_injection host "$RUNNER" &
@@ -427,7 +427,7 @@ capture_screenshot() {
     printf '%q ' "$ADB" -s "$SERIAL" exec-out screencap -p
     printf '\n'
     if timeout --foreground --signal=TERM --kill-after=3s "${SERVICE_TIMEOUT}s" \
-        "$ADB" -s "$SERIAL" exec-out screencap -p \
+        "$ADB" -s "$SERIAL" exec-out screencap -p 9>&- \
         >"$RUN_DIR/$label.png" 2>"$RUN_DIR/$label.stderr.log"; then
         signature="$(od -An -tx1 -N8 "$RUN_DIR/$label.png" | tr -d ' \n')"
         size="$(wc -c <"$RUN_DIR/$label.png" | tr -d ' ')"
@@ -446,7 +446,7 @@ capture_screenshot() {
 probe_service() {
     local service="$1" output status result
     if timeout --foreground --signal=TERM --kill-after=2s "${SERVICE_TIMEOUT}s" \
-        "$ADB" -s "$SERIAL" shell service check "$service" \
+        "$ADB" -s "$SERIAL" shell service check "$service" 9>&- \
         >"$RUN_DIR/service-$service.stdout.log" 2>"$RUN_DIR/service-$service.stderr.log"; then
         status=0
     else
@@ -530,7 +530,7 @@ home_picker_dump() {
     run_target "$label-dump-ui" shell uiautomator dump /sdcard/v623-home-picker.xml
     [[ "$(target_exit "$label-dump-ui")" == 0 ]] || return 1
     timeout --foreground --signal=TERM --kill-after=3s "${COMMAND_TIMEOUT}s" \
-        "$ADB" -s "$SERIAL" exec-out cat /sdcard/v623-home-picker.xml \
+        "$ADB" -s "$SERIAL" exec-out cat /sdcard/v623-home-picker.xml 9>&- \
         >"$RUN_DIR/$label-ui.xml" 2>"$RUN_DIR/$label-ui.stderr.log"
 }
 
@@ -624,7 +624,7 @@ run_home_roundtrip() {
         run_target atlas-home-ui-dump shell uiautomator dump /sdcard/v623-home-ui.xml
         if [[ "$(target_exit atlas-home-ui-dump)" == 0 ]] &&
             timeout --foreground --signal=TERM --kill-after=3s "${COMMAND_TIMEOUT}s" \
-                "$ADB" -s "$SERIAL" exec-out cat /sdcard/v623-home-ui.xml \
+                "$ADB" -s "$SERIAL" exec-out cat /sdcard/v623-home-ui.xml 9>&- \
                 >"$RUN_DIR/atlas-home-ui.xml" 2>"$RUN_DIR/atlas-home-ui.stderr.log"; then
             plus_point="$(home_picker_point "$RUN_DIR/atlas-home-ui.xml" Plus || true)"
         else
@@ -637,7 +637,7 @@ run_home_roundtrip() {
             run_target atlas-home-menu-dump shell uiautomator dump /sdcard/v623-home-menu.xml
             if [[ "$(target_exit atlas-home-menu-dump)" == 0 ]] &&
                 timeout --foreground --signal=TERM --kill-after=3s "${COMMAND_TIMEOUT}s" \
-                    "$ADB" -s "$SERIAL" exec-out cat /sdcard/v623-home-menu.xml \
+                    "$ADB" -s "$SERIAL" exec-out cat /sdcard/v623-home-menu.xml 9>&- \
                     >"$RUN_DIR/atlas-home-menu.xml" 2>"$RUN_DIR/atlas-home-menu.stderr.log"; then
                 return_point="$(home_picker_point "$RUN_DIR/atlas-home-menu.xml" 'Launcher précédent' || true)"
             else
@@ -682,7 +682,7 @@ cleanup() {
     fi
     if [[ "$EMULATOR_STARTED" == 1 ]]; then
         timeout --foreground --signal=TERM --kill-after=3s 15s \
-            "$ADB" -s "$SERIAL" emu kill \
+            "$ADB" -s "$SERIAL" emu kill 9>&- \
             >"$RUN_DIR/emulator-stop.log" 2>&1 || true
         if [[ -n "$EMULATOR_PID" ]] && kill -0 "$EMULATOR_PID" 2>/dev/null; then
             kill -TERM "$EMULATOR_PID" 2>/dev/null || true
@@ -791,7 +791,7 @@ printf '%q ' "$EMULATOR" -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no
 printf '\n'
 "$EMULATOR" -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no-snapshot-load -no-snapshot-save \
     -port "$CONSOLE_PORT" -gpu "$GPU" -cores 2 -memory "$MEMORY_MB" -partition-size 4096 -wipe-data \
-    -netdelay none -netspeed full >"$RUN_DIR/emulator.log" 2>&1 &
+    -netdelay none -netspeed full 9>&- >"$RUN_DIR/emulator.log" 2>&1 &
 EMULATOR_PID=$!
 EMULATOR_STARTED=1
 printf 'emulator_pid=%s\n' "$EMULATOR_PID" | tee "$RUN_DIR/emulator.pid"
@@ -800,6 +800,7 @@ boot_deadline=$((SECONDS + 240))
 boot_complete=""
 while (( SECONDS < boot_deadline )); do
     if timeout --foreground --signal=TERM --kill-after=2s 10s "$ADB" -s "$SERIAL" \
+        9>&- \
         shell getprop sys.boot_completed >"$RUN_DIR/boot-probe.log" 2>"$RUN_DIR/boot-probe.stderr.log"; then
         boot_complete="$(tr -d '\r[:space:]' <"$RUN_DIR/boot-probe.log")"
     else
@@ -968,7 +969,7 @@ export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK" ANDROID_SERIAL="$SERIAL"
 export ANDROID_ADB_SERVER_PORT="$ADB_PORT" ADB_SERVER_SOCKET="tcp:localhost:$ADB_PORT"
 run_target logcat-clear shell logcat -c
 timeout --foreground --signal=TERM --kill-after=5s "${TEST_TIMEOUT}s" \
-    "$ADB" -s "$SERIAL" logcat -v threadtime \
+    "$ADB" -s "$SERIAL" logcat -v threadtime 9>&- \
     >"$RUN_DIR/logcat-live.log" 2>"$RUN_DIR/logcat-live.stderr.log" &
 LOGCAT_PID=$!
 
