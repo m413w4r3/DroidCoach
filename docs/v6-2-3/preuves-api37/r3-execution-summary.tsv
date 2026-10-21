@@ -1,0 +1,14 @@
+check	status	count_or_value	cause_or_observation	evidence
+JVM unit tests	PASS	321 tests; 58 XML; 0 failures; 0 errors; 0 skipped	317 + 4 expected	/tmp/v623-qa/qa-r3-53ba3a6/jvm-lint-r3-final.log
+Android lint	PASS	53 warnings; BUILD SUCCESSFUL	No lint task failure	/tmp/v623-qa/qa-r3-53ba3a6/jvm-lint-r3-final.log
+Debug APK assembly	PASS	2 APKs; BUILD SUCCESSFUL	Integrated app and AndroidTest APKs	docs/v6-2-3/preuves-api37/r3-apk-sha256.txt
+Gradle shutdown	PASS	No Gradle daemons are running	Completed before API 34 AVD boot	/tmp/v623-qa/qa-r3-53ba3a6/gradle-stop-r3-final.log
+API 34 instrumentation suite	NOT_RUN	0 tests; 0 XML	Host MemAvailable 4947044 KiB < 5242880 KiB during boot	/tmp/v623-qa/api34-20261021T154656Z/host-memory-breach.txt
+API 37 instrumentation suite	NOT_RUN	0 tests; 0 XML	Host MemAvailable 5114032 KiB < 5242880 KiB during boot	/tmp/v623-qa/api37-gpu-guest-20261021T154902Z/host-memory-breach.txt
+API 37 -gpu guest	NOT_RUN	0 stable probes; 0 tests	Image refused guest rendering and fell back to lavapipe; then host gate stopped boot	/tmp/v623-qa/api37-gpu-guest-20261021T154902Z/emulator.log
+API 37 -gpu swangle_indirect	NOT_RUN	No AVD started	Mode absent from emulator -help-gpu; only swangle is listed	docs/v6-2-3/preuves-api37/r3-emulator-help-gpu.txt
+Physical phone read-only inventory	PASS	Device API 37 detected; ATLAS installed; Pixel Launcher remains HOME	No app install/launch or settings change	docs/v6-2-3/preuves-api37/r3-phone-read-only-summary.txt
+Physical phone product scenarios	NOT_RUN	0 app tests	Preserve existing installation/data; no install, launch, role, permission or app-op change	docs/v6-2-3/preuves-api37/r3-phone-read-only-summary.txt
+Parser conversion fixture	PASS	1 synthetic pass + 1 synthetic failure	Synthetic only; not Android instrumentation	docs/v6-2-3/preuves-api37/r3-parser-fixture-summary.txt
+API 34 scenarios	NOT_RUN	13 scenarios; each 0 executions	No installation or instrumentation started	docs/v6-2-3/preuves-api37/scenario-matrix-api34-r3.tsv
+API 37 scenarios	NOT_RUN	13 scenarios; each 0 executions	No installation or instrumentation started	docs/v6-2-3/preuves-api37/scenario-matrix-api37-r3.tsv

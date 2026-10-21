@@ -1,6 +1,47 @@
 # Diagnostic Android 17 — ATLAS V6.2.3
 
-Date : 21 octobre 2026. Worktree : `worktree/timely-fox`, HEAD initial `38c346a84d6d41a0f030bf90e0ea733ebdbb0787`, basé sur le code attendu `aa9b2daf703d7653b33d6433e3d97b915c955731` et les corrections de tests déjà commitées. Les logs complets restent hors dépôt sous `/tmp/v623-qa/`.
+Date : 21 octobre 2026. Les logs complets restent hors dépôt sous `/tmp/v623-qa/`. **La section QA-R3 ci-dessous est le résultat courant sur la branche intégrée `53ba3a629b68d87749f04a05c34b62a1ec0ab1f3`; les résultats QA-R2 plus bas sont historiques et ne qualifient pas ce code.**
+
+## Requalification QA-R3 — branche intégrée
+
+Le worktree a été replacé sur `53ba3a6` à la demande de l'orchestrateur. Ce commit inclut la refonte UI et le retour de `requestNotifications()` lors de l'activation des routines Focus. Aucun fichier `src/main` n'a été modifié pendant cette requalification.
+
+### JVM, lint et APK
+
+| Vérification | Statut | Résultat observé |
+|---|---|---|
+| `:app:testDebugUnitTest` | `PASS` | 321 tests, 58 XML, 0 échec, 0 erreur, 0 ignoré (317 + 4 attendus). |
+| `:app:lintDebug` | `PASS` | Gradle `BUILD SUCCESSFUL`; rapport lint avec 53 avertissements et aucun arrêt de tâche. |
+| `:app:assembleDebug :app:assembleDebugAndroidTest` | `PASS` | Deux APK reconstruits sur le worktree intégré; empreintes ci-dessous. |
+| `./gradlew --stop` | `PASS` | Sortie réelle : `No Gradle daemons are running.` avant le boot AVD. |
+
+SHA-256 app : `d6f8d4d9c94523a94759fe7a4343bafd12cd6c4ba143b946f8af7020e0189feb`. SHA-256 AndroidTest : `a4484069b992873a2b96f3b9663aaa0d7919b6c3b15b2a557fdd2d0d7016d382`. Les commandes, comptes et empreintes sont dans [r3-execution-summary.tsv](preuves-api37/r3-execution-summary.tsv); les sorties complètes sont sous `/tmp/v623-qa/qa-r3-53ba3a6/`.
+
+### API 34 — suite instrumentée
+
+Le seuil de lancement R3 est 5 GiB (`5 242 880 KiB`), tracé à la demande de l'orchestrateur. La mémoire avant boot était `7 194 960 KiB`; le surveillant, actif durant le boot de l'unique AVD API 34 (`-memory 2048`, ports 5580/5581), a relevé `4 947 044 KiB` à `2026-10-21T15:47:22Z`, sous le seuil. Le harnais a arrêté cet AVD et rendu **`NOT_RUN / HOST_ENVIRONMENT`**. Il n'a pas atteint `adb install` ni `am instrument` : XML réels = 0, tests exécutés = 0. La matrice complète API 34 n'est donc pas verte et aucune classe UI n'est déclarée réussie ou en échec. Les 29 classes présentes dans le code sont listées `NOT_RUN` avec 0 exécution dans [api34-r3-class-results.tsv](preuves-api37/api34-r3-class-results.tsv); les 94 méthodes annotées `@Test` indiquées là sont un inventaire statique, pas un compte d'exécution.
+
+La mesure continue est dans [api34-r3-host-memory.tsv](preuves-api37/api34-r3-host-memory.tsv). Le run complet, incluant la raison d'arrêt et l'absence de tests/XML, est sous `/tmp/v623-qa/api34-20261021T154656Z/`. Aucune comparaison de `AtlasLaunchTest` contre `aa9b2da` n'a été faite, car cette classe n'a pas été exécutée sur le code intégré; aucun défaut produit n'est démontré par cette tentative.
+
+### API 37 — tentative GPU supplémentaire
+
+L'unique tentative demandée a utilisé l'image API 37.2 `google_apis_ps16k`, `-gpu guest`, 2048 Mo, sous `flock /tmp/v623-emulator.lock`. L'émulateur a écrit : `Your AVD has been configured with an in-guest renderer, but the system image does not support guest rendering. Falling back to 'lavapipe' mode.` Le GPU demandé n'a donc pas été appliqué. Avant le boot complet, `MemAvailable` est passé sous le seuil à `5 114 032 KiB` (`2026-10-21T15:49:19Z`); le surveillant a arrêté l'AVD. Résultat : **`NOT_RUN / HOST_ENVIRONMENT`**, 0 sondes de stabilité, 0 APK installé, 0 `am instrument`, 0 XML/test. Les scénarios API 37 restent `NOT_RUN`; il n'y a pas de nouveau diagnostic d'échec d'application.
+
+La version émulateur est `37.2.12.0`. Sa sortie réelle `-help-gpu` propose `swangle`, mais pas `swangle_indirect`; cette variante conditionnelle n'était donc pas disponible et n'a pas été lancée. Les éléments sont dans [r3-api37-gpu-options.txt](preuves-api37/r3-api37-gpu-options.txt), [api37-r3-host-memory.tsv](preuves-api37/api37-r3-host-memory.tsv) et `/tmp/v623-qa/api37-gpu-guest-20261021T154902Z/emulator.log`.
+
+### Classification et périphériques
+
+| Observation | Classification | Statut / preuve |
+|---|---|---|
+| Mémoire hôte sous 5 GiB pendant les deux boots | Aucun échec de test à classer | Le garde a produit `NOT_RUN / HOST_ENVIRONMENT`; le runner n'a pas démarré. |
+| Rendu `guest` refusé par l'image API 37.2 puis repli lavapipe | `AVD_ENVIRONMENT_BLOCKED` | Configuration AVD non applicable; aucune assertion ATLAS exécutée. |
+| Échec instrumenté `APP_BUG` | Aucun observé | 0 test instrumenté exécuté sur API 34 et API 37; aucune classification d'échec produit n'est possible. |
+| Échec instrumenté `TEST_HARNESS_BUG` | Aucun observé | Aucun runner réel n'a démarré. Le convertisseur de sortie `am instrument` a passé un contrôle témoin synthétique (1 succès + 1 échec convertis en XML), qui ne vaut pas test Android; voir `/tmp/v623-qa/qa-r3-53ba3a6/parser-fixture-xml/`. |
+| Tests produit sur le téléphone `45301FDAS001QT` | `NOT_RUN` | Le contrôle final a trouvé le Pixel 9 Pro XL sous Android 17/API 37, avec ATLAS déjà installé et Pixel Launcher HOME. Inventaire lecture seule seulement; aucun APK installé/remplacé, aucune app lancée et aucun réglage modifié pour préserver ses données. Voir [r3-phone-read-only-summary.txt](preuves-api37/r3-phone-read-only-summary.txt) et [r3-adb-devices.txt](preuves-api37/r3-adb-devices.txt). |
+
+À la fin de chaque tentative, l'AVD et le serveur ADB isolé ont été arrêtés; `./gradlew --stop` avait déjà confirmé l'absence de daemon. Les ports 5582–5585 n'ont pas été utilisés. Les commandes et sorties synthétiques sont dans [r3-command-results.tsv](preuves-api37/r3-command-results.tsv); le contrôle final des processus et appareils est résumé dans [r3-execution-summary.tsv](preuves-api37/r3-execution-summary.tsv).
+
+Les détails ci-dessous décrivent les exécutions QA-R2 sur l'ancien état et sont conservés uniquement comme historique. Ils ne remplacent aucun résultat R3.
 
 ## Résultat de la reprise QA-R2
 
@@ -48,7 +89,7 @@ Le HAL UWB avorte également sur des images Google APIs où `/dev/uwb0` n'existe
 
 ## API 34 et historique
 
-La matrice API 34 courante est [scenario-matrix-api34.tsv](preuves-api37/scenario-matrix-api34.tsv). Elle conserve deux vérifications partielles antérieures `PASS` (installation/lancement et sélection HOME) et marque `NOT_RUN` les parcours sans preuve réelle. Le faux `PASS` Gradle antérieur (`XML_FILES=0 TESTS=0`) est un `TEST_HARNESS_BUG`, pas une réussite de la suite. La reprise R2 n'a généré aucun XML et ne permet pas de déclarer API 34 vert.
+L'ancienne matrice API 34 issue de R2 est conservée dans [scenario-matrix-api34.tsv](preuves-api37/scenario-matrix-api34.tsv). Elle comportait deux vérifications partielles `PASS` (installation/lancement et sélection HOME) et des `NOT_RUN` sans preuve réelle. Ces résultats ne sont pas repris en R3; la matrice courante, entièrement `NOT_RUN` faute de tests exécutés, est [API37_MATRICE.md](API37_MATRICE.md) et son TSV est [scenario-matrix-api34-r3.tsv](preuves-api37/scenario-matrix-api34-r3.tsv). Le faux `PASS` Gradle antérieur (`XML_FILES=0 TESTS=0`) était un `TEST_HARNESS_BUG`, pas une réussite de suite.
 
 Une première exécution API 37 historique avait atteint des réponses de services positives puis les avait perdues; elle est conservée dans [scenario-matrix-api37-run-raw.tsv](preuves-api37/scenario-matrix-api37-run-raw.tsv) et [run-20261021.md](preuves-api37/run-20261021.md). La campagne différentielle R2, son diagnostic et ses limites détaillées sont dans [run-20261021-r2.md](preuves-api37/run-20261021-r2.md).
 

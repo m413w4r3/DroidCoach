@@ -1,0 +1,7 @@
+requested_mode=guest
+observed=The API 37.2 google_apis_ps16k system image does not support guest rendering; emulator fell back to lavapipe.
+requested_optional_mode=swangle_indirect
+availability=Not listed by emulator 37.2.12.0 -help-gpu; available listed mode is swangle.
+raw_version=r3-emulator-version.txt
+raw_help=r3-emulator-help-gpu.txt
+raw_emulator_log=/tmp/v623-qa/api37-gpu-guest-20261021T154902Z/emulator.log

@@ -17,7 +17,9 @@ RUNNER="dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner"
 GPU="${ATLAS_V623_EMULATOR_GPU:-auto}"
 MEMORY_MB="${ATLAS_V623_EMULATOR_MEMORY_MB:-2048}"
 PROBE_ONLY="${ATLAS_V623_PROBE_ONLY:-0}"
-MEMORY_GATE_KIB=8388608
+PREBUILT_APKS="${ATLAS_V623_PREBUILT_APKS:-0}"
+DIRECT_INSTRUMENTATION="${ATLAS_V623_DIRECT_INSTRUMENTATION:-0}"
+MEMORY_GATE_KIB=5242880
 COMMAND_TIMEOUT="${ATLAS_V623_ADB_TIMEOUT_SECONDS:-20}"
 SERVICE_TIMEOUT="${ATLAS_V623_SERVICE_TIMEOUT_SECONDS:-5}"
 BUILD_TIMEOUT="${ATLAS_V623_BUILD_TIMEOUT_SECONDS:-1200}"
@@ -29,7 +31,7 @@ export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
 
 usage() {
     cat <<'USAGE'
-Usage: scripts/v623-android-qa.sh api34|api37-baseline|api37-gpu-swiftshader|api37-memory-3072|api37-memory-4096|api37-image-37-1-playstore|api37-image-37-2-playstore|api35-control|--self-test
+Usage: scripts/v623-android-qa.sh api34|api37-baseline|api37-gpu-guest|api37-gpu-swiftshader|api37-memory-3072|api37-memory-4096|api37-image-37-1-playstore|api37-image-37-2-playstore|api35-control|--self-test
 
 Builds in this worktree, then uses one task-owned disposable AVD at a time.
 The AVD console/ADB ports are 5580/5581. It starts an isolated ADB server on
@@ -40,7 +42,7 @@ USAGE
 
 MODE="${1:-}"
 case "$MODE" in
-    api34|api37|api37-baseline|api37-gpu-swiftshader|api37-memory-3072|api37-memory-4096|api37-image-37-1-playstore|api37-image-37-2-playstore|api35-control|--self-test) ;;
+    api34|api37|api37-baseline|api37-gpu-guest|api37-gpu-swiftshader|api37-memory-3072|api37-memory-4096|api37-image-37-1-playstore|api37-image-37-2-playstore|api35-control|--self-test) ;;
     *) usage >&2; exit 2 ;;
 esac
 
@@ -54,6 +56,7 @@ SELF_TEST_FAILURES=0
 EMULATOR_STARTED=0
 EMULATOR_PID=""
 LOGCAT_PID=""
+HOST_MEM_PID=""
 AVD_NAME=""
 API_LEVEL=""
 AVD_DIR=""
@@ -112,11 +115,40 @@ memory_gate_status() {
     if (( $1 >= MEMORY_GATE_KIB )); then printf 'PASS'; else printf 'NOT_RUN'; fi
 }
 
+host_memory_breached() {
+    [[ -f "$RUN_DIR/host-memory-breach.txt" ]]
+}
+
+monitor_host_memory() {
+    local emulator_pid="$1"
+    (
+        printf 'utc\tmemavailable_kib\tthreshold_kib\n' >"$RUN_DIR/host-memory-monitor.tsv"
+        while kill -0 "$emulator_pid" 2>/dev/null; do
+            local available now
+            available="$(memavailable_kib 2>/dev/null || true)"
+            now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+            printf '%s\t%s\t%s\n' "$now" "${available:-UNREADABLE}" "$MEMORY_GATE_KIB" \
+                >>"$RUN_DIR/host-memory-monitor.tsv"
+            if [[ ! "$available" =~ ^[0-9]+$ ]] || (( available < MEMORY_GATE_KIB )); then
+                printf 'utc=%s memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
+                    "$now" "${available:-UNREADABLE}" "$MEMORY_GATE_KIB" \
+                    >"$RUN_DIR/host-memory-breach.txt"
+                kill -TERM "$emulator_pid" 2>/dev/null || true
+                break
+            fi
+            sleep 2
+        done
+    ) 9>&- &
+    HOST_MEM_PID=$!
+    printf 'host_memory_monitor_pid=%s interval_seconds=2 threshold_kib=%s\n' \
+        "$HOST_MEM_PID" "$MEMORY_GATE_KIB" | tee "$RUN_DIR/host-memory-monitor.start.txt"
+}
+
 write_not_run_matrix() {
-    local reason="$1" file="$RUN_DIR/scenario-matrix.tsv"
+    local reason="$1" cause="${2:-HOST_ENVIRONMENT}" file="$RUN_DIR/scenario-matrix.tsv"
     printf 'scenario\tstatus\tcause\tevidence\n' >"$file"
     for scenario in installation_launch home_role previous_launcher focus goals notifications location_one_shot mobility_visible runtime_permissions revocation rotation font_scale_2x offline; do
-        printf '%s\tNOT_RUN\tHOST_ENVIRONMENT\t%s (%s)\n' "$scenario" "$reason" "$RUN_DIR" >>"$file"
+        printf '%s\tNOT_RUN\t%s\t%s (%s)\n' "$scenario" "$cause" "$reason" "$RUN_DIR" >>"$file"
     done
     printf 'NOT_RUN reason=%s matrix=%s\n' "$reason" "$file" | tee "$RUN_DIR/scenario-matrix.result.txt"
 }
@@ -129,8 +161,8 @@ if [[ "$MODE" == --self-test ]]; then
     for status in PASS FAIL BLOCKED NOT_RUN; do
         if status_is_valid "$status"; then self_assert "status_$status" yes yes; else self_assert "status_$status" yes no; fi
     done
-    self_assert memory_at_threshold PASS "$(memory_gate_status 8388608)"
-    self_assert memory_below_threshold NOT_RUN "$(memory_gate_status 8388607)"
+    self_assert memory_at_threshold PASS "$(memory_gate_status 5242880)"
+    self_assert memory_below_threshold NOT_RUN "$(memory_gate_status 5242879)"
     if status_is_valid SKIPPED; then self_assert forbidden_skipped no yes; else self_assert forbidden_skipped no no; fi
     printf 'SELF_TEST_SUMMARY pass=%s fail=%s adb_called=no emulator_started=no gradle_called=no\n' \
         "$SELF_TEST_PASSES" "$SELF_TEST_FAILURES"
@@ -160,6 +192,12 @@ case "$MODE" in
         API_LEVEL=37
         AVD_NAME="atlas_v623_qa_api37"
         IMAGE="system-images;android-37.2;google_apis_ps16k;x86_64"
+        ;;
+    api37-gpu-guest)
+        API_LEVEL=37
+        AVD_NAME="atlas_v623_qa_api37_gpu_guest"
+        IMAGE="system-images;android-37.2;google_apis_ps16k;x86_64"
+        GPU=guest
         ;;
     api37-gpu-swiftshader)
         API_LEVEL=37
@@ -471,6 +509,10 @@ probe_service() {
 
 write_blocked_matrix() {
     local reason="$1" cause="${2:-AVD_ENVIRONMENT_BLOCKED}"
+    if host_memory_breached; then
+        write_not_run_matrix "host_memavailable_below_5GiB_during_run"
+        return 0
+    fi
     local file="$RUN_DIR/scenario-matrix.tsv"
     printf 'scenario\tstatus\tcause\tevidence\n' >"$file"
     for scenario in installation_launch home_role previous_launcher focus goals notifications location_one_shot mobility_visible runtime_permissions revocation rotation font_scale_2x offline; do
@@ -689,6 +731,21 @@ cleanup() {
             wait "$EMULATOR_PID" 2>/dev/null || true
         fi
     fi
+    if [[ -n "$HOST_MEM_PID" ]]; then
+        kill -TERM "$HOST_MEM_PID" 2>/dev/null || true
+        wait "$HOST_MEM_PID" 2>/dev/null || true
+        HOST_MEM_PID=""
+    fi
+    timeout --foreground --signal=TERM --kill-after=2s 10s "$ADB" kill-server 9>&- \
+        >"$RUN_DIR/adb-server-stop.log" 2>&1 || true
+    if host_memory_breached; then
+        local breach
+        breach="$(cat "$RUN_DIR/host-memory-breach.txt")"
+        printf 'NOT_RUN reason=host_memory_below_5GiB_during_run %s\n' "$breach" \
+            | tee "$RUN_DIR/recipe.result.txt"
+        write_not_run_matrix host_memavailable_below_5GiB_during_run
+        cp "$RUN_DIR/scenario-matrix.tsv" "$RUN_DIR/scenario-matrix.result.tsv"
+    fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -705,22 +762,27 @@ printf 'stage=pre_build memavailable_kib=%s threshold_kib=%s memory_gate=%s\n' \
     "$host_mem_kib" "$MEMORY_GATE_KIB" "$(memory_gate_status "$host_mem_kib")" \
     | tee "$RUN_DIR/host-memory-gate.txt"
 if [[ "$(memory_gate_status "$host_mem_kib")" != PASS ]]; then
-    printf 'NOT_RUN reason=host_memavailable_below_8GiB memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
+    printf 'NOT_RUN reason=host_memavailable_below_5GiB memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
         "$host_mem_kib" "$MEMORY_GATE_KIB" | tee "$RUN_DIR/recipe.result.txt"
-    write_not_run_matrix host_memavailable_below_8GiB
+    write_not_run_matrix host_memavailable_below_5GiB
     exit 0
 fi
 
-printf '\n[build] Building debug app and AndroidTest APKs into this worktree.\n'
-if ! run_host build "$BUILD_TIMEOUT" env GRADLE_USER_HOME="$GRADLE_HOME" \
-    "${ROOT}/android/gradlew" --no-daemon --project-cache-dir "$GRADLE_CACHE" \
-    -p "$ROOT/android" :app:assembleDebug :app:assembleDebugAndroidTest; then
-    : # run_host records failures in its exit file.
-fi
-if [[ "$(cat "$RUN_DIR/build.exit")" != 0 ]]; then
-    cat "$RUN_DIR/build.stdout.log" "$RUN_DIR/build.stderr.log"
-    printf 'NOT_RUN reason=build_failed\n' | tee "$RUN_DIR/recipe.result.txt"
-    exit 1
+if [[ "$PREBUILT_APKS" == 1 ]]; then
+    printf '\n[build] Using APKs already assembled before the AVD boot.\n' \
+        | tee "$RUN_DIR/build-policy.txt"
+else
+    printf '\n[build] Building debug app and AndroidTest APKs into this worktree.\n'
+    if ! run_host build "$BUILD_TIMEOUT" env GRADLE_USER_HOME="$GRADLE_HOME" \
+        "${ROOT}/android/gradlew" --no-daemon --project-cache-dir "$GRADLE_CACHE" \
+        -p "$ROOT/android" :app:assembleDebug :app:assembleDebugAndroidTest; then
+        : # run_host records failures in its exit file.
+    fi
+    if [[ "$(cat "$RUN_DIR/build.exit")" != 0 ]]; then
+        cat "$RUN_DIR/build.stdout.log" "$RUN_DIR/build.stderr.log"
+        printf 'NOT_RUN reason=build_failed\n' | tee "$RUN_DIR/recipe.result.txt"
+        exit 1
+    fi
 fi
 APP_APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 TEST_APK="$ROOT/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
@@ -779,9 +841,9 @@ printf 'stage=pre_boot memavailable_kib=%s threshold_kib=%s memory_gate=%s\n' \
     | tee -a "$RUN_DIR/host-memory-gate.txt"
 if [[ ! "$preboot_mem_kib" =~ ^[0-9]+$ ]] ||
    [[ "$(memory_gate_status "$preboot_mem_kib")" != PASS ]]; then
-    printf 'NOT_RUN reason=host_memavailable_below_8GiB_before_boot memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
+    printf 'NOT_RUN reason=host_memavailable_below_5GiB_before_boot memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
         "${preboot_mem_kib:-UNREADABLE}" "$MEMORY_GATE_KIB" | tee "$RUN_DIR/recipe.result.txt"
-    write_not_run_matrix host_memavailable_below_8GiB_before_boot
+    write_not_run_matrix host_memavailable_below_5GiB_before_boot
     exit 0
 fi
 
@@ -795,6 +857,7 @@ printf '\n'
 EMULATOR_PID=$!
 EMULATOR_STARTED=1
 printf 'emulator_pid=%s\n' "$EMULATOR_PID" | tee "$RUN_DIR/emulator.pid"
+monitor_host_memory "$EMULATOR_PID"
 
 boot_deadline=$((SECONDS + 240))
 boot_complete=""
@@ -807,9 +870,27 @@ while (( SECONDS < boot_deadline )); do
         boot_complete=""
     fi
     [[ "$boot_complete" == 1 ]] && break
+    if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+        wait "$EMULATOR_PID" 2>/dev/null || true
+        printf 'emulator_process_exited_before_boot=1\n' >"$RUN_DIR/emulator-early-exit.txt"
+        break
+    fi
     sleep 2
 done
 if [[ "$boot_complete" != 1 ]]; then
+    if host_memory_breached; then
+        printf 'NOT_RUN reason=host_memavailable_below_5GiB_during_boot %s\n' \
+            "$(cat "$RUN_DIR/host-memory-breach.txt")" | tee "$RUN_DIR/recipe.result.txt"
+        write_not_run_matrix host_memavailable_below_5GiB_during_boot
+        exit 0
+    fi
+    if [[ "$MODE" == api37-gpu-guest ]] &&
+       rg -qi 'unknown gpu|invalid gpu|unsupported gpu|gpu.*not supported' "$RUN_DIR/emulator.log"; then
+        printf 'NOT_RUN reason=emulator_gpu_mode_unavailable mode=%s api=%s evidence=%s\n' \
+            "$GPU" "$API_LEVEL" "$RUN_DIR/emulator.log" | tee "$RUN_DIR/recipe.result.txt"
+        write_not_run_matrix emulator_gpu_mode_unavailable AVD_ENVIRONMENT_BLOCKED
+        exit 0
+    fi
     printf 'BLOCKED api=%s reason=boot_not_completed_before_deadline\n' "$API_LEVEL" \
         | tee "$RUN_DIR/recipe.result.txt"
     write_blocked_matrix boot_not_completed
@@ -1000,16 +1081,22 @@ else
         printf 'BLOCKED reason=permission_revoke_setup_failed\n' >"$RUN_DIR/permission-initial-denied.result.txt"
     fi
     run_target grant-notification-permission shell pm grant dev.atlas.coach android.permission.POST_NOTIFICATIONS
-    printf '\n[instrumentation] Running connectedDebugAndroidTest on the isolated ADB server and explicit disposable serial.\n'
     rm -rf "$XML_SOURCE_DIR"
-    run_host instrumentation "$TEST_TIMEOUT" env \
-        GRADLE_USER_HOME="$GRADLE_HOME" \
-        ANDROID_SERIAL="$SERIAL" \
-        ANDROID_ADB_SERVER_PORT="$ADB_PORT" \
-        ADB_SERVER_SOCKET="tcp:localhost:$ADB_PORT" \
-        "$ROOT/android/gradlew" --no-daemon --project-cache-dir "$GRADLE_CACHE" \
-        --console=plain -p "$ROOT/android" :app:connectedDebugAndroidTest
-    TEST_EXIT="$(cat "$RUN_DIR/instrumentation.exit" 2>/dev/null || true)"
+    if [[ "$DIRECT_INSTRUMENTATION" == 1 ]]; then
+        printf '\n[instrumentation] Running the complete AndroidJUnitRunner suite through adb shell am instrument.\n'
+        run_target instrumentation shell am instrument -w -r "$RUNNER"
+        TEST_EXIT="$(target_exit instrumentation)"
+    else
+        printf '\n[instrumentation] Running connectedDebugAndroidTest on the isolated ADB server and explicit disposable serial.\n'
+        run_host instrumentation "$TEST_TIMEOUT" env \
+            GRADLE_USER_HOME="$GRADLE_HOME" \
+            ANDROID_SERIAL="$SERIAL" \
+            ANDROID_ADB_SERVER_PORT="$ADB_PORT" \
+            ADB_SERVER_SOCKET="tcp:localhost:$ADB_PORT" \
+            "$ROOT/android/gradlew" --no-daemon --project-cache-dir "$GRADLE_CACHE" \
+            --console=plain -p "$ROOT/android" :app:connectedDebugAndroidTest
+        TEST_EXIT="$(cat "$RUN_DIR/instrumentation.exit" 2>/dev/null || true)"
+    fi
 fi
 TEST_EXIT="${TEST_EXIT:-999}"
 printf '%s\n' "$TEST_EXIT" >"$RUN_DIR/instrumentation.exit"
@@ -1029,6 +1116,11 @@ printf 'status=%s\ncapture_ok=%s\ncapture_blocked=%s\n' \
 mkdir -p "$RUN_DIR/test-results-xml"
 cat "$RUN_DIR/instrumentation.stdout.log" "$RUN_DIR/instrumentation.stderr.log" \
     >"$RUN_DIR/instrumentation.combined.log" 2>/dev/null || true
+if [[ "$DIRECT_INSTRUMENTATION" == 1 && -s "$RUN_DIR/instrumentation.combined.log" ]]; then
+    python3 "$ROOT/scripts/v623-parse-instrumentation.py" \
+        "$RUN_DIR/instrumentation.combined.log" "$XML_SOURCE_DIR" \
+        | tee "$RUN_DIR/am-instrument-parser.txt" || true
+fi
 python3 - "$XML_SOURCE_DIR" "$RUN_DIR/test-results-xml" "$RUN_DIR/instrumentation.combined.log" "$TEST_EXIT" <<'PY' | tee "$RUN_DIR/test-counts.txt"
 import glob
 import os

@@ -1,0 +1,10 @@
+command	result	observed_output	full_log
+cd android && ./gradlew --rerun-tasks --no-daemon :app:testDebugUnitTest :app:lintDebug --console=plain	exit 0; BUILD SUCCESSFUL	321 tests in 58 XML; 0 failures/errors/skips; lint 53 warnings	/tmp/v623-qa/qa-r3-53ba3a6/jvm-lint-r3-final.log
+cd android && ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest --console=plain	BUILD SUCCESSFUL	Both APK tasks completed	/tmp/v623-qa/qa-r3-53ba3a6/assemble.log
+cd android && ./gradlew --stop --console=plain	exit 0	No Gradle daemons are running	/tmp/v623-qa/qa-r3-53ba3a6/gradle-stop-r3-final.log
+ATLAS_V623_PREBUILT_APKS=1 ATLAS_V623_DIRECT_INSTRUMENTATION=1 ATLAS_V623_TEST_TIMEOUT_SECONDS=1800 ATLAS_V623_SERVICE_TIMEOUT_SECONDS=10 scripts/v623-android-qa.sh api34	exit 0; scenario result NOT_RUN	MemAvailable before boot 7194960 KiB; during boot 4947044 KiB; no install, runner or XML	/tmp/v623-qa/api34-20261021T154656Z/recipe.result.txt
+ATLAS_V623_PREBUILT_APKS=1 ATLAS_V623_DIRECT_INSTRUMENTATION=1 ATLAS_V623_TEST_TIMEOUT_SECONDS=1800 ATLAS_V623_SERVICE_TIMEOUT_SECONDS=10 scripts/v623-android-qa.sh api37-gpu-guest	exit 0; scenario result NOT_RUN	MemAvailable before boot 7017444 KiB; during boot 5114032 KiB; guest mode rejected; no complete boot or runner	/tmp/v623-qa/api37-gpu-guest-20261021T154902Z/recipe.result.txt
+/home/nill/Android/Sdk/emulator/emulator -version	PASS	Android emulator version 37.2.12.0	docs/v6-2-3/preuves-api37/r3-emulator-version.txt
+/home/nill/Android/Sdk/emulator/emulator -help-gpu	PASS	Lists auto, host, software, lavapipe, swiftshader, swangle; no guest or swangle_indirect	docs/v6-2-3/preuves-api37/r3-emulator-help-gpu.txt
+/home/nill/Android/Sdk/platform-tools/adb devices -l	PASS command; serial present at final recheck	45301FDAS001QT Pixel 9 Pro XL, device	docs/v6-2-3/preuves-api37/r3-adb-devices.txt
+adb -s 45301FDAS001QT read-only device/package/HOME inspection	PASS read-only inventory	Android 17/API 37; ATLAS versionCode 1 installed; current HOME Pixel Launcher; no mutation	/tmp/v623-qa/qa-r3-53ba3a6/phone-read-only.txt

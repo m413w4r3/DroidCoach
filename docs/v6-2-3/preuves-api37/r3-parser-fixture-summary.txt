@@ -1,0 +1,4 @@
+Non-device parser fixture only; not an Android instrumentation result.
+Input: two synthetic AndroidJUnitRunner status sequences (one pass, one failure).
+Output: classes=1, tests=2, passed=1, failed=1, skipped=0, runner_complete=true, aborted=false.
+The generated JUnit XML is under /tmp/v623-qa/qa-r3-53ba3a6/parser-fixture-xml/.
