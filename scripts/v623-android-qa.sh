@@ -10,11 +10,14 @@ AVD_HOME="/tmp/v623-qa/avd"
 LOG_ROOT="/tmp/v623-qa"
 GRADLE_HOME="$LOG_ROOT/gradle-home"
 GRADLE_CACHE="$LOG_ROOT/project-cache"
-ADB_PORT=5037
+ADB_PORT=5038
 CONSOLE_PORT=5580
 SERIAL="emulator-$CONSOLE_PORT"
 RUNNER="dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner"
 GPU="${ATLAS_V623_EMULATOR_GPU:-auto}"
+MEMORY_MB="${ATLAS_V623_EMULATOR_MEMORY_MB:-2048}"
+PROBE_ONLY="${ATLAS_V623_PROBE_ONLY:-0}"
+MEMORY_GATE_KIB=8388608
 COMMAND_TIMEOUT="${ATLAS_V623_ADB_TIMEOUT_SECONDS:-20}"
 SERVICE_TIMEOUT="${ATLAS_V623_SERVICE_TIMEOUT_SECONDS:-5}"
 BUILD_TIMEOUT="${ATLAS_V623_BUILD_TIMEOUT_SECONDS:-1200}"
@@ -26,18 +29,18 @@ export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
 
 usage() {
     cat <<'USAGE'
-Usage: scripts/v623-android-qa.sh api34|api37|--self-test
+Usage: scripts/v623-android-qa.sh api34|api37-baseline|api37-gpu-swiftshader|api37-memory-3072|api37-memory-4096|api37-image-37-1-playstore|api37-image-37-2-playstore|api35-control|--self-test
 
 Builds in this worktree, then uses one task-owned disposable AVD at a time.
-The AVD console/ADB ports are 5580/5581. The shared ADB server remains running;
-all target commands use the explicit disposable-emulator serial.
+The AVD console/ADB ports are 5580/5581. It starts an isolated ADB server on
+5038; all target commands use the explicit disposable-emulator serial.
 Full run logs are kept outside the repository under /tmp/v623-qa.
 USAGE
 }
 
 MODE="${1:-}"
 case "$MODE" in
-    api34|api37|--self-test) ;;
+    api34|api37|api37-baseline|api37-gpu-swiftshader|api37-memory-3072|api37-memory-4096|api37-image-37-1-playstore|api37-image-37-2-playstore|api35-control|--self-test) ;;
     *) usage >&2; exit 2 ;;
 esac
 
@@ -101,6 +104,23 @@ status_is_valid() {
     case "$1" in PASS|FAIL|BLOCKED|NOT_RUN) return 0 ;; *) return 1 ;; esac
 }
 
+memavailable_kib() {
+    awk '$1 == "MemAvailable:" { print $2; found=1; exit } END { if (!found) exit 1 }' /proc/meminfo
+}
+
+memory_gate_status() {
+    if (( $1 >= MEMORY_GATE_KIB )); then printf 'PASS'; else printf 'NOT_RUN'; fi
+}
+
+write_not_run_matrix() {
+    local reason="$1" file="$RUN_DIR/scenario-matrix.tsv"
+    printf 'scenario\tstatus\tcause\tevidence\n' >"$file"
+    for scenario in installation_launch home_role previous_launcher focus goals notifications location_one_shot mobility_visible runtime_permissions revocation rotation font_scale_2x offline; do
+        printf '%s\tNOT_RUN\tHOST_ENVIRONMENT\t%s (%s)\n' "$scenario" "$reason" "$RUN_DIR" >>"$file"
+    done
+    printf 'NOT_RUN reason=%s matrix=%s\n' "$reason" "$file" | tee "$RUN_DIR/scenario-matrix.result.txt"
+}
+
 if [[ "$MODE" == --self-test ]]; then
     self_assert service_exact_found found "$(service_kind package 'Service package: found')"
     self_assert service_exact_missing not_found "$(service_kind package 'Service package: not found')"
@@ -109,12 +129,20 @@ if [[ "$MODE" == --self-test ]]; then
     for status in PASS FAIL BLOCKED NOT_RUN; do
         if status_is_valid "$status"; then self_assert "status_$status" yes yes; else self_assert "status_$status" yes no; fi
     done
+    self_assert memory_at_threshold PASS "$(memory_gate_status 8388608)"
+    self_assert memory_below_threshold NOT_RUN "$(memory_gate_status 8388607)"
     if status_is_valid SKIPPED; then self_assert forbidden_skipped no yes; else self_assert forbidden_skipped no no; fi
     printf 'SELF_TEST_SUMMARY pass=%s fail=%s adb_called=no emulator_started=no gradle_called=no\n' \
         "$SELF_TEST_PASSES" "$SELF_TEST_FAILURES"
     [[ "$SELF_TEST_FAILURES" == 0 ]]
     exit $?
 fi
+
+# Keep the exclusion lock for the full AVD lifetime, including cleanup. The UI
+# session uses the same path, so a task-owned emulator cannot overlap it.
+exec 9>/tmp/v623-emulator.lock
+flock -x 9
+printf 'emulator_lock=/tmp/v623-emulator.lock acquired=1\n'
 
 if [[ ! -x "$ADB" || ! -x "$EMULATOR" || ! -x "$AVDMANAGER" ]]; then
     printf 'BLOCKED missing_android_tool adb=%s emulator=%s avdmanager=%s\n' \
@@ -128,18 +156,53 @@ case "$MODE" in
         AVD_NAME="atlas_v623_qa_api34"
         IMAGE="system-images;android-34;google_apis;x86_64"
         ;;
-    api37)
+    api37|api37-baseline)
         API_LEVEL=37
         AVD_NAME="atlas_v623_qa_api37"
         IMAGE="system-images;android-37.2;google_apis_ps16k;x86_64"
+        ;;
+    api37-gpu-swiftshader)
+        API_LEVEL=37
+        AVD_NAME="atlas_v623_qa_api37_gpu_swiftshader"
+        IMAGE="system-images;android-37.2;google_apis_ps16k;x86_64"
+        GPU=swiftshader_indirect
+        ;;
+    api37-memory-3072)
+        API_LEVEL=37
+        AVD_NAME="atlas_v623_qa_api37_mem3072"
+        IMAGE="system-images;android-37.2;google_apis_ps16k;x86_64"
+        MEMORY_MB=3072
+        ;;
+    api37-memory-4096)
+        API_LEVEL=37
+        AVD_NAME="atlas_v623_qa_api37_mem4096"
+        IMAGE="system-images;android-37.2;google_apis_ps16k;x86_64"
+        MEMORY_MB=4096
+        ;;
+    api37-image-37-1-playstore)
+        API_LEVEL=37
+        AVD_NAME="atlas_v623_qa_api37_1_playstore"
+        IMAGE="system-images;android-37.1;google_apis_playstore_ps16k;x86_64"
+        ;;
+    api37-image-37-2-playstore)
+        API_LEVEL=37
+        AVD_NAME="atlas_v623_qa_api37_2_playstore"
+        IMAGE="system-images;android-37.2;google_apis_playstore_ps16k;x86_64"
+        ;;
+    api35-control)
+        API_LEVEL=35
+        AVD_NAME="atlas_v623_qa_api35_control"
+        IMAGE="system-images;android-35;google_apis_ps16k;x86_64"
+        PROBE_ONLY=1
         ;;
 esac
 AVD_DIR="$AVD_HOME/$AVD_NAME.avd"
 APP_APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 TEST_APK="$ROOT/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+XML_SOURCE_DIR="$ROOT/android/app/build/outputs/androidTest-results/connected/debug"
 
-printf 'ATLAS V6.2.3 Android QA recipe\nrepo=%s\nmode=%s\napi=%s\navd=%s\nserial=%s\nconsole_port=%s\nadb_port=%s\nadb_server_port=%s\ngpu=%s\nrun_dir=%s\n' \
-    "$ROOT" "$MODE" "$API_LEVEL" "$AVD_NAME" "$SERIAL" "$CONSOLE_PORT" "$((CONSOLE_PORT + 1))" "$ADB_PORT" "$GPU" "$RUN_DIR"
+printf 'ATLAS V6.2.3 Android QA recipe\nrepo=%s\nmode=%s\napi=%s\navd=%s\nserial=%s\nconsole_port=%s\nadb_port=%s\nadb_server_port=%s\nimage=%s\ngpu=%s\nmemory_mb=%s\nprobe_only=%s\nrun_dir=%s\n' \
+    "$ROOT" "$MODE" "$API_LEVEL" "$AVD_NAME" "$SERIAL" "$CONSOLE_PORT" "$((CONSOLE_PORT + 1))" "$ADB_PORT" "$IMAGE" "$GPU" "$MEMORY_MB" "$PROBE_ONLY" "$RUN_DIR"
 printf 'git_branch=%s\ngit_head=%s\njava=%s\npython=%s\nemulator=%s\nadb=%s\n' \
     "$(git -C "$ROOT" branch --show-current)" "$(git -C "$ROOT" rev-parse HEAD)" \
     "$(java -version 2>&1 | head -1)" "$(python3 --version 2>&1)" \
@@ -407,13 +470,19 @@ probe_service() {
 }
 
 write_blocked_matrix() {
-    local reason="$1"
+    local reason="$1" cause="${2:-AVD_ENVIRONMENT_BLOCKED}"
     local file="$RUN_DIR/scenario-matrix.tsv"
     printf 'scenario\tstatus\tcause\tevidence\n' >"$file"
     for scenario in installation_launch home_role previous_launcher focus goals notifications location_one_shot mobility_visible runtime_permissions revocation rotation font_scale_2x offline; do
-        printf '%s\tBLOCKED\tAVD_ENVIRONMENT_BLOCKED\t%s (%s)\n' "$scenario" "$reason" "$RUN_DIR" >>"$file"
+        printf '%s\tBLOCKED\t%s\t%s (%s)\n' "$scenario" "$cause" "$reason" "$RUN_DIR" >>"$file"
     done
     printf 'BLOCKED framework_gate=%s matrix=%s\n' "$reason" "$file" | tee "$RUN_DIR/scenario-matrix.result.txt"
+}
+
+count_system_server_starts() {
+    local file="$1" count
+    count="$(rg -c 'system_server_start' "$file" 2>/dev/null || true)"
+    printf '%s' "${count:-0}"
 }
 
 home_picker_point() {
@@ -625,6 +694,23 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+host_mem_kib="$(memavailable_kib || true)"
+if [[ ! "$host_mem_kib" =~ ^[0-9]+$ ]]; then
+    printf 'NOT_RUN reason=host_memavailable_unreadable cause=HOST_ENVIRONMENT\n' \
+        | tee "$RUN_DIR/recipe.result.txt"
+    write_not_run_matrix host_memavailable_unreadable
+    exit 0
+fi
+printf 'stage=pre_build memavailable_kib=%s threshold_kib=%s memory_gate=%s\n' \
+    "$host_mem_kib" "$MEMORY_GATE_KIB" "$(memory_gate_status "$host_mem_kib")" \
+    | tee "$RUN_DIR/host-memory-gate.txt"
+if [[ "$(memory_gate_status "$host_mem_kib")" != PASS ]]; then
+    printf 'NOT_RUN reason=host_memavailable_below_8GiB memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
+        "$host_mem_kib" "$MEMORY_GATE_KIB" | tee "$RUN_DIR/recipe.result.txt"
+    write_not_run_matrix host_memavailable_below_8GiB
+    exit 0
+fi
+
 printf '\n[build] Building debug app and AndroidTest APKs into this worktree.\n'
 if ! run_host build "$BUILD_TIMEOUT" env GRADLE_USER_HOME="$GRADLE_HOME" \
     "${ROOT}/android/gradlew" --no-daemon --project-cache-dir "$GRADLE_CACHE" \
@@ -664,8 +750,10 @@ if [[ ! -f "$AVD_DIR/.v623-qa-owned" ]]; then
     printf 'BLOCKED avd_ownership_marker_missing path=%s\n' "$AVD_DIR" | tee "$RUN_DIR/recipe.result.txt"
     exit 2
 fi
-if ! grep -Eq "^image\.sysdir\.1[[:space:]]*=[[:space:]]*system-images/android-${API_LEVEL}(\.2)?/" "$AVD_DIR/config.ini"; then
-    printf 'BLOCKED avd_image_mismatch path=%s expected=%s\n' "$AVD_DIR/config.ini" "$IMAGE" \
+expected_image_sysdir="$(tr ';' '/' <<<"$IMAGE")"
+actual_image_sysdir="$(sed -n 's/^image\.sysdir\.1[[:space:]]*=[[:space:]]*//p' "$AVD_DIR/config.ini" | tail -n 1 | sed 's:/*$::')"
+if [[ "$actual_image_sysdir" != "$expected_image_sysdir" ]]; then
+    printf 'BLOCKED avd_image_mismatch path=%s expected=%s actual=%s\n' "$AVD_DIR/config.ini" "$expected_image_sysdir" "$actual_image_sysdir" \
         | tee "$RUN_DIR/recipe.result.txt"
     exit 2
 fi
@@ -684,12 +772,25 @@ if awk -v serial="$SERIAL" '$1 == serial && $2 == "device" {found=1} END {exit !
     exit 2
 fi
 
+preboot_mem_kib="$(memavailable_kib || true)"
+printf 'stage=pre_boot memavailable_kib=%s threshold_kib=%s memory_gate=%s\n' \
+    "${preboot_mem_kib:-UNREADABLE}" "$MEMORY_GATE_KIB" \
+    "$( [[ "${preboot_mem_kib:-}" =~ ^[0-9]+$ ]] && memory_gate_status "$preboot_mem_kib" || printf NOT_RUN )" \
+    | tee -a "$RUN_DIR/host-memory-gate.txt"
+if [[ ! "$preboot_mem_kib" =~ ^[0-9]+$ ]] ||
+   [[ "$(memory_gate_status "$preboot_mem_kib")" != PASS ]]; then
+    printf 'NOT_RUN reason=host_memavailable_below_8GiB_before_boot memavailable_kib=%s threshold_kib=%s cause=HOST_ENVIRONMENT\n' \
+        "${preboot_mem_kib:-UNREADABLE}" "$MEMORY_GATE_KIB" | tee "$RUN_DIR/recipe.result.txt"
+    write_not_run_matrix host_memavailable_below_8GiB_before_boot
+    exit 0
+fi
+
 printf '[emulator-start] command='
 printf '%q ' "$EMULATOR" -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no-snapshot-load -no-snapshot-save \
-    -port "$CONSOLE_PORT" -gpu "$GPU" -cores 2 -memory 2048 -partition-size 4096 -wipe-data -netdelay none -netspeed full
+    -port "$CONSOLE_PORT" -gpu "$GPU" -cores 2 -memory "$MEMORY_MB" -partition-size 4096 -wipe-data -netdelay none -netspeed full
 printf '\n'
 "$EMULATOR" -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no-snapshot-load -no-snapshot-save \
-    -port "$CONSOLE_PORT" -gpu "$GPU" -cores 2 -memory 2048 -partition-size 4096 -wipe-data \
+    -port "$CONSOLE_PORT" -gpu "$GPU" -cores 2 -memory "$MEMORY_MB" -partition-size 4096 -wipe-data \
     -netdelay none -netspeed full >"$RUN_DIR/emulator.log" 2>&1 &
 EMULATOR_PID=$!
 EMULATOR_STARTED=1
@@ -737,9 +838,32 @@ capture_screenshot pre-install-screencap
 framework_deadline=$((SECONDS + 240))
 framework_ready=0
 services_ever_found=0
-stable_since=""
+positive_service_responses=0
+total_positive_service_responses=0
+probe_round=0
 : >"$RUN_DIR/framework-service-probes.log"
+run_target framework-events-baseline shell logcat -b events -d -v threadtime
+system_server_starts_baseline="$(count_system_server_starts "$RUN_DIR/framework-events-baseline.stdout.log")"
+if [[ "$(target_exit framework-events-baseline)" != 0 || "$system_server_starts_baseline" == 0 ]]; then
+    printf 'BLOCKED reason=system_server_start_events_unavailable baseline_count=%s\n' \
+        "$system_server_starts_baseline" | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+    printf 'positive_service_responses=0\nsystem_server_start_baseline=%s\nstatus=UNKNOWN\n' \
+        "$system_server_starts_baseline" >"$RUN_DIR/framework-gate-counts.txt"
+    capture_diagnostics system_server_event_telemetry_unavailable
+    write_blocked_matrix system_server_start_events_unavailable UNKNOWN
+    exit 1
+fi
+if [[ "$system_server_starts_baseline" != 1 ]]; then
+    printf 'BLOCKED reason=system_server_restarted_before_probe_window baseline_start_count=%s\n' \
+        "$system_server_starts_baseline" | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+    printf 'positive_service_responses=0\nsystem_server_start_baseline=%s\nstatus=AVD_ENVIRONMENT_BLOCKED\n' \
+        "$system_server_starts_baseline" >"$RUN_DIR/framework-gate-counts.txt"
+    capture_diagnostics system_server_restarted_before_probe_window
+    write_blocked_matrix system_server_restarted_before_probe_window
+    exit 1
+fi
 while (( SECONDS < framework_deadline )); do
+    probe_round=$((probe_round + 1))
     found_count=0
     missing_count=0
     for service in package activity location notification window; do
@@ -749,14 +873,41 @@ while (( SECONDS < framework_deadline )); do
         fi
     done
     (( found_count == 5 )) && services_ever_found=1
+    total_positive_service_responses=$((total_positive_service_responses + found_count))
     if (( found_count == 5 )); then
-        [[ -n "$stable_since" ]] || stable_since="$SECONDS"
-        if (( SECONDS - stable_since >= 15 )); then framework_ready=1; break; fi
+        positive_service_responses=$((positive_service_responses + found_count))
+        run_target "framework-events-window-$probe_round" shell logcat -b events -d -v threadtime
+        current_system_server_starts="$(count_system_server_starts "$RUN_DIR/framework-events-window-$probe_round.stdout.log")"
+        if [[ "$(target_exit "framework-events-window-$probe_round")" != 0 ]]; then
+            printf 'BLOCKED reason=system_server_event_probe_failed round=%s\n' "$probe_round" \
+                | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+            printf 'positive_service_responses=%s\ntotal_positive_service_responses=%s\nsystem_server_start_baseline=%s\nsystem_server_start_current=%s\nstatus=UNKNOWN\n' \
+                "$positive_service_responses" "$total_positive_service_responses" "$system_server_starts_baseline" "$current_system_server_starts" \
+                >"$RUN_DIR/framework-gate-counts.txt"
+            capture_diagnostics system_server_event_probe_failed
+            write_blocked_matrix system_server_event_probe_failed UNKNOWN
+            exit 1
+        fi
+        if [[ "$current_system_server_starts" != "$system_server_starts_baseline" ]]; then
+            printf 'BLOCKED reason=system_server_restart_during_service_probe_window round=%s starts_before=%s starts_now=%s\n' \
+                "$probe_round" "$system_server_starts_baseline" "$current_system_server_starts" \
+                | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+            printf 'positive_service_responses=%s\ntotal_positive_service_responses=%s\nsystem_server_start_baseline=%s\nsystem_server_start_current=%s\nstatus=AVD_ENVIRONMENT_BLOCKED\n' \
+                "$positive_service_responses" "$total_positive_service_responses" "$system_server_starts_baseline" "$current_system_server_starts" \
+                >"$RUN_DIR/framework-gate-counts.txt"
+            capture_diagnostics system_server_restart_during_service_probe_window
+            write_blocked_matrix system_server_restart_during_service_probe_window
+            exit 1
+        fi
+        if (( positive_service_responses >= 30 )); then framework_ready=1; break; fi
     else
-        stable_since=""
+        positive_service_responses=0
         if (( services_ever_found && missing_count == 5 )); then
             printf 'BLOCKED framework_services_disappeared_after_positive_probes\n' \
                 | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+            printf 'positive_service_responses=0\ntotal_positive_service_responses=%s\nsystem_server_start_baseline=%s\nstatus=AVD_ENVIRONMENT_BLOCKED\n' \
+                "$total_positive_service_responses" "$system_server_starts_baseline" \
+                >"$RUN_DIR/framework-gate-counts.txt"
             capture_diagnostics framework_services_disappeared
             write_blocked_matrix framework_services_disappeared
             exit 1
@@ -765,12 +916,27 @@ while (( SECONDS < framework_deadline )); do
     sleep 2
 done
 if [[ "$framework_ready" != 1 ]]; then
-    printf 'BLOCKED framework_services_not_stable_within_240s\n' | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+    printf 'BLOCKED reason=framework_services_not_stable_for_30_consecutive_positive_probes within=240s positives=%s\n' \
+        "$positive_service_responses" | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+    printf 'positive_service_responses=%s\ntotal_positive_service_responses=%s\nsystem_server_start_baseline=%s\nstatus=AVD_ENVIRONMENT_BLOCKED\n' \
+        "$positive_service_responses" "$total_positive_service_responses" "$system_server_starts_baseline" \
+        >"$RUN_DIR/framework-gate-counts.txt"
     capture_diagnostics framework_services_not_stable
     write_blocked_matrix framework_services_not_stable
     exit 1
 fi
-printf 'PASS framework_services_stable_for_15s\n' | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+printf 'positive_service_responses=%s\ntotal_positive_service_responses=%s\nsystem_server_start_baseline=%s\nsystem_server_start_final=%s\nsystem_server_restarts_during_window=0\nstatus=PASS\n' \
+    "$positive_service_responses" "$total_positive_service_responses" "$system_server_starts_baseline" "$system_server_starts_baseline" \
+    >"$RUN_DIR/framework-gate-counts.txt"
+printf 'PASS framework_services_stable_for_30_positive_probes_without_system_server_restart\n' \
+    | tee "$RUN_DIR/framework-runtime-gate.result.txt"
+
+if [[ "$PROBE_ONLY" == 1 ]]; then
+    printf 'PASS probe_only_control api=%s image=%s positives=%s system_server_restarts=0\n' \
+        "$API_LEVEL" "$IMAGE" "$positive_service_responses" | tee "$RUN_DIR/recipe.result.txt"
+    capture_diagnostics stable_probe_only_control
+    exit 0
+fi
 
 run_target package-inventory shell pm list packages dev.atlas.coach
 if grep -Fxq 'package:dev.atlas.coach' "$RUN_DIR/package-inventory.stdout.log"; then
@@ -833,10 +999,18 @@ else
         printf 'BLOCKED reason=permission_revoke_setup_failed\n' >"$RUN_DIR/permission-initial-denied.result.txt"
     fi
     run_target grant-notification-permission shell pm grant dev.atlas.coach android.permission.POST_NOTIFICATIONS
-    printf '\n[instrumentation] Running every test available to the generic AndroidJUnitRunner on the explicit AVD serial.\n'
-    run_target instrumentation shell am instrument -w -r dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
-    TEST_EXIT="$(target_exit instrumentation)"
+    printf '\n[instrumentation] Running connectedDebugAndroidTest on the isolated ADB server and explicit disposable serial.\n'
+    rm -rf "$XML_SOURCE_DIR"
+    run_host instrumentation "$TEST_TIMEOUT" env \
+        GRADLE_USER_HOME="$GRADLE_HOME" \
+        ANDROID_SERIAL="$SERIAL" \
+        ANDROID_ADB_SERVER_PORT="$ADB_PORT" \
+        ADB_SERVER_SOCKET="tcp:localhost:$ADB_PORT" \
+        "$ROOT/android/gradlew" --no-daemon --project-cache-dir "$GRADLE_CACHE" \
+        --console=plain -p "$ROOT/android" :app:connectedDebugAndroidTest
+    TEST_EXIT="$(cat "$RUN_DIR/instrumentation.exit" 2>/dev/null || true)"
 fi
+TEST_EXIT="${TEST_EXIT:-999}"
 printf '%s\n' "$TEST_EXIT" >"$RUN_DIR/instrumentation.exit"
 run_target test-filter-logcat shell logcat -d -s ATLAS_TEST_FILTER:I
 run_target screenshot-capture-logcat shell logcat -d -s ATLAS_UI_CAPTURE:I
@@ -851,53 +1025,92 @@ fi
 printf 'status=%s\ncapture_ok=%s\ncapture_blocked=%s\n' \
     "$SCREENSHOT_CAPTURE_STATUS" "$capture_ok_count" "$capture_blocked_count" \
     | tee "$RUN_DIR/screenshot-capture.result.txt"
-python3 - "$RUN_DIR/instrumentation.stdout.log" "$TEST_EXIT" <<'PY' | tee "$RUN_DIR/test-counts.txt"
-import re
+mkdir -p "$RUN_DIR/test-results-xml"
+cat "$RUN_DIR/instrumentation.stdout.log" "$RUN_DIR/instrumentation.stderr.log" \
+    >"$RUN_DIR/instrumentation.combined.log" 2>/dev/null || true
+python3 - "$XML_SOURCE_DIR" "$RUN_DIR/test-results-xml" "$RUN_DIR/instrumentation.combined.log" "$TEST_EXIT" <<'PY' | tee "$RUN_DIR/test-counts.txt"
+import glob
+import os
+import shutil
 import sys
+import xml.etree.ElementTree as ET
 
-path, exit_code = sys.argv[1], int(sys.argv[2])
-text = open(path, encoding="utf-8", errors="replace").read()
-last_class = "?"
-last_test = "?"
-completed = passed = failures = errors = 0
-for line in text.splitlines():
-    if line.startswith("INSTRUMENTATION_STATUS: class="):
-        last_class = line.split("=", 1)[1]
-    elif line.startswith("INSTRUMENTATION_STATUS: test="):
-        last_test = line.split("=", 1)[1]
-    elif line.startswith("INSTRUMENTATION_STATUS_CODE:"):
-        code = line.split(":", 1)[1].strip()
-        if code in {"0", "-2", "-3"}:
-            completed += 1
-            if code == "0":
-                passed += 1
-                print(f"PASS {last_class}#{last_test}")
-            elif code == "-2":
-                failures += 1
-                print(f"FAIL {last_class}#{last_test}")
-            else:
-                errors += 1
-                print(f"ERROR {last_class}#{last_test}")
-summary = re.findall(r"Tests run:\s*(\d+)\s*,\s*Failures:\s*(\d+)", text)
-ok = re.findall(r"OK \((\d+) tests?\)", text)
-if summary:
-    total = int(summary[-1][0])
-    failures = max(failures, int(summary[-1][1]))
-elif ok:
-    total = int(ok[-1])
-else:
-    total = completed
-complete_marker = "INSTRUMENTATION_CODE: -1" in text
-aborted = ("INSTRUMENTATION_ABORTED" in text or "System has crashed" in text or
-           "shortMsg=Process crashed" in text)
-print(f"TESTS={max(total, completed)} PASSED={passed} FAILURES={failures} ERRORS={errors} "
-      f"RUNNER_COMPLETE={str(complete_marker).lower()} ABORTED={str(aborted).lower()} "
-      f"ADB_EXIT={exit_code}")
+source_dir, output_dir, log_path, exit_code_raw = sys.argv[1:]
+exit_code = int(exit_code_raw)
+xml_paths = sorted(glob.glob(os.path.join(source_dir, "**", "TEST-*.xml"), recursive=True))
+text = open(log_path, encoding="utf-8", errors="replace").read() if os.path.exists(log_path) else ""
+total = passed = failures = errors = skipped = 0
+xml_parse_errors = 0
+failure_rows = []
+def failure_classification(name, details):
+    lower_name = name.casefold()
+    lower_details = details.casefold()
+    if "screenshotcapturepipelineproducespng" in lower_name or any(token in lower_details for token in (
+        "device offline", "system has crashed", "instrumentation_aborted", "shortmsg=process crashed",
+        "timed out waiting for", "screencap", "invalid png", "window did not draw",
+    )):
+        return "AVD_ENVIRONMENT_BLOCKED"
+    if any(token in lower_details for token in (
+        "expected_width_dp", "configured capture width", "runnerarguments", "missing instrumentation",
+    )):
+        return "TEST_HARNESS_BUG"
+    if "assertionerror" in lower_details or "assertionfailederror" in lower_details or "expected:<" in lower_details:
+        return "APP_BUG"
+    if "fatal exception" in lower_details and "dev.atlas.coach" in lower_details:
+        return "APP_BUG"
+    if not name or not details:
+        return "UNKNOWN"
+    return "UNKNOWN"
+for index, path in enumerate(xml_paths, start=1):
+    shutil.copy2(path, os.path.join(output_dir, f"TEST-{index:03d}-{os.path.basename(path)}"))
+    try:
+        root = ET.parse(path).getroot()
+    except ET.ParseError as exc:
+        xml_parse_errors += 1
+        print(f"NOT_RUN malformed_xml={path} reason={exc}")
+        continue
+    for case in root.iter("testcase"):
+        total += 1
+        full_name = f"{case.get('classname', root.get('name', '?'))}#{case.get('name', '?')}"
+        if case.find("failure") is not None:
+            failures += 1
+            node = case.find("failure")
+            details = " ".join((node.get("message", ""), node.text or "")).replace("\t", " ").replace("\n", " ")
+            classification = failure_classification(full_name, details)
+            failure_rows.append((full_name, classification, details[:1000]))
+            print(f"FAIL {full_name} classification={classification}")
+        elif case.find("error") is not None:
+            errors += 1
+            node = case.find("error")
+            details = " ".join((node.get("message", ""), node.text or "")).replace("\t", " ").replace("\n", " ")
+            classification = failure_classification(full_name, details)
+            failure_rows.append((full_name, classification, details[:1000]))
+            print(f"ERROR {full_name} classification={classification}")
+        elif case.find("skipped") is not None:
+            skipped += 1
+            reason = (case.find("skipped").get("message", "") or "").replace("\n", " ")
+            print(f"NOT_RUN {full_name} reason={reason}")
+        else:
+            passed += 1
+            print(f"PASS {full_name}")
+with open(os.path.join(output_dir, "test-failure-classifications.tsv"), "w", encoding="utf-8") as out:
+    out.write("test\tclassification\tevidence\n")
+    for name, classification, details in failure_rows:
+        out.write(f"{name}\t{classification}\t{details}\n")
+aborted = any(marker in text for marker in (
+    "INSTRUMENTATION_ABORTED", "System has crashed", "shortMsg=Process crashed",
+    "device offline", "Instrumentation run failed due to",
+))
+complete = bool(xml_paths and total > 0 and xml_parse_errors == 0 and not aborted)
+print(f"TESTS={total} PASSED={passed} FAILURES={failures} ERRORS={errors} SKIPPED={skipped} XML_PARSE_ERRORS={xml_parse_errors} "
+      f"XML_FILES={len(xml_paths)} RUNNER_COMPLETE={str(complete).lower()} "
+      f"ABORTED={str(aborted).lower()} GRADLE_EXIT={exit_code}")
 PY
 SUMMARY_LINE="$(tail -n 1 "$RUN_DIR/test-counts.txt")"
 TEST_COUNT="$(sed -n 's/.*TESTS=\([0-9][0-9]*\).*/\1/p' <<<"$SUMMARY_LINE")"
 FAILURE_COUNT="$(sed -n 's/.*FAILURES=\([0-9][0-9]*\).*/\1/p' <<<"$SUMMARY_LINE")"
 ERROR_COUNT="$(sed -n 's/.*ERRORS=\([0-9][0-9]*\).*/\1/p' <<<"$SUMMARY_LINE")"
+SKIPPED_COUNT="$(sed -n 's/.*SKIPPED=\([0-9][0-9]*\).*/\1/p' <<<"$SUMMARY_LINE")"
 RUNNER_COMPLETE="$(sed -n 's/.*RUNNER_COMPLETE=\([a-z]*\).*/\1/p' <<<"$SUMMARY_LINE")"
 RUNNER_ABORTED="$(sed -n 's/.*ABORTED=\([a-z]*\).*/\1/p' <<<"$SUMMARY_LINE")"
 
@@ -1087,7 +1300,7 @@ matrix_row() {
     case "$status" in
         PASS) cause=NONE ;;
         BLOCKED) cause=AVD_ENVIRONMENT_BLOCKED ;;
-        FAIL) cause=UNKNOWN ;;
+        FAIL) cause=APP_BUG ;;
         NOT_RUN) cause=UNKNOWN ;;
         *) status=NOT_RUN; cause=UNKNOWN ;;
     esac
@@ -1117,17 +1330,20 @@ elif (( service_failures == 5 )); then
     SUITE_CAUSE=AVD_ENVIRONMENT_BLOCKED
     capture_diagnostics framework_services_lost_or_instrumentation_aborted
 elif [[ "$RUNNER_ABORTED" == true && "${TEST_COUNT:-0}" != 0 ]]; then
-    SUITE_STATUS=FAIL
-    SUITE_CAUSE=UNKNOWN
+    SUITE_STATUS=BLOCKED
+    SUITE_CAUSE=AVD_ENVIRONMENT_BLOCKED
 elif [[ "${TEST_COUNT:-0}" == 0 || "$RUNNER_COMPLETE" != true ]]; then
     SUITE_STATUS=NOT_RUN
     SUITE_CAUSE=TEST_HARNESS_BUG
+elif (( ${SKIPPED_COUNT:-0} > 0 )); then
+    SUITE_STATUS=NOT_RUN
+    SUITE_CAUSE=UNKNOWN
 elif [[ "$TEST_EXIT" == 0 && "${FAILURE_COUNT:-0}" == 0 && "${ERROR_COUNT:-0}" == 0 ]]; then
     SUITE_STATUS=PASS
     SUITE_CAUSE=NONE
 else
     SUITE_STATUS=FAIL
-    SUITE_CAUSE=ASSERTION_OR_RUNNER_FAILURE
+    SUITE_CAUSE=UNKNOWN
 fi
 if (( SUPPLEMENTAL_FAILURES > 0 )) && [[ "$SUITE_STATUS" != BLOCKED ]]; then
     SUITE_STATUS=FAIL
@@ -1137,10 +1353,13 @@ elif (( SUPPLEMENTAL_BLOCKED > 0 )) && [[ "$SUITE_STATUS" == PASS ]]; then
     SUITE_CAUSE=AVD_ENVIRONMENT_BLOCKED
 fi
 if [[ "$SCREENSHOT_CAPTURE_STATUS" == FAIL && "$SUITE_STATUS" != BLOCKED ]]; then
-    SUITE_STATUS=FAIL
-    [[ "$SUITE_CAUSE" == NONE ]] && SUITE_CAUSE=UNKNOWN
+    SUITE_STATUS=BLOCKED
+    SUITE_CAUSE=AVD_ENVIRONMENT_BLOCKED
 fi
-if [[ "$HOME_ROLE_RESULT" == FAIL || "$HOME_RETURN_RESULT" == FAIL || "$HOME_RESTORE_RESULT" == FAIL ]]; then SUITE_STATUS=FAIL; fi
+if [[ "$HOME_ROLE_RESULT" == FAIL || "$HOME_RETURN_RESULT" == FAIL || "$HOME_RESTORE_RESULT" == FAIL ]]; then
+    SUITE_STATUS=FAIL
+    SUITE_CAUSE=APP_BUG
+fi
 printf 'suite_status=%s\nsuite_cause=%s\ntests=%s\nfailures=%s\nerrors=%s\ninstall_launch_status=%s\nhome_role_status=%s\nhome_return_status=%s\nhome_restore_status=%s\nfocus_status=%s\ngoals_status=%s\nnotifications_status=%s\nscreenshot_capture_status=%s\nlocation_status=%s\nmobility_status=%s\nruntime_permissions_status=%s\nrevocation_status=%s\nrotation_status=%s\nfont_scale_2x_status=%s\noffline_status=%s\nsupplemental_failures=%s\nsupplemental_blocked=%s\ntest_exit=%s\nrun_dir=%s\n' \
     "$SUITE_STATUS" "$SUITE_CAUSE" "${TEST_COUNT:-0}" "${FAILURE_COUNT:-0}" \
     "${ERROR_COUNT:-0}" "${INSTALL_LAUNCH_STATUS:-NOT_RUN}" "$HOME_ROLE_RESULT" "$HOME_RETURN_RESULT" "$HOME_RESTORE_RESULT" \

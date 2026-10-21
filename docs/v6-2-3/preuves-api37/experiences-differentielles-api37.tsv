@@ -1,0 +1,8 @@
+variant	variable	api	image	gpu	ram_mb	status	cause	memavailable_kib	positive_service_probes	system_server_start_count	run_dir
+api37-baseline	baseline	37	android-37.2/google_apis_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7297852	0	UNKNOWN	/tmp/v623-qa/api37-baseline-20261021T144352Z
+api37-gpu-swiftshader	gpu	37	android-37.2/google_apis_ps16k	swiftshader_indirect	2048	NOT_RUN	HOST_ENVIRONMENT	7277424	0	UNKNOWN	/tmp/v623-qa/api37-gpu-swiftshader-20261021T144352Z
+api37-memory-3072	memory	37	android-37.2/google_apis_ps16k	auto	3072	NOT_RUN	HOST_ENVIRONMENT	7239940	0	UNKNOWN	/tmp/v623-qa/api37-memory-3072-20261021T144353Z
+api37-memory-4096	memory	37	android-37.2/google_apis_ps16k	auto	4096	NOT_RUN	HOST_ENVIRONMENT	7234152	0	UNKNOWN	/tmp/v623-qa/api37-memory-4096-20261021T144353Z
+api37-image-37-1-playstore	image_version	37	android-37.1/google_apis_playstore_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7203680	0	UNKNOWN	/tmp/v623-qa/api37-image-37-1-playstore-20261021T144353Z
+api37-image-37-2-playstore	image_version	37	android-37.2/google_apis_playstore_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7183368	0	UNKNOWN	/tmp/v623-qa/api37-image-37-2-playstore-20261021T144353Z
+api35-control	api_control	35	android-35/google_apis_ps16k	auto	2048	NOT_RUN	HOST_ENVIRONMENT	7184052	0	UNKNOWN	/tmp/v623-qa/api35-control-20261021T144353Z

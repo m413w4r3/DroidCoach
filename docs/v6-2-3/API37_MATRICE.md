@@ -1,29 +1,30 @@
 # Matrice Android 14 / Android 17 — V6.2.3
 
-Statuts par scénario : `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN` seulement. Les preuves détaillées API 37 sont dans [API37_DIAGNOSTIC.md](API37_DIAGNOSTIC.md) et [preuves-api37/run-20261021.md](preuves-api37/run-20261021.md).
+Statuts utilisés : `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN` uniquement. Cette matrice décrit le résultat le plus récent disponible par scénario, avec les preuves partielles antérieures conservées dans la colonne de raison.
 
-La tentative API 34 disponible a exécuté l’installation, le lancement, le choix HOME par l’interface Réglages, l’appui HOME et la restauration du launcher d’origine. La suite instrumentée a ensuite été faussement déclarée réussie par l’ancienne recette alors que Gradle signalait `emulator-5580 not found` et `XML_FILES=0 TESTS=0`; les scénarios fonctionnels restent `NOT_RUN`. Une reprise complète n’a pas été lancée : l’AVD réservé `emulator-5582` est resté actif et l’hôte n’avait que 3,5 GiB disponibles avec le swap de 2 GiB entièrement utilisé. Démarrer un second AVD dans cet état risquait de déstabiliser l’AVD d’une autre session.
+La requalification demandée a atteint le **gate hôte** avant tout démarrage AVD : `MemAvailable` est resté entre 6,85 et 6,96 GiB pour les sept variantes, sous le seuil de 8 GiB. Le run API 34 distinct a également rendu `NOT_RUN` avant installation et sans XML. Le critère d’acceptation « Android 14 reste vert » n’est donc pas atteint par une suite complète. Deux vérifications API 34 partielles déjà exécutées restent des `PASS` valides pour leurs seuls scénarios.
 
 | Scénario | Android 14 — API 34 | Android 17 — API 37 | Preuve / raison |
 |---|---|---|---|
-| Installation et lancement | PASS | BLOCKED | API 34 : `adb install` a répondu `Success`, `am start -W` a répondu `Status: ok`. API 37 : gate framework avant toute installation. |
-| Rôle HOME ATLAS | PASS | BLOCKED | API 34 : rôle sélectionné dans Réglages et HOME a ouvert ATLAS. API 37 : AVD instable avant interface utilisable. |
-| Retour au launcher précédent | NOT_RUN | BLOCKED | API 34 : l’ancienne recette n’a pas ouvert l’entrée « Launcher précédent ». API 37 : bloqué avant scénario HOME. |
-| Focus | NOT_RUN | BLOCKED | API 34 : aucun test instrumenté n’a été exécuté après le faux vert Gradle. API 37 : aucune instrumentation démarrée. |
-| Objectifs | NOT_RUN | BLOCKED | API 34 : aucun test instrumenté exécuté. API 37 : aucune instrumentation démarrée. |
-| Notifications | NOT_RUN | BLOCKED | API 34 : aucune assertion notifications exécutée. API 37 : aucune instrumentation démarrée. |
-| Localisation ponctuelle | NOT_RUN | BLOCKED | API 34 : aucune permission ni injection coarse tentée. API 37 : aucune installation ni injection coarse. |
-| Mobilité visible | NOT_RUN | BLOCKED | API 34 : aucun démarrage de service instrumenté. API 37 : aucune installation ni injection synchronisée. |
-| Permissions runtime | NOT_RUN | BLOCKED | API 34 : aucun état coarse/fine/notifications piloté par cette recette. API 37 : aucun APK installé. |
-| Révocation | NOT_RUN | BLOCKED | API 34 : aucune révocation runtime/consent instrumentée. API 37 : aucune instrumentation démarrée. |
-| Rotation | NOT_RUN | BLOCKED | API 34 : aucun test d’orientation exécuté. API 37 : aucune instrumentation démarrée. |
-| Police système à 2× | NOT_RUN | BLOCKED | API 34 : aucun changement de police système exécuté. API 37 : aucune instrumentation démarrée. |
-| Hors ligne | NOT_RUN | BLOCKED | API 34 : mode avion et parcours local non exécutés. API 37 : aucune instrumentation démarrée. |
+| Installation et lancement | PASS | NOT_RUN | API 34 partiel : `adb install` → `Success`, `am start -W` → `Status: ok`. La nouvelle reprise a été arrêtée au gate mémoire. API 37 : aucune variante n’a booté. |
+| Rôle HOME ATLAS | PASS | NOT_RUN | API 34 partiel : choix via Réglages et ouverture par HOME vérifiés. API 37 : aucune variante n’a booté. |
+| Retour au launcher précédent | NOT_RUN | NOT_RUN | API 34 précédent : cette action n’a pas été tentée. Aucun run récent n’a dépassé le gate hôte. |
+| Focus | NOT_RUN | NOT_RUN | Aucun résultat instrumenté XML dans les reprises. API 37 : aucune configuration lancée. |
+| Objectifs | NOT_RUN | NOT_RUN | Aucun résultat instrumenté XML dans les reprises. API 37 : aucune configuration lancée. |
+| Notifications | NOT_RUN | NOT_RUN | Aucun résultat instrumenté XML dans les reprises. API 37 : aucune configuration lancée. |
+| Localisation ponctuelle | NOT_RUN | NOT_RUN | Aucune permission ni injection de fix exécutée dans les reprises. |
+| Mobilité visible | NOT_RUN | NOT_RUN | Aucun service de mobilité démarré dans les reprises. |
+| Permissions runtime | NOT_RUN | NOT_RUN | Aucun état runtime piloté dans les reprises. |
+| Révocation | NOT_RUN | NOT_RUN | Aucune révocation testée dans les reprises. |
+| Rotation | NOT_RUN | NOT_RUN | Aucun résultat XML instrumenté dans les reprises. |
+| Police système à 2× | NOT_RUN | NOT_RUN | Aucun changement de police exécuté dans les reprises. |
+| Hors ligne | NOT_RUN | NOT_RUN | Aucun parcours hors ligne exécuté dans les reprises. |
 
-## Détail des exécutions
+## Preuves et historique
 
-- Android 14 partiel : [`/tmp/v623-qa/api34-20261021T134714Z/recipe.console.log`](/tmp/v623-qa/api34-20261021T134714Z/recipe.console.log), [`connectedDebugAndroidTest.log`](/tmp/v623-qa/api34-20261021T134714Z/connectedDebugAndroidTest.log), [installation](/tmp/v623-qa/api34-20261021T134714Z/install-launch.result.txt), [rôle HOME](/tmp/v623-qa/api34-20261021T134714Z/home-roundtrip.result.txt), [restauration](/tmp/v623-qa/api34-20261021T134714Z/home-restore.result.txt). Statut ancien de la suite : zéro XML / zéro test; classification `TEST_HARNESS_BUG`, pas `PASS`.
-- Android 17 : [`scenario-matrix-api37.tsv`](preuves-api37/scenario-matrix-api37.tsv), [sondes framework](/tmp/v623-qa/api37-20261021T141112Z/framework-service-probes.log), [tombstones](/tmp/v623-qa/api37-20261021T141112Z/diagnostics-crash-buffer.stdout.log), [événements](/tmp/v623-qa/api37-20261021T141112Z/diagnostics-events.stdout.log). Les cinq services système disparaissent après 30 réponses positives; la recette s’arrête avant installation.
-- [Preuve de ressources et de non-relance API 34](preuves-api37/api34-rerun-not-run-20261021.md).
+- La reprise API 34 la plus récente est `NOT_RUN` : [matrice du gate API 34](preuves-api37/scenario-matrix-api34-host-gate.tsv), log `/tmp/v623-qa/api34-20261021T144403Z/recipe.console.log`, sortie `MemAvailable=7498600 KiB`, seuil `8388608 KiB`. Elle n’a ni démarré l’AVD ni produit d’XML.
+- La campagne différentielle API 37/API 35 est consignée dans [experiences-differentielles-api37.tsv](preuves-api37/experiences-differentielles-api37.tsv) et `/tmp/v623-qa/android17-differentials-20261021T144352Z/`. Les sept variantes sont `NOT_RUN` au gate mémoire, donc il n’existe pas de mesure de stabilité des services pour ces variantes.
+- Une tentative API 37 antérieure a bien démarré l’AVD, puis perdu les services Framework avant installation. Elle est conservée séparément dans [la matrice brute de cette exécution](preuves-api37/scenario-matrix-api37-run-raw.tsv), le [diagnostic](API37_DIAGNOSTIC.md) et les logs `/tmp/v623-qa/api37-20261021T141112Z/`. Son statut environnemental historique est `BLOCKED`; il ne prouve pas le résultat de la campagne différentielle courante.
+- La tentative API 34 partielle ayant fourni les deux `PASS` ci-dessus est sous `/tmp/v623-qa/api34-20261021T134714Z/` : [installation/lancement](/tmp/v623-qa/api34-20261021T134714Z/install-launch.result.txt), [rôle HOME](/tmp/v623-qa/api34-20261021T134714Z/home-roundtrip.result.txt) et [restauration du launcher](/tmp/v623-qa/api34-20261021T134714Z/home-restore.result.txt). Sa suite Gradle n’a exécuté aucun test (`XML_FILES=0 TESTS=0`) et avait été faussement marquée `PASS`; cette erreur est `TEST_HARNESS_BUG`.
 
-Le téléphone `45301FDAS001QT` est `NOT_RUN` : absent de `adb devices -l` au moment des vérifications. Aucune commande d’installation, d’effacement, de permissions ou de rôle HOME n’a été envoyée à ce téléphone.
+Le téléphone `45301FDAS001QT` était absent de `adb devices -l` au dernier contrôle; statut `NOT_RUN`. Aucun changement de rôle HOME ou de données ne lui a été envoyé. L’AVD d’une autre session sur 5582 est resté intact.
