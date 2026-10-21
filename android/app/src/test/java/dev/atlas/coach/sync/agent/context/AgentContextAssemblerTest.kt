@@ -246,6 +246,54 @@ class AgentContextAssemblerTest {
     }
 
     @Test
+    fun consentedCoachContextCarriesLinkedFocusAndGoalProgressAndDropsRevokedGoals() {
+        val consentAt = NOW - HOUR
+        val finished = session(
+            id = "context-linked-focus-session",
+            status = FocusStatus.FINISHED,
+            createdAt = consentAt + MINUTE,
+            workSeconds = 25L * 60L,
+            cycles = 1,
+            remainingMillis = 0L,
+        )
+        val goal = GoalRecord(
+            id = "context-focus-goal",
+            title = "Fixture focus goal",
+            description = "Synthetic local goal",
+            metric = GoalMetric.FOCUS_MINUTES,
+            targetValue = 120L,
+            linkedFocusSessionIds = setOf(finished.id),
+            createdAt = consentAt - DAY,
+            updatedAt = consentAt + MINUTE,
+        )
+        val domains = AgentContextDomainViews(focusSessions = listOf(finished), goals = listOf(goal))
+        val consentDates = mapOf("focus" to consentAt, "goals" to consentAt)
+
+        val granted = assembler.assemble(
+            mandate(shared = setOf("focus", "goals")),
+            consentDates,
+            domains,
+            NOW,
+        )
+        assertEquals(setOf("focus", "goals"), granted.categories.keys)
+        assertTrue(granted.categories.getValue("focus").single().contains("25 min"))
+        assertTrue(granted.categories.getValue("goals").single().contains("Fixture focus goal"))
+        assertTrue(granted.categories.getValue("goals").single().contains("validé 25"))
+        assertFalse("raw Focus IDs do not enter Coach context", granted.toJsonString().contains(finished.id))
+
+        val afterRevocation = assembler.assemble(
+            mandate(shared = setOf("focus")),
+            consentDates,
+            domains,
+            NOW,
+        )
+        assertEquals(setOf("focus"), afterRevocation.categories.keys)
+        assertTrue(afterRevocation.categories.getValue("focus").single().contains("25 min"))
+        assertFalse(afterRevocation.toJsonString().contains("Fixture focus goal"))
+        assertFalse(afterRevocation.toJsonString().contains("validé 25"))
+    }
+
+    @Test
     fun goalEditAfterConsentIsIncludedWithoutExistingGoalChoiceAndInactiveGoalsStayExcluded() {
         val consentAt = NOW - HOUR
         val old = GoalRecord(

@@ -570,6 +570,46 @@ class ProactiveCoachSchedulerTest {
     }
 
     @Test
+    fun `successfully delivered notification is not repeated after scheduler recreation`() {
+        val h = Harness(allConsents)
+        h.record(trigger("single-delivery-after-restart", motif = "single-delivery-after-restart"))
+        val notifications = mutableListOf<ProactiveNotification>()
+        var planRequests = 0
+
+        val first = h.scheduler.runAuthorized(
+            NOW,
+            utc,
+            requestPlan = { planRequests++; responseWithLocalProposal() },
+            showNotification = { notifications += it },
+        )
+
+        assertEquals(ProactiveRunStatus.REQUESTED, first.status)
+        assertEquals(1, notifications.size)
+        assertEquals(ProactiveNotificationStatus.DELIVERED, h.state.notificationReservations.single().status)
+
+        var persistedState = ProactiveCoachState.fromJsonString(h.state.toJsonString())
+        val restartedScheduler = ProactiveCoachScheduler(
+            readState = { persistedState },
+            writeState = { persistedState = it },
+            currentConsent = { allConsents },
+            clockUtcMillis = { NOW + ProactiveTriggerGate.MIN_COOLDOWN_MS },
+        )
+        var replayedNotifications = 0
+        val replay = restartedScheduler.runAuthorized(
+            NOW + ProactiveTriggerGate.MIN_COOLDOWN_MS,
+            utc,
+            requestPlan = { planRequests++; responseWithLocalProposal() },
+            showNotification = { replayedNotifications++ },
+        )
+
+        assertEquals(ProactiveRunStatus.NO_ELIGIBLE_TRIGGERS, replay.status)
+        assertEquals(1, planRequests)
+        assertEquals(0, replayedNotifications)
+        assertEquals(ProactiveNotificationStatus.DELIVERED, persistedState.notificationReservations.single().status)
+        assertEquals(listOf("single-delivery-after-restart"), persistedState.consumedEventTombstones.map { it.eventId })
+    }
+
+    @Test
     fun `failed notification callback consumes its reserved slot and is never repeated`() {
         val h = Harness(allConsents)
         h.record(trigger("notification-failure", motif = "notification-failure"))
