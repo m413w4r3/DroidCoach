@@ -64,7 +64,10 @@ class LocationPrivacyTest {
         assertEquals(0, provider.captureCount)
 
         consent.setLocationSummarySharingEnabled(true)
-        provider.fix = testFix(capturedAtUtcMillis = System.currentTimeMillis())
+        // The in-memory consent fixture timestamps the grant independently; keep the synthetic
+        // capture strictly after it even on hosts whose wall clock has millisecond granularity.
+        provider.fix = testFix(capturedAtUtcMillis = System.currentTimeMillis() + 1_000L)
+        provider.onCapture = { provider.fix }
         val summary = repository.captureManualSummaryForCoach()
 
         assertNotNullCoarse(summary)

@@ -20,6 +20,7 @@ import dev.atlas.coach.app.ui.AtlasScreenFrame
 import dev.atlas.coach.app.ui.AtlasTheme
 import dev.atlas.coach.focus.FakeClock
 import dev.atlas.coach.focus.FocusPlan
+import dev.atlas.coach.focus.FocusStatus
 import dev.atlas.coach.goals.GoalMetric
 import dev.atlas.coach.goals.GoalProgressCalculator
 import dev.atlas.coach.sync.agent.AgentActionType
@@ -27,11 +28,11 @@ import dev.atlas.coach.sync.agent.AgentMode
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.test.BackendArgumentsAwareRunner
 import dev.atlas.coach.test.RequiresBackendArguments
+import dev.atlas.coach.usage.android.AndroidEmergencyPauseStore
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,18 +101,50 @@ class V62RealGatewayContextBridgeTest {
         }
 
         val goal = localController.coachGoals.single().record
+        lateinit var focusSessionId: String
         composeRule.runOnUiThread {
-            localController.startFocus(FocusPlan.custom(25 * 60L, totalWorkCycles = 1).copy(taskTitle = "Réviser l'algèbre"))
+            localController.startFocus(
+                FocusPlan.custom(25 * 60L, totalWorkCycles = 1).copy(taskTitle = "Réviser l'algèbre"),
+                goalId = goal.id,
+            )
+            val running = requireNotNull(localController.focusSession)
+            assertEquals(FocusStatus.RUNNING, running.status)
+            focusSessionId = running.id
+            val linkedWhileRunning = requireNotNull(localController.coachGoals.singleOrNull { it.record.id == goal.id })
+            assertEquals(0L, linkedWhileRunning.progress.currentValue)
+            assertTrue(running.id in linkedWhileRunning.record.linkedFocusSessionIds)
+
+            // Verify the atomic Goal-Focus start reached the isolated durable store before time advances.
+            val startedOnDisk = isolatedPersistedState()
+            assertEquals(running.id, startedOnDisk.getJSONObject("focus").getString("id"))
+            assertEquals("RUNNING", startedOnDisk.getJSONObject("focus").getString("status"))
+            assertPersistedGoalLink(startedOnDisk, goal.id, running.id)
+
             clock.advanceMillis(25 * 60_000L)
             localController.tickFocus()
             val finished = requireNotNull(localController.focusSession)
-            assertEquals("Injected Focus clock must finish the 25 minute work phase", dev.atlas.coach.focus.FocusStatus.FINISHED, finished.status)
-            localController.linkFocusToGoal(goal.id, finished.id, linked = true)
+            assertEquals("Injected Focus clock must finish the 25 minute work phase", FocusStatus.FINISHED, finished.status)
+            assertEquals(running.id, finished.id)
         }
 
         val linkedGoal = localController.coachGoals.single()
+        assertEquals(setOf(focusSessionId), linkedGoal.record.linkedFocusSessionIds)
         assertEquals(25L, linkedGoal.progress.currentValue)
         assertEquals(120L, linkedGoal.progress.targetValue)
+        val finishedOnDisk = isolatedPersistedState()
+        assertPersistedGoalLink(finishedOnDisk, goal.id, focusSessionId)
+        assertEquals(120L, persistedGoal(finishedOnDisk, goal.id).getLong("targetValue"))
+        val persistedHistory = finishedOnDisk.getJSONArray("focusHistory")
+        val persistedFinished = (0 until persistedHistory.length()).map { index ->
+            persistedHistory.getJSONObject(index)
+        }.single { session ->
+            session.getString("id") == focusSessionId
+        }
+        assertEquals("FINISHED", persistedFinished.getString("status"))
+        assertEquals(
+            25L,
+            persistedFinished.getLong("workSeconds") * persistedFinished.getInt("completedWorkCycles") / 60L,
+        )
         val beforeContext = JSONObject(localController.agentContextPreview.serializedPayload)
         val initialContext = beforeContext.getJSONObject("categories")
         assertTrue(initialContext.getJSONArray("focus").getString(0).contains("completed | 25 min"))
@@ -171,6 +204,13 @@ class V62RealGatewayContextBridgeTest {
         val accepted = localController.agentInbox.firstOrNull { it.id == directive.id }
             ?: error("Accepted proposal is absent from the Android inbox")
         assertEquals(ProposalState.EXECUTED, accepted.proposal.state)
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            localController.agentInbox.firstOrNull { it.id == directive.id }?.ackPending == false
+        }
+        assertTrue(
+            "The executed proposal ACK was not accepted by the backend",
+            !requireNotNull(localController.agentInbox.firstOrNull { it.id == directive.id }).ackPending,
+        )
         assertTrue("The accepted Gateway proposal must be in the Android effect journal", localController.agentEffectHistory.any {
             it.proposalId == directive.id && it.actionType == "home.set_directive" && it.state == ProposalState.EXECUTED
         })
@@ -255,8 +295,40 @@ class V62RealGatewayContextBridgeTest {
     }
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["backend_stopped"],
+        reason = "offline recreation fixture runs only after the local backend has stopped",
+    )
+    fun prepareLocalFocusFixtureForOfflineRecreation() {
+        assertEquals(
+            "This fixture must run only after the v62 harness stops FastAPI",
+            "true",
+            InstrumentationRegistry.getArguments().getString("backend_stopped"),
+        )
+        val localController = newIsolatedController(
+            FakeClock(System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime()),
+            clearState = false,
+        )
+        assertTrue(localController.focusHistory.any { it.status == dev.atlas.coach.focus.FocusStatus.FINISHED })
+        assertTrue(localController.coachGoals.any { it.progress.currentValue == 25L && it.progress.targetValue == 120L })
+        assertTrue("The launcher favorite must remain local", "com.android.settings" in localController.launcherPinnedPackages)
+        localController.clearSyncToken()
+        localController.saveSyncConfiguration("", null)
+        localController.setEmergencyPause()
+        assertTrue("Emergency pause must be persisted before process termination", localController.isEmergencyPaused)
+    }
+
+    @Test
+    @RequiresBackendArguments(
+        keys = ["backend_stopped"],
+        reason = "offline recreation proof requires the harness to stop FastAPI first",
+    )
     fun localGoalFocusFavoritesAndEmergencyPauseRemainAvailableAfterBackendStop() {
-        assumeTrue("This proof is run only after the v62 harness stops FastAPI", InstrumentationRegistry.getArguments().getString("backend_stopped") == "true")
+        assertEquals(
+            "This proof must be invoked only after the v62 harness stops FastAPI",
+            "true",
+            InstrumentationRegistry.getArguments().getString("backend_stopped"),
+        )
         val localController = newIsolatedController(
             FakeClock(System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime()),
             clearState = false,
@@ -287,8 +359,29 @@ class V62RealGatewayContextBridgeTest {
             isolated.getSharedPreferences("atlas_agent_sync_settings", Context.MODE_PRIVATE).edit().clear().commit()
             File(isolated.filesDir, "atlas_agent_inbox_v2.json").delete()
             File(isolated.filesDir, "atlas_agent_effects_v1.json").delete()
+            AndroidEmergencyPauseStore.clear(isolated)
         }
         return AtlasController(isolated, clock)
+    }
+
+    private fun isolatedPersistedState(): JSONObject {
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val raw = targetContext.getSharedPreferences("v62_instrumented_atlas_local_state", Context.MODE_PRIVATE)
+            .getString("state_v1", null)
+        return JSONObject(requireNotNull(raw) { "Expected the isolated ATLAS state to be committed" })
+    }
+
+    private fun assertPersistedGoalLink(state: JSONObject, goalId: String, focusSessionId: String) {
+        val goal = persistedGoal(state, goalId)
+        val linkedIds = goal.getJSONArray("linkedFocusSessionIds")
+        assertTrue((0 until linkedIds.length()).any { linkedIds.getString(it) == focusSessionId })
+    }
+
+    private fun persistedGoal(state: JSONObject, goalId: String): JSONObject {
+        val goals = state.getJSONObject("goals").getJSONArray("goals")
+        return (0 until goals.length())
+            .map { index -> goals.getJSONObject(index) }
+            .single { it.getString("id") == goalId }
     }
 
     private fun showCoach(controller: AtlasController) {

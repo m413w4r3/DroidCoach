@@ -1,6 +1,7 @@
 package dev.atlas.coach.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -23,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,9 @@ import dev.atlas.coach.focus.FocusPlan
 import dev.atlas.coach.focus.FocusSession
 import dev.atlas.coach.focus.FocusStatus
 import dev.atlas.coach.focus.ReefPomodoroConfig
+import dev.atlas.coach.goals.GoalMetric
+import dev.atlas.coach.goals.GoalProgressCalculator
+import dev.atlas.coach.goals.GoalStatus
 import dev.atlas.coach.routines.FocusRoutine
 import dev.atlas.coach.routines.RoutineSchedule
 import java.time.Instant
@@ -101,7 +109,44 @@ fun FocusSessionScreen(
     onStartProposed: ((taskTitle: String, config: ReefPomodoroConfig) -> Unit)? = null,
     onChooseHabit: () -> Unit = {},
 ) {
+    val compatibleStart: ((String, ReefPomodoroConfig, String?) -> Unit)? = onStartProposed?.let { start ->
+        { taskTitle, config, _ -> start(taskTitle, config) }
+    }
+    FocusSessionScreen(
+        controller = controller,
+        revision = controller.revision,
+        proposedSession = proposedSession,
+        onStartProposed = compatibleStart,
+        onChooseHabit = onChooseHabit,
+    )
+}
+
+/** Goal-aware overload; the original public FocusSessionScreen overload remains source/JVM compatible. */
+@Composable
+fun FocusSessionScreen(
+    controller: AtlasController,
+    revision: Int,
+    proposedSession: ProposedFocusSession? = null,
+    onStartProposed: ((taskTitle: String, config: ReefPomodoroConfig, goalId: String?) -> Unit)? = null,
+    onChooseHabit: () -> Unit = {},
+) {
     val session = controller.focusSession?.takeUnless { it.status == FocusStatus.CANCELLED }
+    val eligibleGoals = remember(controller, revision) {
+        controller.coachGoals.filter {
+            it.record.status == GoalStatus.ACTIVE && it.record.metric == GoalMetric.FOCUS_MINUTES
+        }
+    }
+    var selectedGoalId by remember { mutableStateOf<String?>(null) }
+    var hasExplicitGoalSelection by remember { mutableStateOf(false) }
+    val selectedFocusGoalId = if (hasExplicitGoalSelection) {
+        selectedGoalId?.takeIf { id -> eligibleGoals.any { it.record.id == id } }
+    } else {
+        eligibleGoals.singleOrNull()?.record?.id
+    }
+    val onFocusGoalSelected: (String?) -> Unit = { id ->
+        selectedGoalId = id
+        hasExplicitGoalSelection = true
+    }
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
     var showManualSetup by remember { mutableStateOf(false) }
 
@@ -117,6 +162,7 @@ fun FocusSessionScreen(
             session?.status == FocusStatus.RUNNING || session?.status == FocusStatus.PAUSED -> {
                 val activeSession = session ?: return@Column
                 Text("${activeSession.taskTitle ?: controller.directiveTitle(activeSession.directiveId)}", modifier = Modifier.testTag("focus_active_task"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                FocusGoalSessionProjection(controller, activeSession)
                 Text("${activeSession.workSeconds / 60} min de concentration · " +
                     if (activeSession.continuous) "mode continu" else "${activeSession.totalWorkCycles} cycles",
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -147,37 +193,49 @@ fun FocusSessionScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (controller.capabilities[AtlasController.CAP_FOCUS] == true) {
-                    Button(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp), onClick = controller::toggleFocusPause) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("focus_pause_resume"),
+                        onClick = controller::toggleFocusPause,
+                    ) {
                         Text(if (activeSession.status == FocusStatus.RUNNING) "Pause" else "Reprendre")
                     }
                 } else {
                     Text("Focus est désactivé. La session reste en pause.")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = controller::cancelFocus) { Text("Annuler") }
-                    OutlinedButton(modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp), onClick = controller::finishFocus) { Text("Terminer") }
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("focus_cancel"),
+                        onClick = controller::cancelFocus,
+                    ) { Text("Annuler") }
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("focus_finish"),
+                        onClick = controller::finishFocus,
+                    ) { Text("Terminer") }
                 }
             }
             session?.status == FocusStatus.FINISHED && showManualSetup &&
                 proposedSession != null && onStartProposed != null -> {
                 Text("Session proposée", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text(proposedSession.reason, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FocusGoalSelector(eligibleGoals, selectedFocusGoalId, onFocusGoalSelected)
                 PomodoroSessionSetup(
                     initialTaskTitle = controller.directive.title,
                     initialConfig = proposedSession.toEditableConfig(),
-                    onStart = { taskTitle, config -> onStartProposed(taskTitle, config) },
+                    onStart = { taskTitle, config -> onStartProposed(taskTitle, config, selectedFocusGoalId) },
                 )
             }
             session?.status == FocusStatus.FINISHED && showManualSetup -> {
                 Text("Préparer une nouvelle session", style = MaterialTheme.typography.headlineSmall)
+                FocusGoalSelector(eligibleGoals, selectedFocusGoalId, onFocusGoalSelected)
                 PomodoroSessionSetup(
                     initialTaskTitle = controller.directive.title,
-                    onStart = { taskTitle, config -> controller.startFocus(config, taskTitle) },
+                    onStart = { taskTitle, config -> controller.startFocus(config, taskTitle, selectedFocusGoalId) },
                 )
             }
             session?.status == FocusStatus.FINISHED -> {
                 Text("Session terminée", style = MaterialTheme.typography.headlineSmall)
                 Text(session.taskTitle ?: controller.directiveTitle(session.directiveId))
+                FocusGoalSessionProjection(controller, session)
                 Text("${session.completedWorkCycles} cycle(s) de travail terminés.")
                 if (controller.capabilities[AtlasController.CAP_HABITS] == true && controller.activeHabits.isNotEmpty() && controller.canLinkCompletedFocusToHabit) {
                     OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = onChooseHabit) {
@@ -191,22 +249,89 @@ fun FocusSessionScreen(
             proposedSession != null -> {
                 Text("Session proposée", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text(proposedSession.reason, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FocusGoalSelector(eligibleGoals, selectedFocusGoalId, onFocusGoalSelected)
                 PomodoroSessionSetup(
                     initialTaskTitle = controller.directive.title,
                     initialConfig = proposedSession.toEditableConfig(),
                     onStart = { taskTitle, config ->
-                        if (onStartProposed != null) onStartProposed(taskTitle, config)
-                        else controller.startFocus(config, taskTitle)
+                        if (onStartProposed != null) onStartProposed(taskTitle, config, selectedFocusGoalId)
+                        else controller.startFocus(config, taskTitle, selectedFocusGoalId)
                     },
                 )
             }
             else -> {
+                FocusGoalSelector(eligibleGoals, selectedFocusGoalId, onFocusGoalSelected)
                 PomodoroSessionSetup(
                     initialTaskTitle = controller.directive.title,
-                    onStart = { taskTitle, config -> controller.startFocus(config, taskTitle) },
+                    onStart = { taskTitle, config -> controller.startFocus(config, taskTitle, selectedFocusGoalId) },
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun FocusGoalSelector(
+    eligibleGoals: List<GoalsPanelEntry>,
+    selectedGoalId: String?,
+    onSelected: (String?) -> Unit,
+) {
+    if (eligibleGoals.isEmpty()) return
+    val selected = eligibleGoals.firstOrNull { it.record.id == selectedGoalId }
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth()
+                .semantics { contentDescription = "Objectif de la session Focus : ${selected?.record?.title ?: "Sans objectif"}" }
+                .testTag("focus_goal_selector"),
+            onClick = { expanded = true },
+        ) {
+            Text(selected?.record?.title ?: "Sans objectif")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Sans objectif") },
+                modifier = Modifier.testTag("focus_goal_none"),
+                onClick = { onSelected(null); expanded = false },
+            )
+            eligibleGoals.forEach { entry ->
+                DropdownMenuItem(
+                    text = { Text(entry.record.title) },
+                    modifier = Modifier.testTag("focus_goal_option_${entry.record.id}"),
+                    onClick = { onSelected(entry.record.id); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun FocusGoalSessionProjection(controller: AtlasController, session: FocusSession) {
+    val linkedGoal = controller.coachGoals.firstOrNull { session.id in it.record.linkedFocusSessionIds }
+    when (session.status) {
+        FocusStatus.RUNNING, FocusStatus.PAUSED -> linkedGoal?.let {
+            Text(
+                "Objectif lié : ${it.record.title} · ${session.workSeconds / 60} min prévues; les minutes seront comptées à la fin.",
+                modifier = Modifier.testTag("focus_goal_active_projection"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FocusStatus.FINISHED -> {
+            val validatedMinutes = GoalProgressCalculator.completedWorkSeconds(session) / 60L
+            Text(
+                "Minutes validées pour cette session : $validatedMinutes min.",
+                modifier = Modifier.testTag("focus_session_validated_minutes"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            linkedGoal?.let {
+                Text(
+                    "Objectif lié : ${it.record.title} · progression ${it.progress.currentValue.coerceAtMost(it.record.targetValue)} / ${it.record.targetValue} min.",
+                    modifier = Modifier.testTag("focus_goal_finished_projection"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        else -> Unit
     }
 }
 

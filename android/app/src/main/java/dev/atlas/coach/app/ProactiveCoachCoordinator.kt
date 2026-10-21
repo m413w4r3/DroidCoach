@@ -7,6 +7,9 @@ import dev.atlas.coach.coach.proactive.ProactiveCoachState
 import dev.atlas.coach.coach.proactive.ProactiveConsentSnapshot
 import dev.atlas.coach.coach.proactive.ProactiveEngagementMode
 import dev.atlas.coach.coach.proactive.ProactiveNotification
+import dev.atlas.coach.coach.proactive.ProactivePublicationAuthorization
+import dev.atlas.coach.coach.proactive.ProactivePublicationEpoch
+import dev.atlas.coach.coach.proactive.ProactivePublicationRejectedException
 import dev.atlas.coach.coach.proactive.ProactivePlanRequest
 import dev.atlas.coach.coach.proactive.ProactivePlanResponse
 import dev.atlas.coach.coach.proactive.ProactiveRunResult
@@ -22,10 +25,44 @@ class ProactiveCoachCoordinator(
     private val isEnabled: () -> Boolean,
     private val nowUtcMillis: () -> Long,
     private val mandateZoneId: () -> ZoneId,
-    private val requestPlan: (ProactivePlanRequest) -> ProactivePlanResponse?,
-    private val showNotification: (ProactiveNotification) -> Unit,
+    private val capturePublicationEpoch: () -> ProactivePublicationEpoch,
+    private val isPublicationAuthorizationCurrent: (ProactivePublicationAuthorization) -> Boolean,
+    private val requestPlan: (ProactivePlanRequest, ProactivePublicationAuthorization) -> ProactivePlanResponse?,
+    private val showNotification: (ProactiveNotification, ProactivePublicationAuthorization) -> Unit,
 ) {
-    private val generation = AtomicLong(0L)
+    /**
+     * Compatibility bridge for existing controller wiring. It snapshots the supplied generation
+     * callback with an empty request before any run preparation; S5 should use the epoch callback.
+     */
+    constructor(
+        readStateJson: () -> String?,
+        writeStateJson: (String) -> Unit,
+        currentConsent: () -> ProactiveConsentSnapshot,
+        isEnabled: () -> Boolean,
+        nowUtcMillis: () -> Long,
+        mandateZoneId: () -> ZoneId,
+        capturePublicationAuthorization: (ProactivePlanRequest) -> ProactivePublicationAuthorization,
+        isPublicationAuthorizationCurrent: (ProactivePublicationAuthorization) -> Boolean,
+        requestPlan: (ProactivePlanRequest, ProactivePublicationAuthorization) -> ProactivePlanResponse?,
+        showNotification: (ProactiveNotification, ProactivePublicationAuthorization) -> Unit,
+    ) : this(
+        readStateJson = readStateJson,
+        writeStateJson = writeStateJson,
+        currentConsent = currentConsent,
+        isEnabled = isEnabled,
+        nowUtcMillis = nowUtcMillis,
+        mandateZoneId = mandateZoneId,
+        capturePublicationEpoch = {
+            val captured = capturePublicationAuthorization(EPOCH_CAPTURE_REQUEST)
+            require(captured.triggers.isEmpty()) { "Epoch capture must not bind triggers before reservation" }
+            ProactivePublicationEpoch(captured.capabilityGeneration, captured.agentRequestGeneration)
+        },
+        isPublicationAuthorizationCurrent = isPublicationAuthorizationCurrent,
+        requestPlan = requestPlan,
+        showNotification = showNotification,
+    )
+
+    private val coordinatorGeneration = AtomicLong(0L)
     private val scheduler = ProactiveCoachScheduler(
         readState = {
             readStateJson()?.let { ProactiveCoachState.fromJsonString(it, nowUtcMillis()) } ?: ProactiveCoachState()
@@ -43,6 +80,12 @@ class ProactiveCoachCoordinator(
     fun recordAll(events: Iterable<CoachTrigger>): List<CoachTriggerRecordStatus> = events.map(::record)
 
     fun runDue(): ProactiveRunResult {
+        // Capture once, before enablement, consent, persisted-state, clock, or timezone reads. The
+        // scheduler later binds this exact epoch to the selected triggers before durable commit.
+        val runGeneration = coordinatorGeneration.get()
+        val publicationEpoch = runCatching(capturePublicationEpoch).getOrElse {
+            return ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED)
+        }
         if (!isEnabled()) {
             disableAndPurgePending()
             return ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED)
@@ -51,18 +94,32 @@ class ProactiveCoachCoordinator(
         val validatedMandateZone = runCatching(mandateZoneId).getOrElse {
             return ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED)
         }
-        val runGeneration = generation.get()
+        fun authorizationIsCurrent(authorization: ProactivePublicationAuthorization): Boolean =
+            coordinatorGeneration.get() == runGeneration &&
+                authorization.capabilityGeneration == publicationEpoch.capabilityGeneration &&
+                authorization.agentRequestGeneration == publicationEpoch.agentRequestGeneration && runCatching {
+                isEnabled() && isPublicationAuthorizationCurrent(authorization)
+            }.getOrDefault(false)
+
         return scheduler.runDue(
             nowUtcMillis = nowUtcMillis(),
             mandateZoneId = validatedMandateZone,
-            requestPlan = { request ->
-                if (generation.get() != runGeneration || !isEnabled()) null else requestPlan(request)
-            },
-            showNotification = { notification ->
-                if (generation.get() != runGeneration || !isEnabled()) {
-                    throw IllegalStateException("Proactive capability was revoked")
+            publicationEpoch = publicationEpoch,
+            isPublicationAuthorizationCurrent = ::authorizationIsCurrent,
+            requestPlan = { request, authorization ->
+                if (!authorizationIsCurrent(authorization) || authorization.triggers != request.triggers) {
+                    null
+                } else {
+                    requestPlan(request, authorization)
                 }
-                showNotification(notification)
+            },
+            showNotification = { notification, authorization ->
+                if (!authorizationIsCurrent(authorization) ||
+                    authorization.triggers.map { it.source }.toSet() != notification.triggerSources
+                ) {
+                    throw ProactivePublicationRejectedException()
+                }
+                showNotification(notification, authorization)
             },
         )
     }
@@ -71,11 +128,20 @@ class ProactiveCoachCoordinator(
 
     /** Cancel queued effects immediately when the Coach, proactive capability, or emergency pause stops. */
     fun disableAndPurgePending() {
-        generation.incrementAndGet()
+        coordinatorGeneration.incrementAndGet()
         scheduler.cancelAllPending()
     }
 
     fun mode(): ProactiveEngagementMode = scheduler.mode() ?: ProactiveEngagementMode.NORMAL
 
     fun setMode(mode: ProactiveEngagementMode): Boolean = scheduler.setMode(mode)
+
+    private companion object {
+        val EPOCH_CAPTURE_REQUEST = ProactivePlanRequest(
+            reservationId = "proactive-epoch-snapshot",
+            requestedAtUtcMillis = 0L,
+            mode = ProactiveEngagementMode.NORMAL,
+            triggers = emptyList(),
+        )
+    }
 }

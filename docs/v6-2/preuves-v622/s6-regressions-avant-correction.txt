@@ -1,0 +1,22 @@
+ATLAS V6.2.2 — S6 regressions explicites, avant correction de fixture
+Date : 2026-10-21
+AVD : atlas_v622_s1_api34, API 34, ADB 5037 / emulator-5580
+APK candidate : app SHA-256 dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9 ;
+                androidTest SHA-256 353a8d0e4cd89658d528bd7da457447c0b11fb482511f395661659779cbaeeb7.
+
+Résultats du runner am instrument (comptes exacts, logs complets sous /tmp/atlas-v622-s6/) :
+- GoalFocusStartInstrumentationTest : 7 cas, 1 échec, 0 erreur, 0 ignoré.
+- ProactiveControllerPublicationAuthorizationInstrumentationTest : 2/2 PASS.
+- ProactiveCoachNotificationPublisherInstrumentationTest : 2/2 PASS.
+- AgentPersistenceFailureInstrumentationTest : 6/6 PASS.
+- ProactiveCoachWorkerInstrumentationTest : 2/2 PASS.
+
+Échec reproduit :
+`focusGoalSelectorOffersNoneOneAndManyAndCreditsOnlyFinishedLinkedWork` échoue à la ligne 169
+sur `Cannot call setContent twice per test!`. Le même test appelle `setContent` aux lignes 72 et 169.
+La trace pointe `AndroidComposeTestRule.setContent`; ce constat concerne le montage de la fixture UI.
+Aucun défaut de production n'est établi par ce résultat et aucun fichier de production n'a été modifié.
+
+Logs : `regression-goal-focus.log`, `regression-controller-publication.log`,
+`regression-publisher.log`, `regression-agent-persistence.log`,
+`regression-proactive-worker.log`.

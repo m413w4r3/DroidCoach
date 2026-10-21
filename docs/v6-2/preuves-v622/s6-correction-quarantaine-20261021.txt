@@ -1,0 +1,117 @@
+ATLAS V6.2.2 — S6 correction ciblée de la fixture quarantaine
+Date : 2026-10-21
+Branche : feat/atlas-v6-2-2, HEAD bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Périmètre
+---------
+Une seule source AndroidTest a été modifiée :
+android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt.
+Aucun fichier de production ni script n'a été changé dans cette correction.
+Le seul APK rebâti est AndroidTest; l'APK app reste identique.
+
+Le test en question compte déjà dans les 75 cas principaux. Aucun @Test n'a
+été ajouté. Le nombre attendu a donc été fixé à 75 avant le rejeu, selon
+scripts/v62-instrumentation-summary.py et le filtre du runner qui exclut
+V62RealGatewayContextBridgeTest.
+
+RED — paire S5 CLEAN précédente
+-------------------------------
+Paire avant correction, vérifiée puis installée sur le seul AVD autorisé
+atlas_v622_s1_api34 / API 34 / ADB 5037 :
+  app         ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a
+  AndroidTest 8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d
+
+Rejeu direct du seul cas :
+  adb shell am instrument -w -r -e class \
+    dev.atlas.coach.AtlasLaunchTest#recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady \
+    dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Résultat runner : 1 test, 1 échec. La pile se termine à AtlasLaunchTest.kt:338,
+sur l'assertion authorizedCategories, après le contrôle de la valeur brute de
+quarantaine. Ce rejeu ne reproduit donc pas l'hypothèse d'octets JSON différents :
+l'assertion raw == raw passe et le test atteint l'assertion suivante.
+
+Inspection locale limitée aux champs synthétiques après le rouge : l'état
+persisté porte le mandat focus/goals et les dates de consentement correspondantes;
+la valeur state_quarantine_* porte schemaVersion 1, ces catégories et la politique
+quietStart invalide attendue. Les deux clés legacy sont absentes. Au même moment,
+la préférence séparée atlas_agent_revocation_barrier indiquait agent_blocked=true
+et aucune catégorie individuelle. AtlasLaunchTest.@Before effaçait seulement
+atlas_local_state, pas cette barrière; isAgentContextVisible() masque alors le
+contexte autorisé. La cause de ce rouge est donc une précondition persistante de
+la fixture de test, pas la normalisation JSON ni une donnée manquante en
+production. Les observations d'état ne contiennent aucun payload privé.
+
+Correction AndroidTest
+----------------------
+- Le cas sauvegarde l'état de RevocationBarrierStorage, initialise la barrière à
+  son état neutre avant de construire le contrôleur, puis le restaure dans @After,
+  y compris si une assertion échoue.
+- La valeur de quarantaine est maintenant analysée comme JSON. Le test vérifie
+  schemaVersion, les catégories focus/goals, quietStart=invalid-time et
+  quietEnd=07:00.
+- La fixture contient un sentinel strictement synthétique dans
+  lastAgentSharedContext et un horodatage factice. Le test vérifie que ni
+  lastAgentSharedContext ni lastAgentSharedContextAt ne restent dans la
+  quarantaine.
+- Les assertions de récupération, notification, migration des dates, Goal et
+  redémarrage ont été conservées.
+
+Build et paire corrigée
+-----------------------
+Commande exécutée dans android/ :
+  ./gradlew :app:assembleDebugAndroidTest --console=plain
+Résultat : BUILD SUCCESSFUL, 4 tâches exécutées; compilation Kotlin de l'app
+UP-TO-DATE. Aucun task assembleDebug ni clean n'a été lancé.
+
+APK candidat de test : /tmp/atlas-v622-s6/quarantine-correction-20261021/
+  app         ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a
+  AndroidTest 0b5c3d087cbf856207cd85d7a4a5573d532a65d89394a54a6c7d16abcc0b3872
+  source/tests/scripts : SHA-256 du manifeste trié à 225 entrées
+              fbb0f7ecf0b05052a75e6b6006bccd94b9e0fe12b92177d9b7d7909737718d52
+
+L'app installée était déjà au hash attendu. L'AndroidTest corrigé a été remplacé
+par adb install -r -t. Les hashes installés après l'installation et à la fin des
+rejeux sont identiques à cette paire. Pas de pm clear, uninstall ou wipe.
+
+Résultats sur la paire corrigée
+-------------------------------
+  cible AtlasLaunchTest : PASS, AndroidJUnitRunner OK (1 test)
+  suite principale      : PASS, AndroidJUnitRunner OK (75 tests), 142.923 s,
+                          largeur attendue 360 dp, hôte exit 0
+  compléments sûrs      : PASS 8/8; 3 LocationCapture simulés, paysage V61,
+                          HOME/Coach à 320 et 360 dp
+  localisation logique  : PASS (provider contrôlé, fraîcheur, divulgation, TTL)
+  activité visible      : PASS (location-visible-main-activity)
+  préparation mobilité : PASS
+  acquisition mobilité : TEST_SYSTEM_BLOCKED, Android n'a pas livré de nouveau
+                          fix coarse après l'injection hôte; script exit 77
+
+Le log résumé du test cible est sous
+/tmp/atlas-v622-s6/quarantine-corrected-target/runner.txt; le runner principal
+et les huit résumés de compléments sont sous
+/tmp/atlas-v622-s6/quarantine-corrected-main-20261021/ et
+/tmp/atlas-v622-s6/quarantine-corrected-complements-20261021/. La recette
+localisation est sous /tmp/atlas-v622-s6/quarantine-corrected-location-20261021/.
+Les journaux sont hors dépôt et en mode privé.
+
+Limites conservées
+------------------
+- Le script complet n'a pas été lancé : il contient deux pm clear. Les deux cas
+  UsageStats qui révoquent l'AppOp ou purgent consentement/historique restent
+  NOT_RUN. D3 reste NOT_RUN; aucun état de consentement UsageStats n'a été
+  sélectionné ou forcé pendant cette correction.
+- Les deux passages OpenClaw et le test hors ligne restent une preuve historique
+  de la paire ce10/8edb; ils n'ont pas été requalifiés pour AndroidTest 0b5c.
+- API 37 reste BLOCKED avant installation; aucun nouvel essai n'a été lancé.
+  Téléphone physique, TalkBack réel et batterie physique : NOT_RUN.
+- Après les tests, l'AVD a été remis à 1080x1920 / densité 420, coarse accordé,
+  fine refusé, notifications accordées, localisation activée et AppOp
+  GET_USAGE_STATS à ignore pour UID/package. À l'audit final, l'AppOp était
+  `allow`; les deux compléments UsageStats destructifs n'avaient pas été lancés
+  et l'origine de cette valeur n'est pas attribuée. Le nettoyage l'a remis à `ignore`, conformément à l'état
+  de recette précédemment consigné, puis a vérifié les deux niveaux. Aucun
+  consentement UsageStats n'a été effacé. Aucun appareil physique n'était
+  connecté. L'AVD a été arrêté proprement après la clôture de cette recette.
+
+Aucune modification de production, commit, push, merge ou tag.
+Contre-revue S7 requise.

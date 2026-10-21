@@ -26,11 +26,12 @@ import kotlin.coroutines.resumeWithException
  * policy, or system scheduling; this worker does not promise a delivery time.
  *
  * Timing out this waiter does not prove that the shared controller drain or its HTTP call stopped.
- * A late response is still checked after transport against both controller request generations,
- * agent enablement, and current proactive consent; the scheduler checks current consent again
- * before notification reservation and the coordinator checks enablement before publishing. The
- * generation checks are not repeated at the final publisher boundary, so a concurrent revocation
- * in the short gap after those checks remains an integration race (see DECISIONS_AUTOMATIQUES.md).
+ * The coordinator snapshots the publication epoch before eligibility, consent, clock, or scheduler
+ * preparation. The scheduler binds that epoch to the exact trigger batch before durable reservation,
+ * then rechecks authorization after transport, before notification reservation, and at the publisher's
+ * final gate immediately before notify. Revocation also removes only proactive-channel notices.
+ * Android notification-manager notify/cancel calls are not one OS transaction: a notify already
+ * accepted by the system can race a subsequent targeted cancellation.
  */
 class ProactiveCoachWorker(
     appContext: Context,

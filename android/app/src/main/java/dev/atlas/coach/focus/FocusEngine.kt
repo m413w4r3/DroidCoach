@@ -2,6 +2,12 @@ package dev.atlas.coach.focus
 
 import java.util.UUID
 
+@ConsistentCopyVisibility
+data class PreparedFocusStart internal constructor(
+    val session: FocusSession,
+    internal val phaseStartedMonotonicMillis: Long,
+)
+
 /** Pure Kotlin Pomodoro state machine. Call [snapshot] when saving local state. */
 class FocusEngine(
     private val clock: Clock,
@@ -29,16 +35,37 @@ class FocusEngine(
         }
 
         val nowUtc = clock.nowMillis()
-        phaseRemainingMillis = plan.workSeconds * MILLIS_PER_SECOND
-        phaseStartedMonotonicMillis = clock.monotonicMillis()
-        return FocusSession(
-            id = idFactory(),
+        val nowMonotonic = clock.monotonicMillis()
+        return publishPreparedStart(
+            prepareStart(
+                plan = plan,
+                directiveId = directiveId,
+                sessionId = idFactory(),
+                startedAtUtcMillis = nowUtc,
+                startedAtMonotonicMillis = nowMonotonic,
+            ),
+        )
+    }
+
+    /** Builds a deterministic start candidate without reading the clock or changing engine state. */
+    fun prepareStart(
+        plan: FocusPlan,
+        directiveId: String?,
+        sessionId: String,
+        startedAtUtcMillis: Long,
+        startedAtMonotonicMillis: Long,
+    ): PreparedFocusStart {
+        require(sessionId.isNotBlank()) { "Focus session ID must not be blank" }
+        require(startedAtUtcMillis >= 0L) { "Focus start time must not be negative" }
+        val remainingMillis = plan.workSeconds * MILLIS_PER_SECOND
+        val candidate = FocusSession(
+            id = sessionId,
             directiveId = directiveId,
             presetId = plan.presetId,
             phase = FocusPhase.WORK,
             status = FocusStatus.RUNNING,
-            createdAtUtcMillis = nowUtc,
-            updatedAtUtcMillis = nowUtc,
+            createdAtUtcMillis = startedAtUtcMillis,
+            updatedAtUtcMillis = startedAtUtcMillis,
             remainingSeconds = plan.workSeconds,
             completedWorkCycles = 0,
             workSeconds = plan.workSeconds,
@@ -48,7 +75,17 @@ class FocusEngine(
             totalWorkCycles = plan.totalWorkCycles,
             continuous = plan.continuous,
             taskTitle = plan.taskTitle,
-        ).also { session = it }
+            remainingMillis = remainingMillis,
+        )
+        return PreparedFocusStart(candidate, startedAtMonotonicMillis)
+    }
+
+    /** Installs a candidate that its owner has already committed. This performs no I/O or validation. */
+    fun publishPreparedStart(prepared: PreparedFocusStart): FocusSession {
+        session = prepared.session
+        phaseRemainingMillis = prepared.session.remainingMillis
+        phaseStartedMonotonicMillis = prepared.phaseStartedMonotonicMillis
+        return prepared.session
     }
 
     /** Starts a configurable work phase; useful for the local demo and repository contract. */

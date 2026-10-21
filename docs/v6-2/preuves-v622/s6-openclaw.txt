@@ -1,0 +1,20 @@
+ATLAS V6.2.2 — E2E OpenClaw réel S6
+Note de statut : ce document est un relevé historique des APK S6 précédentes. Les résultats du candidat final S5/S7-P1-01 sont dans [s6-e2e-candidat-s5-final.txt](s6-e2e-candidat-s5-final.txt).
+Gateway configuré localement : HTTP 127.0.0.1:18789; adaptateur rapporté `openclaw`.
+Les tokens étaient temporaires, tirés aléatoirement, en fichiers mode 600 hors dépôt; la base backend et logs bruts ont été temporaires. Aucune valeur d'identifiant ou de payload n'est conservée ici.
+
+Passage complet 20261020T224832Z
+- realCoachResponseCreatesDirectiveAndStartsFocus : 1/1 PASS avec le Gateway réel.
+- Force-stop Android du processus app vérifié; redémarrage Focus pause/reprise/annulation : 1/1 PASS.
+- MandateVerifier / plan Focus limité Android : 1/1 PASS.
+- realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal : 1/1 PASS au runner initial. Goal synthétique 120 min, Focus terminé de 25 min via horloge contrôlée, puis lien au Goal; contexte rapporté 25/120; proposition Gateway reçue puis acceptée; effet HOME exécuté, journal d'effets et ACK accepté. Après révocation goals, le payload suivant conservait le contexte Focus autorisé et n'incluait pas Goal/titre/120. Relecture E1 : le lien était postérieur à la fin; cette preuve historique ne démontre pas le lien durable au démarrage.
+- Backend temporaire arrêté, endpoint health devenu inaccessible, essai local après arrêt : 1/1 PASS.
+- Résumé backend : 3 ACK d'effets `executed` avec effet non vide.
+
+Rejeux du test de contexte réel
+- 20261020T225427Z et 20261020T225535Z : assertion attendue `EXECUTED`, état terminal différent; les anciens résumés ne conservent pas l'inbox/journal brut.
+- Deux exécutions structurées distinctes, rejouées après ces anciens résumés, ont montré `REJECTED`/`EMERGENCY_PAUSE` avec action canonique `home.set_directive`, version 15/15, action autorisée, quota 0/50, proposition non expirée et pause active au dispatch. Elles prouvent ce mécanisme sur ces deux nouvelles exécutions; elles ne permettent pas d'attribuer rétrospectivement la cause aux deux anciens refus.
+- Le helper `newIsolatedController(clearState=true)` ne nettoyait pas la préférence de pause dans le `ContextWrapper` isolé; cela constituait une voie de contamination démontrée par les nouveaux dispatchs. Cette observation ne remplace pas les journaux manquants des anciens cas.
+- Les corrections E1 (lien durable dès le démarrage) et E2 (nettoyage de cette seule préférence dans le contexte de test isolé) sont incluses dans le candidat final S5/S7-P1-01 et ont été rejouées; voir la preuve E2E finale liée en tête.
+
+À la date de ce relevé historique, aucun code de production ou mandat n'avait été modifié par les tests E2E. Verdict de ces anciens essais : une réussite complète initiale, deux anciens échecs non attribués rétrospectivement et deux nouvelles reproductions structurées du mécanisme `EMERGENCY_PAUSE`. Le résultat final actuel est séparé et consigné dans [s6-e2e-candidat-s5-final.txt](s6-e2e-candidat-s5-final.txt). Aucun log brut/token/payload n'est conservé dans les preuves.

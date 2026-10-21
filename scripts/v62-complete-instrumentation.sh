@@ -5,39 +5,103 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_DIR="$ROOT/android"
 SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/home/nill/Android/Sdk}}"
 ADB="$SDK_ROOT/platform-tools/adb"
-SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+EXPECTED_SERIAL="emulator-5580"
+EXPECTED_AVD="atlas_v622_s1_api34"
+SERIAL="${ANDROID_SERIAL:-$EXPECTED_SERIAL}"
 RUNNER="dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner"
 APP_APK="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
 TEST_APK="$ANDROID_DIR/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+CANDIDATE_DIR="${ATLAS_V622_S6_CANDIDATE_DIR:-/tmp/atlas-v622-s6-s5-s7-p1-01-corrected-test-candidate}"
+CANDIDATE_APP_APK="$CANDIDATE_DIR/app-debug.apk"
+CANDIDATE_TEST_APK="$CANDIDATE_DIR/app-debug-androidTest.apk"
+EXPECTED_APP_SHA256="${ATLAS_V622_CANDIDATE_APP_SHA256:-ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a}"
+EXPECTED_TEST_SHA256="${ATLAS_V622_CANDIDATE_TEST_SHA256:-8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d}"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_START="$(date -u -Iseconds)"
-LOG_DIR="$ROOT/logs/regressions-instrumentation/$RUN_ID"
-CAPTURE_DIR="$LOG_DIR/captures"
+LOG_DIR="${ATLAS_V622_S6_LOG_DIR:-/tmp/atlas-v622-s6/full-harness/$RUN_ID}"
 GRADLE_STATUS=0
 STATE_SNAPSHOT=0
 
+LOG_DIR="$(realpath -m -- "$LOG_DIR")"
+case "$LOG_DIR" in
+  /tmp/atlas-v622-s6/*) ;;
+  *) printf 'BLOCKED: instrumentation evidence must stay under /tmp/atlas-v622-s6.\n' >&2; exit 77 ;;
+esac
+CAPTURE_DIR="$LOG_DIR/captures"
+umask 077
 mkdir -p "$LOG_DIR" "$CAPTURE_DIR"
+chmod 700 "$LOG_DIR" "$CAPTURE_DIR"
+export ADB_SERVER_PORT=5037
 
-if [[ ! -x "$ADB" || ! -x "$ANDROID_DIR/gradlew" ]]; then
-  printf 'BLOCKED: adb/Gradle wrapper unavailable. SDK=%s\n' "$SDK_ROOT" | tee "$LOG_DIR/preflight.txt" >&2
+if [[ ! -x "$ADB" || ! -x "$ANDROID_DIR/gradlew" ]] || ! command -v timeout >/dev/null 2>&1; then
+  printf 'BLOCKED: adb, Gradle wrapper or timeout unavailable. SDK=%s\n' "$SDK_ROOT" | tee "$LOG_DIR/preflight.txt" >&2
   exit 77
 fi
-if [[ ! "$SERIAL" =~ ^emulator-[0-9]+$ ]] || ! "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
+if [[ "$SERIAL" != "$EXPECTED_SERIAL" ]] || ! "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
   printf 'BLOCKED: expected a running disposable AVD at %s.\n' "$SERIAL" | tee "$LOG_DIR/preflight.txt" >&2
   exit 77
 fi
 AVD_NAME="$("$ADB" -s "$SERIAL" shell getprop ro.boot.qemu.avd_name 2>/dev/null | tr -d '\r')"
-if [[ -z "$AVD_NAME" ]]; then
-  AVD_NAME="$("$ADB" -s "$SERIAL" emu avd name 2>/dev/null | sed -n '1p' | tr -d '\r ' )"
-fi
 API_LEVEL="$("$ADB" -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
 MODEL="$("$ADB" -s "$SERIAL" shell getprop ro.product.model | tr -d '\r')"
-DEVICE_LIST="$("$ADB" devices | awk 'NR > 1 && $2 == "device" { print $1 }')"
-if [[ "$AVD_NAME" != atlas_v62_disposable_api34 || "$API_LEVEL" != 34 || "$DEVICE_LIST" != "$SERIAL" ]]; then
-  printf 'BLOCKED: expected only atlas_v62_disposable_api34 / API 34 on %s; observed AVD=%s API=%s connected=%s\n' \
-    "$SERIAL" "$AVD_NAME" "$API_LEVEL" "${DEVICE_LIST//$'\n'/,}" | tee "$LOG_DIR/preflight.txt" >&2
+if ! DEVICE_SUMMARY="$(python3 - "$ADB" "$SERIAL" <<'PY'
+import os
+import subprocess
+import sys
+
+try:
+    result = subprocess.run(
+        [sys.argv[1], "devices"], text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL, check=False, timeout=20,
+        env={**os.environ, "ADB_SERVER_PORT": "5037"},
+    )
+except (OSError, subprocess.TimeoutExpired):
+    raise SystemExit(1)
+rows = [line.split() for line in result.stdout.splitlines()[1:] if line.strip()]
+assigned = [row for row in rows if row[0] == sys.argv[2] and len(row) >= 2 and row[1] == "device"]
+other_count = len(rows) - len(assigned)
+assigned_state = "device" if len(assigned) == 1 else "missing_or_ambiguous"
+print(f"targets={len(rows)} assigned={assigned_state} other_targets={other_count}")
+raise SystemExit(result.returncode)
+PY
+)"; then
+  printf 'BLOCKED: ADB target inventory failed or timed out.\n' | tee "$LOG_DIR/preflight.txt" >&2
   exit 77
 fi
+if [[ "$AVD_NAME" != "$EXPECTED_AVD" || "$API_LEVEL" != 34 || "$DEVICE_SUMMARY" != "targets=1 assigned=device other_targets=0" ]]; then
+  printf 'BLOCKED: expected only %s / API 34; observed AVD=%s API=%s inventory=%s\n' \
+    "$EXPECTED_AVD" "$AVD_NAME" "$API_LEVEL" "$DEVICE_SUMMARY" | tee "$LOG_DIR/preflight.txt" >&2
+  exit 77
+fi
+
+if [[ ! -s "$CANDIDATE_APP_APK" || ! -s "$CANDIDATE_TEST_APK" ]]; then
+  printf 'BLOCKED: frozen candidate APK pair is unavailable.\n' | tee "$LOG_DIR/preflight.txt" >&2
+  exit 77
+fi
+CANDIDATE_APP_ACTUAL="$(sha256sum "$CANDIDATE_APP_APK" | awk '{print $1}')"
+CANDIDATE_TEST_ACTUAL="$(sha256sum "$CANDIDATE_TEST_APK" | awk '{print $1}')"
+if [[ "$CANDIDATE_APP_ACTUAL" != "$EXPECTED_APP_SHA256" || "$CANDIDATE_TEST_ACTUAL" != "$EXPECTED_TEST_SHA256" ]]; then
+  printf 'BLOCKED: frozen candidate APK hashes differ from the declared pair.\n' | tee "$LOG_DIR/preflight.txt" >&2
+  exit 77
+fi
+{
+  printf 'candidate_app_sha256=%s\ncandidate_test_sha256=%s\n' "$CANDIDATE_APP_ACTUAL" "$CANDIDATE_TEST_ACTUAL"
+} > "$LOG_DIR/candidate-identity.txt"
+
+run_instrument() {
+  local status=0
+  if timeout --signal=TERM --kill-after=10s 90s "$ADB" -s "$SERIAL" shell am instrument "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+  if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
+    printf 'FAIL: instrumentation exceeded 90 seconds; stopping both test packages.\n' >&2
+    "$ADB" -s "$SERIAL" shell am force-stop dev.atlas.coach.test >/dev/null 2>&1 || true
+    "$ADB" -s "$SERIAL" shell am force-stop dev.atlas.coach >/dev/null 2>&1 || true
+  fi
+  return "$status"
+}
 
 runtime_permission_state() {
   local permission="$1" line
@@ -151,6 +215,17 @@ if ! ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --console=plain 
   exit 1
 fi
 
+BUILT_APP_SHA256="$(sha256sum "$APP_APK" | awk '{print $1}')"
+BUILT_TEST_SHA256="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+if [[ "$BUILT_APP_SHA256" != "$EXPECTED_APP_SHA256" || "$BUILT_TEST_SHA256" != "$EXPECTED_TEST_SHA256" ]]; then
+  printf 'BLOCKED: assembled APK pair does not match the frozen candidate; nothing installed.\n' | tee "$LOG_DIR/candidate-build-mismatch.txt" >&2
+  printf 'candidate_app_sha256=%s\nbuilt_app_sha256=%s\ncandidate_test_sha256=%s\nbuilt_test_sha256=%s\n' \
+    "$EXPECTED_APP_SHA256" "$BUILT_APP_SHA256" "$EXPECTED_TEST_SHA256" "$BUILT_TEST_SHA256" >> "$LOG_DIR/candidate-build-mismatch.txt"
+  exit 77
+fi
+printf 'assembled_app_sha256=%s\nassembled_test_sha256=%s\n' "$BUILT_APP_SHA256" "$BUILT_TEST_SHA256" \
+  >> "$LOG_DIR/candidate-identity.txt"
+
 "$ADB" -s "$SERIAL" install -r "$APP_APK" > "$LOG_DIR/install-app.log" 2>&1 || exit 1
 "$ADB" -s "$SERIAL" install -r -t "$TEST_APK" > "$LOG_DIR/install-test-apk.log" 2>&1 || exit 1
 # This recipe owns only the dedicated AVD's app and instrumentation package data.
@@ -168,7 +243,14 @@ printf 'background_location=not_requested_and_denied_by_default\n' > "$LOG_DIR/r
 "$ADB" -s "$SERIAL" logcat -c
 
 set +e
-./gradlew :app:connectedDebugAndroidTest \
+PRE_RUN_APP_SHA256="$(sha256sum "$APP_APK" | awk '{print $1}')"
+PRE_RUN_TEST_SHA256="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+if [[ "$PRE_RUN_APP_SHA256" != "$EXPECTED_APP_SHA256" || "$PRE_RUN_TEST_SHA256" != "$EXPECTED_TEST_SHA256" ]]; then
+  printf 'BLOCKED: APK pair changed before connected instrumentation; runner not started.\n' | tee "$LOG_DIR/candidate-pre-run-mismatch.txt" >&2
+  printf 'app_sha256=%s\ntest_sha256=%s\n' "$PRE_RUN_APP_SHA256" "$PRE_RUN_TEST_SHA256" >> "$LOG_DIR/candidate-pre-run-mismatch.txt"
+  exit 77
+fi
+./gradlew :app:connectedDebugAndroidTest -x :app:assembleDebug -x :app:assembleDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.notClass=dev.atlas.coach.app.V62RealGatewayContextBridgeTest \
   -Pandroid.testInstrumentationRunnerArguments.expected_width_dp=360 \
   --console=plain > "$LOG_DIR/connected-debug-android-test.log" 2>&1
@@ -224,7 +306,7 @@ uid_ignore_status=$?
 "$ADB" -s "$SERIAL" shell appops set dev.atlas.coach GET_USAGE_STATS ignore >> "$LOG_DIR/appops-denial-prepare.log" 2>&1
 package_ignore_status=$?
 if [[ "$external_packages_ready" == 1 && "$uid_ignore_status" -eq 0 && "$package_ignore_status" -eq 0 ]]; then
-  "$ADB" -s "$SERIAL" shell am instrument -w -r -e usage_appops_denied "$RUN_ID" -e class \
+  run_instrument -w -r -e usage_appops_denied "$RUN_ID" -e class \
     'dev.atlas.coach.usage.UsageFixtureInstrumentationTest#actualAppOpsDenialStopsBeforeQueryingUsageStats' "$RUNNER" \
     > "$LOG_DIR/usage-actual-appops-denial.log" 2>&1
   USAGE_DENIAL_STATUS=$?
@@ -256,7 +338,7 @@ if [[ "$FIXTURE_BUILD_STATUS" -eq 0 && -f "$FIXTURE_APK" ]]; then
       >> "$LOG_DIR/appops-fixture-prepare.log" 2>&1
     notification_grant_status=$?
     if [[ "$uid_allow_status" -eq 0 && "$package_allow_status" -eq 0 && "$notification_grant_status" -eq 0 ]]; then
-      "$ADB" -s "$SERIAL" shell am instrument -w -r -e usage_fixture_ready "$RUN_ID" -e class \
+      run_instrument -w -r -e usage_fixture_ready "$RUN_ID" -e class \
         'dev.atlas.coach.usage.UsageFixtureInstrumentationTest#fourRealFixtureOpensReachTheRuleAfterReturningToAtlas' "$RUNNER" \
         > "$LOG_DIR/usage-four-fixture-opens.log" 2>&1
       FIXTURE_TEST_STATUS=$?
@@ -298,13 +380,13 @@ printf 'V61LandscapeCaptureTest#capturesHomeWithDirectiveCtaAboveFixedFooter=fil
 run_targeted() {
   local label="$1" class_method="$2" expected_width="$3"
   local args=("-e" "expected_width_dp" "$expected_width" "-e" "class" "$class_method")
-  "$ADB" -s "$SERIAL" shell am instrument -w -r "${args[@]}" "$RUNNER" > "$LOG_DIR/$label.log" 2>&1
+  run_instrument -w -r "${args[@]}" "$RUNNER" > "$LOG_DIR/$label.log" 2>&1
   return $?
 }
 
 run_targeted_with_argument() {
   local label="$1" class_method="$2" expected_width="$3" key="$4" value="$5"
-  "$ADB" -s "$SERIAL" shell am instrument -w -r \
+  run_instrument -w -r \
     -e "$key" "$value" -e expected_width_dp "$expected_width" -e class "$class_method" "$RUNNER" \
     > "$LOG_DIR/$label.log" 2>&1
   return $?
@@ -377,7 +459,7 @@ while IFS= read -r class_name; do
       ;;
     dev.atlas.coach.location.V62MobilityServiceInstrumentedTest)
       set +e
-      "$ADB" -s "$SERIAL" shell am instrument -w -r -e class "$class_name" "$RUNNER" \
+      run_instrument -w -r -e class "$class_name" "$RUNNER" \
         > "$LOG_DIR/follow-up-class-${class_name##*.}.log" 2>&1
       class_status=$?
       set -e
@@ -386,7 +468,7 @@ while IFS= read -r class_name; do
       ;;
     dev.atlas.coach.usage.UsageFixtureInstrumentationTest)
       set +e
-      "$ADB" -s "$SERIAL" shell am instrument -w -r -e class \
+      run_instrument -w -r -e class \
         "$class_name#notificationPresenterReportsMissingManifestPermissionInsteadOfPosting" "$RUNNER" \
         > "$LOG_DIR/follow-up-usage-notification-permission.log" 2>&1
       method_status=$?
@@ -397,7 +479,7 @@ while IFS= read -r class_name; do
       ;;
     dev.atlas.coach.sync.SyncSettingsScreenCaptureTest)
       set +e
-      "$ADB" -s "$SERIAL" shell am instrument -w -r -e capture_state disabled -e class \
+      run_instrument -w -r -e capture_state disabled -e class \
         "$class_name" "$RUNNER" > "$LOG_DIR/follow-up-sync-settings-disabled.log" 2>&1
       method_status=$?
       set -e
@@ -406,7 +488,7 @@ while IFS= read -r class_name; do
       ;;
   esac
   set +e
-  "$ADB" -s "$SERIAL" shell am instrument -w -r -e class "$class_name" "$RUNNER" \
+  run_instrument -w -r -e class "$class_name" "$RUNNER" \
     > "$LOG_DIR/follow-up-class-${class_name##*.}.log" 2>&1
   class_status=$?
   set -e
@@ -512,107 +594,19 @@ done
 "$ADB" -s "$SERIAL" shell wm density 480 >> "$LOG_DIR/restore-display-360dp.log" 2>&1
 "$ADB" -s "$SERIAL" logcat -d -s ATLAS_TEST_FILTER:I > "$LOG_DIR/follow-up-filter.log" 2>&1
 
-python3 - "$LOG_DIR" "$GRADLE_STATUS" "$HOME_360_STATUS" "$COACH_360_STATUS" "$HOME_320_STATUS" "$COACH_320_STATUS" "$V61_LANDSCAPE_STATUS" <<'PY' > "$LOG_DIR/counts.txt"
-import pathlib
-import re
-import sys
-import xml.etree.ElementTree as ET
-
-root = pathlib.Path(sys.argv[1])
-print(f"connectedDebugAndroidTest_exit={sys.argv[2]}")
-print(f"native_home_360dp_exit={sys.argv[3]}")
-print(f"native_coach_360dp_exit={sys.argv[4]}")
-print(f"native_home_320dp_exit={sys.argv[5]}")
-print(f"native_coach_320dp_exit={sys.argv[6]}")
-print(f"v61_landscape_exit={sys.argv[7]}")
-tests = failures = errors = skipped = 0
-files = list((root / "android-test-results").rglob("*.xml"))
-class_counts = {}
-for path in files:
-    try:
-        tree = ET.parse(path)
-    except ET.ParseError:
-        continue
-    for case in tree.iter("testcase"):
-        tests += 1
-        class_name = case.attrib.get("classname", "unknown")
-        class_counts[class_name] = class_counts.get(class_name, 0) + 1
-        failures += case.find("failure") is not None
-        errors += case.find("error") is not None
-        skipped += case.find("skipped") is not None
-print(f"xml_files={len(files)}")
-print(f"full_suite_tests={tests}")
-print(f"full_suite_passed={tests - failures - errors - skipped}")
-print(f"full_suite_failures={failures}")
-print(f"full_suite_errors={errors}")
-print(f"full_suite_skipped={skipped}")
-print(f"full_suite_classes_with_executed_cases={len(class_counts)}")
-for class_name, count in sorted(class_counts.items()):
-    print(f"full_suite_class={class_name} cases={count}")
-filter_log = root / "backend-filter.log"
-filtered = [line for line in filter_log.read_text(errors="replace").splitlines() if "Filtered " in line]
-print(f"runner_filtered_cases={len(filtered)}")
-location_filtered = [line for line in filtered if "V62LocationCaptureInstrumentedTest" in line]
-usage_external_filtered = [line for line in filtered if "UsageFixtureInstrumentationTest" in line]
-token_filtered = [line for line in filtered if any(token in line.lower() for token in ("token", "backend", "gateway"))]
-print(f"location_external_cases_filtered_in_full_suite={len(location_filtered)}")
-print(f"usage_host_harness_cases_filtered_in_full_suite={len(usage_external_filtered)}")
-print(f"landscape_host_setup_cases_filtered_in_full_suite={sum('V61LandscapeCaptureTest' in line for line in filtered)}")
-backend_filtered = [line for line in filtered if any(name in line for name in ("V62OpenClawClientInstrumentationTest", "V6RealAgentE2eInstrumentationTest", "RemoteBackendE2eInstrumentationTest"))]
-print(f"real_backend_cases_filtered_in_full_suite={len(backend_filtered)}")
-for line in filtered:
-    print("runner_filter=" + line.strip())
-follow_up_filter_log = root / "follow-up-filter.log"
-follow_up_filtered = [line for line in follow_up_filter_log.read_text(errors="replace").splitlines() if "Filtered " in line]
-unique_follow_up_filtered = sorted(set(re.sub(r"^.*ATLAS_TEST_FILTER:\s*", "", line).strip() for line in follow_up_filtered))
-print(f"runner_filtered_log_entries_in_followups={len(follow_up_filtered)}")
-print(f"runner_filtered_unique_cases_in_followups={len(unique_follow_up_filtered)}")
-for line in unique_follow_up_filtered:
-    print("follow_up_filter=" + line)
-excluded_follow_up_logs = ("follow-up-clear-", "follow-up-enable-", "follow-up-grant-", "follow-up-revoke-", "follow-up-ensure-")
-manual_logs = [path for path in sorted(root.glob("follow-up-*.log")) if not path.name.startswith(excluded_follow_up_logs)]
-manual_logs = [path for path in manual_logs if path.name != "follow-up-filter.log"]
-manual_logs += sorted(root.glob("usage-*.log")) + sorted(root.glob("native-*.log"))
-manual_tests = manual_failures = manual_errors = manual_skipped = unparsed = 0
-for path in manual_logs:
-    body = path.read_text(errors="replace")
-    # AndroidJUnitRunner omits Errors/Skipped when its stream ends on a failed
-    # assertion. Keep the reported assertion in the failure column instead of
-    # misclassifying the whole instrumentation invocation as an error.
-    match = re.search(
-        r"Tests run:\s*(\d+),\s*Failures:\s*(\d+)"
-        r"(?:,\s*Errors:\s*(\d+))?(?:,\s*Skipped:\s*(\d+))?",
-        body,
-    )
-    if match:
-        count = int(match.group(1))
-        failed = int(match.group(2))
-        errored = int(match.group(3) or 0)
-        ignored = int(match.group(4) or 0)
-    else:
-        match = re.search(r"OK \((\d+) tests?\)", body)
-        if match:
-            count, failed, errored, ignored = int(match.group(1)), 0, 0, 0
-        elif "INSTRUMENTATION_CODE: -1" in body or "FAILURES!!!" in body:
-            count, failed, errored, ignored = 0, 0, 1, 0
-        else:
-            count, failed, errored, ignored = 0, 0, 0, 0
-            unparsed += 1
-    manual_tests += count
-    manual_failures += failed
-    manual_errors += errored
-    manual_skipped += ignored
-    print(f"additional_log={path.name} tests={count} failures={failed} errors={errored} skipped={ignored}")
-print(f"additional_tests={manual_tests}")
-print(f"additional_passed={manual_tests - manual_failures - manual_errors - manual_skipped}")
-print(f"additional_failures={manual_failures}")
-print(f"additional_errors={manual_errors}")
-print(f"additional_skipped={manual_skipped}")
-print(f"additional_logs_without_summary={unparsed}")
-captures = list((root / "captures").glob("*.png"))
-print(f"capture_png_files={len(captures)}")
-print(f"capture_png_expected=21")
-PY
+printf 'native_home_360dp_exit=%s\nnative_coach_360dp_exit=%s\nnative_home_320dp_exit=%s\nnative_coach_320dp_exit=%s\n' \
+  "$HOME_360_STATUS" "$COACH_360_STATUS" "$HOME_320_STATUS" "$COACH_320_STATUS" \
+  > "$LOG_DIR/native-test-status.txt"
+if ! python3 "$ROOT/scripts/v62-instrumentation-summary.py" \
+  --root "$LOG_DIR" \
+  --main-exit "$GRADLE_STATUS" \
+  --native-home-360dp "$HOME_360_STATUS" \
+  --native-coach-360dp "$COACH_360_STATUS" \
+  --native-home-320dp "$HOME_320_STATUS" \
+  --native-coach-320dp "$COACH_320_STATUS"; then
+  printf 'summary_generator=FAIL\nrecipe=FAIL\n' > "$LOG_DIR/recipe-result.txt"
+  cp "$LOG_DIR/recipe-result.txt" "$LOG_DIR/counts.txt"
+fi
 
 python3 - "$ANDROID_DIR/app/build/reports/androidTests/connected/debug" "$LOG_DIR/failure-summary.txt" <<'PY'
 import html.parser
@@ -663,67 +657,6 @@ for report in sorted(report_dir.glob("*.html")):
         lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
         rows.append((report.name, name, " | ".join(lines[:5])))
 output.write_text("\n".join(f"{report} :: {name}\n  {detail}" for report, name, detail in rows) + ("\n" if rows else "No Gradle HTML failure reports were found.\n"))
-PY
-
-python3 - "$LOG_DIR" "$GRADLE_STATUS" "$HOME_360_STATUS" "$COACH_360_STATUS" "$HOME_320_STATUS" "$COACH_320_STATUS" "$V61_LANDSCAPE_STATUS" \
-  "$USAGE_DENIAL_STATUS" "$FIXTURE_BUILD_STATUS" "$FIXTURE_INSTALL_STATUS" "$FIXTURE_TEST_STATUS" <<'PY' > "$LOG_DIR/recipe-result.txt"
-import pathlib
-import re
-import sys
-import xml.etree.ElementTree as ET
-
-root = pathlib.Path(sys.argv[1])
-gradle, *statuses = map(int, sys.argv[2:])
-tests = failures = errors = skipped = 0
-for path in (root / "android-test-results").rglob("*.xml"):
-    try:
-        tree = ET.parse(path)
-    except ET.ParseError:
-        continue
-    for case in tree.iter("testcase"):
-        tests += 1
-        failures += case.find("failure") is not None
-        errors += case.find("error") is not None
-        skipped += case.find("skipped") is not None
-additional_failures = additional_errors = 0
-excluded_follow_up_logs = ("follow-up-clear-", "follow-up-enable-", "follow-up-grant-", "follow-up-revoke-", "follow-up-ensure-")
-manual_logs = [path for path in root.glob("follow-up-*.log") if not path.name.startswith(excluded_follow_up_logs)]
-manual_logs = [path for path in manual_logs if path.name != "follow-up-filter.log"]
-manual_logs += list(root.glob("usage-*.log")) + list(root.glob("native-*.log"))
-for path in manual_logs:
-    body = path.read_text(errors="replace")
-    match = re.search(
-        r"Tests run:\s*\d+,\s*Failures:\s*(\d+)"
-        r"(?:,\s*Errors:\s*(\d+))?(?:,\s*Skipped:\s*\d+)?",
-        body,
-    )
-    if match:
-        additional_failures += int(match.group(1))
-        additional_errors += int(match.group(2) or 0)
-    elif "FAILURES!!!" in body:
-        additional_errors += 1
-status_files = (root / "follow-up-status.txt", root / "external-test-status.txt")
-status_failure = False
-for path in status_files:
-    if path.is_file():
-        for match in re.finditer(r"(?:exit=)(-?\d+)", path.read_text(errors="replace")):
-            value = int(match.group(1))
-            if value != 0:
-                status_failure = True
-capture_count = len(list((root / "captures").glob("*.png")))
-required_native_failed = any(value != 0 for value in statuses[0:4])
-external_failed = any(value != 0 for value in statuses[4:])
-failed = (gradle != 0 or failures > 0 or errors > 0 or skipped > 0 or
-          additional_failures > 0 or additional_errors > 0 or status_failure or
-          required_native_failed or external_failed or capture_count != 21)
-print(f"full_suite_tests={tests}")
-print(f"full_suite_failures={failures}")
-print(f"full_suite_errors={errors}")
-print(f"full_suite_skipped={skipped}")
-print(f"additional_failures={additional_failures}")
-print(f"additional_errors={additional_errors}")
-print(f"capture_png_files={capture_count}/21")
-print(f"recipe={'FAIL' if failed else 'PASS'}")
 PY
 
 if rg -q '^recipe=PASS$' "$LOG_DIR/recipe-result.txt"; then

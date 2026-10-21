@@ -1,0 +1,67 @@
+ATLAS V6.2.2 — tentative d'isolement ADB 5038 pour le handoff ACK S5
+Date : 2026-10-21
+Branche / HEAD documentaire : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Périmètre
+---------
+Après le blocage du préflight sur le serveur partagé 5037, tenter uniquement
+l'isolation de l'AVD jetable `atlas_v622_s1_api34` sur le serveur ADB dédié
+5038. La condition préalable était que `adb -P 5038 devices -l` liste
+exclusivement `emulator-5580`, puis que le SDK live confirme API 34. Sans cette
+preuve, aucune installation ni instrumentation n'était autorisée.
+
+Candidat contrôlé
+-----------------
+Répertoire : `/tmp/atlas-v622-s5-ack-positive-final-20261021/`
+
+- app-debug.apk : SHA-256
+  `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- app-debug-androidTest.apk : SHA-256
+  `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb`
+- `sources-tests-scripts.sha256` : SHA-256
+  `87d05e9c17da0f4c64ceaaf452548a62e3ce49734b57d8052c281324d5e62e98`
+- manifeste : 234 entrées, `sha256sum -c` indique 234/234 `OK`.
+
+Résultat de l'isolement
+----------------------
+- Le registre ne contient que le profil attribué `atlas_v622_s1_api34`.
+- Avant toute installation, le profil était arrêté; les ports AVD 5580/5581
+  étaient libres et aucun processus emulator/qemu n'était actif.
+- `adb -P 5038 devices -l` a tenté de démarrer son serveur, mais le démarrage
+  a échoué avant de fournir un inventaire : la réclamation de l'interface USB
+  a retourné `LIBUSB_ERROR_BUSY`, alors que l'appareil non-émulateur demeure
+  sous le serveur partagé 5037. Le listing attendu `emulator-5580` seul n'a
+  donc pas été obtenu. Aucun identifiant physique n'est conservé ici.
+- L'AVD n'a pas été démarré. Aucun APK n'a été installé et aucune commande
+  d'appareil n'a été exécutée. Le serveur 5037 n'a été ni interrogé ni modifié
+  pendant cette tentative.
+
+Statuts
+-------
+
+| Étape | Statut | Résultat |
+| --- | --- | --- |
+| Hashes APK et manifeste locaux | PASS | Paire exacte ci-dessus; manifeste 234/234 |
+| Profil AVD attribué | PASS | Seul profil enregistré; arrêté et ports libres avant l'essai |
+| Inventaire exclusif via ADB 5038 | BLOCKED | Le serveur n'a pas démarré (`LIBUSB_ERROR_BUSY`); aucune liste de devices exploitable |
+| API live du serial `emulator-5580` | NOT_RUN | Aucun serial n'a été présenté par le serveur isolé; AVD non démarré |
+| Installation / hash installé | NOT_RUN | Aucune installation; aucun hash installé revendiqué |
+| `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate` | NOT_RUN | Précondition d'isolation non satisfaite |
+| `proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient` | NOT_RUN | Précondition d'isolation non satisfaite |
+
+Commandes exécutées
+-------------------
+
+```text
+sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug.apk /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug-androidTest.apk
+sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+wc -l /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+sha256sum -c /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+/home/nill/Android/Sdk/emulator/emulator -list-avds
+adb -P 5038 devices -l
+```
+
+Aucun build, Gradle, test, Gateway, `pm clear`, désinstallation, wipe ou
+suppression de données n'a été lancé. Aucune nouvelle tentative ADB n'est
+prévue dans cette reprise. L'AVD reste arrêté. Le résultat antérieur accepté
+sur app `ce10…` / AndroidTest `893da1…` demeure séparé de ce handoff.

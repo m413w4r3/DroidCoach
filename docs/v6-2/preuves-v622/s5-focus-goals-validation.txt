@@ -1,0 +1,68 @@
+ATLAS V6.2.2 — preuve compacte S5 C — corrections revue R-S5-1..4
+Date : 2026-10-20
+Branche/base : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+R-S5-1 — test rouge puis correction
+  Avant correction, GoalFocusStartTransactionTest : 12 cas, 2 échecs attendus.
+  Après départ lié, pause/reprise/fin et écriture racine indépendante, les
+  liens Goal lus du disque étaient vides pour le départ local et agent.
+  Cause : le commit contenait la Goals candidate, mais le miroir
+  goalsSubdocument restait ancien et les sauvegardes suivantes l'écrasaient.
+  Correction : après commit unique, publier le lien dans le dépôt et mettre à
+  jour le miroir en mémoire, avant les effets; aucun callback de persistance
+  ni second commit à cette étape.
+
+Commandes depuis android/
+  ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.app.GoalFocusStartTransactionTest'
+  BUILD SUCCESSFUL — 12/12.
+
+  ./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
+  BUILD SUCCESSFUL — 57 XML, 309 tests, 0 failure, 0 error, 0 skipped;
+  AndroidTest Kotlin compiled.
+
+Vérifications
+  bash -n scripts/v62-complete-instrumentation.sh          PASS
+  git diff --check                                         PASS
+
+R-S5-2..4
+  Le menu reste ouvrable avec un seul Goal et « Sans objectif » est un choix
+  explicite distinct de la valeur par défaut. Le choix libre reste libre quand
+  la liste change; multi-Goals démarre par Sans objectif. AndroidTest Compose
+  couvre un candidat -> Sans objectif -> ajout candidat -> départ libre.
+  La fixture active 3 Goals au plus; le Goal Focus supplémentaire est mis en
+  pause avant la création du Goal MANUAL.
+  Après la fin, l'écran affiche les minutes validées depuis
+  GoalProgressCalculator.completedWorkSeconds(session), en plus de la
+  progression Goal.
+  Le test JVM observe publication Focus/Goal/mirror -> alarme -> outbox ->
+  message/navigation; l'agent publie aussi sa carte après alarme et outbox.
+  Les surcharges API publiques héritées restent disponibles.
+
+Régressions root et recréation
+  JVM local + agent : pause/reprise/fin et sauvegarde non-Goal, puis lecture
+  root; lien et progression 25/120 restent présents.
+  AndroidTest local + agent : mêmes mutations, lecture du document persisté,
+  puis recréation du véritable AtlasController; vérification du lien et de
+  25/120. L'agent garde aussi sa clé d'idempotence.
+
+AndroidTest
+  7 méthodes GoalFocusStartInstrumentationTest compilées.
+  Aucun AVD, appareil ou am instrument exécuté; aucune couverture runtime
+  Compose annoncée. Les 16 scénarios C4 sont mappés au niveau adapté, mais
+  les AndroidTest seront rejoués en S6 après intégration/stabilisation B2.
+  L'APK debug n'a pas été assemblé après ces corrections.
+
+Harnais et S1
+  scripts/v62-complete-instrumentation.sh exige exactement
+  atlas_v622_s1_api34 / emulator-5580 / API34 et une seule ligne ADB
+  emulator-5580:device. Tous les appels am instrument sont bornés à 90 s;
+  expiration = FAIL et force-stop des deux packages Atlas avant retour du code,
+  y compris sous set -e.
+  Les corrections S1 (assertion spatiale 25 km et parseur du blocage système)
+  compilent avec cette suite; aucun rejeu appareil ici. Résultat auparavant
+  rapporté : TEST_SYSTEM_BLOCKED (code 77), zéro fix coarse frais.
+
+S2 / coordination
+  /tmp/atlas-v622-s2/atlas-v622-s2.patch demeure non appliqué. Aucun fichier
+  coordinator/publisher/proactive/test S2 touché. Gradle libéré après ces
+  validations. Aucun commit/push/merge, agent délégué ou appareil utilisé.

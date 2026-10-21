@@ -1,0 +1,134 @@
+ATLAS V6.2.2 — S1 localisation, validation des tests/harnais
+Date: 2026-10-20
+Branch: feat/atlas-v6-2-2
+HEAD de départ et de fin: bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Portée
+------
+Modifications limitées à:
+- android/app/src/androidTest/java/dev/atlas/coach/location/V62LocationCaptureInstrumentedTest.kt
+- android/app/src/androidTest/java/dev/atlas/coach/location/V62MobilityServiceInstrumentedTest.kt
+- scripts/v62-location-visible-recipe.sh
+- docs/v6-2/LOCALISATION_V622.md et cette preuve
+
+Aucun code de production, contrôleur/UI ou scripts/v62-complete-instrumentation.sh
+n'a été modifié. Pas de commit, push ou merge.
+
+Environnement système
+--------------------
+AVD jetable neuf atlas_v622_s1_api34, API 34, Google APIs x86_64 image rev. 14,
+build UE1A.230829.050; émulateur 37.2.12.0; serial emulator-5580, ports
+5580/5581. Aucun appareil physique ni AVD personnel utilisé. ACCESS_COARSE_LOCATION
+accordée, ACCESS_FINE_LOCATION refusée, notifications accordées; l'application
+ne déclare pas ACCESS_BACKGROUND_LOCATION. Localisation activée.
+
+Les APK produits par la recette de la révision pré-correction (ils ne
+contiennent pas la dernière restauration de la garde mobilité):
+- app-debug.apk SHA-256 1993e38ae07984181b4f048c138f8cff9df339b5426b87c2f78cc010a8757d2d
+- app-debug-androidTest.apk SHA-256 6e85eb32da32ef7ca68631cace7eeebce320ec76a11d71575dc3473faa173f43
+
+Preuves logiques contrôlées
+--------------------------
+`TEST_LOGIQUE_PASS`: 32 tests JVM, 0 échec, 0 ignoré:
+- LocationCaptureManagerTest: 10
+- LocationPrivacyTest: 14
+- LocationRepositoryTest: 3
+- MobilitySessionTest: 5
+
+Ces tests couvrent fournisseur contrôlé, rejet de cache trop ancien, fraîcheur,
+permission coarse, divulgation/minimisation, TTL/consentement et cycle d'une
+session. Leurs XML sont dans android/app/build/test-results/testDebugUnitTest/.
+
+Gate2 baseline, avant toute modification AndroidTest, avec les APK S0:
+- AgentPersistenceFailureInstrumentationTest: 6 tests, 0 échec, 0 ignoré.
+- ProactiveCoachWorkerInstrumentationTest: 2 tests, 0 échec, 0 ignoré.
+
+`scripts/v62-location-visible-recipe.sh` a également compilé les APK debug et
+androidTest sans échec. `bash -n scripts/v62-location-visible-recipe.sh` et
+`git diff --check` passent.
+
+Preuve système du rejeu pré-correction
+---------------------------------------
+Recette: `/tmp/atlas-v622-s1/logs/recipe-20261020T193422Z/`.
+Résultat de recette: code 77 et `TEST_SYSTEM_BLOCKED`; aucun PASS système n'est
+émis.
+
+Capture ponctuelle:
+- La recette attend la requête GPS coarse actuelle de l'application dans la
+  section `Location Providers` de `dumpsys location`, puis diffuse l'heure UTC
+  de l'injection et lance exactement `adb -s emulator-5580 emu geo fix
+  2.123456 48.123456`.
+- Une requête GPS coarse était active (21:34:38.446, heure locale); l'injection
+  a commencé à 21:34:38.779. Android n'a livré aucun fix avant le timeout de
+  production de 10 s.
+- Le test a consigné `TEST_SYSTEM_BLOCKED`, et le script n'a pas assimilé le
+  zéro-fix à une acquisition réussie.
+
+Mobilité:
+- Une requête GPS coarse de `dev.atlas.coach` était active à 21:35:11.230,
+  heure locale. `host_geo_fix_started_utc_ms=1792524911600`, soit 21:35:11.600
+  local, environ 370 ms après l'enregistrement GPS.
+- La requête GPS s'est terminée à 21:35:16.230 sans événement `received
+  location` ou `delivered location`; le relevé après exécution indique 0
+  emplacement pour la requête ATLAS.
+- Après 15 s sans mesure, le test a journalisé `TEST_SYSTEM_BLOCKED`. Les
+  assertions de notification persistante, action Arrêter, arrêt manuel,
+  révocation et retrait de notification ont passé; le test termine ensuite par
+  un échec explicite portant ce marqueur. Ce n'est ni un test ignoré ni un
+  succès d'acquisition.
+
+Un rejeu exploratoire antérieur a obtenu une capture avec un fix âgé de 11 ms
+et une précision Android de 2 000 m. L'injection avait toutefois commencé
+pendant la requête réseau, avant l'enregistrement GPS; ce résultat n'est pas
+compté comme preuve système strictement synchronisée. Le rejeu final et strict
+montre l'intermittence du fournisseur AVD.
+
+Classification du défaut historique
+------------------------------------
+La baseline V6.2.1 rapporte `distance_m=8925794.0` dans le test mobilité. Le
+rejeu strict n'a pas reproduit cette distance. Dans le flux de capture ponctuelle,
+le test compare le fix Android brut injecté à la précision coarse déclarée par
+Android; ce contrôle ne couvre pas le fix brut du service mobilité. Dans le flux
+mobilité, l'assertion spatiale historique de 25 km porte sur le résumé ATLAS
+arrondi. La trace de baseline ne fournit ni coordonnées brutes, ni fournisseur,
+ni temps d'injection/fix.
+L'origine exacte des 8 925 794 m demeure donc indéterminée. Les éléments
+reproductibles classent le problème observé du fournisseur comme livraison
+intermittente sur l'AVD et le défaut du harnais comme absence de contrôle causal
+de fraîcheur et ancien zéro-fix traité comme réussite. Aucune trace ne justifie
+une correction de production.
+
+Correction après revue S1
+-------------------------
+La revue a relevé que la révision instrumentée utilisée ci-dessus avait omis
+l'assertion spatiale historique sur le résumé mobilité. Elle est maintenant
+rétablie dans `V62MobilityServiceInstrumentedTest` à `distance <= 25 000 m`;
+la borne n'a pas été augmentée. Le test capture ponctuel conserve son contrôle
+séparé du fix brut contre la précision Android. Aucun résultat n'est présenté
+comme une vérification du fix brut mobilité. Un résumé mobilité à 8 900 km
+échouera à cette assertion.
+
+Le harnais ne classe désormais `TEST_SYSTEM_BLOCKED` qu'avec une seule erreur
+JUnit dans le journal brut, `INSTRUMENTATION_STATUS_CODE: -2`, le message et la
+méthode attendus, et une seule ligne `Error in`. Les erreurs de notification,
+d'action Arrêter ou de révocation restent `FAIL`, même si logcat contient le
+marqueur de journal du blocage système. L'absence de requête GPS avant
+l'injection reste `FAIL`. Les exécutions instrumentation sont bornées à 90 s;
+un timeout est `FAIL` et force l'arrêt des deux paquets de test sur l'AVD S1.
+
+Après cette correction source, les vérifications statiques `bash -n
+scripts/v62-location-visible-recipe.sh` et `git diff --check` ont passé. Aucun
+Gradle/build ni AndroidTest n'a été lancé après la correction; leur exécution
+est intentionnellement différée à S5/S6 pour éviter une compilation
+intermédiaire pendant S3. Les APK hachés et le rejeu système décrits ci-dessus
+sont ceux de la révision pré-correction; ils ne valident pas la dernière
+assertion ni le nouveau parseur de classification.
+
+Le service crée directement `LocationCaptureManager` et n'expose au test que
+l'état de session et le stockage des résumés coarse. Il n'existe pas de seam
+test accessible pour lire son fix brut sans ajouter un point d'injection au
+service; la précision raw de mobilité reste explicitement non vérifiée. Le
+contrôle raw du test capture ponctuel ne s'étend pas au service.
+
+Les journaux complets restent privés dans `/tmp/atlas-v622-s1/logs/`. L'AVD a
+été utilisé exclusivement pour S1; son état n'a pas été effacé.

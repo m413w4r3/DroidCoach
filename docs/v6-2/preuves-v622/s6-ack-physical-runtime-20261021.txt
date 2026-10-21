@@ -1,0 +1,83 @@
+ATLAS V6.2.2 — contrôle ACK ciblé sur appareil physique
+Date : 2026-10-21
+
+Périmètre
+---------
+Seules les deux méthodes ACK du handoff S5 ont été lancées sur le téléphone.
+Le serial n'est pas conservé. L'inventaire ADB a confirmé une seule cible en
+ligne, physique; propriétés lues avec une cible explicitement sélectionnée :
+Pixel 9 Pro XL, API 37. L'AVD API34 était arrêté et n'a pas été démarré.
+
+Candidat
+--------
+- app-debug.apk : SHA-256
+  `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- app-debug-androidTest.apk : SHA-256
+  `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb`
+
+Les deux packages étaient absents avant installation; il n'existait donc aucun
+APK original, split, version ou certificat ATLAS à sauvegarder. La signature
+des deux APK candidates correspondait. Les APK installées ont été relues et
+leur SHA-256 correspondait exactement aux candidats avant les tests et avant
+le nettoyage. Des cycles préalables d'installation temporaire ont servi à
+vérifier `run-as` et la restauration de l'état absent; seuls les deux packages
+candidats ont été installés puis retirés, et leur absence a été confirmée avant
+le lancement des méthodes.
+
+Commandes et résultats
+----------------------
+- `adb devices -l` — lecture seule; une seule cible physique en ligne.
+- Installation temporaire de la paire avec `adb -s <serial-physique> install -r`
+  — `PASS` pour l'app et AndroidTest.
+- `adb -s <serial-physique> shell am instrument -r -w -e class` avec le FQCN
+  et la méthode ciblée, runner
+  `dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner` — seulement
+  les méthodes suivantes :
+
+| Méthode | Verdict | Résumé runner expurgé |
+| --- | --- | --- |
+| `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate` | `PASS` | 1 cas exact, code de sortie 0, `OK (1 test)` |
+| `proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient` | `FAIL` | Deux exécutions; le runner sélectionne 1 cas et termine, mais ne rapporte pas `OK`; le rejeu diagnostic rend `FAILURES!!!` / code de statut `-2` |
+
+Aucun message d'assertion, contenu de notification, URL, token, en-tête ou corps
+n'a été conservé. Le résultat positif API37 est donc un échec de test reproduit;
+il ne modifie pas le résultat API34 séparé, où les deux méthodes sont `PASS`.
+
+Nettoyage et restauration
+-------------------------
+- Entrées de fixtures avant test : aucune (`0` cache, `0` préférences).
+- Entrées observées après les tests et supprimées par chemin exact :
+  - cache :
+    `v622-proactive-controller-ack-accepted-executed-17ebcdcf-90af-48ea-94bf-4bbb53597f96`
+    `v622-proactive-controller-ack-accepted-executed-b2d21170-6d36-4755-ad9a-0e2ffc2fd6bf`
+    `v622-proactive-controller-ack-body-gate-4a561098-3a2d-4fd7-a210-ace05f867589`
+  - préférences :
+    `v622_proactive_controller_ack-accepted-executed-17ebcdcf-90af-48ea-94bf-4bbb53597f96_atlas_location_consent.xml`
+    `v622_proactive_controller_ack-accepted-executed-b2d21170-6d36-4755-ad9a-0e2ffc2fd6bf_atlas_location_consent.xml`
+    `v622_proactive_controller_ack-body-gate-4a561098-3a2d-4fd7-a210-ace05f867589_atlas_location_consent.xml`
+- Vérification des préfixes après suppression : `PASS`, zéro entrée restante.
+- Enregistrements de notification actifs correspondant au package : `0` avant
+  et `0` après désinstallation; aucun contenu de notification n'a été lu,
+  affiché ou conservé.
+- Les deux packages créés pour ce test ont été retirés avec `adb -s
+  <serial-physique> uninstall`. `pm path` n'a ensuite retourné aucun APK
+  (code 1 attendu pour un package absent) et la liste exacte des packages ne
+  contenait ni `dev.atlas.coach` ni `dev.atlas.coach.test` : restauration
+  `PASS` de l'état initial absent.
+- Un premier indicateur de nettoyage a interprété à tort le code 1 de `pm path`
+  comme un échec. La vérification exacte `pm list packages` a confirmé ensuite
+  l'absence des deux packages.
+
+Aucune permission, préférence système ou réglage n'a été modifié. Aucun
+`pm clear`, wipe, root ou commande ADB non ciblée après l'inventaire n'a été
+utilisé. Le résultat est limité à ces deux méthodes et à cet appareil/API.
+
+Suivi après le run
+------------------
+Après ce nettoyage vérifié, une tentative de reprise préliminaire a été
+interrompue par l'utilisateur après 8,4 s. Le script ne contenait aucun appel
+`am instrument`, donc aucun troisième run de test n'a eu lieu. Il contenait
+toutefois les commandes `install -r`; aucune sortie ni hash post-installation
+n'a été capturé. Aucun autre accès ADB n'a été effectué ensuite. Le nettoyage
+PASS ci-dessus est celui confirmé après le premier run; l'état des packages
+après l'interruption est `NOT_RECHECKED`.

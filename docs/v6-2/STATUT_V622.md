@@ -1,0 +1,26 @@
+# ATLAS V6.2.2 — statut du chantier
+
+**21 octobre 2026 — rejeu API34 S6 terminé sur la paire `ce10/893da1`; S7 a confirmé un P1 résiduel dans l’ACK, correction S5 en cours; Gate 5 reste FAIL et la contre-revue finale suivra le prochain candidat.**
+
+La [revue indépendante](REVUE_V622.md) a d’abord refusé Gate5 pour la course réservation→révocation/réopt-in; S2/S5 l’ont corrigée et S7 confirme maintenant sa fermeture. La contre-revue a trouvé un défaut P1 distinct : l’ACK proactif ne garde pas l’époque capturée jusqu’à la sérialisation du corps HTTP. S5 implémente le correctif et les tests; S6 rejouera l’AndroidTest ciblé sur le nouveau hash, puis la même session S7 fera la contre-revue finale. Le Gate 5 reste FAIL jusque-là.
+
+Branche `feat/atlas-v6-2-2`, base `bf647cc18a142dd0f5cd5e68b21c36d511014388`. Modifications non committées ; aucun push, merge ou tag. Source de vérité : [prompt maître](../../prompts/Prompt_Maitre_6.2.2.md). Reprise : [journal d'orchestration](ORCHESTRATION_V622.md).
+
+## Correctifs intégrés, validation locale
+
+- Préparation Focus/Goal sans effet ; commit racine unique avant publication, alarmes et événement. Verrou commun aux démarrages et aux sept mutations Goals. Modèle Focus et protocole agent V2 conservés.
+- Sélection d'objectif actif Focus, y compris « Sans objectif » avec un seul candidat ; progression issue du calculateur métier.
+- Jeton de génération proactive lié à la réservation, au transport du plan, à la fusion/déclenchement de l’inbox et au dernier contrôle du publisher ; retrait ciblé et quotas/réservations préservés. Le chemin ACK est encore P1 : son garde spécifique doit atteindre la sérialisation HTTP après le retrait/réopt-in.
+- Harnais localisation : fraîcheur après injection, assertion spatiale conservée, absence de fix distinguée d'un succès, erreurs de notification/révocation non masquées. Production localisation inchangée.
+- Revue orchestrateur : correction du miroir Goals qui aurait effacé le lien lors d'une sauvegarde suivante ; reproduction rouge puis régressions vertes. Choix libre, ordre des effets, fixtures et protections des recettes corrigés également.
+
+Validation antérieure sur les sources sans le correctif ACK : **315 JVM PASS, 0 FAIL, 0 ERROR, 0 SKIP**, lintDebug PASS. Sur l'app `ce10c968…` / AndroidTest `893da1cf…`, le rejeu API34 S6 passe le ciblé **1/1**, la suite principale **75/75** à 360 dp, deux passages Gateway réels consécutifs **1/1 chacun** et le scénario local hors ligne **1/1**; les APK installées ont été revérifiées avant/après. Ce candidat demeure un résultat historique de recette et ne contient pas le correctif ACK qui va créer une nouvelle paire. Voir la [preuve finale S6](preuves-v622/s6-revocation-fixture-exact-restore-20261021.txt), la [revue S7](REVUE_V622.md), la [preuve S5](preuves-v622/s5-b2-notifications-validation.txt) et les preuves historiques conservées séparément.
+
+## Qualification encore ouverte
+
+- API34 final : candidat app `ce10c968…`, AndroidTest `893da1cf…`. Le test corrigé passe 1/1; la suite principale passe 75/75 après correction réversible du viewport à 360 dp (un premier passage à 411 dp a échoué deux assertions de largeur et reste consigné comme tel). Deux tests de capture isolés passent chacun 1/1. Deux passages Gateway réels et le cas hors ligne passent sur la même paire; les hashes installés sont conformes après exécution. La localisation logique, l'activité visible et la préparation passent; l'acquisition mobilité reste `TEST_SYSTEM_BLOCKED`, aucun fix coarse frais n'ayant été livré. Harnais complet avec `pm clear`, compléments UsageStats et D3 : `NOT_RUN`. Voir [recette](RECETTE_V622.md) et la [preuve finale](preuves-v622/s6-revocation-fixture-exact-restore-20261021.txt).
+- Android17 : **BLOCKED environnement** sur candidat final haché, avant installation. Les services framework disparaissent et `system_server` redémarre ; les17 scénarios et11 nouveaux tests sont `NOT_RUN`. L'installation historique ne vaut pas résultat du candidat final. Voir [rapport](ANDROID17_V622.md) et [preuve](preuves-v622/android17-v622-final-candidate.txt).
+- OpenClaw réel : sur l'app `ce10…` / AndroidTest final `893da1cf…`, deux passages Gateway consécutifs avec lien Goal–Focus committé au départ, ACK, révocation et requête suivante sans Goal passent; le scénario local hors ligne passe après arrêt du backend et force-stop/recréation OS. Les deux ACK exécutés avec effet sont confirmés. Le préambule historique `V6RealAgentE2e` est `NOT_RUN` en mode `context-only` sur ce candidat; son FAIL non classé sur `8edb` reste historique et distinct.
+- Téléphone physique, TalkBack réel, autonomie quotidienne : aucune qualification acquise. Inventaire et mesures S6 attendus ; [guide](GUIDE_ESSAI_REEL_V622.md) disponible.
+- Issue GitHub [#1](https://github.com/m413w4r3/DroidCoach/issues/1) observée ouverte ; aucune fermeture sans couverture et revue indépendantes de ses critères Android17.
+- D3 reste `NOT_RUN`; AppOp UsageStats UID/package remis à `ignore` au nettoyage, sans exécuter les tests UsageStats ni sélectionner de consentement coaching. L'ancienne fenêtre locale n'est pas réutilisée; paire D3 non qualifiée. Les transactions Android `notify/cancel` ne sont pas atomiques avec la génération ATLAS ; une visibilité transitoire reste possible pendant un appel OS déjà entré.

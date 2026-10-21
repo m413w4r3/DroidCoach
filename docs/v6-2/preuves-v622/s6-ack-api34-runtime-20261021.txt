@@ -1,0 +1,146 @@
+ATLAS V6.2.2 — vérifications ACK API34 sur le candidat S5
+Date : 2026-10-21
+Branche / HEAD documentaire : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Périmètre
+---------
+Exécuter uniquement les deux méthodes ACK du handoff S5 sur l'AVD jetable
+assigné, après confirmation du serial et d'API 34. Ne pas lancer Gradle, le
+harnais complet, ni d'autres scénarios.
+
+Candidat contrôlé
+-----------------
+Répertoire : `/tmp/atlas-v622-s5-ack-positive-final-20261021/`
+
+- app-debug.apk : SHA-256
+  `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- app-debug-androidTest.apk : SHA-256
+  `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb`
+- `sources-tests-scripts.sha256` : SHA-256
+  `87d05e9c17da0f4c64ceaaf452548a62e3ce49734b57d8052c281324d5e62e98`
+- manifeste : 234 entrées, vérification locale `234/234 OK` avant installation.
+
+AVD et identité live
+--------------------
+La première commande `emulator -list-avds` avait consulté le registre Android
+par défaut et ne listait pas le profil S6. Le registre assigné a ensuite été
+vérifié explicitement :
+
+```text
+ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home /home/nill/Android/Sdk/emulator/emulator -list-avds
+```
+
+Il contenait `atlas_v622_s1_api34`. Avant le démarrage, les ports 5580/5581
+étaient libres et aucun processus emulator/qemu n'était actif. La lecture
+`adb devices -l` montrait ensuite un seul émulateur, `emulator-5580`, et une
+cible non-émulateur; cette dernière n'a jamais été ciblée.
+
+L'AVD a été démarré sans wipe avec :
+
+```text
+ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home /home/nill/Android/Sdk/emulator/emulator -avd atlas_v622_s1_api34 -port 5580 -no-window -no-audio -no-boot-anim
+```
+
+Une fois démarré, les commandes ciblées ont confirmé :
+
+- `adb -s emulator-5580 shell getprop sys.boot_completed` : `1`
+- `adb -s emulator-5580 shell getprop ro.kernel.qemu` : `1`
+- `adb -s emulator-5580 shell getprop ro.boot.qemu.avd_name` :
+  `atlas_v622_s1_api34`
+- `adb -s emulator-5580 shell getprop ro.build.version.sdk` : `34`
+- `adb -s emulator-5580 emu avd name` : `atlas_v622_s1_api34`
+
+Installation et hashes installés
+---------------------------------
+Les APK ont été re-hashées juste avant l'installation; valeurs conformes au
+candidat ci-dessus. Les manifestes indiquaient les packages `dev.atlas.coach`
+et `dev.atlas.coach.test`; le runner est
+`androidx.test.runner.AndroidJUnitRunner`.
+
+```text
+adb -s emulator-5580 install -r /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug.apk
+adb -s emulator-5580 install -r /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug-androidTest.apk
+```
+
+Les deux installations ont rendu `Success`. Les APK extraites des packages
+installés avec `adb -s emulator-5580 shell pm path` puis `adb -s emulator-5580
+pull` correspondent octet pour octet aux APK candidates :
+
+- app installée : `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea` — `PASS`
+- AndroidTest installé : `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb` — `PASS`
+
+Les copies locales des APK installées sont sous
+`/tmp/atlas-v622-s6-ack-positive-20261021/` (répertoire 0700, fichiers 0600).
+
+Résultats runner
+----------------
+
+1. `dev.atlas.coach.app.ProactiveControllerPublicationAuthorizationInstrumentationTest#sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate`
+
+   La commande AndroidJUnitRunner a été lancée avec le filtre exact
+   `-e class FQCN#méthode` sur `emulator-5580`. Code de sortie `0` et résumé
+   JUnit `OK (1 test)` : `PASS`, un test exécuté, aucun test manquant/ignoré.
+   Le mode résumé n'a pas émis les champs `INSTRUMENTATION_STATUS` détaillés;
+   le collecteur local initial a donc affiché `reported_test_count=missing`,
+   `instrumentation_final_code=missing` et `result=FAIL`, parce qu'il exigeait
+   ces champs optionnels. C'est un échec du collecteur, pas du runner : le
+   code de sortie AndroidJUnitRunner était `0` et son résumé était
+   `OK (1 test)`. Aucun échec d'assertion n'a été rapporté. Les assertions du
+   cas couvrent le GET de prévol, l'absence de POST ACK après retrait/ré-opt-in,
+   l'autorisation générique, le blocage à la sérialisation et `ackPending`.
+
+2. `dev.atlas.coach.app.ProactiveControllerPublicationAuthorizationInstrumentationTest#proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient`
+
+   Le lancement ciblé en mode brut (`-r`) a confirmé classe et méthode,
+   `numtests=1`, `INSTRUMENTATION_CODE=-1`, code de sortie `0` et résumé
+   `OK (1 test)` : `PASS`, zéro test manquant/ignoré. Les assertions du cas
+   couvrent accepted puis executed reçus sur le loopback, un seul dispatch et
+   `ackPending=false`.
+
+Commandes de lancement exactes :
+
+```text
+adb -s emulator-5580 shell am instrument -w -e class dev.atlas.coach.app.ProactiveControllerPublicationAuthorizationInstrumentationTest#sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+adb -s emulator-5580 shell am instrument -r -w -e class dev.atlas.coach.app.ProactiveControllerPublicationAuthorizationInstrumentationTest#proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Les sorties brutes n'ont pas été conservées. Seuls les champs de statut et
+résumés expurgés ci-dessus sont consignés; aucun header, jeton ou payload n'a
+été écrit dans le dépôt.
+
+Arrêt et effets sur l'état local
+-------------------------------
+Après les deux méthodes, seul l'émulateur attribué a été arrêté :
+
+```text
+adb -s emulator-5580 emu kill
+```
+
+La commande a rendu `OK`; les ports 5580/5581 sont ensuite libres, aucun
+processus emulator/qemu ne reste actif et `adb devices -l` ne liste plus
+d'émulateur. Une cible non-émulateur reste présente et n'a pas été ciblée.
+L'arrêt normal a enregistré le snapshot `default_boot`; aucun wipe ni
+suppression de données n'a eu lieu. Les installations `-r` ont préservé les
+données préexistantes; aucun `pm clear`, uninstall ou changement de settings
+n'a été exécuté. Les deux méthodes AndroidTest ont pu modifier uniquement
+l'état de fixture qu'elles exercent sur cet AVD jetable.
+
+Statuts et limites
+------------------
+
+| Étape | Statut | Résultat |
+| --- | --- | --- |
+| Hashes app/test/manifeste avant install | PASS | Hashes exacts; manifeste 234/234 |
+| Profil AVD assigné / identité / API34 | PASS | `atlas_v622_s1_api34`, serial `emulator-5580`, SDK 34 |
+| Inventaire ADB avant run | PASS | Un seul émulateur; cible non-émulateur laissée intacte |
+| Installation et hashes extraits | PASS | `install -r` pour chaque package, hashes conformes |
+| Course ACK au gate de sérialisation | PASS | `OK (1 test)`, méthode filtrée exactement |
+| ACK positif accepted → executed | PASS | `OK (1 test)`, méthode/classe/statuts bruts conformes |
+| Arrêt AVD | PASS | AVD arrêté, ports libres, données conservées |
+| Harnais complet / autres tests / Gradle | NOT_RUN | Hors périmètre de ce handoff |
+
+Aucun build, `connectedAndroidTest`, Gateway, appareil physique, `pm clear`,
+uninstall, wipe, commande non ciblée modifiant l'appareil, arrêt du serveur
+ADB 5037, commit, push ou merge n'a été effectué. La recette antérieure
+`ce10…` / `893da1…` et le blocage historique du serveur 5038 restent des
+preuves séparées.

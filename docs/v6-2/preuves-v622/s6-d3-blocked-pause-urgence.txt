@@ -1,0 +1,52 @@
+ATLAS V6.2.2 — D3, mesure locale et blocage du consentement coaching
+Date : 2026-10-21
+Statut courant : `BLOCKED` comme paire D3. Une fenêtre locale valide de 60,0 s a été enregistrée à écran éteint; aucune fenêtre coaching n'a démarré car le consentement UsageStats ATLAS n'a pas activé l'allowlist. Le résultat courant est documenté dans la dernière section.
+
+Les sections suivantes conservent l'historique des vérifications et fenêtres antérieures, sans les transférer au candidat courant.
+
+## Vérifications UI/Android avant fenêtre — historique
+
+- AVD réservé `atlas_v622_s1_api34`, API 34, ADB 5037; APK app installée conforme au SHA `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- L'écran Observation montrait une allowlist vide et aucun consentement UsageStats ATLAS actif.
+- AppOp `GET_USAGE_STATS` était initialement `allow`; le réglage a été basculé via l'écran Android Usage Access, jamais avec `appops set`, puis lu comme `ignore` pour préparer le mode local.
+- Pour le mode local, le Coach OpenClaw a été désactivé depuis l'écran Mandat. L'interface a confirmé l'agent désactivé et les plans proactifs off.
+- L'écran Urgence a ensuite affiché « Pause d'urgence active pendant 30 minutes ». Cette pause n'a pas été terminée, purgée, ni modifiée; aucun reset de statistiques ou de données n'a eu lieu.
+
+## Conséquence et état laissé
+
+La pause active viole la précondition D3 qui exige une pause déjà inactive. Aucune des deux fenêtres de 60 s n'a été lancée; aucun chiffre CPU, JobScheduler, réseau ou Batterystats n'est ajouté à `s6-mesures.txt`.
+
+L'AppOp a été remis à son état initial `allow` depuis Réglages Android. L'action de désactivation de l'agent a, conformément au comportement visible de l'application, aussi révoqué son mandat. Deux interactions UI sur « Réactiver le mandat » n'ont pas modifié l'état affiché; le mandat reste révoqué et le Coach désactivé. Aucun accès direct aux préférences, aucune commande privilégiée et aucune action « Fin » sur la pause n'ont été utilisés. L'état actuel doit être repris explicitement après expiration/fin autorisée de la pause; la recette S6 ne tente pas de le contourner.
+
+Prochaine exécution à cette étape : une fois la pause réellement inactive et le mandat/agent établis depuis l'interface, vérifier le consentement UsageStats ATLAS et l'AppOp dans les deux modes, confirmer absence de Focus/mobilité/E2E, puis exécuter deux fenêtres d'au moins 60 s au même état écran. Les anciennes mesures courtes restent distinctes et ne remplissent pas cette exigence.
+
+## Préparation de la paire intermédiaire 8edb — historique
+
+- Candidat installé : app SHA-256 `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`; l'AndroidTest associé est `8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d`.
+- Le Coach OpenClaw est désactivé dans l'écran Mandat. Le mandat a été réactivé par l'action explicite « Réactiver le mandat »; les catégories précédemment partagées ont été réinitialisées par l'application. Aucun envoi n'a été lancé.
+- L'écran Coach montre Plans proactifs désactivés et désactivés/non interactifs tant que le Coach est off. « Observation UsageStats toutes les 30 minutes au mieux » est off et non interactif; l'écran Observation indique « Donner mon consentement et continuer » et une allowlist vide.
+- Comme l'AVD ne contenait aucune application synthétique admissible, l'activité fixture déjà présente dans le dépôt a été copiée sous `/tmp`, ciblée sur compile/target API 34, puis construite hors dépôt. APK `dev.atlas.fixture.distraction` SHA-256 `69293ec880ff833e9dd7b1d22d3138e5e1158735f7d91c1bf88856019a8d7ed4`; manifestes/sources fixture SHA-256 agrégé `bd5650492d0f018d560895825eaf5cf2a2fc4f5ef42dd2c8ebb64aca91c4f5e4`. Elle ne déclare aucune permission réseau. Elle est installée uniquement sur l'AVD réservé et apparaît sous le libellé « Distraction test » dans le choix UsageStats; elle n'est pas encore sélectionnée et aucun consentement n'a été accordé.
+- Pour préparer la condition locale, l'accès système Usage Access a été retiré au moyen de l'écran Réglages Android. Le switch est lu off et AppOp `GET_USAGE_STATS` est `ignore`. Aucune commande `appops set` n'a été utilisée.
+- L'écran Focus montre « Préparer le focus » et le bouton « Démarrer »; aucune session n'est active. Le harnais D3 rejette aussi un processus instrumentation ou le service de mobilité.
+- En touchant « Urgence » pour vérifier la pause, l'interface a affiché « Pause d'urgence active pendant 30 minutes » et « Fin ». Ce toucher a activé la pause; l'action « Fin » n'a pas été touchée. La pause doit expirer naturellement avant toute fenêtre.
+- Statut à cette étape : `BLOCKED`, zéro fenêtre de repos exécutée sur cette paire intermédiaire. Aucun reset de batterystats ou JobScheduler, aucune suppression de données ATLAS, ni commande ADB d'écriture AppOps n'a eu lieu. Le backend E2E a été arrêté avant les scénarios hors ligne; aucun E2E ni message Coach n'a tourné pendant cette préparation.
+
+## Corrections host de la recette — 2026-10-21
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-v622-d3-rest-recipe.py` : 19/19 PASS. Les tests couvrent les attestations séparées pour le consentement UsageStats et le switch UsageStats périodique en arrière-plan, les modes AppOps paquet/UID, le format écran `mWakefulness`, les contrôles ADB temporisés, l'écran connu, les identités PID/starttime et les compteurs monotones.
+- `git diff --check`, `bash -n` des scripts de recette et analyse AST Python : PASS. Les contrôles host n'appellent ni ADB ni Gradle.
+- Le script exige `--usage-background-state off` en local et `on` en coaching; il refuse AppOp `default`/`foreground` et exige `ignore` en local, `allow` en coaching. Le parseur choisit la ligne d'AppOp spécifique au paquet avant le mode UID et lit `mWakefulness=Asleep/Awake` quand `mInteractive` n'existe pas. Le protocole sélectionne uniquement la fixture synthétique « Distraction test ». Aucun changement APK ni rebuild.
+- L'écran a confirmé l'expiration naturelle par le retour du bouton à « Urgence » après redémarrage du processus; « Fin » n'a pas été touché. Le premier démarrage local a été bloqué par un processus AndroidTest résiduel sans instrumentation active; le package test inactif a été force-stop sans effacement. Le deuxième a été bloqué par la lecture UID/paquet AppOps, corrigée dans le harnais. Ces deux tentatives sont pré-mesure; aucune valeur CPU/réseau/JobScheduler D3 n'est enregistrée.
+- Une fenêtre locale a ensuite duré exactement 60,0 s, app candidate vérifiée, AppOp paquet `ignore`, agent/proactivité/consentements/background off. Le rapport expurgé est `/tmp/atlas-v622-s6/d3-rest-ce10c968-20261021/local.json`. Valeurs : `screen_state=unavailable` avant le correctif `mWakefulness`, CPU processus/threads `unavailable_snapshot`, réseau UID `unavailable_snapshot`, processus `[1,1]`, lignes JobScheduler `[14,14]` (0 en-tête JobStatus), enregistrements Batterystats `[10,10]` sans changement; les réveils par appli restent indisponibles et le résultat physique `NOT_RUN`. Cette fenêtre n'est pas comparatrice et ne peut pas être réutilisée dans une paire.
+- Statut après la première fenêtre locale non comparable : `BLOCKED` comme qualification D3; la pause avait expiré naturellement et n'avait pas été effacée. Les états UI et AppOp ont ensuite été revérifiés avant la fenêtre courante. Le script revérifie candidat, AVD unique, instrumentation, mobilité et AppOp à chaque fenêtre.
+
+
+## Résultat runtime final sur le candidat reçu
+
+Paire vérifiée : app `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`, AndroidTest `ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c`.
+
+La fenêtre locale expurgée `/tmp/atlas-v622-s6/d3-rest-screenfix-ce10c968-20261021/local.json` a duré 60,0 s. Écran `screen-off`; AppOp paquet `ignore`; agent, proactivité, consentement et tâche UsageStats périodique désactivés; aucun Focus, mobilité ou E2E. Processus `[1,1]`. CPU processus/threads et réseau UID `unavailable_snapshot`. JobScheduler paquet `[14,14]` lignes, 0 en-tête JobStatus. Batterystats `[10,10]`, delta agrégé 0. Réveils par appli non attribuables; WorkManager DB non lue; téléphone/batterie `NOT_RUN`. Ces lignes ne prouvent pas une absence de réveils ni ne permettent une projection batterie.
+
+Pour préparer coaching, la page Réglages Android a montré Usage Access autorisé et la fixture synthétique « Distraction test » était sélectionnée dans Observation. Après l'action visible « Donner mon consentement et continuer », la page ATLAS disait encore `Allowlist active : aucune`; le consentement ATLAS ne pouvait donc pas être attesté. Coaching `BLOCKED` avant fenêtre. Aucun Coach/plan proactif/tâche périodique n'a été activé et aucune requête n'a été envoyée.
+
+Nettoyage vérifié : AppOp paquet revenu à `ignore`; Sync désactivée, file à zéro, sept catégories non cochées, URL vide, jeton non enregistré; fixture synthétique désinstallée; adaptateur temporaire arrêté et répertoire privé supprimé. Aucune donnée ATLAS effacée, aucune statistique réinitialisée et aucun bouton « Fin » touché; la pause avait expiré naturellement. Instrumentation active absente.

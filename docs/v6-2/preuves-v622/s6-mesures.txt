@@ -1,0 +1,11 @@
+ATLAS V6.2.2 — mesures disponibles D3 S6
+Environnement : AVD `atlas_v622_s1_api34`, API 34, package UID éphémère de cet AVD; aucune mesure physique.
+
+| Mode / fenêtre réelle | CPU observé | Wakeups / locks | WorkManager / jobs | Réseau | Classement |
+| --- | --- | --- | --- | --- | --- |
+| Local hors ligne, 60,000 s | Processus ATLAS présent au début/fin; delta 0 tick à résolution 100 Hz, donc moins de 0,01 s observé, pas « zéro consommation » | Les lignes app `pwi`, `awl`, `wl` de batterystats n'ont pas varié; ce dump ne fournit pas un delta de wakeups par app | 0 `JobStatus` au début et à la fin | Compteurs UID xt_qtaguid/netstats non exposés par cet AVD | Observation idle AVD, pas preuve d'autonomie |
+| Coaching Gateway réel, 25,891 s | `dev.atlas.coach`: 0 tick mesuré; package d'instrumentation: 0,18 s CPU de processus | Lignes app batterystats identiques avant/après; aucun compteur wakeup par app dédié | 0 `JobStatus` actif avant/après; les lignes de package comprenaient les mêmes entrées système | Les lignes netstats UID n'exposaient aucun octet; la route réelle est prouvée par la réponse Gateway et 2 ACK d'effets exécutés, sans volume d'octets | Une transaction réelle mesurée, pas une fenêtre de repos longue |
+
+Le premier essai local avait l'écran AVD non interactif; le second échantillon local de 60 s a aussi gardé `mInteractive=false`. Les deux observations sont explicites et concernent l'émulateur. L'essai coaching a utilisé le Gateway OpenClaw réel et l'adaptateur réel, sans mock; les credentials étaient éphémères/hors dépôt et les journaux sensibles supprimés.
+
+Il n'y a pas de paire de fenêtres longues de repos local/coaching comparable, ni de batterie, température, réveils physiques, requêtes octet par octet ou autonomie mesurés. La partie D3 physique est `NOT_RUN`; aucune projection AVD → téléphone/Pixel n'est permise. Résumés AVD hors dépôt : `/tmp/atlas-v622-s6/metrics-local-awake-60s/summary.json` et `/tmp/atlas-v622-s6/metrics-coaching-call-*/summary.json`.

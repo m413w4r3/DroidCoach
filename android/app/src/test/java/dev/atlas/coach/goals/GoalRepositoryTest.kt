@@ -99,6 +99,91 @@ class GoalRepositoryTest {
         assertEquals(listOf("goal-0", "goal-1", "goal-2"), repository.activeGoalsForCoach().map(GoalRecord::id))
     }
 
+    @Suppress("UNCHECKED_CAST")
+    @Test
+    fun preparedFocusLinkIsAnImmutableSnapshotAndPublicationDoesNotPersist() {
+        var saved: Map<String, Any?>? = null
+        var writes = 0
+        val repository = GoalRepository({ null }) {
+            saved = it
+            writes++
+        }
+        val focusGoal = goal(id = "focus-goal", metric = GoalMetric.FOCUS_MINUTES, targetValue = 120L)
+        repository.add(focusGoal)
+        val savedBeforePreparation = saved
+        val writesBeforePreparation = writes
+
+        val prepared = repository.prepareFocusLink("focus-goal", "new-session", linkedAtUtcMillis = 250L)
+
+        assertEquals(listOf(focusGoal), prepared.expectedRecords)
+        assertEquals(setOf("new-session"), prepared.linkedGoal.linkedFocusSessionIds)
+        assertEquals(1, prepared.goalsSubdocument["schema_version"])
+        assertEquals(focusGoal, repository.get("focus-goal"))
+        assertEquals(writesBeforePreparation, writes)
+        assertEquals(savedBeforePreparation, saved)
+        assertThrows(UnsupportedOperationException::class.java) {
+            (prepared.goalsSubdocument["goals"] as MutableList<Any?>).clear()
+        }
+        assertThrows(UnsupportedOperationException::class.java) {
+            (prepared.linkedGoal.linkedFocusSessionIds as MutableSet<String>).add("mutated")
+        }
+
+        val published = repository.publishCommittedFocusLink(prepared)
+
+        assertEquals(prepared.linkedGoal, published)
+        assertEquals(setOf("new-session"), repository.get("focus-goal")!!.linkedFocusSessionIds)
+        assertEquals(writesBeforePreparation, writes)
+        assertEquals(savedBeforePreparation, saved)
+    }
+
+    @Test
+    fun focusLinkPreparationRejectsMissingInactiveWrongMetricAndConflictingGoals() {
+        val repository = GoalRepository({ null }) {}
+        repository.add(goal(id = "active", metric = GoalMetric.FOCUS_MINUTES, targetValue = 120L))
+        repository.add(goal(id = "paused", metric = GoalMetric.FOCUS_MINUTES, targetValue = 120L).copy(status = GoalStatus.PAUSED))
+        repository.add(goal(id = "manual"))
+        repository.add(goal(id = "habit", metric = GoalMetric.HABIT_CHECKINS, targetValue = 7L))
+        repository.add(
+            goal(id = "owner", metric = GoalMetric.FOCUS_MINUTES, targetValue = 120L)
+                .copy(linkedFocusSessionIds = setOf("claimed-session")),
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.prepareFocusLink("missing", "new-session", 200L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.prepareFocusLink("paused", "new-session", 200L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.prepareFocusLink("manual", "new-session", 200L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.prepareFocusLink("habit", "new-session", 200L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.prepareFocusLink("active", "claimed-session", 200L)
+        }
+    }
+
+    @Test
+    fun repeatedFocusLinkPreparationIsIdempotentAndExpectedRecordsAreASeparateSnapshot() {
+        val repository = GoalRepository({ null }) {}
+        val existing = goal(
+            id = "active",
+            metric = GoalMetric.FOCUS_MINUTES,
+            targetValue = 120L,
+            links = setOf("existing-session"),
+        )
+        repository.add(existing)
+
+        val prepared = repository.prepareFocusLink("active", "existing-session", linkedAtUtcMillis = 500L)
+
+        assertEquals(existing, prepared.linkedGoal)
+        assertEquals(prepared.expectedRecords, prepared.candidateRecords)
+        repository.add(goal(id = "later", metric = GoalMetric.FOCUS_MINUTES, targetValue = 120L))
+        assertTrue(prepared.expectedRecords != repository.all())
+    }
+
     private fun goal(
         id: String = "goal-1",
         metric: GoalMetric = GoalMetric.MANUAL,

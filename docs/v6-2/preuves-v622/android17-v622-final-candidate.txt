@@ -1,0 +1,92 @@
+ATLAS V6.2.2 / S4 A2 — recette candidat final S5
+Date: 2026-10-21 (Europe/Paris)
+Branche: feat/atlas-v6-2-2
+HEAD observé: bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+ARTEFACTS FIGÉS
+  app-debug.apk
+    source=/tmp/atlas-v622-final-candidate/app-debug.apk
+    sha256=dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9
+  app-debug-androidTest.apk
+    source=/tmp/atlas-v622-final-candidate/app-debug-androidTest.apk
+    sha256=353a8d0e4cd89658d528bd7da457447c0b11fb482511f395661659779cbaeeb7
+  Les copies read-only dans le run dir ont passé SHA source avant/après, SHA de la copie et SHA attendu.
+  L'installation Android n'a pas commencé.
+
+CONFINEMENT / ENVIRONNEMENT
+  AVD dédié: atlas_v622_disposable_api37, image system-images;android-37.2;google_apis_ps16k;x86_64
+  API: 37 / 37.2; fingerprint google/sdk_gphone16k_x86_64/emu64xa16k:17/CP41.260831.007/16416850
+  serial explicite: emulator-5582; console 5582; ADB device 5583; serveur ADB isolé 5038
+  ANDROID_ADB_SERVER_PORT=5038 exporté pour l'auto-enregistrement du bridge de l'Emulator
+  API34 AVD atlas_v622_s1_api34 observé sur 5580, non ciblé et non arrêté par S4
+  aucun téléphone/personnel ciblé; aucune commande Gradle/build exécutée
+  après arrêt diagnostic: ports 5038/5582/5583 sans listener; AVD API37 et serveur 5038 arrêtés
+  aucun changement HOME/provider; aucun APK installé; aucune injection de coordonnées
+
+RÉSULTAT RUNTIME
+  AVD démarré, identité vérifiée, sys.boot_completed=1.
+  Les cinq sondes exactes (package/activity/location/notification/window) ont d'abord répondu
+  « Service <nom>: found », puis ont alterné avec des réponses explicites « not found ».
+  Les probes de stabilité n'ont jamais pu fournir une fenêtre stable avant disparition des services.
+  L'exécution a été interrompue avant installation, lancement app, permissions ou instrumentation.
+  Résultat: zéro scénario applicatif PASS/FAIL; matrice A2 ci-dessous entièrement NOT_RUN.
+
+CAUSES PLATEFORME OBSERVÉES
+  main-buffer.log contient 6 messages ot-daemon « system_server is dead » de 00:43:38 à 00:45:00;
+  le redémarrage partiel consigne des SystemServiceRegistry « No service published ».
+  early-framework-crash-buffer.log contient 35 Fatal signal entries, dont:
+    - android.hardware.uwb-service: abort, impossible d'ouvrir /dev/uwb0 (« No such device or address »)
+    - surfaceflinger / GoldfishMapper::readFromHost: assertion
+      « !rcEnc->featureInfo()->hasReadColorBufferDma »
+  lowmemorykiller a tué com.google.android.cellbroadcastreceiver et com.google.android.dialer
+  au watermark mémoire. Aucun am_crash ni stack fatal Java system_server n'a été trouvé;
+  les buffers AndroidRuntime/SystemServer/Watchdog filtrés sont vides.
+  Ces éléments établissent l'instabilité native/framework de l'AVD, pas sa cause racine complète;
+  aucun élément ne permet de l'attribuer au code ATLAS.
+
+MATRICE A2 — APK CANDIDAT FINAL
+  01 installation propre                                      NOT_RUN — adb install non exécuté
+  02 lancement sans rôle HOME                                NOT_RUN — installation non atteinte
+  03 attribution volontaire HOME                             NOT_RUN — Settings UI non ouverte
+  04 retour au launcher précédent                            NOT_RUN — rôle HOME non changé
+  05 permission localisation approximative                   NOT_RUN — permissions non exercées
+  06 refus localisation                                      NOT_RUN — AndroidTest non exécuté
+  07 révocation localisation                                 NOT_RUN — aucune révocation runtime
+  08 fournisseur localisation désactivé                     NOT_RUN — fournisseur non touché
+  09 timeout de capture                                      NOT_RUN — AndroidTest non exécuté
+  10 démarrage explicite du service mobilité                NOT_RUN — app non installée
+  11 action notification « Arrêter »                        NOT_RUN — service non démarré
+  12 force-stop sans relancement                             NOT_RUN — processus ATLAS inexistant
+  13 rotation portrait/paysage                               NOT_RUN — UI non exercée
+  14 police Android 2x                                       NOT_RUN — UI non exercée
+  15 Focus/pause/reprise hors ligne                          NOT_RUN — AndroidTest non exécuté
+  16 révocation proactive Coach                              NOT_RUN — AndroidTests non exécutés
+  17 HOME/pause d'urgence sans backend                       NOT_RUN — AndroidTest non exécuté
+  screencap indépendant                                      NOT_RUN — run arrêté avant capture
+
+TESTS NOUVEAUX CIBLÉS
+  7 cibles GoalFocus + 2 ProactiveController + 2 Publisher sont vérifiées statiquement
+  mais n'ont pas tourné sur l'AVD. Aucune qualification runtime n'en est tirée.
+
+VÉRIFICATIONS STATIQUES APRÈS CORRECTIONS
+  bash -n scripts/v622-android17-recipe.sh: PASS
+  ./scripts/v622-android17-recipe.sh --self-test: PASS, 37 assertions / 0 échec
+  22/22 invocations auditées contre chemin fichier, package, classe et méthode déclarée
+  service check: seul « Service <nom>: found » est positif; timeout/non trouvé/absent distincts
+  OK (0 tests), mauvaise méthode, échec, abort et timeout ne peuvent pas être PASS
+  timeout borné; timeout instrumentation devient BLOCKED; disparition des cinq services après
+  réponses positives arrête la recette, écrit les 17 lignes NOT_RUN et collecte les buffers
+  sans lancer de variantes.
+  --self-test: aucun AVD, appel ADB, Emulator ou Gradle.
+
+LOGS
+  run candidat: /tmp/atlas-v622-s4/run-20261020T224158.158124016
+  self-test final: /tmp/atlas-v622-s4/run-20261020T224942.410051952
+  preuve de correction statique runtime-gate/trap: bash -n + self-test ci-dessus seulement;
+  aucun nouveau run AVD effectué après cette correction de garde.
+
+REPRISE
+  Relancer la commande documentée dans docs/v6-2/ANDROID17_V622.md uniquement quand l'image,
+  le framework et les ressources AVD sont stabilisés. Refaire toute la matrice et les 11 nouveaux
+  tests sur le candidat hashé. Ne pas reporter les résultats historiques S4 ni les résultats fake
+  comme qualification Android 17. Pas de validation physique/Pixel revendiquée.

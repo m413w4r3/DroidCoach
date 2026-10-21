@@ -1,0 +1,31 @@
+ATLAS V6.2.2 — inventaire pré-exécution du candidat S5/S7-P1-01
+Date : 2026-10-21
+Branche/base : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+## Artefacts figés — vérification locale
+
+- Candidat : `/tmp/atlas-v622-s5-s7-p1-01-final-candidate/`.
+- `app-debug.apk` : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a` — SHA-256 recalculé, conforme.
+- `app-debug-androidTest.apk` : `ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c` — SHA-256 recalculé, conforme.
+- `candidate-metadata.txt` déclare le digest sources/tests/harnais `6fd5cbf1d44656d101bfa790f1d0d7e7da4b2f595b702584241a5c3f5b2757a5` sur 226 fichiers. L'APK et l'APK AndroidTest ont été vérifiés indépendamment; la recompilation propre a produit ces mêmes deux empreintes avant l'exécution du harnais.
+
+## Décompte du harnais — établi avant résultat runtime
+
+Inventaire statique de toutes les annotations `@Test` de `android/app/src/androidTest` : 89 méthodes.
+
+- Exclure les 4 méthodes de `V62RealGatewayContextBridgeTest`, écartée du passage principal par `notClass` et exécutée dans la séquence E2E réelle dédiée : 85.
+- Exclure les 10 cas explicitement filtrés et listés dans `EXPECTED_RUNNER_FILTERS`; ils restent des préconditions/filtres séparés, jamais des tests exécutés : **75 cas principaux attendus**.
+- Compléments du harnais inchangés : **10 cas** contrôlés par leurs journaux et résumés JUnit.
+- Le cas controller ajouté par S5 est `ProactiveControllerPublicationAuthorizationInstrumentationTest#categoryWithdrawalAndSameClockReoptInAtDurableReservationCommitNeverEntersTransportOrReplays`; le compteur passe donc de 74 à 75 pour ce candidat.
+
+Le validateur et son jeu synthétique hôte attendent maintenant 75 cas principaux. Les cas négatifs de comptage testent 74 et 76. Aucun compte XML d'exécution n'a servi à définir cette valeur.
+
+## Régressions ciblées avant harnais
+
+Les sélections préparées sont les 3 courses `ProactiveControllerPublicationAuthorizationInstrumentationTest`, les 2 méthodes du publisher (dont contrôle réel de `activeNotifications` pendant le retrait concurrent), les 7 méthodes `GoalFocusStartInstrumentationTest`, les 6 méthodes `AgentPersistenceFailureInstrumentationTest` et les 2 méthodes `ProactiveCoachWorkerInstrumentationTest` : 20 méthodes AndroidTest ciblées.
+
+## Résultat sur le candidat figé
+
+Les deux APK ont été re-hachées avant installation puis relues depuis les chemins `base.apk` installés; les empreintes correspondent à celles ci-dessus. Les résultats sont consignés dans [s6-candidat-s5-resultats.txt](s6-candidat-s5-resultats.txt) : 19/20 cas ciblés passent; un ancien message attendu dans `GoalFocusStartInstrumentationTest` ne correspond plus au message produit par le candidat S5. Aucun code de production ou test partagé n'a été modifié après ce constat.
+
+Le décompte principal a été fixé à 75 avant lancement, à partir des 89 méthodes annotées, des 4 méthodes E2E exclues du passage principal et des 10 filtres explicites. Le harnais a exécuté 75 cas, avec 1 échec; 10/10 compléments et 21/21 captures passent. Son verdict demeure `FAIL`. Les preuves 74 + 10 antérieures restent historiques et distinctes.

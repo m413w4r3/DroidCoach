@@ -1,0 +1,23 @@
+ATLAS V6.2.2 — harnais instrumentation final S6
+Date UTC : 2026-10-20T23:01Z (rédaction du rapport : 2026-10-21)
+AVD : atlas_v622_s1_api34 / API 34 / sdk_gphone64_x86_64
+Commande : ADB_SERVER_PORT=5037 ANDROID_SERIAL=emulator-5580 bash scripts/v62-complete-instrumentation.sh
+Run : 20261020T230129Z — exit 0.
+
+Comptes AndroidJUnitRunner et artefacts
+- Suite principale : 74 tests, 74 réussis, 0 échec, 0 erreur, 0 ignoré; 24 classes.
+- Compléments : 10 tests, 10 réussis, 0 échec, 0 erreur, 0 ignoré.
+- Captures : 21 PNG attendues, 21 présentes.
+- 10 cas host-only/externe filtrés dans la suite principale; les cas exécutables ont été rejoués. Les acquisitions GPS visibles sont classées séparément TEST_SYSTEM_BLOCKED, pas PASS.
+- Manifeste des fichiers complets hors dépôt : /tmp/atlas-v622-s6/full-harness-final-files.sha256
+  SHA-256 du manifeste : d3fe0c5c8809627f209f043e61d1d33319f4a4d1842dd3083b256d0e2e3225d6.
+
+Avant / après
+- Première suite complète : 75 cas, 73 PASS, 2 FAIL — écriture privée impossible dans la fixture Lot E et mobilité visible sans injection hôte. Le défaut distinct de deux `setContent` appartenait au test ciblé GoalFocus, pas à Lot E; il a été corrigé sous une racine Compose unique (voir `s6-regressions-avant-correction.txt` et `s6-regressions-corrigees.txt`).
+- Cause Lot E confirmée dans les logs : le package test ne pouvait pas créer le stockage privé attendu; la fixture a été remplacée par un backend mémoire.
+- Le cas mobilité sans injection a été déclaré dépendant de l'argument hôte et retiré de l'exécution générique; la recette dédiée a toujours exécuté les assertions de logique et classé les deux acquisitions système TEST_SYSTEM_BLOCKED faute de fix frais.
+- Aucun test n'a été supprimé/affaibli et aucune source de production n'a été modifiée en S6.
+
+D1 inclus dans les cas : HOME/Coach 320 et 360 dp, portrait/paysage, polices 1×/1,5×/2×, recherche/favoris, footer, pause, retour HOME, tiroir synthétique 100/250 applications. Résultat AVD seulement.
+
+Logs complets : /tmp/atlas-v622-s6/full-harness-final/20261020T230129Z/.

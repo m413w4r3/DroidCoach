@@ -1,5 +1,12 @@
 # Décisions automatiques
 
+## V6.2.2 — 21 octobre 2026
+
+- Checkout partagé sur `feat/atlas-v6-2-2` : fichiers exclusivement attribués, Gradle sérialisé et notifications natives de fin de sous-session ; le patch B2 a été préparé hors arbre puis appliqué après validation Goal–Focus afin de conserver des étapes compilables.
+- APK de recette copiées et identifiées par SHA-256 avant les essais. AVD jetables API34 et API37 avec séries explicites ; serveur ADB isolé pour API37. Aucun profil personnel ni appareil physique modifié par défaut.
+- Un fix absent ou un crash de services Android ne vaut jamais validation fonctionnelle. Les fixtures et contrôles du harnais ont été renforcés ; aucune modification du fournisseur de production sans défaut démontré.
+- La qualification physique et l'autonomie quotidienne demeurent distinctes des tests JVM/AVD. Pas de fermeture automatique de l'issue1 ni publication Git.
+
 | Date | Décision | Raison |
 |---|---|---|
 | 2026-10-18 | Package `dev.atlas.coach`, module unique `:app`, minSdk 26 | Exemple de 09 ; réversible |

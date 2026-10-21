@@ -1,0 +1,79 @@
+ATLAS V6.2.2 — préflight ADB partagé pour le handoff ACK S5
+Date : 2026-10-21
+Branche / HEAD documentaire : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Note de chronologie : ce relevé est le préflight initial, avant vérification
+du registre AVD assigné. La commande `emulator -list-avds` sans
+`ANDROID_AVD_HOME` consultait le registre par défaut et ne permettait pas de
+conclure que le profil attribué était absent. Le registre correct a ensuite
+confirmé l'AVD; l'installation et les deux méthodes ont été exécutées comme
+documenté dans [le rapport runtime final](s6-ack-api34-runtime-20261021.txt).
+
+Périmètre
+---------
+Après l'échec du démarrage du serveur dédié 5038, effectuer uniquement les
+vérifications en lecture seule demandées avant tout usage de l'ADB partagé :
+confirmer que le profil assigné `atlas_v622_s1_api34` existe, vérifier que
+5580/5581 sont libres, puis lire `adb devices -l`. Aucun appareil non-émulateur
+ne doit être ciblé. Le démarrage, l'installation et les deux méthodes ACK ne
+sont autorisés qu'avec le profil et le serial `emulator-5580` confirmés.
+
+Candidat contrôlé
+-----------------
+Répertoire : `/tmp/atlas-v622-s5-ack-positive-final-20261021/`
+
+- app-debug.apk : SHA-256
+  `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- app-debug-androidTest.apk : SHA-256
+  `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb`
+- `sources-tests-scripts.sha256` : SHA-256
+  `87d05e9c17da0f4c64ceaaf452548a62e3ce49734b57d8052c281324d5e62e98`
+- manifeste : 234 entrées, `sha256sum -c` retourne succès pour les 234.
+
+Résultat du préflight
+---------------------
+- Les ports 5580 et 5581 étaient libres; aucun processus emulator/qemu n'était
+  actif.
+- La première commande `emulator -list-avds`, lancée sans variable de registre,
+  ne contenait pas `atlas_v622_s1_api34`; ce résultat ne décrivait pas le
+  registre attribué et n'était pas suffisant pour bloquer le démarrage.
+- `adb devices -l` (lecture seule sur le serveur partagé 5037) ne listait aucun
+  émulateur; une cible non-émulateur était présente. Son identifiant n'est pas
+  conservé ici. Aucune commande ne l'a ciblée et aucun serveur ADB n'a été
+  arrêté ou modifié.
+- Comme le profil exact et `emulator-5580` ne pouvaient pas être confirmés,
+  l'AVD n'a pas été démarré. Les propriétés `ro.kernel.qemu`, identité AVD et
+  `ro.build.version.sdk` n'ont pas été lues.
+
+Statuts
+-------
+
+| Étape | Statut | Résultat |
+| --- | --- | --- |
+| Hashes candidat locaux | PASS | APK app/test et manifeste exacts; 234/234 entrées vérifiées |
+| Ports AVD assignés | PASS | 5580/5581 libres avant le préflight |
+| Profil exact `atlas_v622_s1_api34` | NOT_RUN à ce stade | Le premier listing utilisait le registre par défaut; vérification ultérieure du registre assigné dans la preuve runtime |
+| Inventaire ADB | BLOCKED | Aucun émulateur; une cible non-émulateur non ciblée |
+| Identité live / SDK API34 | NOT_RUN | L'AVD assigné n'a pas été démarré |
+| Installation / hashes installés | NOT_RUN | Aucune commande d'installation; aucun hash installé revendiqué |
+| `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate` | NOT_RUN | Préconditions d'identité et d'isolement non satisfaites |
+| `proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient` | NOT_RUN | Préconditions d'identité et d'isolement non satisfaites |
+
+Commandes exécutées
+-------------------
+
+```text
+sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug.apk /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug-androidTest.apk /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+wc -l /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+sha256sum -c /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+/home/nill/Android/Sdk/emulator/emulator -list-avds
+adb devices -l
+ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home /home/nill/Android/Sdk/emulator/emulator -list-avds
+```
+
+Les contrôles locaux des ports 5580/5581 et processus emulator/qemu étaient en
+lecture seule. Aucun `adb -s` vers un appareil n'a été nécessaire ou exécuté.
+À l'instant de ce préflight, aucun démarrage AVD, installation ou test n'avait
+encore été lancé. Le résultat final ultérieur est dans la preuve runtime liée
+ci-dessus. Le résultat accepté antérieurement sur app `ce10…` / AndroidTest
+`893da1…` reste distinct.

@@ -1,0 +1,18 @@
+ATLAS V6.2.2 — relecture du résultat S4 final pendant S6
+Date de relecture : 2026-10-21 (Europe/Paris).
+
+STATUT
+- Environnement AVD Android 17 / API 37 : `BLOCKED` avant installation du candidat final.
+- Candidat final S4 attendu : app SHA-256 `dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9`; test SHA-256 `353a8d0e4cd89658d528bd7da457447c0b11fb482511f395661659779cbaeeb7`. Les copies read-only ont des empreintes conformes.
+- `adb install` du candidat final non exécuté; aucun test/app ATLAS lancé dans ce run.
+- Les 17 scénarios A2 et 11 nouveaux tests GoalFocus/révocation du candidat final sont `NOT_RUN`.
+- Une installation PASS historique concernait une APK plus ancienne; elle n'est pas recyclée comme résultat du candidat final.
+
+CONSTAT ENVIRONNEMENT
+- Les sondes API 37 ont alterné de `Service <nom>: found` à `not found`; six observations `system_server dead`.
+- Le buffer natif rapporte l'assertion DMA de SurfaceFlinger/GoldfishMapper et l'échec UWB `/dev/uwb0`. Aucun test ATLAS n'ayant été lancé, aucun défaut applicatif Android 17 n'est déduit.
+- AVD API 37 `emulator-5582` / serveur ADB isolé 5038 arrêté après diagnostic. API 34 S1 n'a pas été ciblé.
+- Les 37 assertions `--self-test` du script sont PASS, mais ce sont des tests statiques/synthétiques : aucun AVD, ADB, installation ou exécution Android n'en découle.
+- Issue 1 reste ouverte. La cause externe/framework n'ayant pas changé, aucune nouvelle tentative API 37 n'était requise en S6; aucune n'a été lancée.
+
+Sources relues : [ANDROID17_V622.md](../ANDROID17_V622.md), [preuve candidat final S4](android17-v622-final-candidate.txt) et [snapshot S4](android17-s4-snapshot.txt). Logs complets conservés par S4 sous `/tmp/atlas-v622-s4/`.

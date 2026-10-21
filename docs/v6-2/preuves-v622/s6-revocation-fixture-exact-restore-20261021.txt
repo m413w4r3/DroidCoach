@@ -1,0 +1,263 @@
+ATLAS V6.2.2 — restauration exacte de la fixture de révocation et rejeu S6
+Date : 2026-10-21
+Branche : feat/atlas-v6-2-2, HEAD bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Périmètre et correction
+-----------------------
+Fichier test concerné : android/app/src/androidTest/java/dev/atlas/coach/AtlasLaunchTest.kt.
+Aucun fichier de production ni script versionné n'a été modifié pour cette reprise.
+
+La fixture capture une copie de toutes les entrées du fichier SharedPreferences
+atlas_agent_revocation_barrier, en copiant aussi chaque Set<String>, avant
+d'écrire l'état neutre. La capture est affectée au champ d'instance avant la
+première mutation. Ainsi une assertion d'installation ou une assertion ultérieure
+qui échoue après la neutralisation laisse l'état disponible pour @After.
+@After efface seulement ce fichier de préférences dédié, remet chaque valeur avec
+son type exact, fait un commit synchrone et compare le contenu restauré à
+l'instantané. Un instantané vide reste distinct de « aucun instantané » : le
+nettoyage supprime alors les clés matérialisées par writeState, rétablissant leur
+absence. readState() étant non-nullable, aucun chemin null n'est supposé.
+
+Le rejeu a passé le test ciblé, donc l'assertion d'égalité exacte exécutée dans
+@After a réussi pour l'état présent avant ce test. L'absence initiale des clés
+n'a pas été supposée ni publiée. Aucun échec artificiel n'a été injecté après la
+neutralisation; l'exécution d'@After en cas d'échec ultérieur découle du cycle
+JUnit et de l'instantané défini avant writeState.
+
+Artefacts finaux
+----------------
+APK app SHA-256 :
+  ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a
+APK AndroidTest SHA-256 :
+  893da1cf4b9750f868cc943e4e5e01ac86409ed75455c12a5c20d781d7195526
+Répertoire candidat hors dépôt :
+  /tmp/atlas-v622-s6/quarantine-exact-restore-20261021/
+Source AndroidTest seule SHA-256 :
+  b3957e398acf0006db354b62d491111c956837e6cdf2c0179325496d41dfd4a1
+Digest de android/app/src + scripts, 225 fichiers, caches Python exclus :
+  6f01dbddc646cacf7bb8f3dfb6445a3a262c19a286209e2541a294a97521b9f7
+
+Construction :
+  ./gradlew :app:assembleDebugAndroidTest
+Répertoire courant : android/
+Résultat : BUILD SUCCESSFUL. La compilation Android principale était UP-TO-DATE;
+aucun assembleDebug ni clean n'a été exécuté. Une tentative depuis la racine du
+dépôt a échoué avant lancement (pas de ./gradlew à cette racine); elle n'a rien
+construit.
+
+Le candidat précédent avait l'AndroidTest 0b5c3d087cbf856207cd85d7a4a5573d532a65d89394a54a6c7d16abcc0b3872.
+L'AVD a été démarré (puis redémarré après le premier arrêt hôte) avec :
+  emulator -avd atlas_v622_s1_api34 -port 5580 \
+    -no-snapshot-load -no-snapshot-save
+Seul le package dev.atlas.coach.test a été remplacé par :
+  adb -P 5037 -s emulator-5580 install -r -t \
+    /tmp/atlas-v622-s6/quarantine-exact-restore-20261021/app-debug-androidTest.apk
+l'APK app déjà installée a été vérifiée à ce10… et n'a pas été réinstallée.
+Avant les tests, après redémarrage de l'AVD, puis après les E2E, `pm path` +
+`adb pull` + SHA-256 ont confirmé la paire ce10… / 893da1… installée. Aucune
+commande `pm clear`, désinstallation ou wipe n'a été lancée.
+
+Instrumentation API 34
+----------------------
+AVD : atlas_v622_s1_api34, API 34, ADB 5037, cible explicitement sélectionnée
+emulator-5580. Le compte principal a été gardé à 75 : 89 méthodes @Test, moins
+les 4 méthodes de la classe Gateway exécutées séparément, moins les 10 filtres
+déclarés avant le run. Aucun test n'a été ajouté.
+
+Commande du test ciblé :
+  adb -P 5037 -s emulator-5580 shell am instrument -w -r \
+    -e class dev.atlas.coach.AtlasLaunchTest#recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady \
+    dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Résultat AndroidJUnitRunner : PASS, OK (1 test). Le test vérifie aussi le
+restauration exacte du fichier de barrière dans @After.
+
+Une première exécution de la suite principale a utilisé l'écran de démarrage
+par défaut 1080x1920 / densité 420, soit 411 dp. Le runner a exécuté 75 tests;
+deux assertions de capture ont échoué uniquement sur expected 360 / actual 411 :
+`coachScreenShowsNamedLocalFixtureWithoutRawProvenanceHash` et
+`nativeHomeMatrixAtRequestedWidth`. L'émulateur s'est ensuite terminé avec le
+code hôte 139. Ce passage est conservé comme FAIL de précondition viewport, pas
+comme verdict produit.
+
+Après redémarrage du même AVD et vérification des hashes installés, le viewport
+a été réglé de manière réversible à `wm size 1080x2400` et `wm density 480`
+(360 dp). Les deux captures ont été rejouées séparément : chacune PASS, 1/1.
+Chaque commande ciblait un seul cas avec `expected_width_dp=360` et
+`class=dev.atlas.coach.app.V62NativeUiCaptureTest#<méthode>`.
+La suite principale corrigée a alors été rejouée avec :
+  adb -P 5037 -s emulator-5580 shell am instrument -w -r \
+    -e notClass dev.atlas.coach.app.V62RealGatewayContextBridgeTest \
+    -e expected_width_dp 360 \
+    dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Résultat : PASS, AndroidJUnitRunner `OK (75 tests)`, 0 échec, 0 erreur,
+0 ignoré; exit shell 0. Aucun pm clear n'a précédé ce run.
+
+E2E Gateway réel et hors ligne — paire exacte
+---------------------------------------------
+Le runner temporaire copié sous
+`/tmp/atlas-v622-s6/openclaw-real-final-893da1-20261021/recipe-no-install.sh`
+a le SHA-256 `986bcce1f72b927a6c18c7648fae5a24fa70d5147f3d8e94bb9d4605d4c10864`.
+`bash -n` passe. La copie conserve le contrôle des hashes, le backend OpenClaw
+réel configuré localement, les assertions Gateway et l'arrêt/redémarrage OS;
+elle n'installe ni ne purge de package. Le jeton local éphémère reste hors dépôt,
+le fichier de configuration Gateway est en mode 600 et aucune URL, valeur de
+jeton, donnée d'objectif ni payload n'est conservé dans la preuve.
+
+Commande (les valeurs sont des empreintes et chemins locaux, pas des secrets) :
+  ATLAS_V622_S6_CANDIDATE_DIR=/tmp/atlas-v622-s6/quarantine-exact-restore-20261021 \
+  ATLAS_V622_CANDIDATE_APP_SHA256=ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a \
+  ATLAS_V622_CANDIDATE_TEST_SHA256=893da1cf4b9750f868cc943e4e5e01ac86409ed75455c12a5c20d781d7195526 \
+  ATLAS_V622_S6_E2E_CONTEXT_ONLY=1 \
+  ATLAS_V622_S6_E2E_OUTPUT_DIR=/tmp/atlas-v622-s6/openclaw-real-final-893da1-20261021/recipe-results \
+  bash /tmp/atlas-v622-s6/openclaw-real-final-893da1-20261021/recipe-no-install.sh
+ADB_SERVER_PORT=5037 et ANDROID_SERIAL=emulator-5580 étaient définis.
+Sortie du runner : exit 0.
+
+Résultats expurgés :
+- Gateway réel / adaptateur `openclaw` : connecté false avant l'appel, true après.
+- Passage Gateway 1 : PASS, 1 test, 0 échec/erreur/ignoré.
+- Passage Gateway 2 consécutif : PASS, 1 test, 0 échec/erreur/ignoré.
+- Les assertions relient le Focus de 25 minutes au Goal avant l'avancement,
+  vérifient le lien durable et 0/120, puis 25/120 après l'horloge contrôlée.
+  La proposition vérifiée et l'effet sont enregistrés; deux ACK exécutés avec
+  effet sont présents. Après révocation de `goals`, l'appel réel suivant conserve
+  Focus autorisé et n'inclut plus Goal.
+- Le PID est arrêté entre les deux passages. Backend arrêté et inaccessible,
+  scénario local hors ligne PASS, 1 test; le processus est force-stoppé puis
+  recréé par Activity Manager.
+- Le préambule `V6RealAgentE2e` est `NOT_RUN` sur 893da1. Son FAIL antérieur sur
+  8edb reste historique et non classé faute de journaux complets; aucune cause
+  n'est transférée à la paire actuelle.
+
+État final et effets
+--------------------
+Après les tests, les deux APK installées ont de nouveau été extraites et leurs
+SHA-256 correspondaient à ce10… / 893da1…. `wm size reset` et `wm density reset`
+ont restauré 1080x1920 / densité 420, valeurs de démarrage. L'AVD a été arrêté
+proprement par `adb -P 5037 -s emulator-5580 emu kill`; le serveur ADB 5037 n'a
+pas été arrêté. Aucune commande n'a ciblé un autre appareil.
+
+Les données du package app n'ont pas été effacées par une commande shell et
+n'ont pas été inspectées ni restaurées. Le `@Before clearDemoState()` existant
+de `AtlasLaunchTest` efface `atlas_local_state` pendant ses cas puis écrit des
+fixtures synthétiques; d'autres tests peuvent également écrire leur état de
+fixture. Les E2E utilisent en plus un `ContextWrapper` isolé pour leurs données
+locales. L'état persistant réel du package app peut donc différer de son état
+initial; il reste conservé sur l'AVD arrêté et n'a pas été inspecté. Le fichier
+de barrière, lui, a été comparé à l'instantané exact après le test. Le
+remplacement AndroidTest était `install -r -t`, sans désinstallation ni purge.
+La géométrie a été restaurée par `adb -P 5037 -s emulator-5580 shell wm size reset`
+et `adb -P 5037 -s emulator-5580 shell wm density reset`, puis l'AVD arrêté par
+`adb -P 5037 -s emulator-5580 emu kill`.
+
+Le harnais complet, ses compléments UsageStats, D3, localisation, baseline
+complète, Android 17, téléphone physique et TalkBack réel : NOT_RUN dans cette
+reprise. Les compléments sûrs 8/8 et la recette localisation de l'AndroidTest
+0b5c demeurent des résultats historiques de cette paire; ils ne sont pas
+attribués à 893da1.
+
+Les journaux runner bruts sont conservés avec permissions 600 sous
+`/tmp/atlas-v622-s6/quarantine-exact-restore-20261021/`; les sorties E2E
+expurgées sont sous `/tmp/atlas-v622-s6/openclaw-real-final-893da1-20261021/recipe-results/`.
+Ils ne contiennent aucun jeton, URL, titre d'objectif utilisateur ou payload.
+Pas de commit, push, merge ni tag.
+
+Rejeu additionnel demandé — paire finale 893da1 — 21 octobre 2026
+----------------------------------------------------------------
+Ce rejeu distinct a commencé à 11:37 UTC, après arrêt antérieur de l'AVD.
+Avant démarrage, ADB 5037 ne listait aucune cible, un seul profil AVD était
+enregistré (`atlas_v622_s1_api34`) et aucun processus emulator/qemu ne tournait.
+L'AVD a été démarré seul sur le port 5580 avec :
+  emulator -avd atlas_v622_s1_api34 -port 5580 \
+    -no-snapshot-load -no-snapshot-save
+Après démarrage : AVD exact `atlas_v622_s1_api34`, modèle
+`sdk_gphone64_x86_64`, API 34; inventaire ADB = 1 cible assignée et 0 autre.
+
+Le hash local de l'APK app était déjà `ce10…`; après vérification de cette app
+installée, seul le paquet AndroidTest a été remplacé, avec la commande :
+  adb -P 5037 -s emulator-5580 install -r -t \
+    /tmp/atlas-v622-s6/quarantine-exact-restore-20261021/app-debug-androidTest.apk
+`pm path` + `adb pull` ont ensuite donné app
+`ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a` et
+AndroidTest `893da1cf4b9750f868cc943e4e5e01ac86409ed75455c12a5c20d781d7195526`.
+Aucun Gradle/build, installation app, `pm clear`, uninstall ou wipe n'a été
+lancé dans ce rejeu.
+
+Test ciblé, démarré à 11:37:47 UTC :
+  timeout --signal=TERM --kill-after=5s 90s adb -P 5037 -s emulator-5580 \
+    shell am instrument -w -r \
+    -e class dev.atlas.coach.AtlasLaunchTest#recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady \
+    dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Résultat : `PASS`, `OK (1 test)`, exit 0. Le snapshot précédent de
+`atlas_agent_revocation_barrier` a été restauré par `@After`.
+
+Avant le runner principal, l'écran a été réglé à 1080x2400 / densité 480
+(360 dp), puis rétabli après le runner. Les permissions coarse, fine et
+notifications, ainsi que la localisation activée, ont été lues et laissées
+inchangées. Le compte attendu était fixé indépendamment à 75 : 89 méthodes
+`@Test`, moins 4 cas Gateway exécutés à part, moins les 10 filtres déclarés.
+Commande du principal, démarré à 11:38:15 UTC :
+  timeout --signal=TERM --kill-after=10s 360s adb -P 5037 -s emulator-5580 \
+    shell am instrument -w -r \
+    -e notClass dev.atlas.coach.app.V62RealGatewayContextBridgeTest \
+    -e expected_width_dp 360 \
+    dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Résultat : `PASS`, `OK (75 tests)`, 0 échec, 0 erreur, 0 ignoré, exit 0.
+
+Rejeu Gateway démarré à 11:40:45 UTC avec le runner temporaire déjà audité
+(SHA-256 `986bcce1f72b927a6c18c7648fae5a24fa70d5147f3d8e94bb9d4605d4c10864`):
+`bash -n` passe; l'audit statique confirme l'absence de `pm clear`, uninstall,
+wipe et commande d'installation APK. Le script a été exécuté avec
+`ATLAS_V622_S6_CANDIDATE_DIR=/tmp/atlas-v622-s6/quarantine-exact-restore-20261021`,
+les SHA `ce10…` / `893da1…`, `ATLAS_V622_S6_E2E_CONTEXT_ONLY=1` et le dossier
+`/tmp/atlas-v622-s6/openclaw-real-final-893da1-rerun-20261021/recipe-results/`.
+Commande exécutée :
+  timeout --signal=TERM --kill-after=10s 420s env \
+    ATLAS_V622_S6_CANDIDATE_DIR=/tmp/atlas-v622-s6/quarantine-exact-restore-20261021 \
+    ATLAS_V622_CANDIDATE_APP_SHA256=ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a \
+    ATLAS_V622_CANDIDATE_TEST_SHA256=893da1cf4b9750f868cc943e4e5e01ac86409ed75455c12a5c20d781d7195526 \
+    ATLAS_V622_S6_E2E_CONTEXT_ONLY=1 \
+    ATLAS_V622_S6_E2E_OUTPUT_DIR=/tmp/atlas-v622-s6/openclaw-real-final-893da1-rerun-20261021/recipe-results \
+    bash /tmp/atlas-v622-s6/openclaw-real-final-893da1-20261021/recipe-no-install.sh
+`ADB_SERVER_PORT=5037` et `ANDROID_SERIAL=emulator-5580` étaient hérités du
+shell de recette. Résultat de commande : exit 0.
+
+Résultats expurgés de cette exécution :
+- Gateway réel via l'adaptateur `openclaw` : 2 passages consécutifs, chacun
+  `PASS`, 1 test, 0 échec/erreur/ignoré.
+- Le résumé confirme 2 ACK exécutés avec effet.
+- Hors ligne après arrêt du backend : `PASS`, 1 test, 0 échec/erreur/ignoré.
+- Le préambule historique `V6RealAgentE2e` : `NOT_RUN`, mode `context-only`;
+  aucun FAIL historique n'est réattribué à cette paire.
+
+Hashes des sorties expurgées de ce rejeu :
+- runner ciblé `/tmp/atlas-v622-s6/quarantine-exact-restore-20261021/rerun/targeted-runner.log` :
+  `16551c7eb23e1eab6fe673c549964a5b3566c6eb5c167b27563350b2aa063a8c`;
+- principal `.../rerun/main75-runner.log` :
+  `646c8be3937dd401e0816db8a0baa72019d18a5f939e6e64369ffdcdc6d32ffc`;
+- sortie runner Gateway expurgée `.../rerun/openclaw-e2e-command.log` :
+  `caf6108960bc8e4d729d56b020481e07a1da9eada011f028d9f2fc692bfce567`;
+- `recipe-results/e2e-results.txt` :
+  `7ffd894e489514d9d615876273abfe568dfbc782bb42f6f9cde3be60d6ec26f4`;
+- `recipe-results/backend-ack-summary.txt` :
+  `b76423c3abdd79236361d2710c03bef340ffda9dd5519ee2e5c9722e2bfb85b9`;
+- `recipe-results/e2e-process-results.txt` :
+  `6e0d02299740bb2b59f2874d57db91e2779c07c3a775d00398ae99b3c2217828`;
+- résultat runner hors ligne :
+  `73e7b37dfda2469af68b352df361696057f9fd36c7112dacfd2c36f0ab9c57c6`.
+
+Après les scénarios, `pm path` + `adb pull` ont encore confirmé les deux SHA
+installés exacts. Après le principal, `wm size reset` / `wm density reset` ont
+restauré les valeurs physiques 1080x1920 / densité 420. L'audit du runner E2E
+confirme qu'il ne change pas la géométrie d'écran. `adb -P 5037 -s emulator-5580
+emu kill` a ensuite arrêté l'AVD; le serial a disparu, aucun autre target ni
+processus emulator/qemu ne restait, et le serveur ADB n'a pas été arrêté.
+
+Effet sur les données : aucun nettoyage de package n'a été fait. Comme autorisé,
+`AtlasLaunchTest.@Before clearDemoState()` a vidé `atlas_local_state` pendant
+ses fixtures puis des tests ont écrit leurs données synthétiques; la fixture de
+barrière de révocation a restauré exactement son SharedPreferences. Les E2E
+ont écrit les données de scénario via leurs fixtures puis testé le chemin hors
+ligne. L'état final du package n'a pas été inspecté ni restauré et reste
+conservé sur l'AVD arrêté. Aucun URL, jeton, titre d'objectif ou payload n'est
+dans les preuves versionnées.

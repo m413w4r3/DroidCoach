@@ -1,0 +1,46 @@
+# S6 — rejeu du candidat S5 CLEAN, 2026-10-21
+
+## Candidat et environnement
+
+- Candidat CLEAN : `/tmp/atlas-v622-s5-clean-candidate-20261021/`.
+- Digest code/tests/harnais déclaré par S5 : `93ec83319a2d1f8c9d1a95205a82432d6f7c253700081c2b1387a3fc4d1916d9`.
+- App SHA-256 : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- AndroidTest SHA-256 : `8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d`.
+- APK app/test retirées de l'AVD après E2E : mêmes hashes. Le test Gateway a installé avec `adb install -r`, puis a retiré les deux APK de l'appareil pour vérifier ces hashes. Aucune réinstallation n'a effacé les données.
+- AVD attribué uniquement : `atlas_v622_s1_api34`, API 34, serveur ADB 5037. Inventaire avant fermeture : cible attribuée seule, 0 autre cible; aucun numéro de téléphone physique n'a été affiché.
+- Préconditions restaurées à la fin : coarse accordé, fine refusé, notifications accordées, localisation active, taille/densité physiques (1080×1920 / 420), AppOp `GET_USAGE_STATS` `ignore` au niveau UID et package. Fixture de distraction absente.
+- Processus app et test arrêtés, puis AVD fermé par `adb emu kill`. Serveur ADB laissé actif, 0 émulateur et 0 autre cible après fermeture. Aucun `pm clear`, désinstall, wipe ou appareil physique.
+
+## Régressions et harnais
+
+- 20/20 tests Android ciblés passent avec des résumés AndroidJUnitRunner explicites : courses contrôleur 3/3, publisher 2/2, Goal–Focus 7/7, persistance V6.2.1 6/6, Worker 2/2. Résumé : `/tmp/atlas-v622-s6/clean-replay-20261021/targeted-results.txt`.
+- Compte principal inventorié avant lancement : 75 cas. Rejeu AndroidJUnitRunner configuré au viewport 360 dp : 75 exécutés, 74 réussis, 1 échec, 0 erreur, 0 ignoré. L'échec reproduit dans les deux passages principaux : `AtlasLaunchTest#recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady`, `AssertionError` à `AtlasLaunchTest.kt:338`, dans `assertTrueQuarantineContains(prefs.all, raw)`. Cause non attribuée; le source AndroidTest et le DEX du candidat correspondent selon l'inspection S5. Aucun correctif de production ou affaiblissement de l'assertion.
+- Un premier passage de diagnostic sans configuration du viewport avait 4 échecs : le même échec de migration, deux tests natifs qui attendaient 360 dp mais mesuraient 411 dp, et un timeout paysage à fontScale 2. Il n'est pas utilisé comme résultat principal. Le rejeu configuré à 360 dp a réduit le résultat à l'unique échec de migration ci-dessus.
+- Huit compléments non destructifs passent chacun avec `OK (1 test)` : trois méthodes LocationCapture à provider simulé, capture paysage V61, HOME et Coach à 320 dp et 360 dp. Résumé : `/tmp/atlas-v622-s6/clean-replay-20261021/complements/results.txt`.
+- Deux des dix compléments du script complet restent `NOT_RUN` : `UsageFixtureInstrumentationTest#actualAppOpsDenialStopsBeforeQueryingUsageStats` et `#fourRealFixtureOpensReachTheRuleAfterReturningToAtlas`. Le premier révoque l'AppOp et efface le magasin d'observation; le second purge le consentement/historique UsageStats de l'app. Le script complet n'a pas été lancé, car il exécute aussi deux `pm clear` sans condition. Les données n'ont pas été réinitialisées par le shell. `AtlasLaunchTest` possède toutefois son propre `@Before clearDemoState()` qui efface `atlas_local_state` dans ses méthodes; ce comportement du test a été exécuté sur l'AVD dédié.
+- Verdict du harnais complet : `FAIL` sur le cas de migration et compléments incomplets (8/10 PASS, 2 NOT_RUN). Aucun `recipe=PASS` n'est déclaré.
+
+## Localisation visible
+
+La recette a vérifié que les deux APK installées correspondaient déjà au candidat exact, puis a passé ses tests logiques. `location-visible-main-activity` et `mobility-prepare-consent` passent. L'acquisition mobilité réelle est `TEST_SYSTEM_BLOCKED`, raison `no_fresh_coarse_fix_after_host_injection` : Android n'a pas fourni de nouveau fix coarse synchronisé. Ce statut système est distinct des tests applicatifs réussis et ne masque aucun autre échec. Résumé expurgé : `/tmp/atlas-v622-s6/location-clean-replay-20261021/results.txt`.
+
+## Gateway OpenClaw réel et mode hors ligne
+
+- Le Gateway local configuré a répondu au contrôle de santé; adaptateur rapporté `openclaw`. La recette a utilisé un bearer éphémère et un backend temporaire. Les tokens et payloads privés ne sont pas conservés dans les preuves.
+- Le premier passage complet du script, qui commence par l'ancien `V6RealAgentE2eInstrumentationTest#realCoachResponseCreatesDirectiveAndStartsFocus`, s'est arrêté sur ce test avec un résumé non classé. Les logs bruts ont été supprimés par le script; aucune exception ni ligne source ne peut être affirmée et ce passage n'est pas compté comme PASS.
+- La recette S6 dédiée, exécutée ensuite sur le même candidat avec `ATLAS_V622_S6_E2E_CONTEXT_ONLY=1`, passe deux fois consécutivement sur le vrai Gateway : `V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal`, 1/1 chaque passage. Entre les deux, PID présent puis force-stop réel et PID absent.
+- Chaque passage démarre le Focus avec `goalId`, vérifie sur disque le lien immédiat et la progression 0/120, avance l'horloge contrôlée de 25 minutes, vérifie 25/120, proposition, mandat, effet et ACK, révoque ensuite `goals`, puis vérifie une nouvelle requête sans Goal. Deux ACK exécutés avec effet sont présents dans la base isolée.
+- Le backend est ensuite arrêté et son endpoint vérifié inaccessible. Le test local Goal/Focus/favori/pause d'urgence passe 1/1; un force-stop réel est vérifié, puis Activity Manager recrée le processus hors ligne. Résumé : `/tmp/atlas-v622-s6/openclaw-real-clean-context-20261021/`.
+
+## D3, autres limites et historique
+
+- D3 coaching : `NOT_RUN` sur ce rejeu. Avant fermeture, `GET_USAGE_STATS` était `ignore` pour l'UID et le package; aucune sélection/allowlist consentie n'a été vérifiée. Aucune permission n'a été forcée et aucune fenêtre de repos n'a été mesurée pendant l'E2E.
+- L'ancienne fenêtre locale de 60 s reste une preuve historique séparée. Les états applicatifs/AVD ont changé depuis et les preuves précédentes portaient sur d'autres exécutions; elle n'est pas associée à ce candidat CLEAN. D3 comme paire de deux modes comparables reste non qualifiée.
+- TalkBack réel, batterie physique et téléphone physique : `NOT_RUN`. Android 17 reste `BLOCKED` environnement, sans nouvelle tentative API 37.
+- Les résultats `ea53…` et les anciens résultats `8edb…` restent historiques. Ce document relie uniquement les résultats ci-dessus au rejeu frais du répertoire CLEAN et aux hashes recalculés.
+
+Les résumés installés, état final et libération de l'AVD sont dans `/tmp/atlas-v622-s6/clean-replay-20261021/final-installed/`. Journaux complets et logs de runners restent hors dépôt, sous `/tmp/atlas-v622-s6/`.
+
+## Addendum — correction AndroidTest du 21 octobre
+
+La section principale ci-dessus conserve les résultats du candidat AndroidTest `8edb…` avant correction. Le rejeu rouge isolé ultérieur, sur la même paire, a montré que l'égalité brute de quarantaine passait; l'échec était l'assertion de catégories autorisées, masquées par une barrière de révocation persistante que le fixture ne réinitialisait pas. La relecture exacte et la correction test-only sont dans [la preuve de correction ciblée](s6-correction-quarantaine-20261021.txt). Le nouvel APK AndroidTest `0b5c3d08…` n'est pas la paire `8edb…`; seul le rapport de correction lui transfère des résultats. Aucun verdict antérieur n'a été réécrit.

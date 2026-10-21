@@ -68,6 +68,9 @@ class AgentApiClient(
 ) {
     private val base = baseUrl.trimEnd('/')
 
+    /** Test-only pause at the ACK body boundary, after requestAllowed and before its epoch check. */
+    @Volatile internal var beforeAckBodySerializationForTesting: (() -> Unit)? = null
+
     init {
         val uri = URI(base)
         require(uri.scheme in setOf("https", "http") && !uri.host.isNullOrBlank())
@@ -203,26 +206,44 @@ class AgentApiClient(
         return AgentInboxResponse(proposals, cursor)
     }
 
-    fun acknowledge(proposalId: String, state: String, effect: String?, atUtcMillis: Long) {
+    @JvmOverloads
+    fun acknowledge(
+        proposalId: String,
+        state: String,
+        effect: String?,
+        atUtcMillis: Long,
+        authorizationAllowed: (() -> Boolean)? = null,
+    ) {
         require(state in setOf("accepted", "executed", "rejected", "expired", "cancelled"))
         val pathId = URLEncoder.encode(proposalId, StandardCharsets.UTF_8.name()).replace("+", "%20")
-        val body = JSONObject()
-            .put("state", state)
-            .put("effect", effect ?: JSONObject.NULL)
-            .put("at", Instant.ofEpochMilli(atUtcMillis).toString())
-        request("POST", "/v2/agent/proposals/$pathId/ack", body)
+        request("POST", "/v2/agent/proposals/$pathId/ack", bodyFactory = {
+            beforeAckBodySerializationForTesting?.invoke()
+            if (authorizationAllowed != null && !runCatching(authorizationAllowed).getOrDefault(false)) {
+                throw AgentApiException("Proactive acknowledgement authorization is no longer active", 403)
+            }
+            RequestBody(JSONObject()
+                .put("state", state)
+                .put("effect", effect ?: JSONObject.NULL)
+                .put("at", Instant.ofEpochMilli(atUtcMillis).toString()))
+        })
     }
 
     /** The backend requires the accepted transition before an executed acknowledgement. */
-    fun acknowledgeExecution(proposalId: String, effect: String?, atUtcMillis: Long) {
+    @JvmOverloads
+    fun acknowledgeExecution(
+        proposalId: String,
+        effect: String?,
+        atUtcMillis: Long,
+        authorizationAllowed: (() -> Boolean)? = null,
+    ) {
         try {
-            acknowledge(proposalId, "accepted", null, atUtcMillis)
+            acknowledge(proposalId, "accepted", null, atUtcMillis, authorizationAllowed)
         } catch (error: AgentApiException) {
             // A retry may find that a prior call already advanced the proposal to executed.
             // The terminal acknowledgement below is idempotent and confirms the resulting state.
             if (error.statusCode != 409) throw error
         }
-        acknowledge(proposalId, "executed", effect, atUtcMillis)
+        acknowledge(proposalId, "executed", effect, atUtcMillis, authorizationAllowed)
     }
 
     private fun request(

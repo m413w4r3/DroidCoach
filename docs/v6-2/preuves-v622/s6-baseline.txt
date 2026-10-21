@@ -1,0 +1,25 @@
+ATLAS V6.2.2 — baseline final S6
+Date de fin : 2026-10-20T23:17:47Z (21 octobre, heure Europe/Paris)
+Branche : feat/atlas-v6-2-2
+HEAD : bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Android, depuis android/
+Commande : ./gradlew clean testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --console=plain
+Résultat : BUILD SUCCESSFUL en 2 min; 82 tâches exécutées.
+- testDebugUnitTest : 57 rapports XML, 313 cas, 0 échec, 0 erreur, 0 skip.
+- lintDebug : PASS, rapport produit sous android/app/build/reports/lint-results-debug.html.
+- assembleDebug : PASS.
+- assembleDebugAndroidTest : PASS.
+- Avertissements de compilation Kotlin : casts unchecked dans des tests existants/nouveaux; non bloquants.
+
+APK assemblées par ce baseline propre
+- app-debug.apk : SHA-256 dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9.
+- app-debug-androidTest.apk : SHA-256 3b7757f382f0e733d90c7765343da0128bd00ab6ffdca1da1d960ebc9f48c524.
+- L'APK applicative est identique au candidat S5; l'APK AndroidTest intègre les fixtures/tests S6 et a une nouvelle empreinte.
+
+Backend, depuis la racine
+Commande : backend/.venv/bin/python -m pytest backend/tests -q
+Résultat : 66 passed, 1 skipped, 0 failed, 1 avertissement de dépréciation Starlette/AnyIO, en 2,43 s.
+
+Sorties complètes expurgées : `/tmp/atlas-v622-s6/baseline-final/gradle.log` et `pytest.log`.
+Le digest final composite des modifications (diff suivi + empreintes des fichiers non suivis) a été calculé après la rédaction de cette preuve et conservé hors dépôt dans `/tmp/atlas-v622-s6/final-worktree-diff.sha256`.

@@ -1,0 +1,50 @@
+ATLAS V6.2.2 — correction de synthèse S7-P2-03
+Date: 2026-10-21
+Statut du relevé initial : correctif préparé et vérifié synthétiquement avant le candidat S5/S7-P1-01. Mise à jour runtime en fin de document.
+
+## E1 — lien Goal–Focus créé au démarrage
+
+`V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal` appelle maintenant `startFocus(plan, goalId=goal.id)`. Avant d'avancer l'horloge injectée, le test exige un Focus `RUNNING`, une progression calculée de 0/120 et la présence du lien dans le cache ET dans la préférence isolée `v62_instrumented_atlas_local_state/state_v1`. Après 25 minutes injectées, il exige la session terminée, le lien toujours durable et les 25 minutes calculables à partir de l'historique persisté. L'attribution manuelle rétroactive a été supprimée de ce parcours Gateway.
+
+Ce correctif n'établit pas à lui seul une exécution Android; il sera compilé et exécuté uniquement sur le prochain candidat gelé et après feu vert.
+
+## E2 — isolation de la pause d'urgence
+
+Le helper de fixture appelle `AndroidEmergencyPauseStore.clear(isolated)` uniquement dans le bloc `clearState == true`. `isolated` est le `ContextWrapper` du test qui préfixe les préférences par `v62_instrumented_`; la préférence de production n'est pas ouverte. Les appels `clearState=false` employés par la vérification de recréation conservent la pause. Aucune règle, vérification de mandat ou sécurité de production n'a été modifiée.
+
+Les deux refus historiques ne sont toujours pas attribués rétrospectivement, faute de leurs journaux complets. Les deux nouveaux résultats structurés établissent le mécanisme `EMERGENCY_PAUSE`; le patch empêche seulement la pollution entre fixtures isolées.
+
+## S7-P2-03 — verdict du harnais
+
+Le verdict précédent ignorait XML absent/invalide, comptage zéro ou inattendu et `additional_logs_without_summary`. Le nouveau [validateur](../../../scripts/v62-instrumentation-summary.py) échoue sur ces cas, contrôle le statut Gradle, les quatre ciblages UI, les trois compléments de suivi, les cinq statuts externes, les six préconditions hôte, les quatre ciblages UI de largeur, les dix journaux complémentaires attendus, leurs résumés JUnit et les 21 captures. Il exige aussi les dix filtres/prérequis attendus dans le log et ne les compte jamais comme tests. Les journaux de prochaine exécution sont par défaut privés sous `/tmp/atlas-v622-s6/full-harness/<UTC>/`, jamais sous le dépôt. La recette S6 précédente avait 74 cas principaux + 10 compléments. Pour le candidat S5/S7-P1-01, l'inventaire pré-exécution établit 75 cas principaux + 10 compléments; voir [l'inventaire candidat](s6-candidat-s5-inventaire.txt). Le compte est défini par les sources et filtres avant le runtime, pas par son résultat.
+
+Les lignes `Filtered` sont résumées séparément et valent zéro test exécuté; `TEST_SYSTEM_BLOCKED` reste identifié comme statut propre à la recette de localisation. Aucune précondition filtrée n'est convertie en PASS.
+
+Vérification synthétique hors appareil :
+
+- Le prédicat historique a été reproduit comme faux vert avec zéro XML, zéro test et zéro complément, mais 21 captures et statuts à zéro.
+- Le cas synthétique historique 74 + 10 passait; le test hôte est maintenant établi à 75 + 10 pour le candidat suivant.
+- Douze cas négatifs sont détectés : XML manquant, illisible ou mal formé, zéro test, compte principal 74 ou 76, complément sans résultat parsable, compte complémentaire inattendu, journal complémentaire manquant, statut de précondition incohérent, ligne `Filtered` utilisée à tort comme exécution et nombre de filtres/prérequis incohérent.
+- `python3 -m py_compile` réussit pour les scripts du résumé et D3; `bash -n scripts/v62-complete-instrumentation.sh` et `git diff --check` réussissent.
+- `python3 scripts/test-v62-instrumentation-summary.py` : un cas positif et douze cas négatifs réussis, sans SDK, ADB ni appareil.
+
+## D3 — procédure préparée
+
+Le [protocole](s6-protocole-repos-coaching.txt) utilise maintenant `scripts/v622-d3-rest-recipe.py` pour deux fenêtres réelles de même durée demandée, au moins 60 s, avec écart mesuré maximal de 500 ms, même APK installée par SHA-256 et même état écran. Le mode coaching exige une attestation UI de l'agent, des plans proactifs, de la tâche périodique UsageStats et du consentement UsageStats, puis lit réellement l'AppOp Android en mode `allow`. Le mode local exige ces quatre états internes inactifs et AppOp `ignore`; `foreground` et `default` ne sont pas traités comme des états équivalents. La pause d'urgence doit déjà être inactive; le script ne l'efface jamais. Il n'active/désactive aucun consentement, n'efface ni ne réinitialise de données, et ne lance aucune requête. Il ne conserve que les résumés expurgés sous `/tmp/atlas-v622-s6/`.
+
+Mesure D3 : le candidat et le feu vert sont disponibles; deux tentatives ont été `BLOCKED` avant fenêtre à cause d'un processus AndroidTest résiduel et d'un parseur AppOps UID/paquet, tous deux diagnostiqués. Une fenêtre locale de 60 s a ensuite produit un relevé mais échoue au critère de comparabilité : l'AVD API 34 renvoie `mWakefulness=Asleep` sans `mInteractive`; le parseur host a été corrigé. CPU processus/threads et réseau UID sont indisponibles par les sources accessibles sur cet AVD. Aucune paire D3 qualifiante n'est encore obtenue. La pause a expiré naturellement et n'a pas été terminée ou effacée. Voir [s6-d3-blocked-pause-urgence.txt](s6-d3-blocked-pause-urgence.txt). Les assertions d'état coaching sont manuelles; l'AppOp système et le hash APK sont vérifiés par le script. Les appels ADB `devices`, commandes shell et `pull` sont bornés (20 s/45 s). Les deltas CPU comparent PID et `starttime`; un changement d'identité/ensemble ou une baisse de compteur rend la mesure indisponible. Les compteurs réseau décroissants sont également indisponibles, jamais ramenés à zéro. Une paire exige deux états écran connus et identiques. Les lignes JobScheduler ne sont pas des mesures de réveil. Batterie physique, base WorkManager et réveils/alarmes/wakelocks attribuables restent hors de portée de cette mesure AVD.
+
+Régressions hôte D3 ajoutées dans [scripts/test-v622-d3-rest-recipe.py](../../../scripts/test-v622-d3-rest-recipe.py) pour le routage de tous les appels ADB dans l'enveloppe temporisée, le traitement de `TimeoutExpired`, l'identité PID/`starttime`, les changements de threads, les compteurs CPU/réseau décroissants et l'état écran inconnu. Elles sont indépendantes du SDK et de tout appareil.
+
+Résultats hôte après correction :
+
+- `python3 scripts/test-v622-d3-rest-recipe.py` : 19 tests réussis, y compris le verdict de paire écrit `FAIL` pour un état écran inconnu, le cas où un compteur CPU/réseau baisse alors que le total agrégé augmenterait, les attestations de fond, la priorité du mode paquet AppOps et le fallback `mWakefulness`; aucune invocation SDK/ADB.
+- `python3 -m py_compile` sur les scripts D3 et de verdict : réussi.
+- `python3 scripts/test-v62-instrumentation-summary.py` : cas positif et 12 négatifs réussis; `bash -n scripts/v62-complete-instrumentation.sh`, `--help` D3 et `git diff --check` réussis.
+- Les 17 tests host n'invoquent SDK/ADB; les lectures ADB et deux blocages pré-mesure rapportés plus haut sont des opérations runtime séparées.
+
+## Mise à jour après livraison du candidat — 2026-10-21
+
+- Les patches E1/E2 test-only sont dans les sources du candidat reçu `ce10c968…` / `ea53e429…`; deux passages OpenClaw réels consécutifs, révocation, ACK et scénario hors ligne passent. Voir [preuve courante du candidat](s6-candidat-s5-s7-p1-01-final.txt).
+- Le compte principal du harnais est 75, établi avant l'exécution; résultat 75 exécutés, 1 échec Goal–Focus, 0 erreur/skip; les 10 compléments et 21 captures passent. La trace runtime ne fournit pas le texte réel; le DEX `ea53…` ne contient pas l'assertion actuellement dans le source. Le décalage source/binaire empêche d'attribuer cet échec à la production. Le verdict demeure `FAIL`.
+- D3 a une fenêtre locale valide de 60 s, puis `BLOCKED` avant coaching car l'allowlist UsageStats ATLAS ne s'active pas; AppOp et réglages temporaires sont restaurés. Android 17/API 37 n'a pas été relancé. Voir [preuve du candidat](s6-candidat-s5-s7-p1-01-final.txt) et [s6-d3-blocked-pause-urgence.txt](s6-d3-blocked-pause-urgence.txt).

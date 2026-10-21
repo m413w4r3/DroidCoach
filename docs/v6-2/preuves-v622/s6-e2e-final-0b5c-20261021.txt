@@ -1,0 +1,73 @@
+# S6 — rejeu E2E Gateway final AndroidTest 0b5c — 2026-10-21
+
+## Verdict
+
+- Disponibilité AVD API 34 : `PASS`, `atlas_v622_s1_api34`, API 34.
+- Identité de la paire installée avant le rejeu : `PASS`.
+- Scénario Gateway réel : `PASS` deux fois de suite, chacun `1 test / 0 échec / 0 erreur / 0 ignoré`.
+- Scénario local hors ligne : `PASS`, `1 test / 0 échec / 0 erreur / 0 ignoré`.
+- Préambule historique `V6RealAgentE2e` : `NOT_RUN` dans ce rejeu dédié. Son ancien échec demeure séparé ci-dessous.
+
+## Candidat vérifié
+
+APK app SHA-256 :
+`ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`
+
+APK AndroidTest SHA-256 :
+`0b5c3d087cbf856207cd85d7a4a5573d532a65d89394a54a6c7d16abcc0b3872`
+
+Les APK installées ont été lues via `pm path` puis `adb pull` avant et après les scénarios. Les deux empreintes correspondaient aux attentes aux deux contrôles. Aucun `install`, réinstallation, désinstallation, `pm clear`, wipe, build Gradle ou modification de source/test n'a été lancé.
+
+## Exécution et résultats
+
+L'AVD était arrêté au départ. Il a été démarré sans chargement ni sauvegarde de snapshot, sans wipe, puis identifié par `ro.boot.qemu.avd_name` et `ro.build.version.sdk`. Le candidat est resté installé pendant tout le rejeu.
+
+Commande AVD réellement lancée :
+
+```sh
+export ANDROID_HOME=/home/nill/Android/Sdk \
+  ANDROID_SDK_ROOT=/home/nill/Android/Sdk \
+  ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home \
+  ADB_SERVER_PORT=5037
+/home/nill/Android/Sdk/emulator/emulator -avd atlas_v622_s1_api34 -port 5580 \
+  -no-snapshot-load -no-snapshot-save \
+  > /tmp/atlas-v622-s6/openclaw-real-final-0b5c-20261021/avd-boot.log 2>&1
+```
+
+Le script S6 original `scripts/v622-s6-openclaw-real-recipe.sh` contient deux commandes `adb install`; il n'a donc pas été exécuté tel quel. Son SHA-256 est `50dfd221532a782b40279f00877f49a1177c458daa6206a8f27813f2661d18be`. Un runner temporaire sous `/tmp`, SHA-256 `986bcce1f72b927a6c18c7648fae5a24fa70d5147f3d8e94bb9d4605d4c10864`, a omis ces deux commandes, fixé la racine du dépôt et conservé l'exigence d'un unique AVD assigné en ligne. Les méthodes, arguments d'instrumentation, assertions et parseur de verdict sont inchangés. Toutes les commandes de test ciblaient explicitement `-s emulator-5580`.
+
+Un précontrôle strict du runner a été `BLOCKED` avant instrumentation, car l'inventaire ADB contenait l'AVD assigné et une autre cible en ligne. L'identifiant de cette cible n'a pas été affiché; aucune commande ne l'a ciblée. Le rejeu a ensuite utilisé le runner temporaire ci-dessus, avec la cible explicitement sélectionnée.
+
+Commande de rejeu (les valeurs d'URL et d'authentification restent dans la configuration locale, jamais dans les journaux ou cette preuve) :
+
+```sh
+export ANDROID_HOME=/home/nill/Android/Sdk \
+  ANDROID_SDK_ROOT=/home/nill/Android/Sdk \
+  ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home \
+  ADB_SERVER_PORT=5037 ANDROID_SERIAL=emulator-5580
+ATLAS_V622_S6_CANDIDATE_DIR=/tmp/atlas-v622-s6/quarantine-correction-20261021 \
+ATLAS_V622_CANDIDATE_APP_SHA256=ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a \
+ATLAS_V622_CANDIDATE_TEST_SHA256=0b5c3d087cbf856207cd85d7a4a5573d532a65d89394a54a6c7d16abcc0b3872 \
+ATLAS_V622_S6_E2E_CONTEXT_ONLY=1 \
+ATLAS_V622_S6_E2E_OUTPUT_DIR=/tmp/atlas-v622-s6/openclaw-real-final-0b5c-20261021/recipe-results \
+bash /tmp/atlas-v622-s6/openclaw-real-final-0b5c-20261021/recipe-no-install.sh \
+  >/dev/null 2>&1
+```
+
+L'identité installée a été relue avant et après avec `adb -s emulator-5580 shell pm path` pour chaque package, `adb -s emulator-5580 pull` sur l'APK de base et SHA-256 local. L'arrêt de fin a utilisé `adb -s emulator-5580 shell am force-stop` sur les deux packages, puis `adb -s emulator-5580 emu kill`.
+
+Résultats AndroidJUnitRunner :
+
+- `V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal` : passages 1 et 2 `PASS 1/1` consécutifs sur l'adaptateur réel `openclaw`; état connecté `false` avant la première requête puis `true` après les requêtes réelles.
+- Le test confirme deux ACK exécutés avec effet. Entre les passages, le PID applicatif est présent puis absent après `am force-stop` (`PASS`).
+- Après arrêt et vérification d'inaccessibilité du backend local, `V62RealGatewayContextBridgeTest#localGoalFocusFavoritesAndEmergencyPauseRemainAvailableAfterBackendStop` : `PASS 1/1`. Le processus a été arrêté puis recréé par Activity Manager avec le backend hors ligne (`PASS`).
+
+Le préambule `V6RealAgentE2eInstrumentationTest` a été exclu par `ATLAS_V622_S6_E2E_CONTEXT_ONLY=1`; il est `NOT_RUN` sur AndroidTest `0b5c`. Son échec historique s'est produit sur AndroidTest `8edb`, avant cette correction; faute de journal brut conservé, il reste `FAIL non classé`, sans cause attribuée et sans transfert à la présente paire. Voir [preuve du rejeu CLEAN antérieur](s6-rejeu-clean-20261021.txt).
+
+## Sorties expurgées et état final
+
+Les neuf fichiers de `/tmp/atlas-v622-s6/openclaw-real-final-0b5c-20261021/recipe-results/` contiennent uniquement hashes, comptes, états runner et étapes de processus. Aucun journal brut runner, URL, jeton, contenu d'objectif ou payload n'y est présent. Le répertoire temporaire brut du runner a été nettoyé à sa sortie.
+
+Après le contrôle des empreintes, les processus app et test ont été force-stoppés puis l'AVD a été arrêté avec `adb -s emulator-5580 emu kill`. Le serveur ADB 5037 reste disponible; l'AVD dédié est arrêté. Une autre cible ADB non-émulateur reste en ligne et n'a pas été ciblée.
+
+Aucune commande de remise à zéro Android/ATLAS n'a été lancée. Les scénarios ont exercé Goal/Focus/révocation; leur éventuelle persistance locale n'a pas été inspectée ni nettoyée. L'arrêt des processus et de l'AVD a conservé les données locales. Harnais complet, UsageStats et D3 : `NOT_RUN`.

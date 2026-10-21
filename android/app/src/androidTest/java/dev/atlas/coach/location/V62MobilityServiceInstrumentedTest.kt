@@ -1,15 +1,19 @@
 package dev.atlas.coach.location
 
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasApplication
 import dev.atlas.coach.app.AtlasController
+import dev.atlas.coach.test.BackendArgumentsAwareRunner
+import dev.atlas.coach.test.RequiresBackendArguments
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -21,9 +25,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /** Exercises the visible Activity start, persistent notification stop, and coarse-only store. */
-@RunWith(AndroidJUnit4::class)
+@RunWith(BackendArgumentsAwareRunner::class)
 class V62MobilityServiceInstrumentedTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -38,11 +45,25 @@ class V62MobilityServiceInstrumentedTest {
     }
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["location_fix_injection"],
+        reason = "requires a synchronized host injection while the visible mobility service is running",
+    )
     fun visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val controller = (composeRule.activity.application as AtlasApplication).controller
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         val store = LocationConsentStore.open(context)
+        val hostFixReceived = CountDownLatch(1)
+        val hostInjectionStartedUtcMillis = AtomicLong(0L)
+        val hostFixReceiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
+                if (intent.action == HOST_FIX_INJECTED_ACTION) {
+                    hostInjectionStartedUtcMillis.set(intent.getLongExtra(HOST_FIX_INJECTED_AT_EXTRA, 0L))
+                    hostFixReceived.countDown()
+                }
+            }
+        }
         assertNotNull(notificationManager)
         assertTrue(
             "Approximate location permission must be granted on the disposable AVD",
@@ -61,6 +82,7 @@ class V62MobilityServiceInstrumentedTest {
             )
         }
 
+        context.registerReceiver(hostFixReceiver, IntentFilter(HOST_FIX_INJECTED_ACTION), Context.RECEIVER_EXPORTED)
         try {
             composeRule.runOnUiThread { controller.setMobilityConsent(true) }
             store.setLocationSummarySharingEnabled(true)
@@ -77,12 +99,16 @@ class V62MobilityServiceInstrumentedTest {
                 withTimeoutOrNull(15_000) { MobilitySessionStatusStore.status.first { it.active && it.measurementCount > 0 } }
             }
             if (measured == null) {
-                Log.w(LOCATION_TAG, "MOBILITY_MEASUREMENT_UNAVAILABLE reason=no_reliable_coarse_fix_within_15000ms session_remained_active=true")
+                Log.e(LOCATION_TAG, "TEST_SYSTEM_BLOCKED reason=no_fresh_coarse_fix_within_15000ms session_remained_active=true")
             } else {
                 assertTrue("The foreground session must report a real measurement", measured.measurementCount > 0)
                 val measuredAt = requireNotNull(measured.lastMeasurementAtUtcMillis)
                 val measurementAgeMs = System.currentTimeMillis() - measuredAt
                 assertTrue("A measured mobility fix must satisfy production freshness", measurementAgeMs in 0L..LocationCaptureRequest.DEFAULT_MAX_AGE_MS)
+                assertTrue("The host must deliver its injection timestamp to the running instrumentation", hostFixReceived.await(5, TimeUnit.SECONDS))
+                val injectedAt = hostInjectionStartedUtcMillis.get()
+                assertTrue("The host injection timestamp must be positive", injectedAt > 0L)
+                assertTrue("A pre-injection cached fix must not satisfy the mobility scenario", measuredAt >= injectedAt)
                 val measurementSummary = store.recentLocationSummaries(System.currentTimeMillis()).lastOrNull()
                 assertNotNull("A measured mobility fix must leave a coarse zone summary", measurementSummary)
                 val saved = requireNotNull(measurementSummary)
@@ -102,9 +128,11 @@ class V62MobilityServiceInstrumentedTest {
                     saved.longitude,
                     injectedDistanceMeters,
                 )
-                assertTrue("The mobility summary must approximately correspond to the injected position within 25 km; distance_m=${injectedDistanceMeters.single()}",
-                    injectedDistanceMeters.single() <= MAX_INJECTED_FIX_DISTANCE_METERS)
-                Log.i(LOCATION_TAG, "MOBILITY_CAPTURED measurement_count=${measured.measurementCount} exact_fix_utc_ms=$measuredAt fix_age_ms=$measurementAgeMs accuracy_m=${saved.accuracyMeters}")
+                assertTrue(
+                    "The coarse mobility summary must remain within the historical 25 km bound; distance_m=${injectedDistanceMeters.single()}",
+                    injectedDistanceMeters.single() <= MAX_INJECTED_SUMMARY_DISTANCE_METERS,
+                )
+                Log.i(LOCATION_TAG, "MOBILITY_CAPTURED measurement_count=${measured.measurementCount} exact_fix_utc_ms=$measuredAt injected_at_utc_ms=$injectedAt fix_age_ms=$measurementAgeMs accuracy_m=${saved.accuracyMeters}")
             }
             val posted = notificationManager.activeNotifications.firstOrNull { it.id == 6231 }
             assertNotNull("The visible mobility service must publish a persistent notification", posted)
@@ -128,9 +156,14 @@ class V62MobilityServiceInstrumentedTest {
                 !MobilitySessionStatusStore.status.value.active &&
                     MobilitySessionStatusStore.status.value.lastCompletion?.stopReason == MobilitySessionStopReason.SHARING_REVOKED
             }
+            composeRule.waitUntil(10_000) {
+                notificationManager.activeNotifications.none { it.id == 6231 }
+            }
             assertFalse("Revoking sharing must remove the foreground notification", notificationManager.activeNotifications.any { it.id == 6231 })
             Log.i(LOCATION_TAG, "MOBILITY_SHARING_REVOCATION_STOPPED active=false notification_present=false")
+            assertNotNull("TEST_SYSTEM_BLOCKED: Android supplied no fresh coarse fix after synchronized injection", measured)
         } finally {
+            context.unregisterReceiver(hostFixReceiver)
             composeRule.runOnUiThread {
                 controller.stopMobilitySession()
                 controller.setMobilityConsent(false)
@@ -142,8 +175,10 @@ class V62MobilityServiceInstrumentedTest {
 
     private companion object {
         const val LOCATION_TAG = "ATLAS_V62_LOCATION"
+        const val HOST_FIX_INJECTED_ACTION = "dev.atlas.coach.location.V62_HOST_FIX_INJECTED"
+        const val HOST_FIX_INJECTED_AT_EXTRA = "injected_at_utc_ms"
         const val INJECTED_LATITUDE = 48.123456
         const val INJECTED_LONGITUDE = 2.123456
-        const val MAX_INJECTED_FIX_DISTANCE_METERS = 25_000f
+        const val MAX_INJECTED_SUMMARY_DISTANCE_METERS = 25_000f
     }
 }

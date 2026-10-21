@@ -1,0 +1,39 @@
+ATLAS V6.2.2 — diagnostic E2E refus d'action (S6)
+
+Date de diagnostic : 2026-10-21, heure locale Europe/Paris. Les rejeux ont utilisé sans reconstruction les APK hors build dont les SHA-256 sont `dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9` et `3b7757f382f0e733d90c7765343da0128bd00ab6ffdca1da1d960ebc9f48c524`. ADB 5037, uniquement l'AVD assigné `atlas_v622_s1_api34` API 34; zéro appareil physique connecté. Gateway local réel joignable, adaptateur OpenClaw, bearer éphémère mode 600 et DB temporaire; aucun jeton, prompt, réponse, paramètre texte, effet libre ni payload n'est conservé.
+
+## Cause constatée
+
+Le test réel termine par `setEmergencyPause()` après avoir avancé son horloge Focus de 25 minutes. Cette pause est conservée 30 minutes après l'heure de cette horloge, soit environ 55 minutes après le début de la fixture. `AndroidEmergencyPauseStore` la persiste dans `atlas_usage_observation_v1`; l'initialisation d'`AtlasController` la recharge dans la politique locale. Le helper `newIsolatedController(clearState = true)` vidait l'état racine, les réglages de synchronisation, l'inbox et le journal d'effets, mais pas cette préférence isolée. Les tests rejoués dans les minutes suivantes héritaient donc de la pause. `MandateVerifier` refuse explicitement toute action sauf `focus.pause` quand `emergencyPaused`; `home.set_directive` est ainsi rejetée sous `EMERGENCY_PAUSE`.
+
+Les deux anciens résumés (`20261020T225427Z` et `20261020T225535Z`) ne contiennent que l'assertion `EXECUTED` attendue et l'état terminal; ils ne préservent pas l'inbox/journal de ces deux exécutions. L'attribution rétrospective est confirmée par une séquence contrôlée sur les mêmes APK : un premier passage propre réussit et laisse la pause; le suivant est rejeté, puis deux rejeux indépendants reproduisent chacun la même raison structurée. Cette limitation de conservation historique reste explicite.
+
+## Reproduction structurée des deux refus
+
+Répertoire minimal : `/tmp/atlas-v622-s6/e2e-refusal-diagnostic-20261020T233034Z/`. Les deux fichiers `run-1-structured.json` et `run-2-structured.json` sont des extractions synthétiques expurgées, référencées par `SHA256SUMS.txt` (SHA-256 du manifeste `ab2523da06f68eb20834a05c3ca15fbd34d90192d687850b1b77210d75f32dec`); les logs runners, la base DB, le bearer et les logs backend bruts ont été supprimés après parsing.
+
+| Champ au dispatch | Rejeu 1 | Rejeu 2 |
+|---|---:|---:|
+| Résultat runner | 1 test, 1 assertion FAIL | 1 test, 1 assertion FAIL |
+| Inbox / journal | `REJECTED` / `REJECTED`, phase `complete` | `REJECTED` / `REJECTED`, phase `complete` |
+| Raison MandateVerifier | `EMERGENCY_PAUSE` | `EMERGENCY_PAUSE` |
+| Action canonique | `home.set_directive` | `home.set_directive` |
+| Schéma des paramètres | valide, clés `body`, `primary_action`, `title` | valide, mêmes clés |
+| ID de proposition (empreinte SHA-256 tronquée) | `c4f3aa98bb7f` | `87c7b347d45d` |
+| Mandat | version proposition 15 = version locale 15; IDs égaux | version proposition 15 = version locale 15; IDs égaux |
+| Action permise / quota avant dispatch | oui; 0/50 changements exécutés | oui; 0/50 changements exécutés |
+| Dates de proposition | créée le 2026-10-20 UTC; TTL 86 400 s; 84 901 s avant échéance au dispatch | mêmes bornes |
+| Mandat expiré | non; échéance 2100-01-01 UTC | non; échéance 2100-01-01 UTC |
+| Pause persistée au dispatch | active, 1 654 s restantes | active, 1 643 s restantes |
+| ACK backend | `rejected` accepté, inbox `ack_pending=false` | `rejected` accepté, inbox `ack_pending=false` |
+
+Pour ces deux nouvelles exécutions structurées, le code du refus est déterministe et ne provient ni du TTL, ni des dates, ni de la version, ni de l'action non permise, ni du quota. La configuration de mandat n'a pas été changée pour obtenir ce résultat. Les journaux complets des rejeux antérieurs n'existent plus; aucune cause ne leur est attribuée rétrospectivement.
+
+## Corrections préparées, non appliquées
+
+Deux patches de fixture uniquement sont sous `/tmp/atlas-v622-s6/staging/` :
+
+- `R-S6-E1-goal-link.patch` appelle `startFocus(plan, goalId = goal.id)`, vérifie le lien dans SharedPreferences immédiatement, constate `RUNNING`/progression 0 avant l'avance d'horloge, puis vérifie session finie et lien encore stocké après 25 minutes. Aucun lien manuel après coup.
+- `R-S6-E2-isolated-emergency-pause.patch` efface seulement la pause d'urgence dans le `ContextWrapper` isolé, uniquement quand `clearState=true`; il ne touche pas la préférence de l'application réelle et ne change ni production ni mandat.
+
+Ce relevé décrit l'état avant la livraison du candidat S5/S7-P1-01. Ces patches test-only sont maintenant intégrés au candidat et validés par deux E2E consécutifs; voir [s6-e2e-candidat-s5-final.txt](s6-e2e-candidat-s5-final.txt). Aucun code de production n'a été modifié par ces patches.

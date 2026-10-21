@@ -1,0 +1,26 @@
+ATLAS V6.2.2 — harnais complet API 34, premier passage
+Date : 2026-10-21
+AVD : atlas_v622_s1_api34, API 34, ADB 5037 / emulator-5580.
+APK app SHA-256 : dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9.
+APK androidTest SHA-256 : 4fd3b5272fbc22dbd95fd28bd96f51c408575d8bf8e7bf08afd4855b71f4cd33.
+
+`bash scripts/v62-complete-instrumentation.sh` : 75 cas runner, 73 PASS,
+2 FAIL, 0 erreur, 0 ignoré. Dix reprises ciblées PASS/10; 21/21 captures PNG
+validées. Les nouvelles classes incluent GoalFocus 7/7, controller publication
+2/2, notification publisher 2/2, AgentPersistence 6/6 et Worker 2/2.
+
+Échecs observés (aucun transformé en succès) :
+- `LotEUiInstrumentationTest.proposedFocusRequiresTapAndSupportsPauseResumeFinish` :
+  après l'appui Démarrer, l'assertion attend le titre de tâche, mais la session
+  vaut `null`. Rejoué isolément : 1 cas, 1 échec identique. L'état de refus du
+  contrôleur doit être rendu plus diagnostiquable; aucun code de production
+  n'est modifié ici.
+- `V62MobilityServiceInstrumentedTest.visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail` :
+  le run générique a reçu une mesure, puis a échoué faute d'horodatage de fix
+  injecté par l'hôte. Ce scénario dépend de l'injection synchronisée et sera
+  réservé au script de recette visible. Le résultat ne constitue pas un PASS
+  d'acquisition GPS.
+
+Sorties complètes et captures :
+`/tmp/atlas-v622-s6/complete-instrumentation-original/20261020T223238Z/`.
+Reproduction isolée LotE : `/tmp/atlas-v622-s6/repro-lote-focus-title.log`.

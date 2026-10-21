@@ -1,0 +1,88 @@
+ATLAS V6.2.2 — suivi S6 ACK sur la paire S5 finale
+Date : 2026-10-21
+Branche / HEAD : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Note de chronologie : cette preuve décrit le premier préflight bloqué sur
+ADB 5037. Un handoff ultérieur a autorisé l'AVD via le serveur partagé après
+confirmation du registre assigné; les deux tests ont alors passé. Le résultat
+final est consigné dans [la preuve runtime](s6-ack-api34-runtime-20261021.txt).
+
+Périmètre
+---------
+Vérifier uniquement ces deux méthodes AndroidTest sur l'AVD jetable API34 :
+1. dev.atlas.coach.app.ProactiveControllerPublicationAuthorizationInstrumentationTest#sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate
+2. dev.atlas.coach.app.ProactiveControllerPublicationAuthorizationInstrumentationTest#proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient
+
+Le fichier déclare `package dev.atlas.coach.app`; les FQCN ci-dessus sont
+confirmés. Le premier cas doit observer le GET de prévol, refuser le POST ACK
+après retrait puis ré-opt-in à la même horloge, garder la requête générique
+autorisée, bloquer l'époque à la sérialisation du body et laisser `ackPending`.
+Le second doit recevoir accepted puis executed sur le loopback, avec un seul
+dispatch et `ackPending=false`.
+
+Paire reçue et vérifiée localement
+---------------------------------
+Répertoire candidat : `/tmp/atlas-v622-s5-ack-positive-final-20261021/`
+
+- app SHA-256 : `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- AndroidTest SHA-256 : `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb`
+- manifeste `sources-tests-scripts.sha256`, 234 entrées, SHA-256 :
+  `87d05e9c17da0f4c64ceaaf452548a62e3ce49734b57d8052c281324d5e62e98`
+- `sha256sum -c` : 234/234 entrées `OK`, zéro échec.
+
+Préflight API34 et blocage
+-------------------------
+Contrôles en lecture seule, avant toute installation :
+
+- ADB 5037 : serial assigné `emulator-5580` absent; aucun autre émulateur en
+  ligne; une cible non-émulateur était en ligne (`device`). Son identifiant
+  n'est pas consigné et aucune commande ne l'a ciblée.
+- Registre AVD : un seul profil, `atlas_v622_s1_api34`.
+- Processus emulator/qemu : zéro; l'AVD assigné est arrêté.
+- Daemons Gradle, Kotlin et wrappers : zéro; aucun build n'a été lancé.
+
+Le prérequis d'isolement « absence d'autres appareils » n'est pas satisfait.
+Statut de l'environnement : `BLOCKED`. Pour préserver la cible non-émulateur,
+l'AVD n'a pas été démarré et aucun `adb -s ...` vers un appareil n'a été lancé.
+
+Statuts des étapes
+------------------
+
+| Élément | Statut | Résultat |
+| --- | --- | --- |
+| Hashes candidat locaux | PASS | App, AndroidTest et manifeste exacts ci-dessus |
+| FQCN / noms des deux méthodes | PASS | Package source `dev.atlas.coach.app` confirmé |
+| Identité live AVD / serial | BLOCKED | AVD enregistré mais arrêté; serial absent de l'inventaire |
+| Absence d'autres appareils | BLOCKED | Une cible non-émulateur en ligne; non ciblée |
+| Installation de la paire | NOT_RUN | Aucun APK installé; pas de hash installé revendiqué |
+| Course retrait/ré-opt-in et ACK | NOT_RUN | Méthode non exécutée; aucun résultat runtime |
+| ACK positif accepted → executed | NOT_RUN | Méthode non exécutée; aucun résultat runtime |
+| Ancienne paire app `ce10…` / AndroidTest `893da1…` | NOT_RUN | Aucun rejeu de cette paire |
+
+Aucun `pm clear`, désinstallation, wipe, build, test, Gateway réel ou autre
+scénario n'a été exécuté. Les méthodes ci-dessus sont présentes dans le DEX
+d'après les éléments de livraison S5, mais cette présence n'est pas un résultat
+d'exécution.
+
+Commandes exécutées
+-------------------
+
+  sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug.apk \
+    /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug-androidTest.apk
+  sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+  wc -l /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+  sha256sum -c /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
+  adb -P 5037 devices  # résumé local expurgé; aucun serial non assigné consigné
+  /home/nill/Android/Sdk/emulator/emulator -list-avds
+  ps -eo comm=,args=  # filtrage local des processus emulator/qemu
+
+Les rapports S5 consultés sont `docs/v6-2/INTEGRATION_V622.md` et
+`docs/v6-2/preuves-v622/s5-b2-notifications-validation.txt`. Aucun changement
+de source, test ou APK n'a été effectué.
+
+Suite à l'instant du premier préflight
+-------------------------------------
+L'AVD était alors laissé arrêté et les tests `NOT_RUN`. La consigne a ensuite
+été remplacée par le feu vert explicite pour le run ciblé décrit dans la
+preuve runtime ci-dessus. Cette chronologie ne modifie pas l'acceptation
+antérieure de la paire `ce10…` / `893da1…`.

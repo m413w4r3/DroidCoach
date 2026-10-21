@@ -1,0 +1,27 @@
+ATLAS V6.2.2 — E2E réel OpenClaw sur le candidat figé S5/S7-P1-01
+Date : 2026-10-21
+Statut : 2 passages consécutifs PASS, puis test local hors ligne PASS.
+
+HISTORIQUE — ces passages ont utilisé l'APK AndroidTest `ea53e429…`. Ils prouvent le rejeu réel de cette paire antérieure uniquement; la séquence finale a été rejouée sur l'AndroidTest corrigé `8edb71a8…` et est consignée dans `s6-candidat-s5-corrige-final.txt`.
+
+## Identité et méthode
+
+- APK app : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- APK AndroidTest : `ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c`.
+- Empreintes recalculées avant chaque E2E; les APK installées ont été relues et correspondent à la paire candidate.
+- Le scénario utilise le Gateway OpenClaw local configuré, le backend réel et l'adaptateur `openclaw`; aucun mock Gateway.
+- Le script corrige le nom de la méthode hors ligne et force-stoppe puis relance l'Activity par Activity Manager après le test. SHA-256 du script exécuté : `4f96496c013cf739d3cc66f201c106600770e52b461f43671db1f824ae659181`.
+- Bearer temporaire et base isolée conservés uniquement sous `/tmp/atlas-v622-s6/`, supprimés par le nettoyage du script; aucune valeur de secret ni payload privé n'est dans cette preuve.
+
+## Résultats
+
+- Passages Gateway consécutifs : 2/2, chacun 1 test, 0 échec/erreur/skip.
+- Le processus Android a été force-stoppé entre les deux passages; PID présent avant et absent après chaque arrêt contrôlé.
+- Chaque passage valide le nouveau flux Goal–Focus : `startFocus(plan, goalId)` crée le lien durable immédiatement, progression 0 avant l'avance de l'horloge; l'horloge contrôlée termine ensuite 25 minutes sur une cible de 120 minutes et l'état persistant indique 25/120.
+- Le scénario réel couvre réponse Gateway, proposition, vérification du mandat et de l'action, effet et ACK; il révoque ensuite `goals` et confirme que la requête suivante n'inclut plus cette catégorie.
+- Résumé backend : 2 ACK d'effet exécutés.
+- Backend local arrêté et endpoint de santé inaccessible avant le scénario hors ligne.
+- Test hors ligne Focus/Goal/favori/pause : 1/1 PASS, assertion réellement exécutée.
+- Après le test d'instrumentation, un second `am force-stop` a confirmé l'absence du processus; `am start -W` a relancé l'activité avec backend toujours arrêté et un PID a été observé.
+
+Résumés expurgés : `/tmp/atlas-v622-s6/openclaw-real-candidate-ce10c968-final/`. L'ancien échec « 0 tests » était un nom de méthode inexistant; il n'est pas réutilisé comme résultat. L'ancien refus `EMERGENCY_PAUSE` n'est pas attribué rétrospectivement sans ses journaux complets; ces deux passages nouveaux sont les seuls utilisés pour le statut ci-dessus.

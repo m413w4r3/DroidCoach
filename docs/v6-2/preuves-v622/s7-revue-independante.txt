@@ -1,0 +1,407 @@
+ATLAS V6.2.2 — contre-revue indépendante S7
+Date : 2026-10-21 (Europe/Paris)
+Branche / HEAD : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+PÉRIMÈTRE ET GARDE-FOUS
+  Reprise statique des diffs suivis/non suivis et assertions liées aux constats
+  S7-P1-01..03 et S7-P2-01..04, puis contre-revue du handoff S5 ACK final.
+  Aucune édition de production, test ou script
+  partagé. Modifications S7 limitées à REVUE_V622.md et ce rapport.
+  Le rejeu JVM/lint de cette mise à jour couvre le manifeste S5 exact.
+  S6 a exécuté les deux méthodes ACK sur AVD API34 puis les mêmes méthodes sur
+  un Pixel 9 Pro XL API37. La course passe sur les deux cibles; le chemin positif
+  passe en API34 mais échoue de façon reproduite en API37, sans cause attribuée.
+  S7 n’a lancé aucun adb/AVD ni nouvel essai. Gate 5 reste FAIL; P1-01 est fermé
+  pour la course testée et le constat P1-04 reste ouvert pour le chemin positif.
+
+IDENTITÉ DU SNAPSHOT S7 PRÉCÉDENT — PAIRE CE10/893DA1
+  Répertoire S6 : /tmp/atlas-v622-s6/quarantine-exact-restore-20261021/
+  app-debug.apk SHA-256 :
+    ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a
+  app-debug-androidTest.apk SHA-256 :
+    893da1cf4b9750f868cc943e4e5e01ac86409ed75455c12a5c20d781d7195526
+  Les deux valeurs concordent avec les artefacts extraits et les identifiants
+  figurant dans s6-revocation-fixture-exact-restore-20261021.txt.
+
+S7-P1-01 — ÉPOQUE, RÉVOCATION, RÉOPT-IN ET FRONTIÈRES D’EFFET
+  ÉTAT À LA PREMIÈRE PASSE SUR CE10/893DA1 : PARTIELLEMENT CORRIGÉ; ACK HTTP RESTAIT BLOQUANT.
+  Ce constat historique est corrigé sur le handoff S5 `7c6c/542280` ci-dessous.
+
+  Chemin revu :
+  - ProactiveCoachCoordinator.runDue capture l’époque à la ligne 85, avant
+    isEnabled, purge, consentement, zone, horloge et préparation scheduler.
+  - ProactiveCoachScheduler.reserveDue lie cette époque au lot exact avant sa
+    consommation et réserve durable (lignes 590–621). Il revalide avant et juste
+    avant le commit; runDue revalide après persist avant requestPlan. Un lot périmé
+    est consommé/tombstoné, sans reprise sous génération postérieure.
+  - Le contrôleur vérifie l’époque sur le HTTP plan (`requestStillAuthorized`,
+    AtlasController.kt:1615–1627; AgentApiClient.kt:162–179), à la réponse avant
+    merge, avant dispatch et avant ACK scheduling (AtlasController.kt:1631–1672).
+    Le merge inbox, le suivi backend, le dispatch préautorisé et persist sont
+    chacun sous `runIfProactiveAuthorizationCurrent` / `runWhileAuthorized`
+    (AtlasController.kt:1653–1667, 1980–2012). Les retraits incrémentent les
+    générations sous `proactiveAuthorizationEffectLock`; le contrôle final
+    vérifie générations, mandat, état proactif et catégories consenties
+    (AtlasController.kt:1425–1491).
+  - Le scheduler revalide après transport, avant réservation notification et
+    avant show; le publisher revalide sous `PUBLICATION_LOCK` immédiatement avant
+    `notify` (ProactiveCoachScheduler.kt:404–445;
+    ProactiveCoachNotificationPublisher.kt:20–60). Le retrait annule uniquement
+    les notices de son canal. La limite notify/cancel Binder déjà entré reste.
+
+  Tests présents dans les sources du snapshot `ce10/893da1` au moment de cette
+  première revue :
+  - ProactiveCoachSchedulerTest.kt:615–681 injecte le retrait/réopt-in au commit
+    de réservation, vérifie zéro transport/notification, tombstone, statut refusé
+    et zéro replay après recréation scheduler.
+  - ProactiveControllerPublicationAuthorizationInstrumentationTest.kt:53–123
+    couvre réponse tardive et révocation après retour transport avant merge;
+    :126–220 couvre la vraie écriture root de réservation, retrait/réopt-in à
+    cette barrière, zéro transport/inbox/dispatch/ACK/notif et zéro replay après
+    recréation contrôleur.
+  - ProactiveCoachNotificationPublisherInstrumentationTest.kt:92–242 couvre
+    gate faux, retrait avant gate, sérialisation gate/cancel et retrait après
+    notify déjà accepté.
+
+  Course ACK restante dans ce snapshot (avant le correctif S5) :
+  - Sur le snapshot `ce10/893da1`, sendPendingAgentAcks revalidait l’autorisation à AtlasController.kt:2054, mais
+    l’appel ACK commence après le hook observer à :2055 et passe
+    `client.acknowledge` à :2056. Pour les ACK `executed`, un second appel se
+    trouve à :2060–2062.
+  - L’ancienne AgentApiClient.acknowledge (AgentApiClient.kt:206–213) n’acceptait pas l’époque
+    ni callback `allowSend`; il passe un JSONObject déjà construit au request
+    commun. Ce request vérifie seulement `requestAllowed` générique à :234, avant
+    ouverture connexion et écriture du corps à :251. AtlasController construit
+    le client avec `requestAllowed = ::isAgentRequestAllowed` (:1352–1386), pas
+    avec le jeton proactif.
+  - Dans ce snapshot, si le retrait/réopt-in se produisait après le dernier test d’époque et avant
+    l’appel réseau, le jeton est obsolète, mais le contrôle générique peut voir
+    le consentement réactivé et autoriser l’ancien ACK. Le changement d’identité
+    du client au rafraîchissement ne ferme pas le défaut : le worker détient
+    encore l’ancien objet, dont `requestAllowed` lit l’état courant. Le hook de
+    test après le contrôle était disponible à :2055/:2061; aucun test de ce
+    snapshot n’injectait le retrait à cette frontière ni ne vérifiait l’absence
+    d’ACK serveur.
+  - Correction demandée à cette étape : propriétaires S2 + S5, autorisation epoch-aware portée
+    jusqu’à l’écriture HTTP pour chaque ACK, et test déterministe retrait puis
+    réopt-in aux frontières `accepted` et `executed`, assertant que l’ancien ACK
+    n’arrive pas côté serveur et reste en attente localement.
+
+  Recontrôle des assertions ACK : les tests de contrôleur affectent le hook
+  `proactiveAckAttemptObserverForTesting` à un simple incrément de compteur. Ils
+  vérifient l’absence d’ACK pour une réponse périmée avant merge, mais aucun test
+  ne révoque dans ce hook ni ne vérifie la réception serveur à la frontière
+  `accepted`/`executed`. Le hook expose la fenêtre; il ne la couvre pas.
+
+  Statut de preuve : anciens tests ciblés qui vérifient une révocation avant
+  réponse ne couvrent pas cette fenêtre ACK. La revue de cette course reste
+  statique; aucune reproduction ACK dédiée n’a été lancée, et le rejeu JVM/lint
+  ultérieur ne couvre pas cette frontière.
+
+S7-P1-02 — TEST GATEWAY ET TRANSACTION GOAL–FOCUS
+  RÉSOLU SUR LE CODE ET LA PAIRE EXACTE.
+
+  V62RealGatewayContextBridgeTest.kt:103–128 appelle désormais
+  startFocus(..., goalId = goal.id), lit Focus RUNNING, lien Goal présent et
+  progression dérivée 0/120 avant l’horloge; le root isolé lu sur disque confirme
+  Focus RUNNING et lien committé. Après avance de 25 minutes, le test vérifie
+  25/120 en mémoire et sur le root. Aucun linkFocusToGoal postérieur n’est
+  appelé. Le commit initial est donc l’événement de liaison testé.
+
+S7-P1-03 — ÉCHECS HISTORIQUES SÉPARÉS DU CANDIDAT
+  RÉSOLU POUR L’ATTRIBUTION CE10/893DA1; HISTORIQUE NON CLASSÉ CONSERVÉ.
+
+  La preuve S6 de la paire exacte dit : Gateway réel 2 × PASS 1/1, deux ACK
+  exécutés avec effet; hors-ligne 1/1 PASS. Le préambule V6RealAgentE2e est
+  NOT_RUN (context-only). Les FAIL observés auparavant sur 8edb restent
+  historiques/non attribués faute de journaux complets; aucune cause n’est
+  déplacée sur ce10/893da1, et ils ne sont pas transformés en PASS rétrospectif.
+  L’E2E courant utilise AgentApiClient et l’adaptateur OpenClaw réel de la recette;
+  les propositions synthétiques des tests de contrôleur et le scénario local
+  hors ligne restent des fixtures/adaptateurs distincts. Focus accéléré, pas
+  25 minutes physiques.
+
+  Artefacts S6 de rejeu relus (sorties expurgées, aucun secret/payload) :
+  - 1-realGateway...-result.txt : tests=1 failures=0 errors=0 ignored=0.
+  - 2-realGateway...-result.txt : tests=1 failures=0 errors=0 ignored=0.
+  - backend-ack-summary.txt : executed_ack_with_effect_count=2.
+  - offline result : tests=1 failures=0 errors=0 ignored=0.
+  - e2e-results.txt SHA-256 :
+    7ffd894e489514d9d615876273abfe568dfbc782bb42f6f9cde3be60d6ec26f4.
+  - backend-ack-summary.txt SHA-256 :
+    b76423c3abdd79236361d2710c03bef340ffda9dd5519ee2e5c9722e2bfb85b9.
+  Résumé de backend réel :
+  /tmp/atlas-v622-s6/openclaw-real-final-893da1-rerun-20261021/recipe-results/.
+
+S7-P2-01 — COMMENTAIRE WORKER
+  RÉSOLU. ProactiveCoachWorker.kt:28–34 décrit désormais l’époque de bout en
+  bout jusqu’au gate final et la limite notify/cancel. Le statut P1-01 de cette
+  première passe était historique; l’ACK est couvert sur la paire S5 ci-dessous.
+
+S7-P2-02 — MESSAGE APRÈS ÉCHEC COMMIT FOCUS
+  RÉSOLU. AtlasController.kt:3170–3175 indique « Focus non démarré. Aucun lien à
+  l’objectif n’a été enregistré. » GoalFocusStartInstrumentationTest.kt:387–412
+  et GoalFocusStartTransactionTest.kt:102–127 vérifient message, root inchangé,
+  session/lien absents, aucune alarme ou événement.
+
+S7-P2-03 — SYNTHÈSE DU HARNAIS / XML / COMPTES
+  CORRIGÉ DANS LE CODE; VALIDATION RUNTIME PAR S7 NOT_RUN.
+
+  v62-instrumentation-summary.py fixe 75 tests principaux, 10 complémentaires,
+  21 captures. Il signale XML absent/invalide, zéro ou nombre inattendu de cas,
+  doublons, failure/error/skip, journal complémentaire manquant/non parsable ou
+  comptage incorrect, préconditions et nombre de filtres incohérents. Les
+  filtres sont distincts des exécutions et produisent zéro PASS. Le test Python
+  test-v62-instrumentation-summary.py contient un cas témoin du faux vert zéro
+  XML historique, une baseline positive et 12 mutations négatives (XML manquant,
+  répertoire illisible, malformé, zéro, compte bas/haut, compléments absents,
+  mal parsés ou discordants, statuts/préconditions/filtres incohérents).
+  Audit S7 des assertions : PASS. Aucun lancement Python de ces tests par S7; le
+  harnais complet avec dix compléments sur la paire exacte reste NOT_RUN.
+
+S7-P2-04 — D3
+  NOT_RUN SUR LA PAIRE EXACTE; AUCUN PASS COMPARATIF.
+
+  La preuve S6 exacte porte D3 `NOT_RUN`. Une précédente fenêtre locale de 60 s
+  et un essai coaching bloqué avant la mesure ne font pas deux modes consentis
+  comparables. Le vrai TalkBack, la navigation physique et l’autonomie batterie
+  restent `NOT_RUN`; les blocages de consentement D3 des candidats précédents
+  ne sont pas transférés à la présente paire comme résultat de mesure.
+
+FIXTURE ATLASLAUNCHTEST — RESTAURATION EXACTE / @AFTER
+  PASS 1/1 POUR atlas_agent_revocation_barrier; PORTEE LIMITÉE À CETTE PRÉFÉRENCE.
+
+  AtlasLaunchTest.kt:44–71 capture toutes les entrées de SharedPreferences et
+  clone les Set<String>. Le test :363–370 affecte le snapshot avant la première
+  écriture neutre. @After efface uniquement le fichier dédié, restaure chaque
+  type pris en charge, commit(true) et compare exactement preferences.all au
+  snapshot. Un snapshot vide n’est pas confondu avec absence de snapshot. La
+  preuve S6 rapporte l’égalité exacte passée après le test ciblé 1/1.
+  Aucun échec artificiel après neutralisation n’a été injecté; l’exécution
+  d’@After dans ce cas repose sur le cycle JUnit, pas sur une reproduction S7.
+  La fixture @Before clearDemoState() efface atlas_local_state et les cas peuvent
+  y écrire des données synthétiques. S6 dit que l’état app complet sur l’AVD
+  arrêté n’a pas été restauré ni inspecté. La restauration exacte n’est donc pas
+  revendiquée pour les données complètes du package.
+
+STATUTS DE VALIDATION RETENUS — SNAPSHOT ANTÉRIEUR CE10/893DA1
+  Candidat exact ce10/893da1 :
+    ciblé restauration: PASS 1/1
+    suite AndroidTest principale: PASS 75/75, 0 failure/error/ignored
+    deux captures largeur isolées après réglage 360 dp: PASS 2/2
+    Gateway réel: PASS 2 × 1/1, ACK avec effet = 2
+    scénario local après arrêt backend: PASS 1/1
+    préambule V6RealAgentE2e context-only: NOT_RUN
+    harnais complet + 10 complémentaires: NOT_RUN
+    D3: NOT_RUN
+  Premier run principal de la reprise : 75 cas au viewport 411 dp, deux échecs
+  d’assertion largeur 360/411 puis terminaison hôte 139. Conservé comme run à
+  précondition viewport invalide, pas comme verdict produit; les deux captures
+  fautives ont passé isolément puis la suite corrigée 75/75 à 360 dp.
+  Le nombre 75 est calculé dans la preuve S6 : 89 méthodes @Test – 4 Gateway
+  exécutées à part – 10 filtres explicites. Les filtres ne sont pas des passes.
+  Les anciens résultats 74+10 et 19 tests ciblés restent historiques et ne sont
+  pas attribués à cette paire. Le `75/75` ci-dessus est le runner principal,
+  pas le harnais complet avec compléments.
+
+  Autres domaines sur le snapshot antérieur `dbce…` :
+    JVM: PASS 315/315, zéro failure/error/skipped.
+    Lint: PASS, exit 0, 53 avertissements, zéro erreur.
+    Ces résultats étaient limités à ce snapshot et ne couvraient pas le manifeste
+    S5 `87d05…` à la date de cette première passe. La qualification mise à jour
+    de la paire S5 est consignée en fin de rapport.
+  Commande Gradle exacte:
+    ./gradlew --rerun-tasks :app:testDebugUnitTest :app:lintDebug --console=plain
+  Résultat: BUILD SUCCESSFUL en 2 min 19 s; 33 tâches exécutées. Les 57 rapports
+  XML JVM totalisent 315 tests, zéro échec, erreur ou skip. Compilation des
+  tests: 7 avertissements Kotlin de casts non vérifiés, pas d’erreur.
+  SARIF lint: 53 diagnostics de niveau warning et zéro error, répartis entre
+  UseKtx (26), ObsoleteSdkInt (9), GradleDependency (7), SetTextI18n (6),
+  AndroidGradlePluginVersion (1), ApplySharedPref (1), NewerVersionAvailable (1),
+  OldTargetApi (1) et RedundantLabel (1). Pas de comparaison de baseline.
+  Les anciens comptes 313 JVM + lint sont historiques et remplacés pour le
+  snapshot antérieur par ce rejeu. Le rapport lint est dans
+  android/app/build/reports/lint-results-debug.sarif.
+    pytest backend de référence: 66 passed, 1 skipped, baseline précédente,
+    non rejouée par S7.
+    Android 17: BLOCKED avant installation; 17 scénarios A2 et 11 tests ciblés
+    NOT_RUN.
+    appareil physique, vrai TalkBack et mesures batterie physique: NOT_RUN.
+
+DIGEST SOURCES / TESTS / SCRIPTS — SNAPSHOT S7 ANTÉRIEUR
+  Commande de digest (ne lit que sources/scripts, pas les builds) :
+    rg --files android/app/src scripts | sort | xargs sha256sum | sha256sum
+  Valeur relevée pendant la contre-revue :
+    dbce6a4e3d40d64853e304a8f84c181a8bf3c04a9aae5f6f08720009bac48003
+  Relecture après validation : même valeur, 223 fichiers. Aucun changement S7 de
+  source/test/script; digest courant confirmé. Les deux APK locales restent aux
+  SHA-256 déclarés en tête. Le daemon Gradle démarré pour le rejeu a été arrêté
+  avant restitution; aucun ADB/AVD n’a été touché.
+
+VERDICT DU SNAPSHOT S7 ANTÉRIEUR
+  Gate 5 = FAIL jusqu’à la fermeture P1-01 sur le transport ACK. P1-02, P1-03,
+  P2-01 et P2-02 sont fermés sur la paire exacte/source actuelle. P2-03 est
+  corrigé statiquement, mais le self-test du synthétiseur n’a pas été relancé par
+  S7. D3 et validations physiques sont NOT_RUN et demeurent des limites visibles.
+
+CONTRE-REVUE S7 — HANDOFF S5 ACK FINAL `7C6C/542280`
+Mise à jour après les preuves S6 API34 et Pixel API37 — 2026-10-21.
+Branche / HEAD documentaire : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388.
+
+Identité du candidat
+--------------------
+  Répertoire : /tmp/atlas-v622-s5-ack-positive-final-20261021/
+  app-debug.apk SHA-256 :
+    7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea
+  app-debug-androidTest.apk SHA-256 :
+    542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb
+  Manifeste sources-tests-scripts : 234 entrées, SHA-256
+    87d05e9c17da0f4c64ceaaf452548a62e3ce49734b57d8052c281324d5e62e98.
+  S6 rapporte 234/234 vérifiés. S7 a revalidé 234/234 avant et après Gradle.
+
+Préflight final S6, installation et identité API34
+--------------------------------------------------
+  La preuve antérieure via 5037 était un préflight incomplet; le serveur isolé
+  5038 n’avait pas pu terminer l’inventaire (`LIBUSB_ERROR_BUSY`). Ces résultats
+  initiaux restent documentés dans les preuves S6, mais sont supersédés pour le
+  statut final ACK par s6-ack-api34-runtime-20261021.txt.
+
+  S6 a vérifié explicitement ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home et
+  trouvé le profil assigné atlas_v622_s1_api34. Il a démarré sans wipe l’AVD
+  emulator-5580 sur le port 5580; l’inventaire en lecture seule ne montrait
+  qu’un émulateur et une cible non-émulateur laissée intacte. Propriétés
+  confirmées : ro.kernel.qemu=1, ro.boot.qemu.avd_name=atlas_v622_s1_api34,
+  ro.build.version.sdk=34.
+
+  Les deux commandes ciblées `adb -s emulator-5580 install -r` ont réussi.
+  Les APK extraites des packages installés ont exactement les hashes candidats
+  ci-dessus. Aucun hash installé n’est inféré d’un fichier local : S6 l’a
+  calculé après extraction du package installé.
+
+Résultats des deux méthodes ACK ciblées
+---------------------------------------
+  1. `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate`
+     (classe ProactiveControllerPublicationAuthorizationInstrumentationTest) :
+     filtre exact, exit 0 et résumé AndroidJUnitRunner `OK (1 test)` — PASS.
+     Le mode résumé sans `-r` n’a pas émis les champs STATUS détaillés. Le
+     collecteur local a d’abord signalé à tort FAIL car ces champs étaient
+     absents; cette erreur de collecte est corrigée par le résultat runner
+     `OK (1 test)` / exit 0. Aucun log brut de cette exécution n’a été conservé,
+     limite de traçabilité à garder visible.
+  2. `proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient` :
+     filtre exact, exit 0 et `OK (1 test)` — PASS. Les statuts bruts rapportés
+     confirment classe+méthode correspondantes, numtests=1 et
+     INSTRUMENTATION_CODE=-1.
+
+  Le premier cas vérifie retrait/réopt-in à la frontière bodyFactory, refus de
+  sérialisation, aucun POST ACK, ackPending maintenu et absence de redispatch.
+  Le positif vérifie accepted puis executed sur loopback local, un seul dispatch,
+  effet et ackPending=false. Ce sont deux tests de transport loopback, pas le
+  scénario Gateway réel. Statut ciblé S6 : 2/2 PASS.
+
+Contrôle physique S6 distinct — Pixel 9 Pro XL API37
+------------------------------------------------------
+  Le serial physique n’est pas conservé. L’inventaire en lecture seule a
+  confirmé une seule cible physique en ligne; les propriétés sélectionnées
+  identifiaient Pixel 9 Pro XL / API37. L’AVD API34 est resté arrêté.
+  S6 a vérifié les mêmes hashes candidats installés avant les deux méthodes.
+
+  - `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate` :
+    PASS 1/1, exit 0, `OK (1 test)`.
+  - `proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient` :
+    FAIL reproduit. Deux exécutions; un cas sélectionné, sans résumé `OK`; le
+    rejeu diagnostic a renvoyé `FAILURES!!!` et statut runner `-2`.
+  Aucun message d’assertion ni sortie brute explicative n’est conservé. La cause
+  reste inconnue et n’est attribuée ni au code ni à l’environnement. Ce FAIL
+  API37 est distinct du PASS 1/1 API34 pour cette méthode.
+
+  Après le premier run, les packages ont été retirés et l’état initial absent a
+  été vérifié : `pm path` sans APK et liste exacte sans app ni AndroidTest. Trois
+  caches et trois fichiers SharedPreferences préfixés ont été supprimés par
+  chemin exact; les préfixes ne laissaient aucune entrée. Zéro notification
+  active a été observée avant et après ce nettoyage. Aucun réglage ou permission
+  n’a changé; aucun `pm clear` ou wipe n’a été utilisé.
+
+  Correction de statut après interruption : aucun troisième test n’a eu lieu.
+  L’appel interrompu ne contenait aucun `am instrument`, mais son script de
+  précontrôle contenait `install -r`. Aucune sortie ni hash post-installation
+  n’a été capturé. Aucun autre accès ADB n’a suivi. Le nettoyage PASS et
+  l’absence des packages sont confirmés après le premier run seulement; l’état
+  package après l’interruption est `NOT_RECHECKED`.
+
+Arrêt et limites du run S6
+--------------------------
+  S6 a arrêté normalement l’AVD par `adb -s emulator-5580 emu kill`; les ports
+  et processus émulateur ont été libérés. L’arrêt a enregistré default_boot.
+  La cible non-émulateur est demeurée intacte. Pas de wipe, `pm clear`, uninstall,
+  build Gradle, autre test, Gateway ou scénario supplémentaire. Aucune méthode
+  de la suite complète n’a été exécutée dans ce handoff.
+
+Relecture statique S7 du correctif ACK et assertions
+----------------------------------------------------
+  - AtlasController.kt:2040–2084 construit une autorisation liée au client et
+    à la publication capturée, puis la passe à chaque ACK. Pour EXECUTED,
+    accepted et executed reçoivent chacun le même callback d’époque.
+  - AgentApiClient.kt:209–228 construit l’ACK via bodyFactory et évalue le
+    callback après le gate générique requestAllowed, avant sérialisation JSON.
+    acknowledgeExecution (lignes 233–246) transmet le callback aux deux
+    transitions et conserve le 409 idempotent d’accepted.
+  - Le refus du callback lève AgentApiException 403; il remonte avant markAcked,
+    donc ackPending est conservé et le body n’est pas écrit sur outputStream.
+  - AgentApiClientTest.kt:128–151 vérifie le refus avant accept HTTP/body et
+    :156+ vérifie le second contrôle entre accepted et executed.
+  - Le test contrôleur de course (lignes 232–382) vérifie le gate générique
+    redevenu vrai après réopt-in, le refus de l’époque au bodyFactory, l’absence
+    de POST ACK, ackPending et l’absence de redispatch.
+  - Le test positif (lignes 384+) vérifie le loopback accepted puis executed,
+    l’effet, un dispatch et ackPending effacé.
+  Revue statique : PASS. Exécution S6 des deux méthodes AndroidTest : PASS 2/2.
+
+Validation JVM/lint indépendante S7
+-----------------------------------
+  S7 a vérifié le manifeste S5 exact 234/234 avant et après le rejeu, puis lancé
+  depuis android :
+    ./gradlew --rerun-tasks :app:testDebugUnitTest :app:lintDebug --console=plain
+  Résultat : BUILD SUCCESSFUL, 33 tâches exécutées en 2 min 42 s.
+  Rapports XML JVM : 57 fichiers, 317 tests, 0 failure, 0 error, 0 skipped.
+  Compilation des tests : sept avertissements Kotlin de casts non vérifiés.
+  lintDebug : PASS, 53 warnings, zéro erreur; les règles étaient UseKtx (26),
+  ObsoleteSdkInt (9), GradleDependency (7), SetTextI18n (6),
+  AndroidGradlePluginVersion (1), ApplySharedPref (1), NewerVersionAvailable
+  (1), OldTargetApi (1), RedundantLabel (1).
+  S7 a ensuite exécuté `./gradlew --stop`; un daemon arrêté. Aucun daemon Gradle
+  ne reste actif. S7 n’a lancé aucun ADB/AVD ni test instrumenté.
+
+Statut de qualification et Gate 5
+---------------------------------
+  `7c6c/542280` :
+    hashes candidate / hashes extraits installés : PASS, identité exacte.
+    manifeste : PASS 234/234 avant/après Gradle.
+    course de révocation API34 : PASS 1/1.
+    ACK positif accepted → executed API34 : PASS 1/1.
+    course de révocation API37 : PASS 1/1.
+    ACK positif API37 : FAIL reproduit, 1 cas sélectionné, runner -2; cause inconnue.
+    nettoyage après le premier run : PASS; package post-interruption : NOT_RECHECKED.
+    aucun troisième test; aucun autre accès ADB après interruption.
+    JVM : PASS 317/317; lint : PASS, 53 warnings / 0 erreur.
+    suite Android principale 75 cas : NOT_RUN sur cette paire.
+    Gateway réel et scénario offline : NOT_RUN sur cette paire.
+    harnais complet et dix compléments : NOT_RUN sur cette paire.
+    nouveaux tests Python du résumeur : NOT_RUN par S7.
+    D3, TalkBack réel, batterie physique et recette physique complète : NOT_RUN;
+    seul le contrôle ACK ciblé API37 a été fait, avec résultat mixte.
+  Le P1-01 est fermé pour le scénario de course retrait/réopt-in vérifié en API34
+  et API37. Le P1-04 reste ouvert : l’ACK positif échoue en API37 sans diagnostic
+  causal, bien qu’il passe en API34. Toute attribution demanderait un diagnostic
+  séparé; S7 n’a lancé ni demandé de nouvel essai. Gate 5 reste FAIL : le FAIL
+  API37 est non attribué et les validations Android principales et le harnais
+  complet ne sont pas établis sur le candidat exact. Les résultats `ce10/893da1` (suite
+  principale 75/75, Gateway 2/2 et offline 1/1) restent une acceptation antérieure
+  distincte; aucune exécution ou limite n’est transférée entre les deux paires.
+  Aucun P0 identifié. Aucun résultat Android 17 ou D3 n’est revendiqué; aucun
+  PASS physique général n’est revendiqué au-delà du test ACK ciblé API37.
+
+Fin de revue
+------------
+  Aucun source/test/script partagé édité par S7. Les seules écritures S7 sont
+  docs/v6-2/REVUE_V622.md et ce rapport. Aucun commit, push, merge ou tag.

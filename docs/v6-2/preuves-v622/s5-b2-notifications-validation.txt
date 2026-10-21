@@ -1,0 +1,177 @@
+ATLAS V6.2.2 — preuve compacte S5 C + B2 + correction S7-P1-01
+Date : 2026-10-21
+Branche : feat/atlas-v6-2-2
+HEAD : bf647cc18a142dd0f5cd5e68b21c36d511014388 (modifications non commitées)
+
+Raccordement epoch
+- AtlasController construit ProactiveCoachCoordinator avec capturePublicationEpoch.
+- La paire capability/Agent est lue atomiquement sous proactiveAuthorizationEffectLock avant
+  l'éligibilité, le consentement, l'horloge/fuseau et toute préparation/réservation.
+- Toutes les écritures des deux générations utilisent le même verrou. blockAgentForRevocation
+  avance la paire et écrit la barrière avant de la libérer. Annulation WorkManager et retrait ciblé
+  des notifications sont effectués après libération, évitant l'inversion avec le verrou publisher.
+- Le scheduler lie l'époque capturée aux triggers avant commit. Le même jeton reste utilisé pour
+  transport, merge, inbox, dispatch, ACK et gate final publisher.
+- Les deux tests réponse tardive restent conservés.
+
+Course contrôleur au commit durable
+- Test : categoryWithdrawalAndSameClockReoptInAtDurableReservationCommitNeverEntersTransportOrReplays.
+- La barrière est dans un StateBackend de test qui bloque puis délègue à AndroidStateBackend et au
+  vrai commit SharedPreferences. Elle reconnaît le root contenant la réservation exacte du trigger.
+- Pendant l'écriture sur le thread principal, le thread test exécute le retrait puis réopt-in public
+  à la même horloge; il doit terminer sans attente du thread principal ni deadlock.
+- Après libération : statut REVOKED_BEFORE_REQUEST; zéro callback transport, Inbox, dispatch, ACK,
+  tentative/notification active. La réservation et le quota, nextReservationSequence et le tombstone
+  restent persistés. Un contrôleur recréé depuis SharedPreferences ne rejoue pas le trigger.
+- Le message sur échec de démarrage est maintenant « Focus non démarré. Aucun lien à l'objectif n'a
+  été enregistré. »; le test de commit racine fautif l'assert exactement et vérifie qu'aucun lien
+  n'est durable ni annoncé comme disponible en mémoire.
+
+Validation précédente — PASS (avant le correctif ACK S7-P1-01 décrit ci-dessous)
+- Depuis android/ :
+  ./gradlew --rerun-tasks :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
+  BUILD SUCCESSFUL en 1 min 31 s; 81 tâches exécutées; 57 rapports XML : 315 tests, 0 failure,
+  0 error, 0 skipped. lintDebug, assembleDebug, assembleDebugAndroidTest et compilation AndroidTest PASS.
+- Avertissement non bloquant du packaging : libandroidx.graphics.path.so non stripable, empaquetée telle quelle.
+- git diff --check — PASS.
+- Aucun script S6 n'a été modifié ni exécuté dans cette reprise S5.
+
+Runtime — NOT_RUN
+- Aucun AVD/appareil ni am instrument lancé. Les trois courses contrôleur, Compose, publisher S2,
+  instrumentation S1 et Gate 3 restent à exécuter par S6; la compilation ne vaut pas runtime.
+- La recette S1 antérieure a explicitement retourné TEST_SYSTEM_BLOCKED (code 77), zéro fix coarse;
+  aucun PASS d'acquisition GPS n'est revendiqué ici.
+- Android/Binder ne rend pas transactionnels génération, SharedPreferences, notify et cancel. Une
+  bannière déjà acceptée par Android peut apparaître brièvement avant le retrait ciblé.
+
+APK et état partagé de la livraison initiale (remplacés pour S6)
+- Candidat : /tmp/atlas-v622-s5-s7-p1-01-final-candidate/.
+- app-debug.apk SHA-256 : ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a.
+- app-debug-androidTest.apk SHA-256 : ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c.
+- candidate-metadata.txt donne HEAD, état git, hashes et digests code/tests/harnais. Les fichiers de
+  recette modifiés par S6 dans l'arbre partagé sont inclus dans le digest mais n'ont pas été modifiés
+  par S5.
+- Aucun commit, push, merge, AVD ou appareil dans cette reprise. Le daemon Gradle a été arrêté après
+  la création du candidat reconstitué.
+
+## Reconstitution propre après diagnostic S6 — candidat antérieur au correctif ACK
+
+Le candidat antérieur à installer était `/tmp/atlas-v622-s5-clean-candidate-20261021/`; il ne contient
+pas le correctif ACK S7-P1-01 ci-dessous.
+Rebuild effectué depuis `android/` avec `./gradlew clean :app:testDebugUnitTest :app:lintDebug
+:app:assembleDebug :app:assembleDebugAndroidTest --console=plain` : `BUILD SUCCESSFUL`, 82 tâches
+exécutées; 57 XML JVM, 315 tests, 0 échec/erreur/ignoré; lint, APK app et APK AndroidTest PASS.
+L'APK app reste `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+L'APK AndroidTest recompilé depuis la source présente est `8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d`.
+
+Le DEX AndroidTest contient le cas `failedInitialCommitHasNoSessionGoalAlarmStartedEventOrRecreatedState` et le
+message exact « Focus non démarré. Aucun lien à l'objectif n'a été enregistré. »; l'ancien libellé
+« Impossible d'enregistrer » en est absent. La source conserve aussi les assertions de commit racine
+inchangé, session absente, lien Goal absent, aucune alarme, aucun événement `FOCUS_STARTED`, puis
+recréation sans session ni lien. La classe compilée correspond à la source courante. Le DEX
+`classes11.dex` de l'ancien candidat `ea53…` a SHA-256 `2d25a457f3afa2947c1c786e55e9f8f88c9058b4692e7ad4877dab2862f028b9` : il contient l'ancien libellé et pas le message courant. Les horodatages confirment la succession : cet APK test est du 01:57, la source corrigée du 09:42 et la sortie clean du 11:30 (Europe/Paris). Cela explique le `FAIL` S6 sans preuve d'un défaut de production. Le candidat historique corrigé `8edb…` avait le même hash binaire que la nouvelle sortie, mais ses résultats de runtime ne sont pas transférés à ce candidat reconstitué.
+
+Digest reproductible sources/tests/scripts : SHA-256 `93ec83319a2d1f8c9d1a95205a82432d6f7c253700081c2b1387a3fc4d1916d9`,
+225 fichiers ordinaires de `android/app/src` et `scripts`, hors caches; manifeste trié
+`sources-tests-scripts.sha256` fourni avec les APK. Aucun fichier de production, script S6 ou contrôleur
+n'a été modifié pour ce diagnostic.
+
+Runtime du nouveau candidat : **NOT_RUN**. Aucun AVD, ADB ou instrumentation n'a été lancé. S6 est
+autorisé à installer cette paire exacte sans effacer les données de l'appareil et à relancer la recette
+ciblée; ce résultat restera distinct du `FAIL` sur `ea53…` et des passages historiques `8edb…`.
+
+## Nouveau finding S7-P1-01 — fermeture du gate ACK, validation en attente
+
+S7 a trouvé un intervalle entre le contrôle d'époque du contrôleur et la création du corps HTTP ACK.
+`AgentApiClient.acknowledge` accepte maintenant `authorizationAllowed` optionnel, vérifié par son
+`bodyFactory` avant la création du JSON et l'ouverture de `outputStream`; le contrôle générique
+`requestAllowed` reste en place. `sendPendingAgentAcks` transmet la même fermeture capturée
+`agentApiClient === client && isProactivePublicationAuthorized(authorization)` aux ACK `accepted`,
+`executed`, `rejected`, `expired` et `cancelled`. Le helper `acknowledgeExecution` transmet aussi ce
+même callback aux deux transitions; les réponses 409 et le comportement par défaut non proactif sont
+conservés, avec les overloads JVM précédents.
+
+Régressions ajoutées :
+- JVM `proactiveAckAuthorizationRejectsBeforeHttpRequestOrBodySerialization` : callback refusé,
+  exception 403, aucun socket accepté.
+- JVM `executedAckRechecksAuthorizationBetweenAcceptedAndExecuted` : le serveur reçoit `accepted`,
+  l'époque devient invalide avant `executed`, aucun second corps ne part.
+- AndroidTest contrôleur `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate` :
+  plan au seam contrôlé, ACK via `AgentApiClient` réel vers `ServerSocket`; le GET de prévol prouve la
+  connectivité loopback. Le hook contrôleur bloque juste avant l'appel client; le test retire puis
+  réactive la catégorie à la même horloge et le libère. Le garde `requestAllowed` passe ensuite après
+  la réoptin. Un second hook bloque dans le vrai `bodyFactory`, avant le callback d'époque. Le test
+  vérifie le garde générique autorisé, un seul passage au point de sérialisation, uniquement le GET
+  de prévol reçu, zéro requête `/ack`, `ackPending == true` et histoire d'effet locale inchangée.
+  L'effet déjà dispatché avant révocation reste appliqué; aucune annulation locale n'est revendiquée.
+
+La paire `ce10/893da1` reste figée dans les preuves S6 et n'inclut pas ces sources/tests. Après la
+libération S7, le build propre suivant a été exécuté depuis `android/` :
+
+```text
+./gradlew clean --rerun-tasks :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
+BUILD SUCCESSFUL en 2 min 33 s; 82 tâches exécutées
+57 XML JVM : 317 tests, 0 failure, 0 error, 0 skipped
+lintDebug PASS (53 résultats SARIF warning); assembleDebug PASS; compilation AndroidTest PASS; assembleDebugAndroidTest PASS
+```
+
+Candidat intermédiaire compilé avant correction de la policy debug, remplacé par la paire finale ci-dessous : `/tmp/atlas-v622-s5-s7-p1-01-ack-body-gate-final-20261021/`.
+- app SHA-256 : `cdefcc668c07e81ce11aa5dabce2d574f734d5cd68852cfc05d7d9c1c91fd70a`
+- AndroidTest SHA-256 : `9b05500325264715e5f30b3f6648cfca59e879002601592771a29d5704f0c658`
+- Manifeste sources/tests/scripts/config Gradle : 234 fichiers; SHA-256 `e8561ed0c18235a3dd8198b0870603355ba66df25f647152fc3f4a25a8946c9c`.
+- Résumé, métadonnées, état Git et hashes des APK sont archivés dans ce répertoire.
+
+Runtime de ce candidat intermédiaire : **NOT_RUN**; aucun ADB, AVD ni `am instrument` n'a été lancé.
+Il a été remplacé après la découverte du mismatch loopback; les résultats S6 de cette paire historique
+ne qualifient pas la paire finale ci-dessous. Le daemon Gradle a été arrêté. L'avertissement non bloquant de packaging est `libandroidx.graphics.path.so`
+non stripable, empaquetée telle quelle. La limite OS entre autorisation et effets Binder reste inchangée.
+
+## Correction de policy loopback debug et paire finale S5
+
+Le test Android utilise `http://127.0.0.1:<port>`. La policy `android/app/src/debug/res/xml/network_security_config.xml`
+autorise maintenant uniquement cet hôte supplémentaire dans son `domain-config` debug existant; le
+`base-config` reste `cleartextTrafficPermitted=false` et l'exception préexistante `10.0.2.2` est conservée.
+Le manifeste main garde `usesCleartextTraffic=false`. Après fusion, l'inspection de variante confirme
+que le manifest debug garde cette valeur et référence la policy, tandis que le manifest release garde
+`usesCleartextTraffic=false` sans référence à la policy debug. Voir
+`/tmp/atlas-v622-s5-loopback-debug-final-20261021/variant-network-config-validation.txt`.
+
+Validation exécutée depuis `android/` après cette correction :
+
+```text
+./gradlew clean --rerun-tasks :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest :app:processReleaseResources :app:processReleaseMainManifest --console=plain
+BUILD SUCCESSFUL en 2 min 15 s; 96 tâches exécutées
+57 XML JVM : 317 tests, 0 failure, 0 error, 0 skipped
+lintDebug PASS (53 résultats SARIF warning); assembleDebug PASS; compilation Kotlin AndroidTest PASS; assembleDebugAndroidTest PASS
+processReleaseResources PASS; processReleaseMainManifest PASS
+```
+
+Paire intermédiaire après correction loopback, depuis remplacée par l’ajout positif ci-dessous : `/tmp/atlas-v622-s5-loopback-debug-final-20261021/`.
+- app SHA-256 : `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- AndroidTest SHA-256 : `9b05500325264715e5f30b3f6648cfca59e879002601592771a29d5704f0c658`
+- Manifeste reproductible `sources-tests-scripts.sha256` : 234 fichiers; SHA-256 `96627f775207468d499d0475bee196b7098ff640a966bd3b479d2dda529139ee`.
+- Vérification manifeste depuis la racine : `sha256sum -c /tmp/atlas-v622-s5-loopback-debug-final-20261021/sources-tests-scripts.sha256` — tous les fichiers OK.
+- Métadonnées et résumé du build dans `candidate-metadata.txt` et `validation-summary.txt` du même répertoire.
+
+À cette étape, S5 n'avait lancé ni ADB, ni AVD, ni `am instrument`; le runtime loopback était **NOT_RUN**. Cette paire est maintenant supersédée par le candidat qui inclut le scénario positif ci-dessous. La paire `ce10/893da1` reste inchangée dans les preuves historiques. L'avertissement de packaging `libandroidx.graphics.path.so` non stripable est non bloquant.
+
+## Ajout de couverture runtime positive accepted → executed — candidat S5 courant
+
+La méthode AndroidTest `proactiveDispatchSendsAcceptedThenExecutedThroughRealLoopbackClient` complète la course négative `sameClockReoptInAfterProactiveDispatchPreventsRealAckAtSerializationGate`, toujours conservée. La réponse de plan reste fournie par le seam synthétique; le chemin ACK traverse le vrai `AgentApiClient` avec un bearer synthétique et un `ServerSocket` sur `127.0.0.1`. Le serveur lit le POST `accepted`, répond HTTP 200, puis lit le POST `executed` et répond HTTP 200. Le test vérifie l’ordre et le corps des deux demandes, l’époque et le consentement toujours actifs, un seul effet dispatché et `ackPending=false`. Le nettoyage ferme les sockets et joint les threads dans `finally`; le consentement de la fixture isolée est ensuite révoqué pour retirer la notification de test éventuelle. Aucun Gateway réel ni secret n'est utilisé.
+
+Depuis `android/`, validation propre après ce seul changement AndroidTest :
+
+```text
+./gradlew clean --rerun-tasks :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:compileDebugAndroidTestKotlin :app:assembleDebugAndroidTest --console=plain
+BUILD SUCCESSFUL en 2 min 18 s; 82 tâches exécutées
+57 XML JVM : 317 tests, 0 failure, 0 error, 0 skipped
+lintDebug PASS (53 résultats SARIF warning); assembleDebug PASS; compilation Kotlin AndroidTest PASS; assembleDebugAndroidTest PASS
+```
+
+Le contrôle des sources depuis le précédent candidat n'a trouvé aucune modification sous `android/app/src/main/**`; le variant release précédemment validé demeure applicable. La nouvelle paire est `/tmp/atlas-v622-s5-ack-positive-final-20261021/` :
+- app SHA-256 : `7c6c41a4b90eb8fa88b3ffcc6003468092c3681a8ef6cd95024e92b73ec7c1ea`
+- AndroidTest SHA-256 : `542280c3c6d020cfe0327056889affeec2dabb9cbaba65a0a03e526ae512deeb`
+- Manifeste reproductible `sources-tests-scripts.sha256` : 234 fichiers; SHA-256 `87d05e9c17da0f4c64ceaaf452548a62e3ce49734b57d8052c281324d5e62e98`; ses 234 entrées ont été revérifiées.
+- Les deux noms de méthodes sont présents dans le DEX AndroidTest. Les métadonnées, le résumé de validation, les hashes APK et l’inspection réseau fusionnée sont archivés dans ce répertoire.
+
+Runtime de ces deux méthodes : **NOT_RUN**; S5 n'a utilisé ni ADB, ni AVD, ni `am instrument`. Handoff S6 API34 : installer uniquement cette paire et lancer uniquement les deux méthodes nommées ci-dessus. Gate5 reste FAIL/P1 ACK jusqu’à leur résultat runtime et à la contre-revue finale S7. Le daemon Gradle a été libéré après validation.

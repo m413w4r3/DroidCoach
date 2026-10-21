@@ -1,0 +1,87 @@
+ATLAS V6.2.2 — protocole D3, fenêtre de repos coaching
+
+Statut actuel : D3 `BLOCKED` comme paire. Une fenêtre locale valide de 60,0 s a été exécutée; la fenêtre coaching n'a pas démarré faute d'allowlist UsageStats ATLAS active. Les mesures historiques locales et l'appel coaching de 25,891 s ne constituent pas deux fenêtres comparables. La recette et le blocage reproduit sont décrits ci-dessous et dans [s6-d3-blocked-pause-urgence.txt](s6-d3-blocked-pause-urgence.txt).
+
+## Préconditions
+
+- Utiliser uniquement l'AVD réservé `atlas_v622_s1_api34`, API 34, ADB 5037, série `emulator-5580`; vérifier son identité avant l'installation. Inventorier les appareils sans imprimer de série physique. Aucun téléphone physique ni effacement n'est requis.
+- Effectuer deux fenêtres séparées d'au moins 60 secondes réelles à l'horloge murale. Conserver les mêmes réglages d'alimentation, luminosité, état d'écran et réseau.
+- Pendant les deux fenêtres : aucun Focus en cours/en pause, aucun flux de mobilité/localisation actif, aucune saisie ou navigation, aucun message Coach et aucun appel E2E. Ne pas mesurer en parallèle une autre opération.
+- Fenêtre locale : depuis l'interface ATLAS, backend hors ligne, agent, plans proactifs et tâche périodique UsageStats désactivés, consentement d'observation UsageStats ATLAS désactivé, AppOp `GET_USAGE_STATS=ignore` et pause d'urgence déjà inactive.
+- Fenêtre coaching consentie : depuis l'interface ATLAS, agent/Coach, plans proactifs et tâche périodique UsageStats explicitement actifs; consentement UsageStats ATLAS actif et AppOp `GET_USAGE_STATS=allow`. Le script relit l'AppOp Android; l'opérateur atteste séparément les quatre états internes après les avoir vérifiés dans l'interface. Le mode `foreground` et le mode AppOp `default` sont refusés : le premier ne garantit pas la collecte en arrière-plan, le second n'atteste pas l'état explicitement demandé. Le script n'active aucun de ces états. Garder le backend configuré mais sans message, déclenchement ou requête pendant la fenêtre. La pause d'urgence doit déjà être inactive; le script ne l'efface jamais. N'activer aucune mobilité ni session Focus. Si l'un de ces états ne peut pas être vérifié, ne pas mesurer une configuration partielle.
+- Le script vérifie l'AVD réservé, l'API 34, l'absence d'une instrumentation ou d'un service mobilité actif et le SHA-256 de l'APK ATLAS installée. Chaque appel ADB, y compris `devices` et `pull`, a un délai maximal (20 s, 45 s pour `pull`); un dépassement termine la recette en `BLOCKED`. Il ne fait ni installation, ni effacement, ni reset de compteurs/statistiques, ni modification de consentement. Les confirmations d'état sont des attestations manuelles; l'AppOp Usage Access est lu réellement par ADB.
+
+## Commandes du protocole
+
+Créer un répertoire privé propre sous `/tmp/atlas-v622-s6/` pour le SHA du candidat gelé. Après installation de ce candidat par sa recette dédiée, mesurer une fenêtre par commande, avec le même SHA et la même durée demandée. Les confirmations `--confirm-no-*` signifient qu'aucun Focus, aucune mobilité et aucun E2E/requête Gateway ne tournent.
+
+```sh
+PAIR_DIR=/tmp/atlas-v622-s6/d3-rest-<sha-candidat>
+python3 scripts/v622-d3-rest-recipe.py --mode local --pair-dir "$PAIR_DIR" \
+  --candidate-app-sha256 <sha256-app-installee> --duration-seconds 60 \
+  --agent-state off --proactive-state off --usage-consent off --usage-background-state off \
+  --emergency-pause off --backend-state offline \
+  --confirm-no-focus --confirm-no-mobility --confirm-no-e2e
+```
+
+Configurer ensuite le mode coaching consenti depuis l'interface, sans lancer de message ni de scénario E2E, puis :
+
+```sh
+python3 scripts/v622-d3-rest-recipe.py --mode coaching --pair-dir "$PAIR_DIR" \
+  --candidate-app-sha256 <sha256-app-installee> --duration-seconds 60 \
+  --agent-state on --proactive-state on --usage-consent on --usage-background-state on \
+  --emergency-pause off --backend-state configured-no-request \
+  --confirm-no-focus --confirm-no-mobility --confirm-no-e2e
+```
+
+Le second passage écrit `pair-summary.json`; les fenêtres ne sont comparables que si elles durent chacune au moins 60 s, diffèrent de 500 ms au plus, utilisent le même candidat et ont le même état écran connu (`interactive` ou `screen-off`). Si les deux états écran sont indisponibles, la paire échoue aussi. Un écart échoue explicitement. Aucun script ni fixture ne crée à lui seul le consentement coaching.
+- Après configuration, laisser l'appareil dans le même état d'écran que pour la fenêtre locale. Attendre au moins 60 secondes mesurées au chronomètre monotone entre T0 et T1.
+
+### Configuration coaching concrète, depuis les écrans visibles
+
+Après l'enregistrement de la fenêtre locale et seulement quand la pause d'urgence a expiré :
+
+1. Réveiller l'AVD. Dans Plus → Mandat du Coach, activer « Activer le Coach OpenClaw » par le bouton visible et conserver « Propositions seulement »; ne pas ouvrir la conversation ni envoyer de message.
+2. Dans Plus → Données partagées, consentir uniquement à « Résumé d'observation des applications » pour cette mesure; laisser les autres catégories désactivées. Dans l'écran Observation, sélectionner uniquement l'application synthétique « Distraction test » déjà installée depuis une copie temporaire de la fixture du dépôt, puis donner le consentement UsageStats ATLAS. Si cette fixture n'apparaît pas, arrêter la préparation et déclarer D3 `BLOCKED`; ne pas choisir une application personnelle ni installer une autre application.
+3. Dans Plus → Diagnostic avancé → Configurer Observation, activer le consentement ATLAS par « Donner mon consentement et continuer ». Accepter Usage Access pour ATLAS dans l'écran Réglages Android; relire `GET_USAGE_STATS=allow` et le statut visible de l'application.
+4. Dans Plus → Coach, section « Tâches en arrière-plan », activer « Observation UsageStats toutes les 30 minutes au mieux » et « Plans proactifs ». Vérifier visuellement que les deux switches sont actifs; conserver le mode proactif `Normal · 3/j`. L'argument `--usage-background-state on` atteste séparément le premier switch; il ne remplace pas le consentement UsageStats ni la lecture réelle de l'AppOp.
+5. Configurer, si nécessaire, l'URL backend de l'adaptateur OpenClaw réel et son bearer éphémère dans Plus → Synchronisation, avec un token local mode 600 hors dépôt. Garder « Activer la sync » désactivé et ne sélectionner aucune catégorie Sync; l'agent utilise le backend configuré séparément et aucun message/plan n'est demandé. Lancer le serveur réel avec accès logs désactivés, ne faire que la vérification de santé avant la fenêtre, et l'arrêter après la paire. Si ce chemin de configuration ou le Gateway réel n'est pas disponible, déclarer `BLOCKED`, sans mock.
+6. Confirmer l'écran Focus sans session, mobilité et instrumentation absentes, aucune requête E2E en cours, pause d'urgence inactive. Éteindre l'écran par l'action système et lancer la fenêtre coaching au même état écran que la fenêtre locale. Les bytes réseau UID et changements JobScheduler observés restent des mesures, pas une garantie de zéro appel.
+
+Ces étapes n'autorisent ni données personnelles ni payloads de diagnostic. Ne jamais imprimer le bearer, le prompt, le corps de requête ou les journaux bruts; arrêter si un contenu non synthétique devrait être partagé.
+
+## Première tentative S6 — historique
+
+L'écran ATLAS a affiché « Pause d'urgence active pendant 30 minutes » pendant la vérification locale des préconditions. La pause n'a pas été levée, aucune fenêtre locale ni coaching n'a démarré, et aucune valeur D3 nouvelle n'est disponible. À cette étape, `GET_USAGE_STATS` avait été restauré par l'écran Android à son état préalable `allow`; le Coach était désactivé et le mandat paraissait révoqué. Ces états décrivent la première tentative uniquement. Ils ont changé depuis et sont mis à jour ci-dessous; aucune commande directe de préférences, d'AppOps ou de statistiques n'a servi.
+
+## Relevés à T0 et T1
+
+Le script conserve uniquement des résumés mode 600 sous le répertoire de paire, et calcule les deltas sans remettre à zéro les compteurs. Il conserve en mémoire l'identité PID et `starttime` entre T0 et T1, sans écrire ces identifiants dans la preuve. Si l'ensemble des processus ou un `starttime` change, le delta CPU processus est `unavailable_process_identity_changed`; si l'ensemble ou l'identité des threads change, le delta threads est `unavailable_thread_identity_changed`. Une baisse de compteur CPU ou réseau est indisponible, jamais convertie artificiellement en zéro. Un zéro n'est rapporté que si le compteur est stable et la source comparable :
+
+- CPU processus et threads ATLAS à partir de `/proc/<pid>/stat` et `/proc/<pid>/task/*/stat`;
+- nombre de processus observé et lignes JobScheduler correspondant au paquet;
+- octets réseau reçus/émis par UID via les instantanés `dumpsys netstats detail`;
+- réveils, alarmes et wakelocks par UID/PID : indisponibles avec les sources lues par cette recette.
+
+Ne pas appeler `dumpsys batterystats --reset`, `cmd jobscheduler reset`, vider les données, ni capturer de payload. Le rapport conserve la durée murale réelle, les états booléens attestés, l'AppOp vérifié, les deltas CPU, les comptes de lignes JobScheduler, les octets UID/sens quand exposés et un changement agrégé des lignes Batterystats. Les lignes JobScheduler décrivent des travaux planifiés; elles ne mesurent ni leur exécution ni des réveils. La base WorkManager et les réveils/alarmes/wakelocks attribuables restent indisponibles avec cette recette; certaines métriques réseau aussi. Le script les marque comme tels, jamais comme zéro. Aucun PID, nom de paquet tiers, contenu de travaux, SSID, prompt, réponse, jeton ou payload ne figure dans la preuve.
+
+## Limites
+
+Un compteur absent ou non attribuable est `unavailable`, jamais assimilé à zéro. Les statistiques réseau peuvent être absentes ou agrégées depuis le démarrage; un job planifié ne prouve pas qu'il a tourné. Une fenêtre AVD de 60 s décrit uniquement cet émulateur et cette durée : elle ne mesure pas l'autonomie batterie, ne valide pas un téléphone physique et ne permet aucune extrapolation journalière.
+
+## Préparation avant la fenêtre locale — historique
+
+- Candidat installé : app `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`, AndroidTest `8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d`.
+- Pour la condition locale, l'interface confirme Coach OpenClaw off, Plans proactifs off, Observation UsageStats ATLAS sans consentement et allowlist vide. `GET_USAGE_STATS` a été retiré depuis l'écran Android; AppOp relu `ignore`. Le mandat a été explicitement réactivé dans l'app, mais la capacité Coach reste off; les catégories restent sans consentement après leur remise à zéro.
+- Focus affiche le formulaire « Préparer le focus », sans session démarrée. Le script vérifie aussi instrumentation inactive et absence du service mobilité.
+- En vérifiant l'action « Urgence », un toucher a activé une pause d'urgence de 30 minutes. Elle n'a pas été arrêtée par le bouton « Fin » et a expiré naturellement. Après redémarrage du processus ATLAS, l'interface montrait « Urgence ».
+- Deux tentatives de démarrage local ont été bloquées avant mesure : la première détectait un processus `dev.atlas.coach.test` sans runner d'instrumentation actif; ce processus inactif a été force-stop sans effacer ses données. La seconde exposait une ambiguïté AppOps : mode UID `allow`, mode spécifique au paquet `ignore`. Le parseur host privilégie maintenant le mode paquet. Une fenêtre locale de 60 s a ensuite été mesurée, mais `dumpsys power` ne fournissait pas `mInteractive`; son état écran restait inconnu, rendant la paire non comparable. Le parseur lit maintenant `mWakefulness`; 19 tests host passent. Aucun reset de statistiques, effacement, E2E ou message Coach pendant cette préparation. Refaire les deux fenêtres sous un nouveau répertoire privé et vérifier AppOp paquet `ignore` en local, `allow` en coaching.
+
+
+## Résultat runtime final — candidat S5/S7-P1-01
+
+- Paire APK : app `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`, AndroidTest `ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c`.
+- Fenêtre locale `PASS` comme relevé isolé : 60,0 s, `screen-off`, agent/proactivité/consentement/background off, AppOp paquet `ignore`, pause inactive, aucun Focus/mobilité/E2E. CPU et réseau `unavailable_snapshot`; JobScheduler 14 lignes stables, Batterystats 10 enregistrements stables, aucun réveil attribuable.
+- Coaching `BLOCKED` avant la fenêtre. L'interface Android affichait Usage Access autorisé et la fixture synthétique était choisie; l'interface Observation ATLAS indiquait toujours `Allowlist active : aucune` après « Donner mon consentement et continuer ». Aucun état de fond ni Coach n'a été activé, aucune requête n'a été émise.
+- Après constat, AppOp est revenu à `ignore`; Sync demeure désactivée/file vide/catégories décochées, URL vide et jeton supprimé. La fixture synthétique a été désinstallée et l'adaptateur temporaire arrêté; son répertoire contenant le jeton a été supprimé. Aucun effacement ATLAS, reset des statistiques ni bouton « Fin ».
+- L'état du dernier essai et les métriques expurgées sont dans `/tmp/atlas-v622-s6/d3-rest-screenfix-ce10c968-20261021/local.json` et [s6-candidat-s5-s7-p1-01-final.txt](s6-candidat-s5-s7-p1-01-final.txt). Reprendre seulement après qu'un consentement UsageStats ATLAS puisse être visiblement établi; conserver l'exigence de deux fenêtres >=60 s comparables.

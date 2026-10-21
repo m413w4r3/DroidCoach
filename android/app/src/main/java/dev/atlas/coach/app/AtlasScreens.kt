@@ -181,7 +181,7 @@ internal fun ShortcutButton(label: String, modifier: Modifier = Modifier, onClic
 }
 
 @Composable
-internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int, onChooseHabit: () -> Unit) {
+internal fun FocusScreen(controller: AtlasController, revision: Int, onChooseHabit: () -> Unit) {
     val focusEnabled = controller.capabilities[AtlasController.CAP_FOCUS] == true
     val pausedSession = controller.focusSession?.takeIf { it.status == FocusStatus.PAUSED }
     val finishedSession = controller.focusSession?.takeIf { it.status == FocusStatus.FINISHED }
@@ -212,6 +212,7 @@ internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETE
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
+            FocusGoalSessionProjection(controller, pausedSession)
             Text(
                 "${pausedSession.remainingSeconds.div(60).toString().padStart(2, '0')}:" +
                     pausedSession.remainingSeconds.rem(60).toString().padStart(2, '0'),
@@ -242,15 +243,19 @@ internal fun FocusScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETE
         } else if (!focusEnabled && finishedSession != null) {
             Text("Session terminée", style = MaterialTheme.typography.headlineSmall)
             Text(finishedSession.taskTitle ?: controller.directiveTitle(finishedSession.directiveId))
+            FocusGoalSessionProjection(controller, finishedSession)
             Text("${finishedSession.completedWorkCycles} cycle(s) de travail terminés.")
         } else if (!focusEnabled) {
             Text("Focus désactivé dans les paramètres.")
         } else {
             FocusSessionScreen(
                 controller = controller,
+                revision = revision,
                 proposedSession = proposed,
                 onStartProposed = proposal?.let { card ->
-                    { taskTitle, config -> controller.startAgentProposedFocus(card.proposalId, taskTitle, config) }
+                    { taskTitle, config, goalId ->
+                        controller.startAgentProposedFocus(card.proposalId, taskTitle, config, goalId)
+                    }
                 },
                 onChooseHabit = onChooseHabit,
             )

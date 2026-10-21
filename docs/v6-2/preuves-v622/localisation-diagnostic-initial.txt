@@ -1,0 +1,29 @@
+ATLAS V6.2.2 — A1 diagnostic initial
+Date: 2026-10-20
+Branch: feat/atlas-v6-2-2
+HEAD: bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Historical baseline: exact failure recorded at distance_m=8925794.0 in
+V62MobilityServiceInstrumentedTest.visibleStartShowsStopNotificationAndServiceStopsWithoutRawTrail.
+The fresh replay did not reproduce this distance; provider/fix/timestamp data
+from the historical failure is insufficient to assign its exact source.
+
+Environment: fresh disposable API 34 AVD atlas_v622_s1_api34, emulator
+37.2.12.0, Google APIs x86_64 image revision 14, build UE1A.230829.050,
+serial emulator-5580. Coarse granted; fine denied; background permission not
+declared; notifications granted; location enabled.
+
+Targeted current APK instrumentation:
+- 1 run: OK (1 test), one fresh measured fix, 14 ms age; service notification,
+  stop action, revocation stop, and coarse-only summary checks passed.
+- 2 runs: OK (1 test) but no measurement within 15 s; each emitted
+  MOBILITY_MEASUREMENT_UNAVAILABLE. These are not system-location PASS results.
+- No production/test/recipe source changed. No Gradle/build command was run by
+  S1; APKs came from S0's successful baseline build.
+- No physical device used. New AVD stopped without wiping; all full logs are
+  private at /tmp/atlas-v622-s1/logs/.
+
+Initial classification: nondeterministic emulator injection/provider delivery;
+test freshness is not causally checked against the injection timestamp; script
+markers do not match current tests; no-fix branch is currently reported as JUnit
+success. Harness correction proposed in LOCALISATION_V622.md remains unproven.

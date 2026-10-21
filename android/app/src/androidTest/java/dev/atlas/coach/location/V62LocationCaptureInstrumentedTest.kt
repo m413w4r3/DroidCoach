@@ -103,7 +103,15 @@ class V62LocationCaptureInstrumentedTest {
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 awaitMainActivityVisible(scenario)
-                val summary = LocationRepository(recordingProvider, consent).captureManualSummaryForCoach()
+                val summary = try {
+                    LocationRepository(recordingProvider, consent).captureManualSummaryForCoach()
+                } catch (failure: LocationCaptureException) {
+                    if (failure.code == LocationErrorCode.TIMEOUT || failure.code == LocationErrorCode.UNAVAILABLE) {
+                        Log.e(TAG, "TEST_SYSTEM_BLOCKED reason=coarse_capture_${failure.code} host_injection_expected=true")
+                        throw AssertionError("TEST_SYSTEM_BLOCKED: Android supplied no fresh coarse fix after synchronized injection", failure)
+                    }
+                    throw failure
+                }
                 assertTrue("The host did not inject while the production manager request was active", hostFixReceived.await(5, TimeUnit.SECONDS))
                 assertNotNull("A fresh, consented coarse fix should be summarized", summary)
                 val fix = requireNotNull(capturedFix.get())
@@ -113,6 +121,9 @@ class V62LocationCaptureInstrumentedTest {
                 val requestStart = requestStartedUtcMillis.get()
                 assertTrue("The operating system should return an approximate location", fix.accuracyMeters >= LocationCoarsener.COARSE_METERS)
                 assertTrue("The exact Android fix timestamp must be no older than the production 15 second cache", fixAgeMs in 0L..LocationCaptureRequest.DEFAULT_MAX_AGE_MS)
+                val injectedAt = hostInjectionStartedUtcMillis.get()
+                assertTrue("The host injection timestamp must be positive", injectedAt > 0L)
+                assertTrue("A cached fix from before the host injection must not satisfy this scenario", fix.capturedAtUtcMillis >= injectedAt)
                 assertTrue("The exact fix timestamp must be within the request's freshness window", fix.capturedAtUtcMillis >= requestStart - LocationCaptureRequest.DEFAULT_MAX_AGE_MS)
                 assertTrue("The exact fix timestamp cannot be in the future", fix.capturedAtUtcMillis <= completedUtcMillis)
                 assertEquals("Coarsening must preserve the exact Android fix timestamp", fix.capturedAtUtcMillis, saved.measuredAtUtcMillis)
@@ -127,8 +138,8 @@ class V62LocationCaptureInstrumentedTest {
                     injectedDistanceMeters,
                 )
                 assertTrue(
-                    "The fresh coarse fix must correspond to the injected emulator position within 25 km; distance_m=${injectedDistanceMeters.single()}",
-                    injectedDistanceMeters.single() <= MAX_INJECTED_FIX_DISTANCE_METERS,
+                    "The raw fix must correspond to the injected point within the Android-reported coarse accuracy; distance_m=${injectedDistanceMeters.single()} accuracy_m=${fix.accuracyMeters}",
+                    injectedDistanceMeters.single() <= fix.accuracyMeters,
                 )
                 assertTrue("Coarsening must declare at least a 2 km uncertainty", saved.accuracyMeters >= LocationCoarsener.COARSE_METERS)
                 assertEquals(saved, consent.recentLocationSummaries(System.currentTimeMillis()).singleOrNull())
@@ -224,7 +235,6 @@ class V62LocationCaptureInstrumentedTest {
         private const val HOST_FIX_INJECTED_AT_EXTRA = "injected_at_utc_ms"
         private const val INJECTED_LATITUDE = 48.123456
         private const val INJECTED_LONGITUDE = 2.123456
-        private const val MAX_INJECTED_FIX_DISTANCE_METERS = 25_000f
     }
 
     private fun awaitMainActivityVisible(scenario: ActivityScenario<MainActivity>) {

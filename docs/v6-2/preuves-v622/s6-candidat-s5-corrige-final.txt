@@ -1,0 +1,51 @@
+HISTORIQUE — passage intermédiaire sur AndroidTest `8edb71a8…`; ne représente pas le candidat S5/S7-P1-01 reçu ensuite (`ea53e429…`). Résultats conservés tels qu’exécutés. La preuve courante est [s6-candidat-s5-s7-p1-01-final.txt](s6-candidat-s5-s7-p1-01-final.txt).
+
+ATLAS V6.2.2 — résultat du candidat S5/S7-P1-01 après correction de fixture
+
+Date : 2026-10-21 (Europe/Paris)
+Branche / HEAD : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+Candidat effectivement installé et vérifié
+- app-debug.apk SHA-256 : ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a
+- app-debug-androidTest.apk SHA-256 : 8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d
+- digest code/tests/harnais : 189402c7392f5e5d4dbf693210e370629b4f19783872d2c85474c5c159739007
+- méthode du digest : manifeste sha256sum trié, 225 fichiers ordinaires sous android/app/src et scripts, hors __pycache__.
+- répertoire candidat privé : /tmp/atlas-v622-s6-s5-s7-p1-01-corrected-test-candidate/
+- les APK locales et installées ont été comparées; le candidat a gardé le même APK app que S5 et le nouveau SHA AndroidTest figé ci-dessus.
+- après l'ajout des attestations explicites de tâche périodique UsageStats, d'AppOp strict et des parseurs AppOps paquet/UID et écran `mWakefulness`, l'arbre courant android/app/src + scripts a le digest `93ec83319a2d1f8c9d1a95205a82432d6f7c253700081c2b1387a3fc4d1916d9` (225 fichiers non-cache). Ce digest de sources/scripts est distinct du digest enregistré au gel APK; aucun rebuild n'a eu lieu.
+
+Correction et baseline
+Le seul changement de fixture après le premier passage S5 corrige l'assertion du cas de démarrage Goal–Focus qui attendait un ancien libellé. Elle vérifie maintenant exactement « Focus non démarré. Aucun lien à l'objectif n'a été enregistré. » et garde les assertions d'absence de session, événement, alarme et état durable. Aucun code de production ni contrôle n'a été modifié par S6.
+
+Le baseline demandé a été exécuté après cette correction : `./gradlew clean`, puis `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest`. Résultat : 315 tests JVM uniques PASS, aucune erreur/échec/ignoré, lint PASS, assemblages app et AndroidTest PASS. SHA app/test produits : ceux ci-dessus. Pytest final : 66 passed, 1 skipped, 0 failed avec `PYTHONPATH=/usr/lib/python3/dist-packages PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q`; le premier appel sans ce PYTHONPATH n'avait pas collecté à cause de Pygments absent du sys.path utilisateur.
+
+Vérification statique finale de cette reprise : `git diff --check`, `bash -n` des scripts instrumentation/localisation/E2E et `ast.parse` des scripts D3/résumé passent. Les 19 régressions hôte pures du script D3 passent après les corrections timeout, état écran inconnu, identité PID/starttime, compteurs décroissants, attestations de fond et parseurs AppOps/écran.
+
+Régressions AndroidTest explicites sur API 34
+- `ProactiveControllerPublicationAuthorizationInstrumentationTest` : 3/3 PASS, y compris `categoryWithdrawalAndSameClockReoptInAtDurableReservationCommitNeverEntersTransportOrReplays`; aucun timeout/deadlock.
+- `ProactiveCoachNotificationPublisherInstrumentationTest` : 2/2 PASS, dont l'essai concurrent.
+- `GoalFocusStartInstrumentationTest` : 7/7 PASS.
+- `AgentPersistenceFailureInstrumentationTest` : 6/6 PASS.
+- `ProactiveCoachWorkerInstrumentationTest` : 2/2 PASS.
+- Total : 20/20 PASS, 0 échec, erreur ou ignoré, comptes AndroidJUnitRunner.
+- journaux privés : `/tmp/atlas-v622-s6/regressions-corrected-candidate-8edb71a8/`.
+
+Harnais complet et D1
+Inventaire écrit avant le lancement : 75 méthodes principales (89 annotées, moins 4 exclusions E2E et 10 filtres explicites); les compléments sont comptés séparément. Résultat sur le candidat corrigé : 75/75 PASS, 0 échec/erreur/ignoré; 24 classes avec cas exécutés; 10/10 compléments PASS; 10/10 filtres analysés et maintenus hors des succès; 21/21 captures; verdict `PASS`. Le résumé a aussi confirmé zéro XML principal invalide/manquant, zéro complément non analysé et aucun rapport d'échec Gradle. Les blocages système GPS restent distincts dans leur recette propre.
+- inventaire antérieur au lancement : `s6-candidat-s5-final-inventaire.txt`.
+- sorties privées : `/tmp/atlas-v622-s6/full-harness-corrected-test-8edb71a8/`.
+
+E2E réel OpenClaw et persistance hors ligne
+Sur les APK installées dont les hashes sont vérifiés, deux passages consécutifs de `realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal` ont chacun exécuté 1 test, 0 échec/erreur/ignoré. L'adaptateur était `openclaw`; aucun faux Gateway n'a été utilisé. Le parcours démarre le Focus avec `goalId`, prouve le lien persistant immédiatement et 0/120 avant l'avance de l'horloge, passe à 25/120 après 25 minutes simulées, vérifie proposition, MandateVerifier, effet et ACK, puis révoque `goals` et vérifie la requête fraîche sans catégorie. Deux ACK d'effets exécutés sont confirmés.
+
+Après l'arrêt du backend de test, le test hors ligne `localGoalFocusFavoritesAndEmergencyPauseRemainAvailableAfterBackendStop` a exécuté 1/1 PASS. Le processus applicatif a été force-stoppé entre les deux passages puis avant le scénario hors ligne; l'activité a été relancée via Activity Manager alors que le backend était arrêté. Les résultats expurgés sont dans `/tmp/atlas-v622-s6/openclaw-real-corrected-test-8edb-final/`; aucun token, prompt ou payload privé n'est conservé dans le dépôt.
+
+La pause d'urgence de l'application réelle n'a pas été nettoyée. L'instantané pré-harnais a été restauré avec le moteur GLES enregistré `swiftshader_indirect`; l'AVD/API34, les deux hashes installés, `GET_USAGE_STATS=allow` et la préférence de pause active ont été vérifiés avant les E2E. La même préférence indiquait toujours la pause active après les E2E. Aucun `pm clear`, bouton « Fin » ou désinstallation n'a été lancé entre cette restauration et les vérifications E2E.
+
+Statuts hors périmètre de cette preuve
+- D3 : aucune fenêtre de repos n'est encore incluse. L'interface confirme le mode local préparé : bouton « Activer le Coach OpenClaw », Plans proactifs désactivés et indisponibles, Observation UsageStats sans consentement ATLAS; l'écran système a été utilisé pour retirer Usage Access, AppOp paquet relu `ignore`. Le seul choix synthétique admissible est la fixture existante « Distraction test » (APK temporaire API 34 hors dépôt, sans permission réseau); elle est installée sur l'AVD, pas encore sélectionnée ni consentie. Focus non démarré; le script vérifie l'absence de mobilité et d'instrumentation. La pause activée accidentellement a expiré naturellement; ni « Fin » ni reset n'ont été utilisés. Deux tentatives de fenêtre ont bloqué avant mesure (package AndroidTest résiduel, puis parsing AppOps UID); aucun échantillon local n'a démarré.
+- Localisation visible sur la paire corrigée : `TEST_LOGIQUE_PASS`, `PASS location-visible-main-activity`, `PASS mobility-prepare-consent`, puis `TEST_SYSTEM_BLOCKED mobility-visible-service-with-measurement` faute de fix coarse frais après injection synchronisée. Le statut système bloqué était isolé, sans autre échec. APK installée conservée et hashes vérifiés; résumé privé : `/tmp/atlas-v622-s6/location-corrected-test-8edb71a8/`.
+- Android 17 S4 : `BLOCKED` avant installation; 17 scénarios A2 et 11 tests du candidat final `NOT_RUN`, sans nouvel essai dans l'environnement inchangé.
+- Téléphone physique et TalkBack réel : `NOT_RUN`.
+
+Aucun commit, push, merge ou tag n'a été créé.

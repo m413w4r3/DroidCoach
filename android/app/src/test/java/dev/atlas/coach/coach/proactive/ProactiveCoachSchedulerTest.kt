@@ -3,6 +3,10 @@ package dev.atlas.coach.coach.proactive
 import java.time.Instant
 import java.time.ZoneId
 import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -84,7 +88,7 @@ class ProactiveCoachSchedulerTest {
         var requested = false
         assertEquals(
             ProactiveRunStatus.NO_ELIGIBLE_TRIGGERS,
-            h.scheduler.runDue(NOW, utc, requestPlan = { requested = true; ProactivePlanResponse() }, showNotification = {}).status,
+            h.scheduler.runAuthorized(NOW, utc, requestPlan = { requested = true; ProactivePlanResponse() }, showNotification = {}).status,
         )
         assertFalse(requested)
     }
@@ -95,7 +99,7 @@ class ProactiveCoachSchedulerTest {
         h.record(trigger("one", motif = "focus-review"))
         h.record(trigger("two", motif = "focus-review"))
         var calls = 0
-        val result = h.scheduler.runDue(
+        val result = h.scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { request ->
@@ -118,7 +122,7 @@ class ProactiveCoachSchedulerTest {
         val h = Harness(allConsents)
         h.record(trigger("failure", motif = "retry-proof"))
         var calls = 0
-        val fail = h.scheduler.runDue(
+        val fail = h.scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { calls++; throw IllegalStateException("offline") },
@@ -128,7 +132,7 @@ class ProactiveCoachSchedulerTest {
         assertEquals(ProactiveRequestStatus.FAILED, h.state.requestReservations.single().status)
 
         assertEquals(CoachTriggerRecordStatus.DUPLICATE, h.scheduler.record(trigger("failure", motif = "retry-proof"), NOW))
-        val replay = h.scheduler.runDue(
+        val replay = h.scheduler.runAuthorized(
             NOW + ProactiveTriggerGate.MIN_COOLDOWN_MS,
             utc,
             requestPlan = { calls++; ProactivePlanResponse() },
@@ -159,7 +163,7 @@ class ProactiveCoachSchedulerTest {
             h.record(trigger("quota-$index", motif = "quota-$index"))
             assertEquals(
                 ProactiveRunStatus.REQUEST_FAILED,
-                h.scheduler.runDue(
+                h.scheduler.runAuthorized(
                     NOW + index,
                     utc,
                     requestPlan = { throw IllegalStateException("offline") },
@@ -169,7 +173,7 @@ class ProactiveCoachSchedulerTest {
         }
         h.record(trigger("quota-over", motif = "quota-over", occurredAt = NOW + 20L))
         var calls = 0
-        val result = h.scheduler.runDue(
+        val result = h.scheduler.runAuthorized(
             NOW + 20L,
             utc,
             requestPlan = { calls++; ProactivePlanResponse() },
@@ -226,7 +230,7 @@ class ProactiveCoachSchedulerTest {
             val atParis2230 = Instant.parse("2026-03-29T20:30:00Z").toEpochMilli()
             h.record(trigger("dst-quiet", occurredAt = atParis2230))
             var requests = 0
-            val result = h.scheduler.runDue(
+            val result = h.scheduler.runAuthorized(
                 atParis2230,
                 paris,
                 requestPlan = { requests++; ProactivePlanResponse() },
@@ -318,58 +322,215 @@ class ProactiveCoachSchedulerTest {
     }
 
     @Test
-    fun `consent revoked before the network callback prevents the request`() {
-        var reads = 0
-        var consent = allConsents
+    fun `authorization invalidated after capture prevents network request`() {
+        var generation = 7L
         var state = ProactiveCoachState()
         val scheduler = ProactiveCoachScheduler(
             readState = { state },
             writeState = { state = it },
-            currentConsent = {
-                reads++
-                if (reads >= 3) ProactiveConsentSnapshot.EMPTY else consent
-            },
+            currentConsent = { allConsents },
             clockUtcMillis = { NOW },
         )
-        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("revoke-race"), NOW))
+        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("revoke-before-request"), NOW))
         var calls = 0
-        val result = scheduler.runDue(
+        val result = scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { calls++; ProactivePlanResponse() },
             showNotification = {},
+            publicationEpoch = ProactivePublicationEpoch(generation, 3L),
+            isAuthorizationCurrent = { authorization ->
+                generation++
+                authorization.capabilityGeneration == generation
+            },
         )
         assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
         assertEquals(0, calls)
+        assertTrue(state.requestReservations.isEmpty())
+        assertEquals(listOf("revoke-before-request"), state.consumedEventTombstones.map { it.eventId })
+    }
+
+    @Test
+    fun `consent revoked before the network callback prevents the request`() {
+        var consent = allConsents
+        var generation = 31L
+        var state = ProactiveCoachState()
+        val scheduler = ProactiveCoachScheduler(
+            readState = { state },
+            writeState = { next ->
+                state = next
+                if (next.requestReservations.lastOrNull()?.status == ProactiveRequestStatus.RESERVED) {
+                    consent = ProactiveConsentSnapshot.EMPTY
+                }
+            },
+            currentConsent = { consent },
+            clockUtcMillis = { NOW },
+        )
+        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("consent-revoke-before"), NOW))
+        var calls = 0
+        val result = scheduler.runAuthorized(
+            NOW,
+            utc,
+            requestPlan = { calls++; ProactivePlanResponse() },
+            showNotification = {},
+            publicationEpoch = ProactivePublicationEpoch(generation, 32L),
+            isAuthorizationCurrent = { true },
+        )
+
+        assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
+        assertEquals(0, calls)
+        assertEquals("current consent alone rejects the request", 31L, generation)
         assertEquals(ProactiveRequestStatus.REVOKED_BEFORE_REQUEST, state.requestReservations.single().status)
     }
 
     @Test
-    fun `consent revoked while the plan request is in flight suppresses its notification`() {
-        var reads = 0
-        val consent = allConsents
+    fun `authorization revoked while network response is in flight drops the late response`() {
+        val generation = AtomicLong(11L)
         var state = ProactiveCoachState()
         val scheduler = ProactiveCoachScheduler(
             readState = { state },
             writeState = { state = it },
-            currentConsent = {
-                reads++
-                if (reads >= 4) ProactiveConsentSnapshot.EMPTY else consent
-            },
+            currentConsent = { allConsents },
             clockUtcMillis = { NOW },
         )
         assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("revoke-in-flight"), NOW))
+        val requestStarted = CountDownLatch(1)
+        val releaseResponse = CountDownLatch(1)
+        val resultReference = AtomicReference<ProactiveRunResult>()
+        val notificationCount = AtomicLong(0L)
+        val run = Thread {
+            resultReference.set(scheduler.runAuthorized(
+                NOW,
+                utc,
+                requestPlan = {
+                    requestStarted.countDown()
+                    check(releaseResponse.await(5, TimeUnit.SECONDS)) { "Response barrier timed out" }
+                    responseWithLocalProposal()
+                },
+                showNotification = { notificationCount.incrementAndGet() },
+                publicationEpoch = ProactivePublicationEpoch(generation.get(), 4L),
+                isAuthorizationCurrent = { it.capabilityGeneration == generation.get() },
+            ))
+        }
+        run.start()
+        assertTrue("Plan request did not reach the controlled network barrier", requestStarted.await(5, TimeUnit.SECONDS))
+        generation.incrementAndGet()
+        releaseResponse.countDown()
+        run.join(5_000L)
+        assertFalse("Scheduler did not finish after response release", run.isAlive)
+
+        val result = requireNotNull(resultReference.get())
+        assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
+        assertEquals(0L, notificationCount.get())
+        assertTrue(state.notificationReservations.isEmpty())
+        assertEquals(ProactiveRequestStatus.FAILED, state.requestReservations.single().status)
+        assertEquals(listOf("revoke-in-flight"), state.consumedEventTombstones.map { it.eventId })
+    }
+
+    @Test
+    fun `consent revoked while the plan request is in flight suppresses its notification`() {
+        var consent = allConsents
+        var generation = 41L
+        var state = ProactiveCoachState()
+        val scheduler = ProactiveCoachScheduler(
+            readState = { state },
+            writeState = { state = it },
+            currentConsent = { consent },
+            clockUtcMillis = { NOW },
+        )
+        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("consent-revoke-in-flight"), NOW))
         var notifications = 0
-        val result = scheduler.runDue(
+        val result = scheduler.runAuthorized(
+            NOW,
+            utc,
+            requestPlan = {
+                consent = ProactiveConsentSnapshot.EMPTY
+                responseWithLocalProposal()
+            },
+            showNotification = { notifications++ },
+            publicationEpoch = ProactivePublicationEpoch(generation, 42L),
+            isAuthorizationCurrent = { true },
+        )
+
+        assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
+        assertEquals(0, notifications)
+        assertTrue(state.notificationReservations.isEmpty())
+        assertEquals(ProactiveRequestStatus.FAILED, state.requestReservations.single().status)
+        assertEquals(41L, generation)
+    }
+
+    @Test
+    fun `authorization revoked during response handling prevents notification reservation`() {
+        var generation = 19L
+        lateinit var state: ProactiveCoachState
+        val scheduler = ProactiveCoachScheduler(
+            readState = { state },
+            writeState = {
+                state = it
+                if (it.requestReservations.any { reservation -> reservation.status == ProactiveRequestStatus.SUCCEEDED }) {
+                    generation++
+                }
+            },
+            currentConsent = { allConsents },
+            clockUtcMillis = { NOW },
+        )
+        state = ProactiveCoachState()
+        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("revoke-processing"), NOW))
+        var notifications = 0
+        val result = scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { responseWithLocalProposal() },
             showNotification = { notifications++ },
+            publicationEpoch = ProactivePublicationEpoch(generation, 5L),
+            isAuthorizationCurrent = { it.capabilityGeneration == generation },
         )
+
         assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
         assertEquals(0, notifications)
         assertTrue(state.notificationReservations.isEmpty())
         assertEquals(ProactiveRequestStatus.SUCCEEDED, state.requestReservations.single().status)
+    }
+
+    @Test
+    fun `revocation after notification reservation fails reserved slot without replay`() {
+        var generation = 23L
+        lateinit var state: ProactiveCoachState
+        val scheduler = ProactiveCoachScheduler(
+            readState = { state },
+            writeState = {
+                state = it
+                if (it.notificationReservations.any { reservation -> reservation.status == ProactiveNotificationStatus.RESERVED }) {
+                    generation++
+                }
+            },
+            currentConsent = { allConsents },
+            clockUtcMillis = { NOW },
+        )
+        state = ProactiveCoachState()
+        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("revoke-after-reserve"), NOW))
+        var notifications = 0
+        val result = scheduler.runAuthorized(
+            NOW,
+            utc,
+            requestPlan = { responseWithLocalProposal() },
+            showNotification = { notifications++ },
+            publicationEpoch = ProactivePublicationEpoch(generation, 6L),
+            isAuthorizationCurrent = { it.capabilityGeneration == generation },
+        )
+
+        assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
+        assertEquals(0, notifications)
+        assertEquals(ProactiveNotificationStatus.FAILED, state.notificationReservations.single().status)
+        assertEquals("proactive-1-notification", state.notificationReservations.single().notificationId)
+        assertEquals(listOf("revoke-after-reserve"), state.consumedEventTombstones.map { it.eventId })
+        assertEquals(1, state.requestReservations.size)
+        assertEquals(ProactiveRunStatus.NO_ELIGIBLE_TRIGGERS, scheduler.runAuthorized(
+            NOW + ProactiveTriggerGate.MIN_COOLDOWN_MS,
+            utc,
+            requestPlan = { ProactivePlanResponse() },
+            showNotification = {},
+        ).status)
     }
 
     @Test
@@ -378,7 +539,7 @@ class ProactiveCoachSchedulerTest {
         h.record(trigger("unlinked-notification"))
         val notifications = mutableListOf<ProactiveNotification>()
 
-        val result = h.scheduler.runDue(
+        val result = h.scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { ProactivePlanResponse(ProactiveNotificationContent("Conseil", "Action proposée")) },
@@ -397,7 +558,7 @@ class ProactiveCoachSchedulerTest {
         h.record(trigger("linked-notification"))
         val notifications = mutableListOf<ProactiveNotification>()
 
-        val result = h.scheduler.runDue(
+        val result = h.scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { responseWithLocalProposal() },
@@ -413,7 +574,7 @@ class ProactiveCoachSchedulerTest {
         val h = Harness(allConsents)
         h.record(trigger("notification-failure", motif = "notification-failure"))
         var requests = 0
-        val first = h.scheduler.runDue(
+        val first = h.scheduler.runAuthorized(
             NOW,
             utc,
             requestPlan = { requests++; responseWithLocalProposal() },
@@ -421,7 +582,7 @@ class ProactiveCoachSchedulerTest {
         )
         assertEquals(ProactiveRunStatus.NOTIFICATION_FAILED, first.status)
         assertEquals(ProactiveNotificationStatus.FAILED, h.state.notificationReservations.single().status)
-        val replay = h.scheduler.runDue(
+        val replay = h.scheduler.runAuthorized(
             NOW + ProactiveTriggerGate.MIN_COOLDOWN_MS,
             utc,
             requestPlan = { requests++; ProactivePlanResponse() },
@@ -443,11 +604,81 @@ class ProactiveCoachSchedulerTest {
         var requests = 0
         assertEquals(
             ProactiveRunStatus.PERSISTENCE_FAILED,
-            scheduler.runDue(NOW, utc, requestPlan = { requests++; ProactivePlanResponse() }, showNotification = {}).status,
+            scheduler.runAuthorized(NOW, utc, requestPlan = { requests++; ProactivePlanResponse() }, showNotification = {}).status,
         )
         assertEquals(0, requests)
         assertEquals(0, writes)
         assertNull(scheduler.mode())
+    }
+
+    @Test
+    fun `withdrawal and re opt in at reservation commit cannot authorize the reserved trigger`() {
+        var consent = allConsents
+        var generation = 1L
+        var state = ProactiveCoachState()
+        lateinit var scheduler: ProactiveCoachScheduler
+        scheduler = ProactiveCoachScheduler(
+            readState = { state },
+            writeState = { next ->
+                state = next
+                if (next.pendingTriggers.isEmpty() &&
+                    next.requestReservations.lastOrNull()?.status == ProactiveRequestStatus.RESERVED &&
+                    generation == 1L
+                ) {
+                    // Inject withdrawal and re-opt-in exactly at durable reservation commit.
+                    consent = ProactiveConsentSnapshot.EMPTY
+                    generation++
+                    assertEquals("a committed trigger is no longer purgeable", 0, scheduler.purgeRevoked())
+                    consent = allConsents
+                }
+            },
+            currentConsent = { consent },
+            clockUtcMillis = { NOW },
+        )
+        assertEquals(CoachTriggerRecordStatus.RECORDED, scheduler.record(trigger("reopt-in-at-commit"), NOW))
+        var requests = 0
+        var notifications = 0
+
+        val result = scheduler.runDue(
+            nowUtcMillis = NOW,
+            mandateZoneId = utc,
+            publicationEpoch = ProactivePublicationEpoch(1L, 1L),
+            isPublicationAuthorizationCurrent = { authorization ->
+                authorization.capabilityGeneration == generation && authorization.triggers.all(consent::allows)
+            },
+            requestPlan = { _, _ -> requests++; ProactivePlanResponse() },
+            showNotification = { _, _ -> notifications++ },
+        )
+
+        assertEquals(ProactiveRunStatus.CONSENT_REVOKED, result.status)
+        assertEquals("withdrawal at commit must block transport", 0, requests)
+        assertEquals("withdrawal at commit must block notification", 0, notifications)
+        assertTrue(state.pendingTriggers.isEmpty())
+        assertTrue(state.consumedEventTombstones.any { it.eventId == "reopt-in-at-commit" })
+        assertEquals(ProactiveRequestStatus.REVOKED_BEFORE_REQUEST, state.requestReservations.single().status)
+
+        // Durable reservation/quota/tombstone state prevents a recreated scheduler from replaying
+        // the old event under the new opt-in epoch, even at the identical wall-clock timestamp.
+        state = ProactiveCoachState.fromJsonString(state.toJsonString())
+        var replayRequests = 0
+        val restarted = ProactiveCoachScheduler(
+            readState = { state },
+            writeState = { state = it },
+            currentConsent = { allConsents },
+            clockUtcMillis = { NOW },
+        )
+        val replay = restarted.runDue(
+            nowUtcMillis = NOW,
+            mandateZoneId = utc,
+            publicationEpoch = ProactivePublicationEpoch(generation, 1L),
+            isPublicationAuthorizationCurrent = { true },
+            requestPlan = { _, _ -> replayRequests++; ProactivePlanResponse() },
+            showNotification = { _, _ -> error("restart must not publish") },
+        )
+        assertEquals(ProactiveRunStatus.NO_ELIGIBLE_TRIGGERS, replay.status)
+        assertEquals(0, replayRequests)
+        assertEquals(1, state.requestReservations.size)
+        assertEquals(ProactiveRequestStatus.REVOKED_BEFORE_REQUEST, state.requestReservations.single().status)
     }
 
     private fun assertNotificationLimit(mode: ProactiveEngagementMode, expectedLimit: Int) {
@@ -456,7 +687,7 @@ class ProactiveCoachSchedulerTest {
         repeat(expectedLimit + 1) { index ->
             val event = trigger("notification-$index", motif = "notification-$index")
             h.record(event)
-            val result = h.scheduler.runDue(
+            val result = h.scheduler.runAuthorized(
                 NOW + index,
                 utc,
                 requestPlan = { responseWithLocalProposal() },
@@ -471,6 +702,22 @@ class ProactiveCoachSchedulerTest {
     private fun responseWithLocalProposal() = ProactivePlanResponse(
         notification = ProactiveNotificationContent("Conseil", "Action proposée"),
         localProposalId = localProposalId,
+    )
+
+    private fun ProactiveCoachScheduler.runAuthorized(
+        nowUtcMillis: Long,
+        mandateZoneId: ZoneId,
+        requestPlan: (ProactivePlanRequest) -> ProactivePlanResponse?,
+        showNotification: (ProactiveNotification) -> Unit,
+        publicationEpoch: ProactivePublicationEpoch = ProactivePublicationEpoch(1L, 1L),
+        isAuthorizationCurrent: (ProactivePublicationAuthorization) -> Boolean = { true },
+    ) = runDue(
+        nowUtcMillis = nowUtcMillis,
+        mandateZoneId = mandateZoneId,
+        publicationEpoch = publicationEpoch,
+        isPublicationAuthorizationCurrent = isAuthorizationCurrent,
+        requestPlan = { request, _ -> requestPlan(request) },
+        showNotification = { notification, _ -> showNotification(notification) },
     )
 
     private fun trigger(
@@ -506,7 +753,7 @@ class ProactiveCoachSchedulerTest {
 
         fun run(now: Long, zone: ZoneId = utc): ProactiveRunResult {
             clockNow = now
-            return scheduler.runDue(
+            return scheduler.runAuthorized(
                 now,
                 zone,
                 requestPlan = { ProactivePlanResponse() },

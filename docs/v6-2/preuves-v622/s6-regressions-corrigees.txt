@@ -1,0 +1,32 @@
+ATLAS V6.2.2 — S6 régressions instrumentées explicites
+Date : 2026-10-21
+AVD : atlas_v622_s1_api34, API 34, ADB 5037 / emulator-5580.
+
+Cause et changement limité aux tests
+- L'exécution initiale de GoalFocusStartInstrumentationTest a compté 7 cas,
+  avec 1 échec : `Cannot call setContent twice per test!` dans le scénario
+  qui vérifie la projection après recréation du contrôleur. Le constat et
+  toutes les sorties initiales sont conservés dans
+  [s6-regressions-avant-correction.txt](s6-regressions-avant-correction.txt).
+- Cause confirmée dans la fixture : deux appels à `setContent` dans une seule
+  méthode. Le second montage est remplacé par un changement de contrôleur via
+  `mutableStateOf`, qui garde une seule racine Compose et rend la projection du
+  contrôleur recréé.
+- Aucun code de production n'a été modifié. `assembleDebugAndroidTest` a réussi.
+
+Résultats après correction — comptes du runner, tous sans skip
+| Classe | Cas | Échecs | Erreurs | Résultat |
+| --- | ---: | ---: | ---: | --- |
+| `GoalFocusStartInstrumentationTest` (rejouée) | 7 | 0 | 0 | PASS |
+| `ProactiveControllerPublicationAuthorizationInstrumentationTest` | 2 | 0 | 0 | PASS |
+| `ProactiveCoachNotificationPublisherInstrumentationTest` | 2 | 0 | 0 | PASS |
+| `AgentPersistenceFailureInstrumentationTest` | 6 | 0 | 0 | PASS |
+| `ProactiveCoachWorkerInstrumentationTest` | 2 | 0 | 0 | PASS |
+| Total de la couverture demandée | 19 | 0 | 0 | PASS |
+
+APK utilisées pour le rejeu Goal-Focus après modification du test :
+- app-debug.apk : SHA-256 `dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9` (inchangée).
+- app-debug-androidTest.apk : SHA-256 `4fd3b5272fbc22dbd95fd28bd96f51c408575d8bf8e7bf08afd4855b71f4cd33` (modifiée).
+
+Sorties complètes hors dépôt : `/tmp/atlas-v622-s6/regression-*.log` et
+`/tmp/atlas-v622-s6/regression-goal-focus-after-fixture.log`.

@@ -1,0 +1,75 @@
+ATLAS V6.2.2 / S4 A2 — preuve minimale
+Date: 2026-10-20
+Branche au départ: feat/atlas-v6-2-2
+HEAD au départ: bf647cc
+
+AVD:
+  name=atlas_v622_disposable_api37
+  image=system-images;android-37.2;google_apis_ps16k;x86_64
+  path=/tmp/atlas-v622-s4/avd
+  ro.boot.qemu.avd_name=atlas_v622_disposable_api37
+  ro.build.version.sdk=37
+  ro.build.version.sdk_full=37.2
+  serial=emulator-5582 (console 5582, ADB 5583)
+  ADB server port=5038
+  end state=stopped; AVD registry retained in /tmp; S4 ADB server 5038 stopped
+
+Garde-fous:
+  no Gradle command run by S4
+  all device operations used the explicit emulator-5582 target
+  no physical device or personal AVD targeted
+  S4 made no source or targetSdk edits
+  HOME role before interaction=com.google.android.apps.nexuslauncher
+  HOME role not changed; S4 injected no real coordinates
+
+Commandes principales:
+  bash -n scripts/v622-android17-recipe.sh
+  ./scripts/v622-android17-recipe.sh
+  ./scripts/v622-android17-recipe.sh --self-test
+  ADB wrapper: /home/nill/Android/Sdk/platform-tools/adb -P 5038 -s emulator-5582
+  Example instrumentation form:
+    adb -P 5038 -s emulator-5582 shell am instrument -w -r -e class \
+      dev.atlas.coach.location.V62LocationCaptureInstrumentedTest#deniedPermissionStateReturnsFunctionalErrorWithoutCrashing \
+      dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+APK fingerprints observed:
+  initial app APK: 1993e38ae07984181b4f048c138f8cff9df339b5426b87c2f78cc010a8757d2d
+  initial test APK: 9b8790cf28f7ff513db8fae31604fde35d91759b85265cf806f7ca9a33404a8f
+  later test APK: 6e85eb32da32ef7ca68631cace7eeebce320ec76a11d71575dc3473faa173f43
+  later app APK detected before install: 0ea4ad8317dc98d7246b3e0826150ea9c3a462003fb69988ff69ee74919408df
+  S0 report did not record APK hashes, so artifact provenance cannot be proven from hashes.
+
+Observed outcomes:
+  clean app install returned Success on the wiped API 37 AVD
+  initial test APK install failed: package service Broken pipe
+  later instrumentation output: INSTRUMENTATION_ABORTED: System has crashed
+  post-test screencap: BLOCKED, 72 bytes, invalid PNG; renderer assertion
+    Assertion failed: !rcEnc->featureInfo()->hasReadColorBufferDma
+  app/API 37 compatibility is not inferred from the renderer failure
+
+Full logs: /tmp/atlas-v622-s4
+No Android ID, real coordinates, or user location is included in this tracked proof.
+
+Revue/corrections post-S4 (2026-10-20):
+  bash -n scripts/v622-android17-recipe.sh => PASS
+  ./scripts/v622-android17-recipe.sh --self-test => PASS, 28 assertions, 0 échec
+  self-test ran no AVD, ADB, emulator, or Gradle command
+  self-test run dir=/tmp/atlas-v622-s4/run-20261020T195821.158565078
+  exact framework service parser: found / not found / absent / unexpected checked synthetically
+  positive service response must equal 'Service <name>: found'; every real probe writes a result row
+  synthetic service probe helper rows: exact found=PASS, not found=BLOCKED, absent=BLOCKED, timeout=BLOCKED_TIMEOUT
+  APK app and AndroidTest snapshots: expected SHA required, source before/after and copied hashes checked,
+    snapshot copies chmod 0444, later install commands use snapshot paths only
+  timeout synthetic: sleep 2 bounded at 1s returned 124 and wrote ADB_TIMEOUT record;
+    timeout result class is BLOCKED_TIMEOUT
+  instrumentation synthetic: exact 1-test pass accepted; zero tests, wrong method, assertion failure rejected;
+    abort and timeout classify BLOCKED; declared AndroidTest FQCN/method targets all found
+  all 7 actual run_instrumented invocations audited against FQCN path/package/class/method declarations;
+    synthetic stale dev.atlas.coach.app.AtlasLaunchTest FQCN is rejected
+  AtlasLaunchTest.kt declares package dev.atlas.coach; invocation uses that exact FQCN
+  mobility visible-start/notification/stop was removed from provider-off path and is recorded NOT_RUN:
+    requires a synchronized fresh host-injected coarse fix; no injection synchronization is in this recipe
+  actual system provider-off scenario is NOT_RUN; fake provider logic remains in its API26-29 test
+  capture remains independent of instrumented-test result
+  Android runtime rerun after these corrections: NOT_RUN by instruction; S5 owns active code/build work
+  final V6.2.2 qualification: NOT_RUN; replay after APK stabilization required

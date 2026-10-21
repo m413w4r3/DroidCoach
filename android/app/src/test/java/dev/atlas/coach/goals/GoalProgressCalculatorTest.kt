@@ -1,8 +1,11 @@
 package dev.atlas.coach.goals
 
 import dev.atlas.coach.focus.FocusPhase
+import dev.atlas.coach.focus.FocusEngine
+import dev.atlas.coach.focus.FocusPlan
 import dev.atlas.coach.focus.FocusSession
 import dev.atlas.coach.focus.FocusStatus
+import dev.atlas.coach.focus.FakeClock
 import dev.atlas.coach.habits.HabitCheckIn
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,6 +13,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GoalProgressCalculatorTest {
+    @Test
+    fun elapsedPomodoroWorkExcludesBreakAndCancelledWorkWithAControlledClock() {
+        val clock = FakeClock(startUtcMillis = 10_000L)
+        val engine = FocusEngine(clock, idFactory = { "pomodoro-session" })
+        val started = engine.start(FocusPlan("pomodoro", workSeconds = 60, shortBreakSeconds = 30, totalWorkCycles = 2))
+
+        clock.advanceMillis(60_000L)
+        assertEquals(FocusPhase.SHORT_BREAK, engine.currentSession()!!.phase)
+        val finishedDuringBreak = engine.finish(started.id)!!
+        assertEquals(60L, GoalProgressCalculator.completedWorkSeconds(finishedDuringBreak))
+
+        val cancelClock = FakeClock()
+        val cancelEngine = FocusEngine(cancelClock, idFactory = { "cancelled-session" })
+        val cancellable = cancelEngine.start(FocusPlan("cancel", workSeconds = 60, shortBreakSeconds = 30))
+        cancelClock.advanceMillis(20_000L)
+        val cancelled = cancelEngine.cancel(cancellable.id)!!
+        assertEquals(FocusStatus.CANCELLED, cancelled.status)
+        assertEquals(0L, GoalProgressCalculator.completedWorkSeconds(cancelled))
+    }
+
     @Test
     fun focusProgressUsesOnlyLinkedFinishedWorkAndDeduplicatesSessions() {
         val goal = goal(

@@ -18,6 +18,8 @@ import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.app.AtlasApplication
 import dev.atlas.coach.app.GoalPanelDraft
 import dev.atlas.coach.app.MainActivity
+import dev.atlas.coach.data.AndroidRevocationBarrierStorage
+import dev.atlas.coach.data.RevocationBarrierState
 import dev.atlas.coach.focus.FakeClock
 import dev.atlas.coach.focus.FocusPlan
 import dev.atlas.coach.focus.FocusStatus
@@ -25,7 +27,9 @@ import dev.atlas.coach.goals.GoalMetric
 import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.launcher.AndroidLauncherCatalog
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -36,6 +40,36 @@ import java.util.concurrent.CopyOnWriteArrayList
 class AtlasLaunchTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private var revocationBarrierPreferencesToRestore: Map<String, Any>? = null
+
+    @After
+    fun restoreRevocationBarrierAfterLegacyMigrationFixture() {
+        val previous = revocationBarrierPreferencesToRestore ?: return
+        val preferences = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("atlas_agent_revocation_barrier", android.content.Context.MODE_PRIVATE)
+        val editor = preferences.edit().clear()
+        previous.forEach { (key, value) ->
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is String -> editor.putString(key, value)
+                is Set<*> -> {
+                    val strings = value.map { it as? String
+                        ?: throw AssertionError("Unexpected non-string value in revocation barrier preferences")
+                    }.toSet()
+                    assertEquals("Unexpected duplicate value in revocation barrier preferences", value.size, strings.size)
+                    editor.putStringSet(key, strings)
+                }
+                else -> throw AssertionError("Unsupported value in revocation barrier preferences: ${value::class.java.name}")
+            }
+        }
+        assertTrue("Could not restore the pre-test revocation barrier preferences", editor.commit())
+        assertEquals("Revocation barrier preferences were not restored exactly", previous, preferences.all)
+        revocationBarrierPreferencesToRestore = null
+    }
 
     @Before
     fun clearDemoState() {
@@ -321,19 +355,34 @@ class AtlasLaunchTest {
     @Test
     fun recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val barrierStorage = AndroidRevocationBarrierStorage(context)
+        val barrierPreferences = context.getSharedPreferences(
+            "atlas_agent_revocation_barrier",
+            android.content.Context.MODE_PRIVATE,
+        )
+        revocationBarrierPreferencesToRestore = barrierPreferences.all.mapValues { (_, value) ->
+            when (value) {
+                is Set<*> -> value.toSet()
+                null -> throw AssertionError("Unexpected null in revocation barrier preferences")
+                else -> value
+            }
+        }
+        assertTrue("Could not isolate the legacy consent migration fixture", barrierStorage.writeState(RevocationBarrierState()))
         val prefs = context.getSharedPreferences("atlas_local_state", android.content.Context.MODE_PRIVATE)
         val legacyMandate = AgentMandate.default().copy(sharedDataCategories = setOf("focus", "goals"))
         val raw = org.json.JSONObject()
             .put("schemaVersion", 1)
             .put("agentMandate", legacyMandate.toJson().toString())
             .put("policy", org.json.JSONObject().put("quietStart", "invalid-time").put("quietEnd", "07:00"))
+            .put("lastAgentSharedContext", "{\"consented_categories\":[\"focus\"],\"categories\":{\"focus\":[\"fixture-sentinel\"]}}")
+            .put("lastAgentSharedContextAt", 1_800_000_000_000L)
             .toString()
         prefs.edit().putString("state_v1", raw).commit()
 
         val app = context.applicationContext as AtlasApplication
         app.resetControllerForTesting()
         val controller = app.controller
-        assertTrueQuarantineContains(prefs.all, raw)
+        assertQuarantineSemanticsAndPrivacy(prefs.all)
         assertTrue(controller.latestMessage?.contains("sous-états invalides") == true)
         assertTrue(controller.agentContextPreview.authorizedCategories.containsAll(setOf("focus", "goals")))
 
@@ -364,7 +413,7 @@ class AtlasLaunchTest {
             .getJSONObject("agentContextConsentAt")
         assertEquals(focusConsentAt, afterRestart.getLong("focus"))
         assertEquals(goalsConsentAt, afterRestart.getLong("goals"))
-        assertTrueQuarantineContains(prefs.all, raw)
+        assertQuarantineSemanticsAndPrivacy(prefs.all)
     }
 
     @Test
@@ -404,5 +453,26 @@ class AtlasLaunchTest {
         assertTrue("Raw state was not found under a quarantine key", values.entries.any { (key, value) ->
             key.startsWith("state_quarantine_") && !key.endsWith("_reason") && value == raw
         })
+    }
+
+    private fun assertQuarantineSemanticsAndPrivacy(values: Map<String, *>) {
+        val quarantinedStates = values.entries.mapNotNull { (key, value) ->
+            if (!key.startsWith("state_quarantine_") || key.endsWith("_reason")) return@mapNotNull null
+            (value as? String)?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
+        }
+        assertTrue("No parseable state was found under a quarantine key", quarantinedStates.isNotEmpty())
+        val quarantined = quarantinedStates.firstOrNull { it.has("agentMandate") && it.has("policy") }
+            ?: throw AssertionError("Quarantine is missing the legacy mandate or policy fields")
+
+        assertEquals(1, quarantined.getInt("schemaVersion"))
+        val mandate = org.json.JSONObject(quarantined.getString("agentMandate"))
+        assertEquals(setOf("focus", "goals"),
+            (0 until mandate.getJSONArray("shared_data_categories").length())
+                .map { mandate.getJSONArray("shared_data_categories").getString(it) }.toSet())
+        val policy = quarantined.getJSONObject("policy")
+        assertEquals("invalid-time", policy.getString("quietStart"))
+        assertEquals("07:00", policy.getString("quietEnd"))
+        assertFalse("Quarantine retained the legacy shared context", quarantined.has("lastAgentSharedContext"))
+        assertFalse("Quarantine retained the legacy shared-context timestamp", quarantined.has("lastAgentSharedContextAt"))
     }
 }

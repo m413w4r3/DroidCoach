@@ -1,0 +1,20 @@
+ATLAS V6.2.2 — recette visible de localisation/mobilité sur la paire corrigée
+Date : 2026-10-21
+AVD : atlas_v622_s1_api34, API 34, ADB 5037; aucun numéro de série physique publié.
+
+## Identité figée
+
+- APK app installée : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- APK AndroidTest installée : `8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d`.
+- Les empreintes lues de l'installation correspondent à la paire corrigée. La recette a sauté la réinstallation car les deux hashes étaient identiques; aucune APK n'a été remplacée ou reconstruite.
+- Script recette : SHA-256 `2e8bf6d6160b4a332230324c75fb89ee2c25c718fa06e66de73def72161ab88a`.
+
+## Résultats
+
+- Tests du fournisseur contrôlé : `TEST_LOGIQUE_PASS` pour provider, fraîcheur, divulgation, TTL et cycle de mobilité.
+- Acquisition visible de l'activité principale : `PASS location-visible-main-activity`.
+- Préparation du consentement mobilité : `PASS mobility-prepare-consent`.
+- Acquisition avec le service mobilité visible : `TEST_SYSTEM_BLOCKED`, raison `no_fresh_coarse_fix_after_host_injection`.
+- Statut global du script : `TEST_SYSTEM_BLOCKED` avec un blocage système; aucune autre erreur ni échec de test.
+
+Le résultat système est conservé comme `TEST_SYSTEM_BLOCKED`, sans le transformer en PASS. Aucune production n'a été changée pour obtenir un fix; le candidat reste la paire figée ci-dessus. Les sorties synthétiques sont sous `/tmp/atlas-v622-s6/location-corrected-test-8edb71a8/`; les dumps internes complets restent hors dépôt.

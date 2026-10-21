@@ -1,0 +1,60 @@
+ATLAS V6.2.2 — S6 sur le candidat S5/S7-P1-01 figé
+
+Date : 2026-10-21 (Europe/Paris)
+Branche / HEAD : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+## Identité vérifiée
+
+- Candidat : `/tmp/atlas-v622-s5-s7-p1-01-final-candidate`.
+- `app-debug.apk` SHA-256 : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- `app-debug-androidTest.apk` SHA-256 : `ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c`.
+- Digest code/tests/harnais au gel : `6fd5cbf1d44656d101bfa790f1d0d7e7da4b2f595b702584241a5c3f5b2757a5`.
+- Les deux hashes APK ont été recalculés. Les rapports E2E et harnais identifient les mêmes hashes candidats et installés. Aucun APK n'a été reconstruit après ce gel.
+- Le digest courant `android/app/src + scripts` est `93ec83319a2d1f8c9d1a95205a82432d6f7c253700081c2b1387a3fc4d1916d9` sur 225 fichiers après les évolutions tests/recette S6, dont les corrections D3. Ce digest ne remplace pas celui du candidat.
+
+## Régressions ciblées API 34
+
+| Groupe | Exécutés | PASS | FAIL | Détails |
+| --- | ---: | ---: | ---: | --- |
+| Courses contrôleur | 3 | 3 | 0 | La course `categoryWithdrawalAndSameClockReoptInAtDurableReservationCommitNeverEntersTransportOrReplays` termine PASS sans deadlock; deux autres courses PASS |
+| Publisher notifications | 2 | 2 | 0 | Publication concurrente incluse |
+| Goal–Focus | 7 | 6 | 1 | `failedInitialCommitHasNoSessionGoalAlarmStartedEventOrRecreatedState` reproduit un échec d'assertion |
+| Persistance V6.2.1 | 6 | 6 | 0 | PASS |
+| Worker V6.2.1 | 2 | 2 | 0 | PASS |
+| **Total ciblé** | **20** | **19** | **1** | **FAIL** |
+
+Le harnais complet a reproduit le même test en échec. La trace pointe la ligne 397 du test compilé; le résumé du runner identifie `assertTrue`. Dans le worktree actuel, cette ligne est une attente `assertEquals` d'un message exact, et cette chaîne n'existe pas dans les DEX du candidat `ea53…`. Le binaire de test ne correspond donc pas à cette assertion source actuelle. Le rapport ne permet pas d'établir le texte réel de l'échec, ni d'en attribuer la cause à la production. Le résultat reste `FAIL`; aucun test n'a été modifié ou affaibli après la reproduction, et aucune production n'a été touchée.
+
+## Harnais complet et D1
+
+L'inventaire pré-exécution établit 75 cas principaux (89 méthodes annotées, moins 4 exclusions E2E et 10 filtres), plus 10 compléments. Résultat sur le candidat figé : 75 exécutés, 1 échec, 0 erreur, 0 ignoré; 10/10 compléments PASS; 21/21 captures valides; 10/10 filtres analysés séparément. Le verdict de recette est `FAIL`, pas PASS. L'unique échec est le test Goal–Focus décrit ci-dessus. La matrice D1 sur AVD comprend 320/360 dp, portrait/paysage, police 1×/1,5×/2×, recherche, favoris, pied fixe, pause, retour HOME et jeux synthétiques 100/250.
+
+Le résumé expurgé est sous `/tmp/atlas-v622-s6/full-harness-candidate-ce10c968-final/`. Le préflight historique sans runner n'est pas réutilisé. Les passages `8edb71a8…` sont des résultats intermédiaires; la vérification GPS dédiée a aussi été bloquée car c'est ce test APK qui était encore installé. Aucun APK n'a été remplacé.
+
+## E2E OpenClaw réel et mode hors ligne
+
+Sur ce candidat, deux passages consécutifs du Gateway OpenClaw réel ont chacun exécuté 1 test avec 0 échec/erreur/ignoré. Le scénario démarre le Focus avec `goalId`, vérifie tout de suite le lien durable et 0/120, avance 25 minutes simulées, vérifie 25/120, puis suit proposition, MandateVerifier, effet et ACK. Après révocation de `goals`, une requête neuve part sans cette catégorie. Deux ACK d'effets exécutés sont résumés. Après arrêt du backend réel, le scénario hors ligne a réussi après force-stop et relance du processus applicatif. Les résumés expurgés sont sous `/tmp/atlas-v622-s6/openclaw-real-candidate-ce10c968-pass12/`; aucun bearer, prompt ou payload privé n'est conservé dans le dépôt.
+
+## D3 — mesure locale et blocage consentement coaching
+
+Une fenêtre locale valide de 60,0 s a été mesurée avec le SHA app vérifié, écran éteint, AppOp paquet `GET_USAGE_STATS=ignore`, agent/proactivité/consentement/background désactivés, pause inactive, sans Focus, mobilité ni appel E2E. Résumé privé : `/tmp/atlas-v622-s6/d3-rest-screenfix-ce10c968-20261021/local.json`.
+
+- Processus : `[1,1]`; CPU processus et threads : `unavailable_snapshot`.
+- UID réseau : `unavailable_snapshot`.
+- JobScheduler du paquet : 14 lignes avant/après, 0 en-tête JobStatus; ce sont des travaux, pas des réveils.
+- Batterystats : 10 enregistrements avant/après, changement agrégé 0; réveils attribuables indisponibles.
+- WorkManager DB non lue; téléphone/batterie physique `NOT_RUN`.
+
+La seconde fenêtre coaching n'a pas démarré : l'écran Android a confirmé Usage Access `allow` et la seule fixture synthétique « Distraction test » était sélectionnée, mais l'écran Observation ATLAS continuait d'afficher `Allowlist active : aucune`; toucher « Donner mon consentement et continuer » n'a pas activé l'allowlist. Le consentement applicatif requis n'était donc pas établi. D3 est `BLOCKED` comme paire. Coach/proactivité n'ont pas été activés et aucune requête n'a été envoyée pendant la mesure. Le protocole ne convertit pas cet état en PASS.
+
+Relecture statique du parcours : ce toucher principal est la confirmation ATLAS et, permission déjà accordée, doit écrire le consentement directement; aucune seconde activation de la coche n'est requise. Si la permission est ouverte avec le bouton secondaire, le toucher principal est requis après le retour. La trace existante ne montre pas les valeurs du callback ou du filtre d'apps, donc elle ne départage pas un toucher non distribué d'un rejet ou d'une erreur d'octroi. L'origine reste `INDETERMINE`, le résultat D3 reste `BLOCKED`. Étapes UI sûres et chemin source détaillés dans [s6-d3-consentement-ui-diagnostic.txt](s6-d3-consentement-ui-diagnostic.txt).
+
+Nettoyage vérifié ensuite dans l'interface et sur l'AVD : AppOp restauré à `ignore`, Sync désactivée, file vide, sept catégories décochées, URL vide, jeton absent; fixture synthétique désinstallée; adaptateur temporaire arrêté puis son répertoire privé supprimé. Aucune donnée ATLAS n'a été effacée; la pause a expiré naturellement, sans bouton « Fin ».
+
+## Autres statuts et baseline
+
+- Localisation visible : les tests logiques passent, mais la recette dédiée est `BLOCKED` avant instrumentation : l’APK app installée est `ce10…`, tandis que le package AndroidTest installé est `8edb…` au lieu du `ea53…` candidat. Le script a refusé de réinstaller. Aucune acquisition GPS du candidat reçu n’a eu lieu; le `TEST_SYSTEM_BLOCKED` d’`8edb…` reste historique.
+- Android 17 S4 : `BLOCKED` avant installation; 17 scénarios A2 et 11 nouveaux tests `NOT_RUN`, aucun nouvel essai API 37.
+- TalkBack réel et téléphone physique : `NOT_RUN`.
+- Baseline du candidat : `clean testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` PASS; hashes bâtis app/test identiques aux hashes candidat; 315 méthodes JVM uniques PASS, lint et assemblages PASS. Pytest final : 66 PASS, 1 SKIP, 0 FAIL.
+- Aucun commit, push, merge ou tag. Le worktree reste modifié.

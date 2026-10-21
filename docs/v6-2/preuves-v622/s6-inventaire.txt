@@ -1,0 +1,11 @@
+ATLAS V6.2.2 — inventaire S6 expurgé
+Date : 2026-10-21; branche `feat/atlas-v6-2-2`; HEAD `bf647cc18a142dd0f5cd5e68b21c36d511014388`.
+
+- ADB server utilisé : 5037; un seul émulateur connecté sur ce serveur, `atlas_v622_s1_api34`, API 34, modèle `sdk_gphone64_x86_64`, Android Emulator 37.2.12.
+- Appareil physique connecté : 0. Les scénarios téléphone physique sont `NOT_RUN`; aucun numéro de série physique n'est imprimé ou conservé.
+- Serveur ADB 5038 et AVD Android 17 S4 : non utilisés par S6. Le résultat S4 final relu classe l'environnement `BLOCKED` avant installation; 17 scénarios A2 et 11 nouveaux tests du candidat final restent `NOT_RUN`. L'AVD 5582 et le serveur 5038 ont été arrêtés. Aucun AVD personnel ou appareil physique n'a été effacé.
+- JDK de l'environnement : OpenJDK 21; Gradle wrapper 9.6.0; SDK Android et versions détaillées sont dans [BASELINE_V622.md](../BASELINE_V622.md).
+- APK applicative candidate : SHA-256 `dfb85688a98d6175395e87f25249dcd265b2802723a708a8205b2e3029e2c5a9`; APK AndroidTest recompilée en S6, empreinte finale dans [s6-baseline.txt](s6-baseline.txt).
+- Secrets OpenClaw : fichier de configuration local mode 600; jetons d'essai aléatoires temporaires, gardés hors dépôt et retirés à la fin. Aucune valeur de secret/payload privé ne figure dans l'inventaire.
+
+Le harnais a gardé le garde-fou ADB exclusif de S1. L'AVD API 34 était le seul appareil visé par les commandes de la recette S6.

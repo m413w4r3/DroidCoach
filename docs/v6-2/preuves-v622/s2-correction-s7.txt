@@ -1,0 +1,64 @@
+ATLAS V6.2.2 / S2 — correction S7
+Date: 2026-10-21 (Europe/Paris)
+Branche: feat/atlas-v6-2-2
+HEAD de départ: bf647cc
+
+PÉRIMÈTRE
+  Correction limitée aux fichiers S2 : ProactiveCoachScheduler, ProactiveCoachCoordinator,
+  ProactivePublicationAuthorization, tests scheduler/coordinator, commentaire Worker et test
+  instrumenté Android du publisher. S2 n'a pas modifié AtlasController/globals/UI.
+  Aucune exécution AVD ou appareil physique.
+
+RÉGRESSION — ROUGE AVANT CORRECTION
+  Test: ProactiveCoachSchedulerTest.withdrawal and re opt in at reservation commit cannot
+        authorize the reserved trigger
+  Commande:
+    ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.coach.proactive.ProactiveCoachSchedulerTest.withdrawal and re opt in at reservation commit cannot authorize the reserved trigger' --console=plain
+  Résultat avant changement scheduler: BUILD FAILED, 1 test, 1 failure à l'assertion
+  exigeant CONSENT_REVOKED et zéro callback transport/notification. Le même créneau est reproduit
+  dans /tmp/atlas-s7-race-repro; la preuve S7 y observait REQUESTED et un appel réseau après purge=0.
+
+CORRECTION ET RÉSULTATS VERTS
+  Époque capturée au début de coordinator.runDue avant éligibilité, purge, consentement,
+  horloge/fuseau et lecture/préparation de l'état. Elle reste immuable; le scheduler la lie au
+  lot avant commit, ne recapture aucune génération, vérifie avant le commit puis après son retour.
+  Lot déjà invalide avant commit: tombstone durable, pas de réservation/quota ni transport.
+  Invalidation exacte au commit: réservation/quota/tombstones gardés, statut
+  REVOKED_BEFORE_REQUEST, zéro transport/notification. Restart au même timestamp: aucun replay.
+
+  Suites ciblées scheduler/coordinator/Worker:
+    ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.coach.proactive.ProactiveCoachSchedulerTest' --tests 'dev.atlas.coach.app.ProactiveCoachCoordinatorTest' --tests 'dev.atlas.coach.coach.proactive.android.ProactiveCoachWorkerTimeoutTest' --console=plain
+    PASS — 33 tests, 0 failure, 0 error, 0 skipped.
+  Suite JVM complète:
+    ./gradlew :app:testDebugUnitTest --console=plain
+    PASS — 315 tests, 0 failure, 0 error, 0 skipped (57 XML).
+  Compilation des tests Android publisher:
+    ./gradlew :app:compileDebugAndroidTestKotlin --console=plain
+    PASS.
+  Les scénarios NotificationManager.activeNotifications et gate/retrait instrumentés sont compilés,
+  mais leur exécution runtime reste NOT_RUN (aucun AVD/appareil dans ce créneau).
+
+CONSENTEMENT ET PUBLISHER
+  Les régressions de retrait par currentConsent avant transport et en transport sont conservées;
+  elles vérifient explicitement que les générations restent inchangées.
+  Le test Android attend bornément les notices active avant annulation, attend la disparition
+  des cibles avec le témoin toujours actif, et nettoie ses IDs/canal témoin en finally. Le canal
+  atlas_proactive_coach de production n'est jamais supprimé.
+  Une seconde interleaving bloque la publication avant le gate, invalide et retire concurremment,
+  puis libère le gate qui refuse; le test complémentaire bloque au gate et vérifie l'ordre du verrou.
+
+TRANSMISSION S5
+  Migrer l'instanciation de ProactiveCoachCoordinator vers capturePublicationEpoch, en lisant
+  de façon cohérente les générations capability et agent avant toute préparation. L'adaptateur
+  doit refuser l'envoi avant HTTP si cette époque est périmée. Après une réponse HTTP tardive,
+  vérifier avant chaque fusion locale/inbox, dispatch et ACK; le scheduler ne peut pas annuler ces
+  effets après le retour du callback. Dans la course au commit: callback réseau non entré et
+  inbox/dispatch/ACK/notification=0. Dans la course en vol: réseau déjà parti mais réponse périmée
+  ignorée, inbox/dispatch/ACK/notification=0. Garder le gate publisher final et le retrait ciblé.
+
+LIMITES
+  La réservation reste durable et au plus une fois avant réseau. Le verrou process ne rend pas
+  atomiques génération, stockage et appels Binder notify/cancel. Une notice déjà acceptée par
+  Android peut être visible brièvement avant retrait ciblé; aucune atomicité OS n'est revendiquée.
+  Aucun commit, push ou merge.
+

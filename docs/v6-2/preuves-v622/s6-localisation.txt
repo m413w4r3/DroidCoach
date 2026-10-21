@@ -1,0 +1,13 @@
+ATLAS V6.2.2 — recette localisation visible S6
+AVD : atlas_v622_s1_api34 / API 34 / ADB server 5037.
+Commande : scripts/v62-location-visible-recipe.sh
+Répertoire de sortie : /tmp/atlas-v622-s1/logs/recipe-20261020T224246Z/.
+
+Résultats classés séparément
+- TEST_LOGIQUE_PASS : provider contrôlé, fraîcheur, divulgation, TTL et cycle de vie mobilité.
+- TEST_SYSTEM_BLOCKED location-visible-main-activity : aucun fix coarse frais après injection ADB synchronisée.
+- PASS mobility-prepare-consent.
+- TEST_SYSTEM_BLOCKED mobility-visible-service-with-measurement : Android n'a pas fourni de fix coarse frais pendant la fenêtre de demande.
+- Résultat global de la recette dédiée : TEST_SYSTEM_BLOCKED pour ces deux acquisitions visibles.
+
+Le runner Android a réellement échoué sur les deux assertions d'acquisition; le script a classé explicitement le marqueur TEST_SYSTEM_BLOCKED. Il n'a pas converti les autres FAIL en succès. Les tests logiques contrôlés restent PASS et ne prouvent pas l'acquisition système. Aucun essai localisation physique n'a eu lieu.

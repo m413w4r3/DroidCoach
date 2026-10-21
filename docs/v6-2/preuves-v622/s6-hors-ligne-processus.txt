@@ -1,0 +1,10 @@
+ATLAS V6.2.2 — persistance locale et processus OS S6
+AVD : atlas_v622_s1_api34 / API 34; données synthétiques.
+
+Parcours vérifiés
+- Tests Compose/AndroidTest avec horloge contrôlée : sélection Goal 120 → Focus 25; 0 minute avant fin, 25 minutes après fin; recréation du contrôleur/document conserve 25/120; session annulée ne crédite aucune minute; cas de pause/reprise inclus dans `GoalFocusStartInstrumentationTest` (7/7 PASS).
+- Le test d'offline complet a exécuté après arrêt du backend temporaire vérifié par la recette E2E : Focus local/Goal/favoris et pause d'urgence restent disponibles, 1/1 PASS.
+- Processus OS : `am force-stop dev.atlas.coach` sur le package cible, PID présent avant, absent après; instrumentation relance ensuite le processus. Une deuxième observation dédiée a donné running_before=1, stopped_after=1, restarted_after=1.
+- Focus restauré après arrêt de processus : pause, reprise et annulation instrumentées, 1/1 PASS.
+
+Limite : les fixtures sont synthétiques et exécutées sur AVD API 34. Aucun effacement de données d'un appareil personnel n'a été exécuté. Le statut hors ligne est prouvé pour l'instance FastAPI temporaire de la recette qui a vérifié son endpoint inaccessible; il ne qualifie pas toutes les installations d'ATLAS.

@@ -1,0 +1,27 @@
+ATLAS V6.2.2 — inventaire pré-exécution du candidat S6 corrigé
+Date : 2026-10-21
+Branche/base : feat/atlas-v6-2-2 / bf647cc18a142dd0f5cd5e68b21c36d511014388
+
+## Paire APK figée avant la nouvelle exécution
+
+- Répertoire candidat : `/tmp/atlas-v622-s6-s5-s7-p1-01-corrected-test-candidate/`.
+- APK app : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- APK AndroidTest : `8edb71a818ac01a4c3195cab48def493be117587159f939962f4f15ed053014d`.
+- Le seul changement AndroidTest par rapport à la paire précédente met à jour l'assertion exacte du message lors d'un échec de commit Focus. Les assertions sur absence de session, lien Goal, alarme, événement et état recréé restent présentes.
+- Aucun code de production n'a changé. Le APK app reste le même SHA; ce nouveau SHA test est enregistré séparément. La paire est copiée dans le répertoire candidat et les deux fichiers sont en mode 600.
+- Digest arbre code/tests/harnais au moment du gel : `189402c7392f5e5d4dbf693210e370629b4f19783872d2c85474c5c159739007` (225 fichiers non-cache; méthode dans `candidate-metadata.txt`).
+
+## Nombre attendu, fixé avant le runtime
+
+Inventaire statique : 89 méthodes annotées AndroidTest; les 4 méthodes E2E de `V62RealGatewayContextBridgeTest` sont sorties du passage principal et 10 cas filtrés sont pré-déclarés : **75 cas principaux attendus**. Les compléments restent à **10**. La correction de message ne crée ni ne supprime de méthode; aucun nombre XML observé n'a servi à régler l'attendu.
+
+## Sélections ciblées prévues
+
+- `ProactiveControllerPublicationAuthorizationInstrumentationTest` : 3 cas, dont la course retrait/réopt-in à la réservation durable.
+- `ProactiveCoachNotificationPublisherInstrumentationTest` : 2 cas, dont `activeNotifications` pendant le retrait concurrent.
+- `GoalFocusStartInstrumentationTest` : 7 cas.
+- `AgentPersistenceFailureInstrumentationTest` : 6 cas.
+- `ProactiveCoachWorkerInstrumentationTest` : 2 cas.
+- Total : 20 cas ciblés. Les tests Android doivent utiliser exclusivement la paire figée ci-dessus; tout timeout est `FAIL`.
+
+Les résultats seront ajoutés après exécution, sans modifier l'attendu de 75/10.

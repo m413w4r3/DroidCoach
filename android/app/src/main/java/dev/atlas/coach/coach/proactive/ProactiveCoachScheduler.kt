@@ -369,32 +369,41 @@ class ProactiveCoachScheduler(
     fun runDue(
         nowUtcMillis: Long,
         mandateZoneId: ZoneId,
-        requestPlan: (ProactivePlanRequest) -> ProactivePlanResponse?,
-        showNotification: (ProactiveNotification) -> Unit,
+        publicationEpoch: ProactivePublicationEpoch,
+        isPublicationAuthorizationCurrent: (ProactivePublicationAuthorization) -> Boolean,
+        requestPlan: (ProactivePlanRequest, ProactivePublicationAuthorization) -> ProactivePlanResponse?,
+        showNotification: (ProactiveNotification, ProactivePublicationAuthorization) -> Unit,
     ): ProactiveRunResult {
         require(nowUtcMillis >= 0L)
         val initialConsent = runCatching(currentConsent).getOrElse {
             return ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED)
         }
         val reservation = synchronized(PROCESS_STATE_LOCK) {
-            reserveDue(nowUtcMillis, mandateZoneId, initialConsent)
+            reserveDue(nowUtcMillis, mandateZoneId, initialConsent, publicationEpoch) { authorization ->
+                isAuthorizationCurrent(authorization, isPublicationAuthorizationCurrent)
+            }
         }
         if (reservation.result.status != ProactiveRunStatus.REQUESTED) return reservation.result
         val request = requireNotNull(reservation.request)
-
-        val preflightConsent = runCatching(currentConsent).getOrElse {
-            return markRequestStatus(request.reservationId, ProactiveRequestStatus.REVOKED_BEFORE_REQUEST,
-                ProactiveRunStatus.CONSENT_REVOKED, request.triggers.size)
-        }
-        if (request.triggers.any { !preflightConsent.allows(it) }) {
+        // This authorization is bound from the epoch captured before consent/preparation; never
+        // replace it with a fresh generation after the reservation has consumed its triggers.
+        val authorization = publicationEpoch.authorize(request.triggers)
+        fun authorizationIsCurrent(): Boolean =
+            authorization.triggers == request.triggers &&
+                isAuthorizationCurrent(authorization, isPublicationAuthorizationCurrent)
+        if (!authorizationIsCurrent()) {
             return markRequestStatus(request.reservationId, ProactiveRequestStatus.REVOKED_BEFORE_REQUEST,
                 ProactiveRunStatus.CONSENT_REVOKED, request.triggers.size)
         }
 
         val response = try {
-            requestPlan(request)
+            requestPlan(request, authorization)
         } catch (_: Exception) {
             null
+        }
+        if (!authorizationIsCurrent()) {
+            return markRequestStatus(request.reservationId, ProactiveRequestStatus.FAILED,
+                ProactiveRunStatus.CONSENT_REVOKED, request.triggers.size)
         }
         if (response == null) {
             return markRequestStatus(request.reservationId, ProactiveRequestStatus.FAILED,
@@ -412,34 +421,45 @@ class ProactiveCoachScheduler(
         // Notification copy remains useful even if the plan has no active local proposal.
         // Invalid IDs are never forwarded as notification payloads.
         val localProposalId = response.localProposalId?.takeIf(::isLocalProposalId)
-        val latestConsent = runCatching(currentConsent).getOrElse {
-            return ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED, request.reservationId, request.triggers.size)
-        }
-        if (request.triggers.any { !latestConsent.allows(it) }) {
+        if (!authorizationIsCurrent()) {
             return ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED, request.reservationId, request.triggers.size)
         }
 
         val notification = synchronized(PROCESS_STATE_LOCK) {
-            val notificationAt = maxOf(nowUtcMillis, runCatching(clockUtcMillis).getOrDefault(nowUtcMillis))
-            reserveNotification(request, content, localProposalId, notificationAt, mandateZoneId)
+            if (!authorizationIsCurrent()) {
+                NotificationOutcome(ProactiveRunResult(
+                    ProactiveRunStatus.CONSENT_REVOKED, request.reservationId, request.triggers.size,
+                ))
+            } else {
+                val notificationAt = maxOf(nowUtcMillis, runCatching(clockUtcMillis).getOrDefault(nowUtcMillis))
+                reserveNotification(request, content, localProposalId, notificationAt, mandateZoneId)
+            }
         }
         if (notification.result.status != ProactiveRunStatus.REQUESTED) return notification.result
         val delivery = requireNotNull(notification.notification)
-        val deliverySucceeded = try {
-            showNotification(delivery)
-            true
-        } catch (_: Exception) {
-            false
+        val publicationFailure = try {
+            if (!authorizationIsCurrent() ||
+                authorization.triggers.map { it.source }.toSet() != delivery.triggerSources
+            ) throw ProactivePublicationRejectedException()
+            showNotification(delivery, authorization)
+            null
+        } catch (failure: Exception) {
+            failure
         }
         val updated = markNotificationStatus(
             delivery.notificationId,
-            if (deliverySucceeded) ProactiveNotificationStatus.DELIVERED else ProactiveNotificationStatus.FAILED,
+            if (publicationFailure == null) ProactiveNotificationStatus.DELIVERED else ProactiveNotificationStatus.FAILED,
         )
         if (!updated) return ProactiveRunResult(
             ProactiveRunStatus.PERSISTENCE_FAILED, request.reservationId, request.triggers.size, notificationReserved = true,
         )
+        val deliverySucceeded = publicationFailure == null
         return ProactiveRunResult(
-            if (deliverySucceeded) ProactiveRunStatus.REQUESTED else ProactiveRunStatus.NOTIFICATION_FAILED,
+            when {
+                deliverySucceeded -> ProactiveRunStatus.REQUESTED
+                publicationFailure is ProactivePublicationRejectedException -> ProactiveRunStatus.CONSENT_REVOKED
+                else -> ProactiveRunStatus.NOTIFICATION_FAILED
+            },
             request.reservationId,
             request.triggers.size,
             notificationReserved = true,
@@ -506,6 +526,8 @@ class ProactiveCoachScheduler(
         nowUtcMillis: Long,
         zoneId: ZoneId,
         currentConsent: ProactiveConsentSnapshot,
+        publicationEpoch: ProactivePublicationEpoch,
+        isAuthorizationCurrent: (ProactivePublicationAuthorization) -> Boolean,
     ): ReservationOutcome {
         val state = readStateDetached()
             ?: return ReservationOutcome(ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED))
@@ -565,13 +587,37 @@ class ProactiveCoachScheduler(
             mode = cleaned.mode,
             triggers = cooldownEligible,
         )
+        val authorization = publicationEpoch.authorize(request.triggers)
+        val eventIdSet = eventIds.toSet()
+        fun consumeInvalidatedCandidates(): ReservationOutcome {
+            val rejected = cleaned.copy(
+                pendingTriggers = cleaned.pendingTriggers.filterNot { it.eventId in eventIdSet },
+                consumedEventTombstones = appendTombstones(
+                    cleaned.consumedEventTombstones,
+                    eventIds,
+                    nowUtcMillis,
+                ),
+            )
+            return if (!persist(rejected)) {
+                ReservationOutcome(ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED))
+            } else {
+                ReservationOutcome(ProactiveRunResult(ProactiveRunStatus.CONSENT_REVOKED, groupedTriggerCount = eventIds.size))
+            }
+        }
+        // Bind the captured epoch to the selected trigger set before consuming any trigger or
+        // committing quota/cooldown state. A stale epoch tombstones the batch so re-opt-in cannot
+        // replay it under a newer generation.
+        if (!isAuthorizationCurrent(authorization)) return consumeInvalidatedCandidates()
         val next = cleaned.copy(
-            pendingTriggers = cleaned.pendingTriggers.filterNot { it.eventId in eventIds.toSet() },
+            pendingTriggers = cleaned.pendingTriggers.filterNot { it.eventId in eventIdSet },
             consumedEventTombstones = appendTombstones(cleaned.consumedEventTombstones, eventIds, nowUtcMillis),
             gateMemory = triggerGate.markRequested(motifs, nowUtcMillis, cleaned.gateMemory),
             requestReservations = cleaned.requestReservations + reservationRecord,
             nextReservationSequence = cleaned.nextReservationSequence + 1L,
         )
+        // Recheck immediately before the durable reservation. A revocation racing the write is
+        // caught again by runDue after persist returns, before the network callback.
+        if (!isAuthorizationCurrent(authorization)) return consumeInvalidatedCandidates()
         if (!persist(next)) return ReservationOutcome(ProactiveRunResult(ProactiveRunStatus.PERSISTENCE_FAILED))
         return ReservationOutcome(
             ProactiveRunResult(ProactiveRunStatus.REQUESTED, reservationId, cooldownEligible.size),
@@ -664,6 +710,15 @@ class ProactiveCoachScheduler(
         }
 
     private fun readStateDetached(): ProactiveCoachState? = runCatching(readState).getOrNull()?.detached()
+
+    private fun isAuthorizationCurrent(
+        authorization: ProactivePublicationAuthorization,
+        externalGate: (ProactivePublicationAuthorization) -> Boolean,
+    ): Boolean = runCatching {
+        authorization.triggers.isNotEmpty() &&
+            authorization.triggers.all(currentConsent()::allows) &&
+            externalGate(authorization)
+    }.getOrDefault(false)
 
     private fun persist(state: ProactiveCoachState): Boolean = runCatching { writeState(state.detached()) }.isSuccess
 

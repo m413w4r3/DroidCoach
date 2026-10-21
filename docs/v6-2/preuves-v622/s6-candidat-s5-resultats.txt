@@ -1,0 +1,49 @@
+ATLAS V6.2.2 — recette du candidat final S5/S7-P1-01
+Date : 2026-10-21
+AVD attribué : atlas_v622_s1_api34, API 34, ADB 5037; aucune série physique publiée.
+
+HISTORIQUE — cette passe utilise l'APK AndroidTest `ea53e429…` et comporte un échec de fixture Goal–Focus. Elle est conservée pour tracer l'anomalie initiale. Le candidat final corrigé utilise `8edb71a8…`; ses résultats sont dans `s6-candidat-s5-corrige-final.txt`. Ne pas compter ce fichier comme le résultat du candidat corrigé.
+
+## Identité vérifiée
+
+- APK application source : `ce10c968988fb3383e06ee94b3c1eb3723f37efcf6035597601643916a9f298a`.
+- APK AndroidTest source : `ea53e4294457c6ccdc1c5ebec52025f3f8259f76486b402a8175e0242904933c`.
+- Les deux APK installées ont été relues depuis `base.apk` et ont exactement ces empreintes.
+- `candidate-metadata.txt` déclare le digest arborescent code/tests/harnais `6fd5cbf1d44656d101bfa790f1d0d7e7da4b2f595b702584241a5c3f5b2757a5`. L'empreinte de l'APK et celle de l'APK AndroidTest ont été recalculées indépendamment.
+- Aucun APK n'a été reconstruit après cette vérification. Le harnais Gradle a produit les mêmes empreintes que la paire figée; l'E2E a installé cette paire directement.
+- Après correction du nom du test hors ligne et de la vérification de relance OS, l'empreinte du script E2E exécuté est `4f96496c013cf739d3cc66f201c106600770e52b461f43671db1f824ae659181`.
+- Empreinte post-recette de l'arbre courant sources/tests/scripts : `98837e4ae5ab59e613f16dd283c1fc429e181bd60f5bb242009594674d872d55`. Méthode : `find android/app/src scripts -type f ! -path '*/__pycache__/*' -print0 | sort -z | xargs -0 sha256sum | sha256sum`; 225 fichiers, les caches Python exclus. Cette empreinte est distincte du digest 226 fichiers déclaré par les métadonnées du candidat.
+
+## Régressions AndroidTest ciblées
+
+| Sélection | Résultat |
+| --- | --- |
+| 3 courses du contrôleur, dont `categoryWithdrawalAndSameClockReoptInAtDurableReservationCommitNeverEntersTransportOrReplays` | 3/3 PASS; aucune attente bloquée |
+| Publisher et révocation concurrente avec `activeNotifications` | 2/2 PASS |
+| Goal–Focus | 6/7 PASS, 1 FAIL |
+| Persistance agent V6.2.1 | 6/6 PASS |
+| Worker V6.2.1 | 2/2 PASS |
+| **Total ciblé** | **19 PASS, 1 FAIL / 20** |
+
+Le seul échec ciblé est `GoalFocusStartInstrumentationTest#failedInitialCommitHasNoSessionGoalAlarmStartedEventOrRecreatedState`, à la ligne 397. La fixture attend encore `Impossible d'enregistrer`; le contrôleur S5 expose désormais `Focus non démarré. Aucun lien à l'objectif n'a été enregistré.` Il s'agit d'une assertion de message obsolète dans le test. La cause est reproduite et vérifiée sur ce candidat; aucune correction de production ni réduction d'assertion n'a été faite.
+
+## Harnais complet
+
+Le nombre principal attendu a été déterminé avant le résultat runtime : 89 méthodes annotées AndroidTest, moins les 4 méthodes E2E exécutées séparément, moins les 10 filtres déclarés = 75 cas principaux. Le cas de course S5 explique le passage historique de 74 à 75. Les compléments restent à 10.
+
+- Principal : 75/75 exécutés, 1 échec, 0 erreur, 0 skip, 24 classes avec cas exécutés.
+- Compléments : 10/10 PASS.
+- Captures : 21/21 PASS.
+- Filtres distincts : 10/10 parsés; zéro filtre n'est compté comme test PASS.
+- Blocage du fournisseur GPS : statut séparé `TEST_SYSTEM_BLOCKED`.
+- Verdict du script : `FAIL`, car l'échec de message du test Goal–Focus est conservé.
+
+Résumé runner expurgé : `/tmp/atlas-v622-s6/full-harness-candidate-ce10c968-final/counts.txt`; détails complets restent hors dépôt.
+
+## Baseline de ce candidat
+
+`clean`, `testDebugUnitTest`, `lintDebug`, `assembleDebug` et `assembleDebugAndroidTest` passent. La recompilation locale propre a produit les mêmes SHA-256 app/test que le candidat figé. Le XML JVM a 315 cas uniques, 0 échec, 0 erreur et 0 skip (les XML imbriqués ne sont pas comptés deux fois).
+
+Le premier `python3 -m pytest -q` a échoué avant collection car `pygments` du Python utilisateur n'était pas dans son `sys.path`. Le rejeu avec `PYTHONPATH=/usr/lib/python3/dist-packages PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q` passe : 66 passed, 1 skipped, 1 avertissement Starlette, 0 failed.
+
+Les régressions hôte D3 (12 cas) et le validateur du résumé du harnais (positif et 12 négatifs) avaient déjà passé avant ce candidat; `bash -n` et `git diff --check` sont également requis après les derniers changements de script/documentation.

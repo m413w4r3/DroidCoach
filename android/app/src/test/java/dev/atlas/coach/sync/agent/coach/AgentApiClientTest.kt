@@ -125,6 +125,55 @@ class AgentApiClientTest {
     }
 
     @Test
+    fun proactiveAckAuthorizationRejectsBeforeHttpRequestOrBodySerialization() {
+        var authorizationChecks = 0
+        ServerSocket(0).use { server ->
+            server.soTimeout = 300
+            val client = AgentApiClient(
+                baseUrl = "http://127.0.0.1:${server.localPort}",
+                tokenProvider = BearerTokenProvider { "test-token" },
+                requestAllowed = { true },
+            )
+
+            val failure = runCatching {
+                client.acknowledge(
+                    proposalId = "proposal-1",
+                    state = "executed",
+                    effect = "Directive applied",
+                    atUtcMillis = 1_800_000_123_000L,
+                    authorizationAllowed = { authorizationChecks++; false },
+                )
+            }.exceptionOrNull()
+
+            assertTrue(failure is AgentApiException)
+            assertEquals(403, (failure as AgentApiException).statusCode)
+            assertEquals(1, authorizationChecks)
+            assertTrue("stale acknowledgement opened an HTTP connection", runCatching { server.accept() }.exceptionOrNull() is SocketTimeoutException)
+        }
+    }
+
+    @Test
+    fun executedAckRechecksAuthorizationBetweenAcceptedAndExecuted() {
+        var authorizationChecks = 0
+        val requests = withAckResponses(listOf(204)) { client ->
+            val failure = runCatching {
+                client.acknowledgeExecution(
+                    proposalId = "proposal-1",
+                    effect = "Directive applied",
+                    atUtcMillis = 1_800_000_123_000L,
+                    authorizationAllowed = { ++authorizationChecks == 1 },
+                )
+            }.exceptionOrNull()
+
+            assertTrue(failure is AgentApiException)
+            assertEquals(403, (failure as AgentApiException).statusCode)
+        }
+
+        assertEquals(2, authorizationChecks)
+        assertEquals("only accepted may cross the HTTP boundary", listOf("accepted"), requests.map { JSONObject(it.body).getString("state") })
+    }
+
+    @Test
     fun chatInboxAndAckUseExistingBearerAndV2ContractOverHttpStub() {
         val proposal = ProposalV2(
             schemaVersion = 2,

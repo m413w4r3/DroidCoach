@@ -10,6 +10,31 @@ import org.junit.Test
 
 class FocusEngineTest {
     @Test
+    fun preparedStartDoesNotMutateEngineAndPublishesUsingTheCapturedMonotonicOrigin() {
+        val clock = FakeClock(startUtcMillis = 1_234L, startMonotonicMillis = 5_678L)
+        val engine = FocusEngine(clock, idFactory = { error("prepareStart must not use the ID factory") })
+        val plan = FocusPlan("prepared", workSeconds = 10, shortBreakSeconds = 2)
+
+        val prepared = engine.prepareStart(
+            plan = plan,
+            directiveId = "directive-prepared",
+            sessionId = "session-prepared",
+            startedAtUtcMillis = clock.nowMillis(),
+            startedAtMonotonicMillis = clock.monotonicMillis(),
+        )
+
+        assertNull(engine.snapshot())
+        assertEquals(FocusStatus.IDLE, engine.state)
+        assertEquals("session-prepared", prepared.session.id)
+        assertEquals(10_000L, prepared.session.remainingMillis)
+        assertEquals(prepared.session, engine.publishPreparedStart(prepared))
+        assertEquals(FocusStatus.RUNNING, engine.state)
+
+        clock.advanceMonotonicMillis(1_250L)
+        assertEquals(8_750L, engine.snapshot()!!.remainingMillis)
+    }
+
+    @Test
     fun pomodoro25_5CompletesWorkAndShortBreak() {
         val clock = FakeClock(startUtcMillis = 1_000_000L)
         val engine = FocusEngine(clock, idFactory = { "focus-1" })

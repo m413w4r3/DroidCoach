@@ -1,0 +1,8 @@
+ATLAS V6.2.2 — inspection TalkBack S6
+AVD : atlas_v622_s1_api34 / API 34. Pas de téléphone physique connecté.
+
+Le service système TalkBack a été activé temporairement et `dumpsys accessibility` a confirmé qu'il était lié. Sur HOME, une capture UI Automator a relevé 40 nœuds, 19 libellés accessibles et 6 nœuds activables; un libellé de pause d'urgence et un libellé Focus étaient présents. Le rôle HOME temporaire et les réglages d'accessibilité ont ensuite été restaurés; après restauration, aucun service TalkBack n'était lié et le rôle HOME original était revenu.
+
+Limite décisive : inspection de structure/semantics seulement. Aucun contrôle fiable de la parole audible, de la navigation gestuelle, de l'ordre réel de lecture ou de l'interaction TalkBack complète n'a été effectué. D2 est `PARTIAL` sur AVD; TalkBack réel physique est `NOT_RUN`, jamais PASS.
+
+Résumé et états restaurés hors dépôt : `/tmp/atlas-v622-s6/talkback-avd/`.

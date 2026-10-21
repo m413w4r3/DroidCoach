@@ -28,7 +28,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.ui.AtlasTheme
 import dev.atlas.coach.app.ui.AtlasThemePreference
+import dev.atlas.coach.data.StateBackend
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -106,7 +108,14 @@ class LotEUiInstrumentationTest {
     @Test
     fun proposedFocusRequiresTapAndSupportsPauseResumeFinish() {
         resetIsolatedState()
-        val controller = AtlasController(isolatedContext)
+        val backend = object : StateBackend {
+            private var value: String? = null
+            override fun read(): String? = value
+            override fun write(value: String) {
+                this.value = value
+            }
+        }
+        val controller = AtlasController(isolatedContext, stateBackendOverride = backend)
         val proposed = ProposedFocusSession(
             focusMinutes = 25,
             breakMinutes = 5,
@@ -130,6 +139,10 @@ class LotEUiInstrumentationTest {
         composeRule.onNodeWithTag("focus_task_title").performTextReplacement("Lecture de test")
         composeRule.onNodeWithTag("focus_duration_minus").performClick()
         composeRule.onNodeWithTag("focus_pomodoro_start").performClick()
+        assertNotNull(
+            "Focus start was refused (enabled=${controller.capabilities[AtlasController.CAP_FOCUS]}, message=${controller.latestMessage})",
+            controller.focusSession,
+        )
         assertEquals("Lecture de test", controller.focusSession?.taskTitle)
         assertEquals(24L * 60L, controller.focusSession?.workSeconds)
         composeRule.onNodeWithTag("focus_phase").assertIsDisplayed()

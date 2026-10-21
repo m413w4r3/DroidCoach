@@ -7,6 +7,7 @@ import dev.atlas.coach.goals.GoalProgressCalculator
 import dev.atlas.coach.goals.GoalRecord
 import dev.atlas.coach.goals.GoalRepository
 import dev.atlas.coach.goals.GoalStatus
+import dev.atlas.coach.goals.PreparedFocusLink
 import dev.atlas.coach.habits.Habit
 import dev.atlas.coach.habits.HabitCheckIn
 import java.time.Instant
@@ -24,6 +25,15 @@ class GoalPanelCoordinator(
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
     val repository = GoalRepository(readSubdocument, persistSubdocument)
+
+    fun prepareFocusLink(
+        goalId: String,
+        focusSessionId: String,
+        linkedAtUtcMillis: Long,
+    ): PreparedFocusLink = repository.prepareFocusLink(goalId, focusSessionId, linkedAtUtcMillis)
+
+    fun publishCommittedFocusLink(prepared: PreparedFocusLink): GoalRecord =
+        repository.publishCommittedFocusLink(prepared)
 
     fun entries(): List<GoalsPanelEntry> = repository.all()
         .sortedWith(
