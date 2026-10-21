@@ -36,6 +36,10 @@ class V62MobilityServiceInstrumentedTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["location_fix_injection"],
+        reason = "must run with the synchronized host injection and visible mobility assertion",
+    )
     fun prepareSharingConsentBeforeHostInjectsFreshMobilityFix() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = LocationConsentStore.open(context)

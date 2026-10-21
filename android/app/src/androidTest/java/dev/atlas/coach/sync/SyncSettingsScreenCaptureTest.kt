@@ -6,7 +6,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.app.SyncSettingsScreen
@@ -14,6 +13,8 @@ import dev.atlas.coach.app.ui.AtlasTheme
 import dev.atlas.coach.app.ui.AtlasRoutes
 import dev.atlas.coach.app.ui.AtlasScreenFrame
 import dev.atlas.coach.focus.FocusPlan
+import dev.atlas.coach.test.BackendArgumentsAwareRunner
+import dev.atlas.coach.test.RequiresBackendArguments
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -21,18 +22,21 @@ import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
-@RunWith(AndroidJUnit4::class)
+@RunWith(BackendArgumentsAwareRunner::class)
 class SyncSettingsScreenCaptureTest {
     @get:Rule
     val composeRule = createComposeRule()
 
     @Test
+    @RequiresBackendArguments(
+        keys = ["capture_state"],
+        reason = "requires an explicitly requested sync-settings capture state",
+    )
     fun captureRequestedState() {
         val arguments = InstrumentationRegistry.getArguments()
-        val state = arguments.getString("capture_state")
-        if (state !in setOf("disabled", "synchronized", "offline")) {
-            android.util.Log.i("ATLAS_H2", "capture_state not requested; no screenshot scenario executed")
-            return
+        val state = requireNotNull(arguments.getString("capture_state"))
+        require(state in setOf("disabled", "synchronized", "offline")) {
+            "capture_state must be disabled, synchronized, or offline; got '$state'"
         }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         resetSyncState(context)

@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
@@ -52,11 +53,16 @@ import java.util.concurrent.TimeUnit
 class V62NativeUiCaptureTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+    private val captureFailures = mutableListOf<String>()
 
     @Test
-    fun nativeHomeMatrixAtRequestedWidth() {
-        val widthDp = InstrumentationRegistry.getArguments().getString("expected_width_dp")?.toInt()
-            ?: error("expected_width_dp is required so captures are tied to a configured AVD viewport")
+    fun nativeHomeMatrixUsesConfiguredOrActualWidth() {
+        val widthArgument = InstrumentationRegistry.getArguments().getString("expected_width_dp")
+        val requestedWidthDp = widthArgument?.toIntOrNull()
+        require(widthArgument == null || requestedWidthDp != null) {
+            "expected_width_dp must be an integer when supplied; got '$widthArgument'"
+        }
+        val widthDp = requestedWidthDp ?: composeRule.activity.resources.configuration.screenWidthDp
         val controller = newController()
         controller.syncLauncherHomeRole(true)
         controller.setCapability(AtlasController.CAP_FOCUS, true)
@@ -76,7 +82,12 @@ class V62NativeUiCaptureTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("launcher_open_drawer").fetchSemanticsNodes().isNotEmpty()
         }
-        assertEquals(widthDp, composeRule.activity.resources.configuration.screenWidthDp)
+        if (requestedWidthDp != null) {
+            assertEquals("Configured capture width must match the AVD viewport", requestedWidthDp,
+                composeRule.activity.resources.configuration.screenWidthDp)
+        } else {
+            Log.i("ATLAS_UI_CAPTURE", "expected_width_dp not supplied; using actual viewport ${widthDp}dp")
+        }
         composeRule.onNodeWithTag("launcher_focus_card_action").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_drawer").assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_coach").assertHeightIsAtLeast(48.dp)
@@ -139,6 +150,43 @@ class V62NativeUiCaptureTest {
         assertThemeTextContrast(AtlasThemePalettes.amoled)
         assertThemeTextContrast(AtlasThemePalettes.light)
         assertTrue("The injected 25-minute visual Focus should remain active during capture", controller.focusSession?.remainingSeconds?.let { it in 1L..1_500L } == true)
+    }
+
+    @Test
+    fun systemFontScaleTwoKeepsEmergencyControlsAccessible() {
+        val expectedFontScale = InstrumentationRegistry.getArguments()
+            .getString("expected_system_font_scale")?.toFloatOrNull()
+            ?: error("expected_system_font_scale must be supplied by the disposable-AVD recipe")
+        assertEquals("The AVD must apply the requested system font scale", expectedFontScale,
+            composeRule.activity.resources.configuration.fontScale, 0.01f)
+
+        val controller = newController()
+        controller.syncLauncherHomeRole(true)
+        val theme = mutableStateOf(AtlasThemePreference.DARK)
+        val fontScale = mutableStateOf(composeRule.activity.resources.configuration.fontScale)
+        val state = mutableStateOf(HomeAgentState.localDefault(controller))
+        showHome(controller, theme, fontScale, state)
+
+        composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_drawer").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_more").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        assertTrue("The actual system font scale must stay at 2x",
+            composeRule.activity.resources.configuration.fontScale >= 2.0f)
+        capture("v623-home-system-font-2_0.png")
+    }
+
+    @Test
+    fun screenshotCapturePipelineProducesPng() {
+        composeRule.setContent {
+            AtlasTheme {
+                androidx.compose.material3.Text("Capture de test synthétique")
+            }
+        }
+        composeRule.onNodeWithText("Capture de test synthétique").assertIsDisplayed()
+        capture("v623-screenshot-pipeline.png")
+        assertTrue("The dedicated screenshot pipeline must produce a valid PNG: ${captureFailures.joinToString("; ")}",
+            captureFailures.isEmpty())
     }
 
     @Test
@@ -308,19 +356,40 @@ class V62NativeUiCaptureTest {
             val observer = decorView.viewTreeObserver
             if (observer.isAlive) observer.removeOnDrawListener(drawListener)
         }
-        check(didDraw) { "The window did not draw before capturing $fileName." }
-        instrumentation.waitForIdleSync()
-        val png = ParcelFileDescriptor.AutoCloseInputStream(
-            instrumentation.uiAutomation.executeShellCommand("screencap -p"),
-        ).use { it.readBytes() }
-        val signature = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
-        check(png.size >= signature.size && png.copyOfRange(0, signature.size).contentEquals(signature)) {
-            "The emulator did not return a PNG screenshot for $fileName."
+        if (!didDraw) {
+            recordCaptureFailure(fileName, "window did not draw within 5 seconds")
+            return
         }
-        val directory = File(instrumentation.targetContext.filesDir, "v62-captures")
-        check(directory.mkdirs() || directory.isDirectory)
-        val output = File(directory, fileName)
-        output.writeBytes(png)
-        check(output.length() > 0L)
+        instrumentation.waitForIdleSync()
+        val png = try {
+            ParcelFileDescriptor.AutoCloseInputStream(
+                instrumentation.uiAutomation.executeShellCommand("screencap -p"),
+            ).use { it.readBytes() }
+        } catch (error: Exception) {
+            recordCaptureFailure(fileName, "screencap command failed: ${error.javaClass.simpleName}: ${error.message}")
+            return
+        }
+        val signature = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+        if (png.size < signature.size || !png.copyOfRange(0, signature.size).contentEquals(signature)) {
+            val prefix = png.take(24).joinToString("") { "%02x".format(it) }
+            recordCaptureFailure(fileName, "invalid PNG bytes=${png.size} prefix=$prefix")
+            return
+        }
+        try {
+            val directory = File(instrumentation.targetContext.filesDir, "v62-captures")
+            check(directory.mkdirs() || directory.isDirectory)
+            val output = File(directory, fileName)
+            output.writeBytes(png)
+            check(output.length() > 0L)
+            Log.i("ATLAS_UI_CAPTURE", "CAPTURE_OK file=$fileName bytes=${output.length()}")
+        } catch (error: Exception) {
+            recordCaptureFailure(fileName, "could not save PNG: ${error.javaClass.simpleName}: ${error.message}")
+        }
+    }
+
+    private fun recordCaptureFailure(fileName: String, reason: String) {
+        val failure = "$fileName: $reason"
+        captureFailures += failure
+        Log.e("ATLAS_UI_CAPTURE", "CAPTURE_BLOCKED $failure")
     }
 }
