@@ -256,6 +256,105 @@ class ActionDispatcherTest {
     }
 
     @Test
+    fun focusProposeRejectsTotalDurationAboveMandateLimit() {
+        val proposal = focusProposal().copy(
+            parameters = mapOf("focus_minutes" to 25, "break_minutes" to 5, "cycles" to 4),
+        )
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.propose"),
+            focusWindow = baseMandate.focusWindow.copy(maxMinutesPerSession = 90),
+        )
+
+        val decision = verifier.verify(proposal, mandate, context())
+
+        assertFalse(decision.accepted)
+        assertEquals("Durée totale supérieure à la borne du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanRejectsTotalDurationAboveMandateLimit() {
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T09:00:00Z",
+            focusMinutes = 25,
+            breakMinutes = 5,
+            cycles = 4,
+        )
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = baseMandate.focusWindow.copy(maxMinutesPerSession = 90),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertFalse(decision.accepted)
+        assertEquals("Durée totale supérieure à la borne du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanRejectsEndAfterDailyMandateWindow() {
+        val plan = focusPlanProposal(startAt = "2026-10-20T09:45:00Z")
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(start = "08:00", end = "10:00", timezone = "UTC"),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertFalse(decision.accepted)
+        assertEquals("Fin du plan hors fenêtre du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanAllowsEndExactlyAtDailyMandateWindowBoundary() {
+        val plan = focusPlanProposal(startAt = "2026-10-20T09:35:00Z")
+        val mandate = baseMandate.copy(
+            mode = AgentMode.PREAUTHORIZED,
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(start = "08:00", end = "10:00", timezone = "UTC"),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertTrue(decision.reason, decision.accepted)
+        assertFalse(decision.requiresConfirmation)
+    }
+
+    @Test
+    fun focusPlanUsesOvernightMandateWindowForItsEnd() {
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(start = "22:00", end = "02:00", timezone = "UTC"),
+        )
+        val capabilities = setOf("focus", "focusRoutines")
+        val inside = verifier.verify(
+            focusPlanProposal(startAt = "2026-10-20T23:35:00Z"),
+            mandate,
+            context().copy(capabilities = capabilities),
+        )
+        val outside = verifier.verify(
+            focusPlanProposal(startAt = "2026-10-21T01:45:00Z"),
+            mandate,
+            context().copy(capabilities = capabilities),
+        )
+
+        assertTrue(inside.reason, inside.accepted)
+        assertFalse(outside.accepted)
+        assertEquals("Fin du plan hors fenêtre du mandat.", outside.reason)
+    }
+
+    @Test
     fun repeatedPullIsIdempotentAndDispatcherRunsAcceptedEffectOnlyOnce() {
         val storage = MemoryStorage()
         val inbox = AgentInboxRepository(storage) { now }
@@ -527,6 +626,23 @@ class ActionDispatcherTest {
         contextVersion = "test", createdAtUtcMillis = now, expiresAtUtcMillis = now + 60_000,
         actionType = "focus.propose", parameters = mapOf("focus_minutes" to 25, "break_minutes" to 5, "cycles" to 1),
         reason = "Commencer par une session courte.", requiredLevel = ProposalLevel.CONFIRM,
+    )
+
+    private fun focusPlanProposal(
+        startAt: String,
+        focusMinutes: Int = 25,
+        breakMinutes: Int = 5,
+        cycles: Int = 1,
+    ) = ProposalV2(
+        schemaVersion = 2, proposalId = UUID.randomUUID().toString(), idempotencyKey = UUID.randomUUID().toString(),
+        conversationId = null, mandateId = baseMandate.id, mandateVersion = baseMandate.version,
+        contextVersion = "test", createdAtUtcMillis = now, expiresAtUtcMillis = now + 60_000,
+        actionType = AgentActionType.FOCUS_PLAN.wireValue,
+        parameters = mapOf(
+            "focus_minutes" to focusMinutes, "break_minutes" to breakMinutes, "cycles" to cycles,
+            "start_at" to startAt, "timezone" to "UTC",
+        ),
+        reason = "Planifier une session Focus.", requiredLevel = ProposalLevel.CONFIRM,
     )
 
     private fun appPolicyProposal(packageRef: String, action: String = "app_policy.propose") = ProposalV2(

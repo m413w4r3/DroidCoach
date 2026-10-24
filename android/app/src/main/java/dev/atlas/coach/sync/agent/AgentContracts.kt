@@ -494,7 +494,20 @@ class MandateVerifier {
             val minutes = (proposal.parameters["focus_minutes"] as? Number)?.toInt()
                 ?: ref?.let(context.focusMinutesByProposal::get)
                 ?: mandate.focusWindow.maxMinutesPerSession
-            if (minutes > mandate.focusWindow.maxMinutesPerSession) return MandateDecision.reject("Durée supérieure à la borne du mandat.")
+            val sessionMinutes = if (type == AgentActionType.FOCUS_PROPOSE || type == AgentActionType.FOCUS_PLAN) {
+                val breakMinutes = (proposal.parameters["break_minutes"] as Number).toLong()
+                val cycles = (proposal.parameters["cycles"] as Number).toLong()
+                minutes.toLong() * cycles + breakMinutes * maxOf(0L, cycles - 1L)
+            } else {
+                minutes.toLong()
+            }
+            if (type == AgentActionType.FOCUS_PROPOSE || type == AgentActionType.FOCUS_PLAN) {
+                if (sessionMinutes > mandate.focusWindow.maxMinutesPerSession.toLong()) {
+                    return MandateDecision.reject("Durée totale supérieure à la borne du mandat.")
+                }
+            } else if (minutes > mandate.focusWindow.maxMinutesPerSession) {
+                return MandateDecision.reject("Durée supérieure à la borne du mandat.")
+            }
             if (context.focusSessionsToday >= mandate.focusWindow.maxSessionsPerDay) return MandateDecision.reject("Quota quotidien de sessions Focus atteint.")
             val zone = ZoneId.of(mandate.focusWindow.timezone)
             val localNow = Instant.ofEpochMilli(context.nowUtcMillis).atZone(zone)
@@ -511,8 +524,16 @@ class MandateVerifier {
             val time = scheduled.toLocalTime()
             val start = LocalTime.parse(mandate.focusWindow.start)
             val end = LocalTime.parse(mandate.focusWindow.end)
-            val inWindow = if (start <= end) !time.isBefore(start) && time.isBefore(end) else !time.isBefore(start) || time.isBefore(end)
-            if (!inWindow) return MandateDecision.reject("Heure hors fenêtre du mandat.")
+            fun inWindow(time: LocalTime, allowEndBoundary: Boolean = false): Boolean =
+                if (start <= end) {
+                    !time.isBefore(start) && (time.isBefore(end) || allowEndBoundary && time == end)
+                } else {
+                    !time.isBefore(start) || time.isBefore(end) || allowEndBoundary && time == end
+                }
+            if (!inWindow(time)) return MandateDecision.reject("Heure hors fenêtre du mandat.")
+            if (type == AgentActionType.FOCUS_PLAN && !inWindow(scheduled.plusSeconds(sessionMinutes * 60L).toLocalTime(), allowEndBoundary = true)) {
+                return MandateDecision.reject("Fin du plan hors fenêtre du mandat.")
+            }
         }
         if (type == AgentActionType.FOCUS_START) {
             val ref = proposal.parameters["session_ref"] as String
