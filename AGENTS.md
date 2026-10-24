@@ -14,3 +14,4 @@
 - Documenter les hypothèses, commandes lancées, sorties de tests, limites et travaux restant à faire. Ne jamais annoncer « testé sur Pixel » sans appareil effectivement testé.
 - Si une intégration externe manque d'API autorisée, construire un adaptateur `unsupported` propre et préserver un flux principal fonctionnel, sans bidouille fragile.
 - Ne pas poser de question bloquante pour une décision réversible : choisir un défaut explicite et tracer ce choix dans `docs/DECISIONS_AUTOMATIQUES.md`.
+- Les procédures de travail ciblées se trouvent sous `.agents/skills/` (index dans `.agents/skills/README.md`) : charger uniquement celle adaptée à la tâche, contrôler que Paseo et ses modèles sont réellement disponibles. Pour toute QA Android 17 physique, appliquer impérativement `android17-device-qa`, sans écriture destructrice ni permission implicite sur le téléphone.
