@@ -1,0 +1,5 @@
+utc	stage	memavailable_kib	threshold_kib	status	evidence
+2026-10-21T15:11:18Z	pre_build	7187064	8388608	NOT_RUN	/tmp/v623-qa/api34-20261021T151118Z/host-memory-gate.txt
+2026-10-21T15:14:36Z	pre_build	9181364	8388608	PASS	/tmp/v623-qa/api34-20261021T151436Z/host-memory-gate.txt
+2026-10-21T15:14:36Z	pre_boot	9234572	8388608	PASS	/tmp/v623-qa/api34-20261021T151436Z/host-memory-gate.txt
+2026-10-21T15:14:55Z	during_boot	8348180	8388608	NOT_RUN	/tmp/v623-qa/api34-host-monitor-151436.tsv

@@ -1,0 +1,15 @@
+run_id	target_revision	class	status	tests	passed	failed	skipped	classification	evidence
+integrated_initial	7c12ad1+test-harness-fix-not-yet-applied	dev.atlas.coach.AtlasLaunchTest	FAIL	12	11	1	0	TEST_HARNESS_BUG	/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/AtlasLaunchTest.xml
+integrated_initial	7c12ad1+test-harness-fix-not-yet-applied	dev.atlas.coach.app.LauncherPresentationTest	PASS	2	2	0	0	-	/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/LauncherPresentationTest.xml
+integrated_focus_isolated	7c12ad1	dev.atlas.coach.AtlasLaunchTest#focusRoutineIsCapabilityGatedAndRequiresExplicitStart	FAIL	1	0	1	0	TEST_HARNESS_BUG	/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/AtlasLaunchTest-focusRoutine-integrated.xml
+baseline_aa9b2da	aa9b2da	dev.atlas.coach.AtlasLaunchTest#focusRoutineIsCapabilityGatedAndRequiresExplicitStart	PASS	1	1	0	0	-	/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/AtlasLaunchTest-focusRoutine-baseline-aa9b2da.xml
+integrated_focus_retry	7c12ad1	dev.atlas.coach.AtlasLaunchTest#focusRoutineIsCapabilityGatedAndRequiresExplicitStart	PASS	1	1	0	0	-	/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/AtlasLaunchTest-focusRoutine-integrated-recheck.xml
+integrated_after_harness_fix	7c12ad1+AtlasLaunchTest permission fixture	dev.atlas.coach.AtlasLaunchTest	PASS	12	12	0	0	-	/tmp/v623-qa/qa-r4-20261021T160125Z/phone/instrumentation/AtlasLaunchTest-after-harness-fix.xml
+not_reached	7c12ad1	dev.atlas.coach.app.GoalFocusStartInstrumentationTest	NOT_RUN	7	0	0	0	PHONE_DISCONNECTED	Phone was disconnected after the two executed classes; no runner output or XML
+not_reached	7c12ad1	dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest	NOT_RUN	6	0	0	0	PHONE_DISCONNECTED	Notification instrumentation was not reached before disconnect
+not_reached	7c12ad1	dev.atlas.coach.app.ProactiveCoachNotificationPublisherInstrumentationTest	NOT_RUN	2	0	0	0	PHONE_DISCONNECTED	Notification publisher instrumentation was not reached before disconnect
+not_reached	7c12ad1	dev.atlas.coach.app.RuntimePermissionInstrumentationTest	NOT_RUN	1	0	0	0	PHONE_DISCONNECTED	Permission-state variants were not invoked
+not_reached	7c12ad1	dev.atlas.coach.location.V62LocationCaptureInstrumentedTest	NOT_RUN	5	0	0	0	DEVICE_SCOPE	Host-injected methods are NOT_RUN on physical phone; fake/denied methods were not reached before disconnect
+not_reached	7c12ad1	dev.atlas.coach.location.V62MobilityServiceInstrumentedTest	NOT_RUN	2	0	0	0	NO_HOST_GPS_INJECTION	Both methods require synchronized host geo fix; not run on physical phone
+not_reached	7c12ad1	dev.atlas.coach.app.HomeLandscapeFooterInstrumentationTest	NOT_RUN	2	0	0	0	PHONE_DISCONNECTED	Rotation/font fixture class was not reached before disconnect
+not_reached	7c12ad1	dev.atlas.coach.FocusIntegrationInstrumentationTest	NOT_RUN	1	0	0	0	PHONE_DISCONNECTED	Class not reached before disconnect; no screenshot or HOME intent issued by this test

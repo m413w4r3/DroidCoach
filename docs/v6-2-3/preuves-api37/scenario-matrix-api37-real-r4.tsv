@@ -1,0 +1,14 @@
+scenario	status	cause	evidence
+installation_launch	PASS	-	adb install app and androidTest returned Success; am start -W returned Status: ok, MainActivity topResumed
+home_role	NOT_RUN	USER_SAFETY	Pixel Launcher remained HOME; role assignment was not changed
+previous_launcher	NOT_RUN	USER_SAFETY	No HOME role round-trip or previous-launcher action was executed
+focus	PASS	-	AtlasLaunchTest after harness fix: 12 tests passed, including Focus journeys and explicit routine start gate
+goals	PASS	-	AtlasLaunchTest recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady passed and persisted one local goal; GoalFocusStart class not run
+notifications	NOT_RUN	PHONE_DISCONNECTED	Notification system/publisher instrumentation class was not reached before phone disconnect
+location_one_shot	NOT_RUN	NO_HOST_GPS_INJECTION	No real location or host geo fix was requested on the physical phone
+mobility_visible	NOT_RUN	NO_HOST_GPS_INJECTION	Visible mobility service requires synchronized injected fix; not run on phone
+runtime_permissions	NOT_RUN	PHONE_DISCONNECTED	Dedicated RuntimePermissionInstrumentationTest was not run; POST_NOTIFICATIONS setup grant was restored to denied
+revocation	NOT_RUN	PHONE_DISCONNECTED	Dedicated revocation and permission-revocation classes were not reached
+rotation	NOT_RUN	PHONE_DISCONNECTED	HomeLandscapeFooterInstrumentationTest was not reached; system rotation settings remained unchanged
+font_scale_2x	PASS	-	LauncherPresentationTest emergencyAndLauncherExitActionsStayReachableAtFontScaleTwo passed
+offline	PASS	-	AtlasLaunchTest directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline passed; local journey did not require backend

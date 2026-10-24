@@ -1,0 +1,11 @@
+status=device_detected; physical_product_scenarios=NOT_RUN
+serial=45301FDAS001QT
+model=Pixel 9 Pro XL
+android_release=17
+api_level=37
+atlas_package=installed (dev.atlas.coach, versionCode 1)
+current_home=com.google.android.apps.nexuslauncher
+commands=adb devices -l; get-state; read-only getprop; cmd role get-role-holders; pm path; pm list packages --show-versioncode
+mutations=none (no install/update, launch, data clear, role change, permission/app-op change, or other-app command)
+reason=preserve the existing app installation and user data under the non-destructive phone constraint
+raw_read_only_output=/tmp/v623-qa/qa-r3-53ba3a6/phone-read-only.txt

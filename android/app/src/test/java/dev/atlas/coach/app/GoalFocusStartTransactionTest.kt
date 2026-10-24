@@ -28,6 +28,7 @@ import dev.atlas.coach.focus.PhaseNotifier
 import dev.atlas.coach.focus.PhaseTransition
 import dev.atlas.coach.focus.ReefPomodoroConfig
 import dev.atlas.coach.goals.GoalMetric
+import dev.atlas.coach.goals.GoalProgressCalculator
 import dev.atlas.coach.goals.GoalRecord
 import dev.atlas.coach.goals.GoalStatus
 import dev.atlas.coach.habits.Habit
@@ -124,6 +125,64 @@ class GoalFocusStartTransactionTest {
         assertFalse(harness.controller.latestMessage.orEmpty().contains("disponible en mémoire"))
         assertTrue(harness.alarms.scheduled.isEmpty())
         assertTrue(harness.outbox.events.isEmpty())
+    }
+
+    @Test
+    fun processStopAfterProductRootWriteRestoresLinkedFocusAndCreditsOnce() {
+        val firstProcess = Harness()
+        val goal = firstProcess.createFocusGoal()
+        val writesBeforeStart = firstProcess.backend.writes
+        firstProcess.backend.crashAfterNextWrite = true
+
+        val processStop = runCatching {
+            firstProcess.controller.startFocus(
+                ReefPomodoroConfig(25, 5, 15, cycles = 1, totalWorkCycles = 1),
+                goalId = goal.id,
+            )
+        }.exceptionOrNull()
+
+        assertTrue("the simulated process stop must occur after the durable write", processStop is SimulatedProcessStop)
+        assertEquals(writesBeforeStart + 1, firstProcess.backend.writes)
+        assertNull("the stopped process did not publish its Focus candidate", firstProcess.controller.focusSession)
+        assertTrue("the stopped process did not publish its Goal candidate", firstProcess.goal(goal.id).linkedFocusSessionIds.isEmpty())
+
+        val committedRoot = firstProcess.persistedRoot()
+        val committedFocus = requireNotNull(committedRoot.focus())
+        assertEquals(FocusStatus.RUNNING, committedFocus.status)
+        assertEquals(setOf(committedFocus.id), committedRoot.goal(goal.id).linkedFocusSessionIds)
+
+        // Recreate the domain engine and Goal coordinator from the exact backend bytes written by
+        // AtlasController.startFocus. No test-side candidate or transaction write is involved.
+        val resumedProcess = Harness(
+            backend = firstProcess.backend,
+            clock = TestClock(STARTED_AT + 60_000L, 0L),
+            restoreFromBackend = true,
+        )
+        assertEquals(FocusStatus.RUNNING, resumedProcess.controller.focusSession?.status)
+        assertEquals(committedFocus.id, resumedProcess.controller.focusSession?.id)
+        assertEquals(setOf(committedFocus.id), resumedProcess.goal(goal.id).linkedFocusSessionIds)
+        assertEquals(0L, resumedProcess.coachGoal(goal.id).progress.currentValue)
+
+        resumedProcess.clock.advanceMillis(resumedProcess.controller.focusSession!!.remainingMillis)
+        resumedProcess.controller.finishFocus()
+        assertEquals(FocusStatus.FINISHED, resumedProcess.controller.focusSession?.status)
+        assertEquals(25L, resumedProcess.coachGoal(goal.id).progress.currentValue)
+
+        val reloadedProcess = Harness(
+            backend = firstProcess.backend,
+            clock = TestClock(STARTED_AT + 26 * 60_000L, 0L),
+            restoreFromBackend = true,
+        )
+        assertEquals(FocusStatus.FINISHED, reloadedProcess.controller.focusSession?.status)
+        assertEquals(setOf(committedFocus.id), reloadedProcess.goal(goal.id).linkedFocusSessionIds)
+        repeat(10) { assertEquals(25L, reloadedProcess.coachGoal(goal.id).progress.currentValue) }
+        assertEquals(
+            25L,
+            GoalProgressCalculator.completedFocusMinutes(
+                reloadedProcess.goal(goal.id),
+                listOfNotNull(reloadedProcess.controller.focusSession) + reloadedProcess.controller.focusHistory,
+            ),
+        )
     }
 
     @Test
@@ -420,10 +479,18 @@ class GoalFocusStartTransactionTest {
         assertEquals(0L, harness.coachGoal(goal.id).progress.currentValue)
     }
 
-    private inner class Harness {
-        val backend = MemoryStateBackend()
+    private inner class Harness(
+        val backend: MemoryStateBackend = MemoryStateBackend(),
+        val clock: TestClock = TestClock(STARTED_AT, 20_000L),
+        private val restoreFromBackend: Boolean = false,
+    ) {
         val store = LocalStateStore(backend)
         val controller = unsafeController()
+        private val restoredRoot = if (restoreFromBackend) {
+            (store.readDocument() as? StateReadResult.Loaded)?.state.orEmpty()
+        } else {
+            emptyMap()
+        }
         val effectOrder = mutableListOf<String>()
         var latestMessageAtAlarm: String? = null
         var latestMessageAtEvent: String? = null
@@ -439,7 +506,6 @@ class GoalFocusStartTransactionTest {
                 agentCardStateAtEvent = agentCardState()
             }
         }
-        val clock = TestClock(1_800_000_000_000L, 20_000L)
         val alarms = RecordingPhaseAlarmScheduler(::persistedRootOrNull) {
             effectOrder += "alarm"
             latestMessageAtAlarm = controller.latestMessage
@@ -449,10 +515,19 @@ class GoalFocusStartTransactionTest {
         private val phaseNotifier = RecordingPhaseNotifier()
         private val habits = InMemoryHabitRepository(clock = clock::nowMillis)
         private val focusRoutines = InMemoryFocusRoutineRepository()
-        private val initialGoals = mapOf<String, Any?>(
+        private val initialGoals = stateObject(restoredRoot["goals"]) ?: mapOf(
             "schema_version" to 1,
             "goals" to emptyList<Map<String, Any?>>(),
         )
+        private val restoredFocusHistory = (restoredRoot["focusHistory"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { row -> stateObject(row)?.let { runCatching { FocusSession.fromMap(it) }.getOrNull() } }
+            .filter { it.status in setOf(FocusStatus.FINISHED, FocusStatus.CANCELLED) }
+        private val restoredFocusEngine = FocusEngine(clock).also { engine ->
+            stateObject(restoredRoot["focus"])?.let { saved ->
+                runCatching { engine.restore(FocusSession.fromMap(saved)) }
+            }
+        }
         private val mandateStore = LocalMandateStore(AgentMandate.default())
 
         init {
@@ -471,7 +546,7 @@ class GoalFocusStartTransactionTest {
             controller.setField("clock", clock)
             controller.setField("goalFocusTransactionLock", Any())
             controller.setField("acceptedAgentFocusGoalId", ThreadLocal<String?>())
-            controller.setField("focusEngine", FocusEngine(clock))
+            controller.setField("focusEngine", restoredFocusEngine)
             controller.setField("phaseAlarms", alarms)
             controller.setField("focusNotifications", phaseNotifier)
             controller.setField("focusRoutineRepository", focusRoutines)
@@ -521,8 +596,8 @@ class GoalFocusStartTransactionTest {
                 habits = habits::list,
                 habitCheckIns = { emptyList<HabitCheckIn>() },
             ))
-            controller.setState("focusSnapshot", null)
-            controller.setState("focusHistoryEntries", emptyList<FocusSession>())
+            controller.setState("focusSnapshot", restoredFocusEngine.currentSession())
+            controller.setState("focusHistoryEntries", restoredFocusHistory)
             controller.setState("focusRoutinesSnapshot", focusRoutines.list())
             controller.setState("directiveSnapshot", directive)
             controller.setState("habitsSnapshot", emptyList<Habit>())
@@ -653,6 +728,7 @@ class GoalFocusStartTransactionTest {
         var value: String? = null
         var writes = 0
         var failNextWrite = false
+        var crashAfterNextWrite = false
         var blockNextWrite: Pair<CountDownLatch, CountDownLatch>? = null
 
         override fun read(): String? = value
@@ -669,10 +745,16 @@ class GoalFocusStartTransactionTest {
                 throw IllegalStateException("simulated root write failure")
             }
             this.value = value
+            if (crashAfterNextWrite) {
+                crashAfterNextWrite = false
+                throw SimulatedProcessStop()
+            }
         }
 
         override fun quarantine(rawValue: String, reason: String): Boolean = true
     }
+
+    private class SimulatedProcessStop : Error("simulated process stop after root write")
 
     private class RecordingEventOutbox(
         private val onEnqueue: (SyncEvent) -> Unit = {},
@@ -781,6 +863,12 @@ class GoalFocusStartTransactionTest {
     private fun Map<String, Any?>.focus(): FocusSession? =
         (this["focus"] as? Map<*, *>)?.entries?.associate { it.key as String to it.value }?.let(FocusSession::fromMap)
 
+    private fun stateObject(value: Any?): Map<String, Any?>? {
+        val raw = value as? Map<*, *> ?: return null
+        if (raw.keys.any { it !is String }) return null
+        return raw.entries.associate { (key, item) -> (key as String) to item }
+    }
+
     private fun draft(goal: GoalRecord, title: String) = GoalPanelDraft(
         title = title,
         metric = goal.metric,
@@ -811,4 +899,8 @@ class GoalFocusStartTransactionTest {
             field.isAccessible = true
             field.get(this)
         }
+
+    private companion object {
+        const val STARTED_AT = 1_800_000_000_000L
+    }
 }

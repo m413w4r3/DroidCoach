@@ -1,0 +1,13 @@
+scenario	status	cause	evidence
+installation_launch	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+home_role	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+previous_launcher	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+focus_goals	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+notifications	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+location	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+mobility	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+runtime_permissions	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+revocation	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+rotation	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+font_scale_2x	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)
+offline	BLOCKED	AVD_ENVIRONMENT_BLOCKED	framework_services_disappeared (/tmp/v623-qa/api37-20261021T141112Z)

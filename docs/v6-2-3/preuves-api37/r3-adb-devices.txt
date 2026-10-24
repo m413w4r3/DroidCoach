@@ -1,0 +1,4 @@
+command=/home/nill/Android/Sdk/platform-tools/adb devices -l
+utc=2026-10-21T15:56:10Z
+List of devices attached
+45301FDAS001QT         device usb:2-3 product:komodo model:Pixel_9_Pro_XL device:komodo transport_id:104

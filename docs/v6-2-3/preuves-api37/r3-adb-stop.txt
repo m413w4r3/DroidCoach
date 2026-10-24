@@ -1,0 +1,2 @@
+command=ANDROID_ADB_SERVER_PORT=5038 ADB_SERVER_SOCKET=tcp:localhost:5038 adb kill-server
+exit=0
