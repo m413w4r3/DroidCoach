@@ -1,0 +1,18 @@
+V62-CI-FINAL / TESTER
+BASE_SHA=8890046012965f3a3112ff0c419014c74e189d11
+Timestamp=2026-10-24 22:38 UTC (2026-10-25 Europe/Paris)
+Initial worktree status: clean
+Build source: git archive of BASE_SHA, extracted under /tmp/atlas-v62-ci-final.PGRetd
+OS=Linux 6.8.0-146-generic amd64
+JDK=OpenJDK 21.0.12.1
+Gradle=9.6.0 (android/gradle/wrapper/gradle-wrapper.properties)
+GRADLE_USER_HOME=default (/home/nill/.gradle)
+ANDROID_HOME=/home/nill/Android/Sdk
+Android platform=/home/nill/Android/Sdk/platforms/android-37.2
+Android build-tools=/home/nill/Android/Sdk/build-tools/37.0.0
+Python backend venv=Python 3.12.3 at /home/nill/perso/AndroCoach/atlas-preparation/backend/.venv/bin/python
+Device/emulator/ADB: not used
+
+The project build and its outputs ran from the temporary archive so generated
+files stayed outside the worktree. Full logs remain outside the repository at
+/tmp/atlas-v62-ci-final.PGRetd/.

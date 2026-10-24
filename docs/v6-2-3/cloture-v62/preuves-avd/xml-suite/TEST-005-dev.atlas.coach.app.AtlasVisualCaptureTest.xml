@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.AtlasVisualCaptureTest" tests="6" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.AtlasVisualCaptureTest" name="capturesEverydaySettingsAdvancedDiagnosticsAndOfflineSync" />
+  <testcase classname="dev.atlas.coach.app.AtlasVisualCaptureTest" name="capturesFocusActivePausedAndFinished" />
+  <testcase classname="dev.atlas.coach.app.AtlasVisualCaptureTest" name="capturesHabitsAndRoutines" />
+  <testcase classname="dev.atlas.coach.app.AtlasVisualCaptureTest" name="capturesHomeInBothThemesAndAtFontScaleTwo" />
+  <testcase classname="dev.atlas.coach.app.AtlasVisualCaptureTest" name="capturesLauncherHomeAndSearchableAppsList" />
+  <testcase classname="dev.atlas.coach.app.AtlasVisualCaptureTest" name="capturesObservationInterventionAndLibrary" />
+</testsuite>

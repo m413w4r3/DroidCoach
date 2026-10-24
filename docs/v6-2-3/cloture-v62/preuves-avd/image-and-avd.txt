@@ -1,0 +1,37 @@
+image=system-images;android-37.2;google_apis_ps16k;x86_64
+Pkg.Desc=System Image Page Size 16k x86_64 with Google APIs.
+Pkg.Revision=6
+Pkg.Dependencies=emulator#36.5.11
+AndroidVersion.ApiLevel=37.2
+AndroidVersion.ExtensionLevel=24
+AndroidVersion.IsBaseSdk=true
+SystemImage.Abi=x86_64
+SystemImage.TagId=google_apis,page_size_16kb
+SystemImage.TagDisplay=Google APIs,16 KB Page Size
+SystemImage.GpuSupport=true
+Addon.VendorId=google
+Addon.VendorDisplay=Google Inc.
+AndroidVersion.PreviewSdkInt=0
+AndroidVersion.BetaVersion=
+
+Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)
+Copyright (C) 2006-2024 The Android Open Source Project and many others.
+This program is a derivative of the QEMU CPU emulator (www.qemu.org).
+
+  This software is licensed under the terms of the GNU General Public
+  License version 2, as published by the Free Software Foundation, and
+  may be copied, distributed, and modified under those terms.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+
+avd_id=atlas_v62_close_api37_disposable
+runtime_memory_mb=3072 (boot argument -memory 3072; overrides profile hw.ramSize below)
+PlayStore.enabled=no
+abi.type=x86_64
+hw.device.name=pixel_8
+hw.ramSize=1536M
+image.sysdir.1=system-images/android-37.2/google_apis_ps16k/x86_64/

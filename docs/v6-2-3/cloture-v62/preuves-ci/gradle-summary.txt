@@ -1,0 +1,16 @@
+BASE_SHA=8890046012965f3a3112ff0c419014c74e189d11
+Working directory: /tmp/atlas-v62-ci-final.PGRetd/android
+GRADLE_USER_HOME was left unset; the default /home/nill/.gradle cache was used.
+
+Command (arguments exactly as requested):
+ANDROID_HOME=/home/nill/Android/Sdk ANDROID_SDK_ROOT=/home/nill/Android/Sdk ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --rerun-tasks --max-workers=1 --console=plain
+
+Result: BUILD SUCCESSFUL in 3m; 81 actionable tasks, 81 executed.
+The requested test, lint, app APK and androidTest APK tasks ran without UP-TO-DATE.
+JUnit XML: 57 files; 321 tests; 0 failures; 0 errors; 0 skipped.
+Lint XML: 52 Warning issues; 0 Error issues.
+Compiler output also contains 7 unchecked-cast Kotlin warnings in JVM test sources; these are not lint issues.
+
+Complete Gradle log: /tmp/atlas-v62-ci-final.PGRetd/gradle-ci.log
+JUnit XML directory: /tmp/atlas-v62-ci-final.PGRetd/android/app/build/test-results/testDebugUnitTest/
+Lint XML: /tmp/atlas-v62-ci-final.PGRetd/android/app/build/reports/lint-results-debug.xml

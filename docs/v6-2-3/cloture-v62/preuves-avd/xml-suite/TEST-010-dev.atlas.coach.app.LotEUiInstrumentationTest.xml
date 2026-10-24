@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.LotEUiInstrumentationTest" tests="5" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.LotEUiInstrumentationTest" name="capturesSyntheticHomeInDarkAndAmoledThemes" />
+  <testcase classname="dev.atlas.coach.app.LotEUiInstrumentationTest" name="coachConversationLinksToThreeSeparateAdvancedScreens" />
+  <testcase classname="dev.atlas.coach.app.LotEUiInstrumentationTest" name="emergencyAndExitActionsRemainReachableAtFontScaleTwoInLandscape" />
+  <testcase classname="dev.atlas.coach.app.LotEUiInstrumentationTest" name="proposedFocusRequiresTapAndSupportsPauseResumeFinish" />
+  <testcase classname="dev.atlas.coach.app.LotEUiInstrumentationTest" name="recreatingControllerRestoresRemoteDirectiveProvenanceAndAppliedEffectMarker" />
+</testsuite>

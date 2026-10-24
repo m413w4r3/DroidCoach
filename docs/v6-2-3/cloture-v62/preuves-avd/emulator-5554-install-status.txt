@@ -1,0 +1,8 @@
+target=emulator-5554
+app_install=PASS (adb -s emulator-5554 install -r app-debug.apk: Success)
+android_test_install=PASS (adb -s emulator-5554 install -r -t app-debug-androidTest.apk: Success)
+app_package=dev.atlas.coach
+test_package=dev.atlas.coach.test
+instrumentation=dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner (target=dev.atlas.coach)
+certificate_sha256=da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee
+No permission or destructive state operation was issued to any serial other than emulator-5554.

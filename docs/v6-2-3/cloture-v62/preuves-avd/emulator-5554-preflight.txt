@@ -1,0 +1,17 @@
+target=emulator-5554 (only device serial explicitly selected for this phase)
+state=device
+ro.kernel.qemu=1
+ro.build.version.sdk=37
+sys.boot_completed=1
+init.svc.surfaceflinger=running
+system_server_pid=707
+surfaceflinger_pid=527
+surfaceflinger_service=Service SurfaceFlinger: found
+activity_service=Service activity: found
+installed_app=package:/data/app/~~WoJ1wB5VX_4XUvcVpgLvkw==/dev.atlas.coach-HMFVnzGNxZszg8aUsOnDmQ==/base.apk
+instrumentation=dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner (target=dev.atlas.coach)
+font_scale_after_targeted_test=1.0
+system_error_buffer=empty for SystemServer:E, AndroidRuntime:E, Watchdog:E
+host_MemAvailable_after_run_kB=3427016
+
+The initial QEMU/API/boot/service checks were run before installing either APK. Final checks showed the same system_server and SurfaceFlinger PIDs and services remained available.

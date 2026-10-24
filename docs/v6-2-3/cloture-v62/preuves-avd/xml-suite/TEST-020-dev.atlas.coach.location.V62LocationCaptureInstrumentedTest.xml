@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" tests="3" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" name="api26Through29UseListenerAndReturnTimeoutOrUnavailableCodes" />
+  <testcase classname="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" name="deniedPermissionStateReturnsFunctionalErrorWithoutCrashing" />
+  <testcase classname="dev.atlas.coach.location.V62LocationCaptureInstrumentedTest" name="permissionRevocationDuringAcquisitionIsRecheckedBeforeReturningFix" />
+</testsuite>

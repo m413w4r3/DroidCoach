@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.AtlasPresentationTest" tests="4" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.AtlasPresentationTest" name="bottomNavigationAndBackFollowTheScreenHistory" />
+  <testcase classname="dev.atlas.coach.app.AtlasPresentationTest" name="homeHasOnePrimaryActionAndSecondaryNegotiationMenu" />
+  <testcase classname="dev.atlas.coach.app.AtlasPresentationTest" name="homeRemainsReadableAtFontScale13" />
+  <testcase classname="dev.atlas.coach.app.AtlasPresentationTest" name="homeRemainsScrollableAtFontScale20" />
+</testsuite>

@@ -1,0 +1,24 @@
+TASK_ID=V62-E2E-OPENCLAW
+timestamp_utc=2026-10-24T22:25:33Z
+source_sha=8890046012965f3a3112ff0c419014c74e189d11
+worktree_clean_before_run=true
+gateway_url=http://127.0.0.1:18789
+gateway_health_command=curl -fsS --max-time 3 http://127.0.0.1:18789/health -o /dev/null -w 'gateway_health_http=%{http_code}\n'
+initial_sandbox_health_http=000
+initial_sandbox_health_curl_exit=7
+initial_sandbox_health_result=connection_refused
+elevated_loopback_health_http=200
+host_run_gateway_health_http=200
+gateway_token_file_present=true
+gateway_token_file_mode=600
+gateway_token_contents=not_printed_or_recorded
+adb_invoked=false
+backend_started_in_initial_attempt=false
+backend_started_in_host_run=true
+backend_token_created_in_host_run=true
+android_build_started=false
+instrumentation_started=false
+external_network_used=false
+personal_data_used=false
+runtime_directory=/run/user/1000
+runtime_directory_removed_after_host_run=true

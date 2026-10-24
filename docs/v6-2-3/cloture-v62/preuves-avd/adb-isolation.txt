@@ -1,0 +1,11 @@
+The usable ADB server was started on port 5038 with --one-device emulator-5580. Its device listing contained only emulator-5580.
+
+An earlier unfiltered start-server attempt on 5038 failed before a server became usable. Its startup log reported LIBUSB_ERROR_BUSY while trying to claim a host USB ADB interface. No command was sent to that device. The startup was abandoned and the successful server was started with the one-device restriction. The raw startup log is not copied here because it contains the host device serial.
+
+A local adb server --help probe was interpreted by adb as a server-start request in the sandbox and failed before binding with Operation not permitted. No device command ran from that probe and no listener was created.
+
+All explicit device commands for this run used -P 5038 -s emulator-5580. ADB_SERVER_PORT=5038 and ANDROID_ADB_SERVER_PORT=5038 were also set for the emulator process. The emulator emitted settings-service failures while system_server was restarting; no app was installed.
+
+The later request to confirm emulator-5554 against the default list could not be completed safely: the final read-only port check found no 5037 listener, and invoking adb devices would start a default server. See default-adb-device-check.txt.
+
+Later authorized follow-up: after explicit user authorization to use the already-present emulator, the default ADB server was started and only serial emulator-5554 was targeted with `adb -s emulator-5554`. No command selected physical serial <serial-physique-omis>. The default server was left running for the parent OpenClaw follow-up.

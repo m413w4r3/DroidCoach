@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" tests="6" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" name="existingGoalsChoicePersistsAndResetsOnGoalsRevocation" />
+  <testcase classname="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" name="failedCategoryWithdrawalKeepsOtherConsentThroughControllerRecreationAndOptIn" />
+  <testcase classname="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" name="failedGoalCreateUpdateAndStatusKeepDiskCacheAndRecreatedControllerConsistent" />
+  <testcase classname="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" name="failedLegacyDisclosureMigrationNeverReexposesPayloadValuesInController" />
+  <testcase classname="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" name="failedRevocationsRemainBlockedAfterControllerRecreation" />
+  <testcase classname="dev.atlas.coach.app.AgentPersistenceFailureInstrumentationTest" name="legacySharedPayloadIsPurgedAfterCategoryRevocationAndControllerRecreation" />
+</testsuite>

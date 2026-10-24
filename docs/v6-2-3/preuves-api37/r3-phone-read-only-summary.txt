@@ -1,5 +1,5 @@
 status=device_detected; physical_product_scenarios=NOT_RUN
-serial=45301FDAS001QT
+serial=<serial-physique-omis>
 model=Pixel 9 Pro XL
 android_release=17
 api_level=37

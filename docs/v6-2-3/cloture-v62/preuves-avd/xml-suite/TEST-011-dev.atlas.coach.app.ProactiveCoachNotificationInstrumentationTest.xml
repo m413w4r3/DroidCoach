@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" tests="6" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" name="tappingAValidIdPrunedFromTheInboxShowsUnavailableStateWithoutActions" />
+  <testcase classname="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" name="tappingAfterMandateRevocationShowsNeutralMessageAndDoesNotNavigateOrDispatch" />
+  <testcase classname="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" name="tappingAnExpiredNotificationOpensItsExpiredStateWithoutChangingIt" />
+  <testcase classname="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" name="tappingNotificationOpensAndHighlightsOnlyTheLocalProposal" />
+  <testcase classname="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" name="tappingNotificationWithInvalidIdIsIgnored" />
+  <testcase classname="dev.atlas.coach.app.ProactiveCoachNotificationInstrumentationTest" name="tappingPlanNotificationWithoutProposalOpensCoachWithoutHighlight" />
+</testsuite>

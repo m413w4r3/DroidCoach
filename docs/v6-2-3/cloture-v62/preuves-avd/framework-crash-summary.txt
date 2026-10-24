@@ -1,0 +1,41 @@
+crash_buffer_lines=4215
+system_server_start_records=14
+surfaceflinger_fatal_signal_records=18
+android_hardware_service_fatal_signal_records=71
+android_runtime_fatal_exception_records=10
+system_error_buffer_lines=0
+
+first_system_server_start_records:
+10-25 00:34:30.679  7473  7473 I system_server_start: [6,96964,96964]
+10-25 00:34:46.932  9049  9049 I system_server_start: [7,113217,113217]
+10-25 00:35:03.764 10685 10685 I system_server_start: [8,130050,130050]
+10-25 00:35:23.301 12437 12437 I system_server_start: [9,149587,149587]
+10-25 00:35:44.630 14012 14012 I system_server_start: [10,170916,170916]
+
+last_system_server_start_records:
+10-25 00:37:31.800 21718 21718 I system_server_start: [15,278084,278084]
+10-25 00:37:52.591 23245 23245 I system_server_start: [16,298877,298877]
+10-25 00:38:11.733 24846 24846 I system_server_start: [17,318019,318019]
+10-25 00:38:32.526 26438 26438 I system_server_start: [18,338811,338811]
+10-25 00:38:51.255 28049 28049 I system_server_start: [19,357540,357540]
+
+first_surfaceflinger_fatal_records:
+10-25 00:33:28.173   515   625 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 625 (RegionSampling), pid 515 (surfaceflinger)
+10-25 00:33:42.997  1736  1796 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1796 (RegionSampling), pid 1736 (surfaceflinger)
+10-25 00:33:57.056  2807  2848 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2848 (RegionSampling), pid 2807 (surfaceflinger)
+10-25 00:34:13.114  4146  4192 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 4192 (RegionSampling), pid 4146 (surfaceflinger)
+10-25 00:34:28.476  5745  5788 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 5788 (RegionSampling), pid 5745 (surfaceflinger)
+
+first_android_hardware_fatal_records:
+10-25 00:33:00.251   535   535 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 535 (android.hardwar), pid 535 (android.hardwar)
+10-25 00:33:05.244   747   747 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 747 (android.hardwar), pid 747 (android.hardwar)
+10-25 00:33:10.270   769   769 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 769 (android.hardwar), pid 769 (android.hardwar)
+10-25 00:33:15.276   787   787 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 787 (android.hardwar), pid 787 (android.hardwar)
+10-25 00:33:20.311  1061  1061 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1061 (android.hardwar), pid 1061 (android.hardwar)
+
+first_android_runtime_fatal_records:
+10-25 00:34:05.858  5054  5075 E AndroidRuntime: FATAL EXCEPTION: BG Thread #2
+10-25 00:34:20.141  6585  6607 E AndroidRuntime: FATAL EXCEPTION: BG Thread #3
+10-25 00:34:20.669  6632  6654 E AndroidRuntime: FATAL EXCEPTION: BG Thread #3
+10-25 00:34:21.358  6682  6710 E AndroidRuntime: FATAL EXCEPTION: BG Thread #3
+10-25 00:35:21.194 11850 12038 E AndroidRuntime: FATAL EXCEPTION: aiai-app-predictor-0

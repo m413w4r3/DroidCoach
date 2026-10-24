@@ -1,0 +1,12 @@
+status=NOT_RUN
+reason=AVD_ENVIRONMENT_BLOCKED before package installation
+am_instrument_command=NOT_EXECUTED
+executed_tests=0
+passed=0
+failed=0
+skipped=0
+xml=NOT_CREATED; no instrumentation run occurred, so no XML exists
+static_inventory=94 @Test methods across 29 classes
+backend_argument_required=16 methods; no backend/OpenClaw service was configured
+per_method_status=initial-attempt-tests-not-run.tsv
+per_class_status=initial-attempt-class-status.tsv

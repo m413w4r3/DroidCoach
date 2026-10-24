@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" tests="7" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="agentStartCommitsTheLocalGoalChoiceWithItsIdempotencyKeyOnce" />
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="controllerRecreationAfterElapsedFocusPersistsOneCompletedCycleAndProgress" />
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="failedInitialCommitHasNoSessionGoalAlarmStartedEventOrRecreatedState" />
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="focusGoalSelectorOffersNoneOneAndManyAndCreditsOnlyFinishedLinkedWork" />
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="legacyV621HistoryIsPreservedWithoutInventedGoalLinks" />
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="localGoalLinkSurvivesPauseResumeFinishUnrelatedWriteAndRealControllerRecreation" />
+  <testcase classname="dev.atlas.coach.app.GoalFocusStartInstrumentationTest" name="singleGoalCanChooseNoGoalAndChoiceStaysFreeWhenEligibilityChanges" />
+</testsuite>

@@ -1,0 +1,13 @@
+target=emulator-5554; ro.kernel.qemu=1; SDK=37
+full_suite_command=adb -s emulator-5554 shell am instrument -w -r dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+full_suite_runner=complete; 23 classes; 78 tests; 77 PASS; 1 FAIL; 0 skipped
+full_suite_failure=dev.atlas.coach.app.V62NativeUiCaptureTest#systemFontScaleTwoKeepsEmergencyControlsAccessible
+failure_cause=IllegalStateException: expected_system_font_scale must be supplied by the disposable-AVD recipe; TEST_HARNESS_BUG
+targeted_command=adb -s emulator-5554 shell am instrument -w -r -e class dev.atlas.coach.app.V62NativeUiCaptureTest#systemFontScaleTwoKeepsEmergencyControlsAccessible -e expected_system_font_scale 2.0 dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+targeted_setup=system font_scale set to 2.0 and verified before test; restored to 1.0 and verified after test
+targeted_result=1 test; 1 PASS; runner complete
+effective_non_backend_methods=78 unique methods have a passing result (77 in full-suite invocation plus the targeted retry); the first invocation's harness failure is retained in tests-results.tsv
+backend_required=16 methods NOT_RUN; the runner filtered them because backend/OpenClaw arguments were not supplied
+instrumentation_executions=79 total invocations across the full suite and one-test retry; 78 unique non-backend test methods
+xml_full_suite=xml-suite/TEST-*.xml
+xml_targeted_retry=xml-fontscale/TEST-*.xml

@@ -1,0 +1,8 @@
+utc=2026-10-24T22:37:14Z
+sys.boot_completed=1
+ro.build.version.sdk=37
+ro.kernel.qemu=1
+system_server_pid=21718
+Service SurfaceFlinger: found
+Service activity: found
+system_server_start_events=15

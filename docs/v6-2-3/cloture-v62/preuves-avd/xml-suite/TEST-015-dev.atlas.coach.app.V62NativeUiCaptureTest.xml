@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.app.V62NativeUiCaptureTest" tests="6" failures="1" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.app.V62NativeUiCaptureTest" name="coachScreenShowsNamedLocalFixtureWithoutRawProvenanceHash" />
+  <testcase classname="dev.atlas.coach.app.V62NativeUiCaptureTest" name="focusScreenAndContrastTokensAreVerifiableWithoutGateway" />
+  <testcase classname="dev.atlas.coach.app.V62NativeUiCaptureTest" name="landscapeHomeKeepsPauseAndFooterOutsideScrollableContent" />
+  <testcase classname="dev.atlas.coach.app.V62NativeUiCaptureTest" name="nativeHomeMatrixUsesConfiguredOrActualWidth" />
+  <testcase classname="dev.atlas.coach.app.V62NativeUiCaptureTest" name="screenshotCapturePipelineProducesPng" />
+  <testcase classname="dev.atlas.coach.app.V62NativeUiCaptureTest" name="systemFontScaleTwoKeepsEmergencyControlsAccessible">
+    <failure message="AndroidJUnitRunner reported test failure">java.lang.IllegalStateException: expected_system_font_scale must be supplied by the disposable-AVD recipe</failure>
+  </testcase>
+</testsuite>
