@@ -18,7 +18,7 @@ Priorité des règles : `AGENTS.md` > consignes explicites de l'utilisateur > mi
 
 ### Configuration Paseo
 
-Vérifier les vrais profils et métadonnées de session côté hôte. Conseillé : **GPT-6 Luna High** pour travaux bornés, **GPT-6 Luna XHigh** pour revue critique, maximum **trois** travailleurs parallèles, un seul propriétaire par fichier et **un seul** acteur ADB/émulateur.
+**Toutes les sous-sessions sont obligatoirement `openai-codex:gpt-6-luna` en `xhigh`** : lecture, code, test, correction et revue. Le parent est la session Paseo choisie par l'utilisateur. Maximum trois enfants simultanés, aucune sous-délégation, un propriétaire par fichier et un propriétaire ADB. Voir le contrat normatif [`.agents/WORKFLOW.md`](../WORKFLOW.md). Vérifier provider/modèle/effort dans la session créée ; aucun fallback High.
 
 Les notifications de fin servent à reprendre le parent. Aucun polling récurrent ou boucle de statut avec `sleep`. Si la reprise événementielle est indisponible, consigner un handoff et attendre une reprise explicite.
 

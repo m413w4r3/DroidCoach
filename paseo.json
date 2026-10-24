@@ -1,0 +1,24 @@
+{
+  "scripts": {
+    "Git preflight (read-only)": {
+      "command": "git rev-parse --show-toplevel && git rev-parse HEAD && git status --short"
+    },
+    "Diff hygiene": {
+      "command": "git diff --check && git status --short"
+    },
+    "JVM + Android lint (no device)": {
+      "command": "cd android && ./gradlew :app:testDebugUnitTest :app:lintDebug --max-workers=1 --console=plain"
+    }
+  },
+  "metadataGeneration": {
+    "branchName": {
+      "instructions": "Use a new lowercase kebab-case branch (fix/,feat/,docs/,test/,audit/). Do not implement directly on main."
+    },
+    "commitMessage": {
+      "instructions": "Use Conventional Commits type(scope): imperative summary; include verified tests only and never user data or secrets."
+    },
+    "pullRequest": {
+      "instructions": "Summarize feature and scope, BASE_SHA and RESULT_SHA, PASS/FAIL/BLOCKED/NOT_RUN tests on exact SHA, Android 17 Pixel evidence, security/privacy, independent review, and explicit human approval required before merge."
+    }
+  }
+}

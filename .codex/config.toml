@@ -1,0 +1,7 @@
+# Fallback pour sous-agents Codex natifs SEULEMENT ; Paseo lit ses profils sur l'hôte.
+# Ne pas imbriquer une flotte native dans une session enfant Paseo.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 3
+default_subagent_model = "gpt-6-luna"
+default_subagent_reasoning_effort = "xhigh"

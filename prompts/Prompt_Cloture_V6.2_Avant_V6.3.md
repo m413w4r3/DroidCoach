@@ -16,7 +16,9 @@
 
 ### 1. Orchestration Paseo
 
-Le parent coordonne les tâches, les permissions, le contrôle des tests, la revue indépendante et la décision finale. Confier les diagnostics/implémentations bornés à des **GPT-6 Luna High** ; choisir **Luna XHigh** pour revue indépendante et défaillances critiques. Maximum **3** sessions de travail en parallèle, **1 seul propriétaire** de chaque fichier, **1 seul acteur ADB/AVD/téléphone** à la fois. Les fichiers `AtlasController.kt`, navigation, manifest et Gradle sont possédés par l'intégrateur exclusivement.
+**Architecture non négociable : un seul orchestrateur parent Paseo**, modèle choisi par l'utilisateur (ex. GPT-6.1 Sol Medium), **et TOUTES les sous-sessions `openai-codex:gpt-6-luna` avec effort `xhigh`** : exploration, diagnostics, tests, implémentation, corrections, intégration déléguée et revue indépendante. **Aucun autre modèle, aucun effort `high`/Medium**. Si le profil Luna XHigh n'est pas disponible ou si ses métadonnées effectives ne correspondent pas, déclarer `BLOCKED`, sans remplacement silencieux.
+
+**Lire et appliquer `.agents/WORKFLOW.md` et `.agents/TASK_TEMPLATE.md` avant le premier lancement.** Le parent gère les autorisations, tickets, sessions et preuves et approuve les changements. Maximum **3 enfants actifs au total**, **aucune sous-délégation récursive**, worktrees isolés, **1 propriétaire par fichier** et **1 seul acteur ADB/AVD/téléphone**. Les fichiers `AtlasController.kt`, navigation, manifest et Gradle appartiennent à une unique phase d'intégration ; faire revoir le diff final par un **autre Luna XHigh**.
 
 Ne pas présumer que la configuration d'AutoWork, les profils Paseo ou les permissions existent sur cet hôte : afficher les véritables modèles/efforts effectifs et les outils disponibles, sans substituer silencieusement un autre modèle.
 
@@ -116,7 +118,7 @@ Comparer les implémentations existantes aux clones locaux `references/repos/And
 
 Pour chaque défaut classé `APP_BUG` :
 1. Reproduction ciblée qui échoue avant correctif.
-2. Correctif minimal par sous-session Luna, propriétaire unique du fichier.
+2. Correctif minimal par sous-session **GPT-6 Luna XHigh**, propriétaire unique du fichier.
 3. Test précédent devenu vert + régressions pertinentes.
 4. Revue du diff réel et test de reprise quand stockage/mandat concernés.
 5. Intégration locale par le parent ; pas de push.

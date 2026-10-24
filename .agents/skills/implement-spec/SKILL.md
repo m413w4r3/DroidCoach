@@ -6,12 +6,12 @@ disable-model-invocation: true
 
 # Modification bornée ATLAS
 
-Le parent décide les priorités, l'arbre de dépendances, les autorisations et l'intégration. Une mission = un résultat testable dans un contexte frais.
+Le parent orchestrateur décide les priorités, l'arbre de dépendances, les autorisations et l'intégration. **Toutes les sous-sessions sont GPT-6 Luna XHigh, sans sous-délégation** (voir `.agents/WORKFLOW.md`). Une mission = un résultat testable dans un contexte frais.
 
 Avant la sous-session :
 - Confirmer base SHA, branche de travail, propriété exclusive des fichiers, worktree, état Git initial et résultat attendu.
 - Donner 3 à 8 chemins pertinents, une spécification précise, un oracle exécutable et les interdictions de la mission.
-- Sélectionner réellement le modèle Paseo `gpt-6-luna` (High, XHigh si critique) ; ne pas présumer d'un profil installé.
+- Sélectionner réellement via Paseo le provider Codex, modèle `gpt-6-luna`, effort **`xhigh` obligatoire pour TOUS les enfants**, et vérifier sa métadonnée effective ; en cas d'indisponibilité, `BLOCKED` et jamais fallback High.
 
 Pendant :
 1. Vérifier les chemins et refuser un scope implicite hors mission.
