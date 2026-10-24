@@ -531,8 +531,13 @@ class MandateVerifier {
                     !time.isBefore(start) || time.isBefore(end) || allowEndBoundary && time == end
                 }
             if (!inWindow(time)) return MandateDecision.reject("Heure hors fenêtre du mandat.")
-            if (type == AgentActionType.FOCUS_PLAN && !inWindow(scheduled.plusSeconds(sessionMinutes * 60L).toLocalTime(), allowEndBoundary = true)) {
-                return MandateDecision.reject("Fin du plan hors fenêtre du mandat.")
+            if (type == AgentActionType.FOCUS_PLAN) {
+                val planEnd = scheduled.plusSeconds(sessionMinutes * 60L)
+                val windowEnd = scheduled.toLocalDate().atTime(end).atZone(zone)
+                    .let { if (it.isAfter(scheduled)) it else it.plusDays(1) }
+                if (planEnd.isAfter(windowEnd)) {
+                    return MandateDecision.reject("Fin du plan hors fenêtre du mandat.")
+                }
             }
         }
         if (type == AgentActionType.FOCUS_START) {

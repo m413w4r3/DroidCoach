@@ -355,6 +355,47 @@ class ActionDispatcherTest {
     }
 
     @Test
+    fun focusPlanRejectsEndOnNextDayForFullDayMandateWindow() {
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(start = "00:00", end = "23:59", timezone = "UTC"),
+        )
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T23:50:00Z",
+            breakMinutes = 0,
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertFalse(decision.accepted)
+        assertEquals("Fin du plan hors fenêtre du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanAllowsEndExactlyAtFullDayMandateWindowBoundary() {
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(start = "00:00", end = "23:59", timezone = "UTC"),
+        )
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T23:34:00Z",
+            breakMinutes = 0,
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertTrue(decision.reason, decision.accepted)
+    }
+
+    @Test
     fun repeatedPullIsIdempotentAndDispatcherRunsAcceptedEffectOnlyOnce() {
         val storage = MemoryStorage()
         val inbox = AgentInboxRepository(storage) { now }
