@@ -40,10 +40,10 @@ Le registre détaillé et les propriétaires de tâches sont dans [REGISTRE_TACH
 - L'état QA du Pixel est conservé; la restauration n'est pas exécutée.
 - Aucun push, merge distant ou fermeture d'issue.
 
-## Conditions de clôture
+## Verdict final
 
-1. Correctifs P1-A/P1-B intégrés, JVM et tests ciblés verts.
-2. CI finale, AVD final et OpenClaw Android rejoués sur le SHA final.
-3. Revue fonctionnelle et sécurité du SHA final : aucun P0/P1.
-4. Acceptation explicite des limites restantes (Pixel non retesté sur le SHA final, localisation/mobilité non validées mais désactivées, restauration non exécutée, P2 sécurité ouverts).
-5. Verdict `V6.2_CLOSED` ou `V6.2_NOT_CLOSED` consigné dans [RAPPORT_CLOTURE_V62.md](RAPPORT_CLOTURE_V62.md).
+1. Correctifs P1 intégrés; JVM 339/339 et tests ciblés verts sur `1a6f761`.
+2. CI finale, AVD cold boot 78/78 effectif et OpenClaw Android 13,817 s rejoués sur le SHA final.
+3. Revue fonctionnelle et sécurité du SHA final : `GO_WITH_LIMITATIONS`, aucun P0/P1.
+4. Limites restantes acceptées et documentées : Pixel non retesté, localisation/mobilité désactivées et non validées, restauration non exécutée, révocation en vol non rejouée, P2 sécurité ouverts.
+5. **Verdict : `V6.2_CLOSED`**, consigné dans [RAPPORT_CLOTURE_V62.md](RAPPORT_CLOTURE_V62.md) et [REVUE_INDEPENDANTE.md](REVUE_INDEPENDANTE.md).
