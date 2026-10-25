@@ -1,6 +1,6 @@
 # Matrice Android 14 / Android 17 — V6.2.3, QA-R4
 
-Révision testée : `7c12ad17f8340d775924a0b986dd44ac35b79722` plus le correctif de harnais instrumenté décrit dans [API37_DIAGNOSTIC.md](API37_DIAGNOSTIC.md). Statuts autorisés : `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`. « API 37 réel » désigne le Pixel physique `45301FDAS001QT`; les résultats AVD restent séparés.
+Révision testée : `7c12ad17f8340d775924a0b986dd44ac35b79722` plus le correctif de harnais instrumenté décrit dans [API37_DIAGNOSTIC.md](API37_DIAGNOSTIC.md). Statuts autorisés : `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`. « API 37 réel » désigne le Pixel physique `<serial-physique-omis>`; les résultats AVD restent séparés.
 
 | Scénario | Android 14 — API 34 AVD | Android 17 — API 37 AVD | Android 17 — appareil réel |
 |---|---|---|---|

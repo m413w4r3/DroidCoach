@@ -153,3 +153,23 @@
 
 - Quand un document ATLAS illisible contient la clé `lastAgentSharedContext`, la quarantaine conserve seulement la raison, l'horodatage, la taille et l'empreinte SHA-256. La valeur brute est volontairement écartée; sa récupération manuelle depuis la quarantaine n'est donc plus possible, afin qu'un ancien contexte d'objectif ne persiste pas dans une copie de récupération.
 - R4 (contre-vérification S7) : tout document local non parsable est désormais mis en quarantaine sous forme d'enveloppe sans valeurs (raison, horodatage, longueur, SHA-256), qu'il semble ou non contenir `lastAgentSharedContext` — un nom de clé échappé contournait le filtre textuel. La récupération manuelle d'un document illisible n'est plus possible; la quarantaine compte comme réussie, donc les écritures restent autorisées.
+
+## V6.2 — Clôture avant V6.3 (2026-10-25)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-10-25 | Le provider Paseo effectif est `codex`, modèle `gpt-6-luna`, effort `xhigh`; le littéral `openai-codex` du mandat n'est pas un ID de provider Paseo sur cet hôte | Métadonnées de session vérifiées (`model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`). Aucune substitution de modèle/effort. |
+| 2026-10-25 | Relecteurs en lecture seule : worktree isolé + `chmod -R a-w` + contrôle `git status`/HEAD après exécution, car Paseo/Codex n'expose pas de mode lecture seule natif | Barrière technique et vérification a posteriori; limite consignée, aucune revendication de mode RO natif. |
+| 2026-10-25 | Aucune tentative AVD API 37 dans cette clôture; Pixel physique prioritaire | Décision utilisateur du prompt maître; l'AVD historiquement bloqué par `surfaceflinger` n'est pas un gate et ne doit pas être poursuivi indéfiniment. |
+| 2026-10-25 | Aucune suite Android 14/API 34 exécutée | Décision utilisateur explicite; hors cible de clôture. |
+| 2026-10-25 | Sauvegarde ATLAS dans un stockage privé hors dépôt (chemin non versionné), vérifiée par extraction locale; aucune archive ni préférence personnelle versionnée | Préservation des données; seules les empreintes SHA-256 sont référencées. |
+| 2026-10-25 | OpenClaw réel utilisé uniquement via la boucle locale `127.0.0.1:18789` avec le jeton local mode 600 et un backend ATLAS éphémère sur port libre | Évite toute exposition réseau et tout secret dans Git; le port 8000 est occupé par un service tiers et ne doit pas être utilisé. |
+| 2026-10-25 | Branche de clôture locale `chore/cloture-v62-android17` depuis `8890046`; aucun push/merge sans autorisation | Prompt maître §0.3. |
+| 2026-10-25 | L'AVD API 37 fourni par l'utilisateur (`emulator-5554`) est utilisé pour les tests restants; aucune suite Android 14 | Autorisation utilisateur explicite; l'AVD remplace le Pixel pour la revue finale et les tests instrumentés. |
+| 2026-10-25 | Le propriétaire conserve l'état QA du Pixel : objectif et session synthétiques non restaurés; sauvegarde d'origine intacte hors dépôt | Choix explicite du propriétaire après la campagne; la restauration n'est pas revendiquée. |
+| 2026-10-25 | Aucun nouveau test sur le Pixel physique et aucune session Focus de 25 minutes en temps réel | Consigne utilisateur du 2026-10-25; les vérifications finales utilisent l'émulateur et les horloges injectées. |
+| 2026-10-25 | Le correctif P1 du mandat couvre la durée totale (pauses longues de 15 min comprises), la fin de fenêtre date+heure et le retour DST; `focus.start` garde son contrôle de référence | Deux P1 confirmés par la revue sécurité finale; correction bornée dans `AgentContracts.kt` et `ActionDispatcherTest.kt`. |
+| 2026-10-25 | Le test OpenClaw Android final est rejoué sur `emulator-5554` dès que le quota gateway est disponible; un échec 429 est classé `BLOCKED_ENVIRONMENT`, jamais PASS | Le quota Codex avait bloqué le premier essai; le réseau et le backend étaient sains. |
+| 2026-10-25 | Corrections P1 successives : pauses longues, DST, pause courte minimale, revalidation de `focus.start`, refus du mode continu; code final `1a6f761` | Trois re-revues indépendantes ont confirmé chaque P1; tests JVM finaux 339/339. |
+| 2026-10-25 | La suite AVD finale est rejouée après redémarrage à froid pour éliminer les flakes Compose; résultat 78/78 effectif (77 PASS + retest font scale) | Le premier run sur l'émulateur déjà utilisé avait produit 5 flakes UI; le cold boot ne conserve que le harnais font scale connu. |
+| 2026-10-25 | Décision finale : `V6.2_CLOSED` avec `GO_WITH_LIMITATIONS` des deux reviewers, aucun P0/P1; limites acceptées : Pixel non retesté, localisation/mobilité off, restauration non exécutée, révocation en vol non rejouée, P2 URL OpenClaw/pull tardif | Revue finale `1a6f761`; limites documentées, aucune revendication de PASS pour les éléments non exécutés. |

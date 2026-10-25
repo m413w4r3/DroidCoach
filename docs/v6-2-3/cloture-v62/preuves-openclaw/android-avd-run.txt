@@ -1,0 +1,34 @@
+run_timestamp_utc=2026-10-24T22:56:44Z
+device=emulator-5554 (Android 17 / API 37, qemu)
+backend_bind=127.0.0.1 ephemeral; device reaches it as 10.0.2.2; token and SQLite removed after run
+gateway=http://127.0.0.1:18789 (real OpenClaw, token file mode 600)
+test=dev.atlas.coach.app.V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal
+result=OK (1 test), 11.143 s
+credentials=not_recorded
+--- raw instrumentation output (no token) ---
+--- raw instrumentation output (no token) ---
+backend_ready=true host=10.0.2.2 port=54155 device=emulator-5554
+INSTRUMENTATION_STATUS: class=dev.atlas.coach.app.V62RealGatewayContextBridgeTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+dev.atlas.coach.app.V62RealGatewayContextBridgeTest:
+INSTRUMENTATION_STATUS: test=realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=dev.atlas.coach.app.V62RealGatewayContextBridgeTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 11.143
+
+OK (1 test)
+
+
+INSTRUMENTATION_CODE: -1
+am_instrument_exit=0

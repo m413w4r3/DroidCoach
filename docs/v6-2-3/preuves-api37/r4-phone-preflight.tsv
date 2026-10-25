@@ -1,24 +1,24 @@
 step	status	command_or_gate	observed_output
 revision	PASS	git rev-parse HEAD	7c12ad17f8340d775924a0b986dd44ac35b79722 before the QA test-harness edit
 first_connection	BLOCKED	adb devices -l; battery read	Device was listed, battery 75%; following read-only preflight returned device not found
-resumed_device_inventory	PASS	adb devices -l	45301FDAS001QT device usb:2-3 product:komodo model:Pixel_9_Pro_XL
-resumed_battery	PASS	adb -s 45301FDAS001QT shell dumpsys battery	level: 82; USB powered: true
-screen_unlock	PASS	adb -s 45301FDAS001QT shell dumpsys window policy	showing=false; inputRestricted=false; screenState=SCREEN_STATE_ON; interactiveState=INTERACTIVE_STATE_AWAKE
-stay_awake_initial	PASS	adb -s 45301FDAS001QT shell settings get global stay_on_while_plugged_in	7; USB stay-awake already set, no svc power stayon command needed
+resumed_device_inventory	PASS	adb devices -l	<serial-physique-omis> device usb:2-3 product:komodo model:Pixel_9_Pro_XL
+resumed_battery	PASS	adb -s <serial-physique-omis> shell dumpsys battery	level: 82; USB powered: true
+screen_unlock	PASS	adb -s <serial-physique-omis> shell dumpsys window policy	showing=false; inputRestricted=false; screenState=SCREEN_STATE_ON; interactiveState=INTERACTIVE_STATE_AWAKE
+stay_awake_initial	PASS	adb -s <serial-physique-omis> shell settings get global stay_on_while_plugged_in	7; USB stay-awake already set, no svc power stayon command needed
 android_version	PASS	getprop ro.build.version.release / ro.build.version.sdk / ro.build.id	Android 17; API 37; CP3A.260905.009; security patch 2026-09-05
-home_holder	PASS	adb -s 45301FDAS001QT shell cmd role get-role-holders android.app.role.HOME	com.google.android.apps.nexuslauncher
-package_debuggable_version	PASS	adb -s 45301FDAS001QT shell dumpsys package dev.atlas.coach	versionName=0.1.0; DEBUGGABLE; apkSigningVersion=2
+home_holder	PASS	adb -s <serial-physique-omis> shell cmd role get-role-holders android.app.role.HOME	com.google.android.apps.nexuslauncher
+package_debuggable_version	PASS	adb -s <serial-physique-omis> shell dumpsys package dev.atlas.coach	versionName=0.1.0; DEBUGGABLE; apkSigningVersion=2
 signature_match	PASS	apksigner verify --print-certs installed/current app/current androidTest/baseline app/baseline androidTest	All certificate SHA-256 digests equal da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee
-package_inventory_before	PASS	adb -s 45301FDAS001QT shell pm list packages	package:dev.atlas.coach only; test package absent before write
+package_inventory_before	PASS	adb -s <serial-physique-omis> shell pm list packages	package:dev.atlas.coach only; test package absent before write
 data_backup	PASS	adb exec-out run-as dev.atlas.coach tar -cf - .	179712 bytes; tar -tf succeeded; 20 entries; SHA-256 06c1e2d64e8d394d1adc1178bb184cbef82b51e89a8618b17ba7e49bec62f7d5; archive stored only outside repo
-integrated_app_install	PASS	adb -s 45301FDAS001QT install -r -d app-debug.apk	Performing Streamed Install; Success
-integrated_test_install	PASS	adb -s 45301FDAS001QT install -r -t app-debug-androidTest.apk	Performing Streamed Install; Success
-permission_restore	PASS	adb -s 45301FDAS001QT shell pm revoke dev.atlas.coach android.permission.POST_NOTIFICATIONS	POST_NOTIFICATIONS=false; ACCESS_COARSE_LOCATION=false; ACCESS_FINE_LOCATION=false; ACCESS_LOCAL_NETWORK=true; matches initial state
+integrated_app_install	PASS	adb -s <serial-physique-omis> install -r -d app-debug.apk	Performing Streamed Install; Success
+integrated_test_install	PASS	adb -s <serial-physique-omis> install -r -t app-debug-androidTest.apk	Performing Streamed Install; Success
+permission_restore	PASS	adb -s <serial-physique-omis> shell pm revoke dev.atlas.coach android.permission.POST_NOTIFICATIONS	POST_NOTIFICATIONS=false; ACCESS_COARSE_LOCATION=false; ACCESS_FINE_LOCATION=false; ACCESS_LOCAL_NETWORK=true; matches initial state
 settings_after_tests	PASS	read stay-awake/font/rotation/HOME	stay_on_while_plugged_in=7; font_scale=1.0; accelerometer_rotation=0; user_rotation=0; HOME Pixel Launcher; no system settings or HOME role changed
 data_restore_before_launch	PASS	adb shell run-as dev.atlas.coach tar -xf - -C .; compare canonical manifest	8/8 regular files identical; manifest SHA-256 17a531c43d948929f39eaf54745e465903262c8ae5a64494918b76dcc715b5e5
-atlas_launch	PASS	adb -s 45301FDAS001QT shell am start -W -n dev.atlas.coach/.app.MainActivity	Status: ok; LaunchState: COLD; Activity MainActivity; topResumedActivity MainActivity
-test_package_uninstall_command	FAIL	adb -s 45301FDAS001QT uninstall dev.atlas.coach.test	Failure [DELETE_FAILED_INTERNAL_ERROR]
-package_inventory_after	PASS	adb -s 45301FDAS001QT shell pm list packages	Only package:dev.atlas.coach returned; test package absent; ATLAS remained installed
+atlas_launch	PASS	adb -s <serial-physique-omis> shell am start -W -n dev.atlas.coach/.app.MainActivity	Status: ok; LaunchState: COLD; Activity MainActivity; topResumedActivity MainActivity
+test_package_uninstall_command	FAIL	adb -s <serial-physique-omis> uninstall dev.atlas.coach.test	Failure [DELETE_FAILED_INTERNAL_ERROR]
+package_inventory_after	PASS	adb -s <serial-physique-omis> shell pm list packages	Only package:dev.atlas.coach returned; test package absent; ATLAS remained installed
 post_launch_data_compare	FAIL	adb exec-out run-as dev.atlas.coach tar -cf - .; compare canonical manifest	8 files present; 3 changed after MainActivity launch: files/profileInstalled and WorkManager wal/shm sidecars
-final_data_reapply	NOT_RUN	adb shell am force-stop dev.atlas.coach; restore archive	Phone disconnected; force-stop returned adb: device '45301FDAS001QT' not found
+final_data_reapply	NOT_RUN	adb shell am force-stop dev.atlas.coach; restore archive	Phone disconnected; force-stop returned adb: device '<serial-physique-omis>' not found
 final_adb_inventory	BLOCKED	adb devices -l	List of devices attached was empty after user disconnected the phone

@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.coach.proactive.android.ProactiveCoachWorkerInstrumentationTest" tests="2" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.coach.proactive.android.ProactiveCoachWorkerInstrumentationTest" name="isolatedControllerRecordsAndDeduplicatesDueWorkWithoutActivityAndRespectsQuietHours" />
+  <testcase classname="dev.atlas.coach.coach.proactive.android.ProactiveCoachWorkerInstrumentationTest" name="periodicJobKeepsOneThirtyMinuteRequestAndWorkerRunsWithoutActivity" />
+</testsuite>

@@ -1,0 +1,3 @@
+The reported emulator-5554 was not the AVD created for the initial attempt. After explicit user authorization, ADB server 5037 was started by the targeted adb command and all subsequent device commands used only `adb -s emulator-5554`.
+Verified on emulator-5554 before install: state=device, ro.kernel.qemu=1, ro.build.version.sdk=37, sys.boot_completed=1, SurfaceFlinger running, system_server PID 707, SurfaceFlinger PID 527. The test and app APKs were installed and the AndroidJUnitRunner suite was executed there.
+No command selected serial <serial-physique-omis>. No unqualified `adb devices` listing was run. The default ADB server and emulator-5554 are intentionally left available for the parent follow-up; they were not stopped or killed.

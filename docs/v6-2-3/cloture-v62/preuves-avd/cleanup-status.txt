@@ -1,0 +1,5 @@
+initial_disposable_avd=atlas_v62_close_api37_disposable on emulator-5580; emulator process session exited 0 after interrupt
+isolated_adb=ADB server 5038 kill-server returned exit 0
+gradle=--no-daemon build completed and single-use daemon stopped
+user_supplied_emulator=emulator-5554 remains running with app and androidTest packages installed for parent OpenClaw follow-up; no further commands will be sent to it
+default_adb_server=left running and available; not killed to preserve emulator-5554 for parent and avoid disrupting other sessions

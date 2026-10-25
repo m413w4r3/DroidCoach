@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" tests="1" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.usage.UsageFixtureInstrumentationTest" name="notificationPresenterReportsMissingManifestPermissionInsteadOfPosting" />
+</testsuite>

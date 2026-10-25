@@ -1,0 +1,8 @@
+utc=2026-10-24T22:35:59Z
+sys.boot_completed=1
+ro.build.version.sdk=37
+ro.kernel.qemu=1
+ro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:17/CP41.260831.007/16416850:userdebug/dev-keys
+Service SurfaceFlinger: found
+Service activity: found
+system_server_pid=14012

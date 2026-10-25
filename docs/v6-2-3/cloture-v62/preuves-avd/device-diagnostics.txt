@@ -1,0 +1,53 @@
+sys.boot_completed=1
+ro.build.version.sdk=37
+ro.kernel.qemu=1
+system_server_pid=28049
+Service SurfaceFlinger: found
+Service activity: found
+MemTotal:        3040300 kB
+MemFree:          494548 kB
+MemAvailable:    2297952 kB
+Buffers:           44428 kB
+Cached:          1842340 kB
+SwapCached:            0 kB
+Active:          1049472 kB
+Inactive:        1165468 kB
+Active(anon):     302852 kB
+Inactive(anon):    57208 kB
+Active(file):     746620 kB
+Inactive(file):  1108260 kB
+Unevictable:       27636 kB
+Mlocked:           27636 kB
+SwapTotal:        570048 kB
+SwapFree:         569148 kB
+Dirty:              1424 kB
+Writeback:             0 kB
+AnonPages:        355896 kB
+Mapped:           392108 kB
+Shmem:              5820 kB
+KReclaimable:      65844 kB
+Slab:             165216 kB
+SReclaimable:      65844 kB
+SUnreclaim:        99372 kB
+KernelStack:        9584 kB
+PageTables:        23056 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     2090196 kB
+Committed_AS:    5098212 kB
+VmallocTotal:   34359738367 kB
+VmallocUsed:       47628 kB
+VmallocChunk:          0 kB
+Percpu:             9488 kB
+AnonHugePages:         0 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+CmaTotal:         303104 kB
+CmaFree:           48032 kB
+DirectMap4k:       67416 kB
+DirectMap2M:     3078144 kB
+cat: /proc/pressure/memory: Permission denied

@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.atlas.coach.AtlasLaunchTest" tests="12" failures="0" errors="0" skipped="0">
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="backReturnsFromDailySettingsToMoreAndTabsSelectTheirRoot" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="finishedFocusHistoryRestoresFromLocalPersistence" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="focusControllerWritesOneCheckpointAfterTwentySecondsOfMonotonicTime" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="focusRoutineIsCapabilityGatedAndRequiresExplicitStart" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="focusSessionRestorationSeed" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="homeRoleSettingsAreSeparateFromTheCoachDashboardAndLicenseAttributionIsVisible" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="malformedPolicyAndRuleSubstatesAreQuarantinedWithoutStartupCrash" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="recoveryDefersLegacyConsentAndGoalMigrationUntilTheStateGraphIsReady" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="reefPomodoroSetupStartsAnAtlasSessionWithCycleState" />
+  <testcase classname="dev.atlas.coach.AtlasLaunchTest" name="unknownSchemaIsQuarantinedAndShowsRecoveryMessage" />
+</testsuite>

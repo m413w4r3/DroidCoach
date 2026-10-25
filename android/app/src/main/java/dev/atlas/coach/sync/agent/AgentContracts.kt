@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.math.BigDecimal
@@ -443,6 +444,65 @@ data class MandateDecision(
     companion object { fun reject(reason: String) = MandateDecision(false, reason) }
 }
 
+/** Total wall time of an agent FocusPlan; callers must reject Long.MAX_VALUE for continuous plans. */
+internal fun focusSessionDurationMinutes(
+    focusMinutes: Long,
+    breakMinutes: Long,
+    cycles: Long,
+    longBreakMinutes: Long,
+    longBreakEveryCycles: Long,
+    continuous: Boolean,
+): Long {
+    fun saturatedMultiply(left: Long, right: Long): Long =
+        runCatching { Math.multiplyExact(left, right) }.getOrDefault(Long.MAX_VALUE)
+    fun saturatedAdd(left: Long, right: Long): Long =
+        runCatching { Math.addExact(left, right) }.getOrDefault(Long.MAX_VALUE)
+
+    if (continuous) {
+        // No finite mandate duration can bound this plan; callers must refuse it.
+        return Long.MAX_VALUE
+    }
+    val cycleCount = cycles.coerceAtLeast(0L)
+    val workMinutes = saturatedMultiply(focusMinutes.coerceAtLeast(0L), cycleCount)
+
+    val breakCount = (cycleCount - 1L).coerceAtLeast(0L)
+    val longBreakEvery = longBreakEveryCycles.coerceAtLeast(1L)
+    val longBreakCount = breakCount / longBreakEvery
+    val shortBreakCount = breakCount - longBreakCount
+    // FocusPlan requires positive short phases; long breaks replace short breaks at configured intervals.
+    val shortBreakTotal = saturatedMultiply(breakMinutes.coerceAtLeast(1L), shortBreakCount)
+    val longBreakTotal = saturatedMultiply(longBreakMinutes.coerceAtLeast(1L), longBreakCount)
+    return saturatedAdd(workMinutes, saturatedAdd(shortBreakTotal, longBreakTotal))
+}
+
+internal fun focusTimeInWindow(time: LocalTime, start: LocalTime, end: LocalTime): Boolean =
+    if (start <= end) {
+        !time.isBefore(start) && time.isBefore(end)
+    } else {
+        !time.isBefore(start) || time.isBefore(end)
+    }
+
+/** Uses local date/time arithmetic for the mandate boundary, including a repeated DST hour. */
+internal fun focusPlanEndWithinWindow(
+    scheduled: ZonedDateTime,
+    sessionMinutes: Long,
+    start: LocalTime,
+    end: LocalTime,
+): Boolean {
+    // Continuous plans have no finite end; callers must reject them before checking a window.
+    if (sessionMinutes == Long.MAX_VALUE) return false
+    val endDate = if (start <= end) {
+        scheduled.toLocalDate()
+    } else if (!scheduled.toLocalTime().isBefore(start)) {
+        scheduled.toLocalDate().plusDays(1)
+    } else {
+        scheduled.toLocalDate()
+    }
+    val windowEndLocal = endDate.atTime(end)
+    val planEndLocal = scheduled.plusSeconds(sessionMinutes * 60L).toLocalDateTime()
+    return !planEndLocal.isAfter(windowEndLocal)
+}
+
 /** The single V2 policy validator used both by dispatch and its JVM tests. */
 class MandateVerifier {
     fun verify(proposal: ProposalV2, mandate: AgentMandate, context: AgentVerificationContext): MandateDecision {
@@ -494,7 +554,27 @@ class MandateVerifier {
             val minutes = (proposal.parameters["focus_minutes"] as? Number)?.toInt()
                 ?: ref?.let(context.focusMinutesByProposal::get)
                 ?: mandate.focusWindow.maxMinutesPerSession
-            if (minutes > mandate.focusWindow.maxMinutesPerSession) return MandateDecision.reject("Durée supérieure à la borne du mandat.")
+            val sessionMinutes = if (type == AgentActionType.FOCUS_PROPOSE || type == AgentActionType.FOCUS_PLAN) {
+                val breakMinutes = (proposal.parameters["break_minutes"] as Number).toLong()
+                val cycles = (proposal.parameters["cycles"] as Number).toLong()
+                focusSessionDurationMinutes(
+                    focusMinutes = minutes.toLong(),
+                    breakMinutes = breakMinutes,
+                    cycles = cycles,
+                    longBreakMinutes = 15L,
+                    longBreakEveryCycles = minOf(4L, cycles),
+                    continuous = false,
+                )
+            } else {
+                minutes.toLong()
+            }
+            if (type == AgentActionType.FOCUS_PROPOSE || type == AgentActionType.FOCUS_PLAN) {
+                if (sessionMinutes > mandate.focusWindow.maxMinutesPerSession.toLong()) {
+                    return MandateDecision.reject("Durée totale supérieure à la borne du mandat.")
+                }
+            } else if (minutes > mandate.focusWindow.maxMinutesPerSession) {
+                return MandateDecision.reject("Durée supérieure à la borne du mandat.")
+            }
             if (context.focusSessionsToday >= mandate.focusWindow.maxSessionsPerDay) return MandateDecision.reject("Quota quotidien de sessions Focus atteint.")
             val zone = ZoneId.of(mandate.focusWindow.timezone)
             val localNow = Instant.ofEpochMilli(context.nowUtcMillis).atZone(zone)
@@ -511,8 +591,12 @@ class MandateVerifier {
             val time = scheduled.toLocalTime()
             val start = LocalTime.parse(mandate.focusWindow.start)
             val end = LocalTime.parse(mandate.focusWindow.end)
-            val inWindow = if (start <= end) !time.isBefore(start) && time.isBefore(end) else !time.isBefore(start) || time.isBefore(end)
-            if (!inWindow) return MandateDecision.reject("Heure hors fenêtre du mandat.")
+            if (!focusTimeInWindow(time, start, end)) return MandateDecision.reject("Heure hors fenêtre du mandat.")
+            if (type == AgentActionType.FOCUS_PLAN) {
+                if (!focusPlanEndWithinWindow(scheduled, sessionMinutes, start, end)) {
+                    return MandateDecision.reject("Fin du plan hors fenêtre du mandat.")
+                }
+            }
         }
         if (type == AgentActionType.FOCUS_START) {
             val ref = proposal.parameters["session_ref"] as String

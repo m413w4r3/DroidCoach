@@ -1,0 +1,19 @@
+BASE_SHA=8890046012965f3a3112ff0c419014c74e189d11
+Status=BLOCKED (no pytest summary)
+Python=3.12.3, executable=<repo>/backend/.venv/bin/python
+
+Attempt 1 working directory: <tmp-ci-dir>/backend
+Command: PYTHONPATH=<tmp-ci-dir>/backend <repo>/backend/.venv/bin/python -m pytest -q
+The log showed 37 progress dots and no failure marker, then no progress for more than 5 minutes. Interrupted with Ctrl-C; shell exit code 130. Log: <tmp-ci-dir>/backend-pytest.log
+
+Attempt 2 working directory: <worktree>/v62-ci-final/backend
+Command: PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider' PYTHONPATH=<worktree>/v62-ci-final/backend <repo>/backend/.venv/bin/python -m pytest -q
+It again showed 37 dots without a summary and was interrupted after about 4 minutes; exit code 130. Log: <tmp-ci-dir>/backend-pytest-corroboration.log
+
+Attempt 3 working directory: <repo>/backend (HEAD verified equal to BASE_SHA)
+Command: PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider' PYTHONPATH=<worktree>/v62-ci-final/backend <repo>/backend/.venv/bin/python -m pytest -q
+It stopped at the same 37-dot point with no summary and was interrupted within the five-minute cap; exit code 130. Log: <tmp-ci-dir>/backend-pytest-main.log
+
+Supplementary command: `PYTHONPATH=<worktree>/v62-ci-final/backend <repo>/backend/.venv/bin/python -m pytest --collect-only -q`; it collected 67 cases. The ordered case after the 37 visible results is `test_v2_chat_is_idempotent_validates_candidates_and_persists_inbox`; this identifies the point of the stall, not a confirmed failure. The partial output gives no reliable aggregate passed/failed/skipped counts.
+
+Independent corroboration from the parent agent on this same SHA: 66 passed, 1 skipped, 2.53 s, using `cd backend && .venv/bin/python -m pytest -q`. This is not one of the three logs above.
