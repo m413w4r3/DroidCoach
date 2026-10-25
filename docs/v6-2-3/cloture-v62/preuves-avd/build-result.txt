@@ -1,6 +1,6 @@
 status=PASS
 base_sha=8890046012965f3a3112ff0c419014c74e189d11
 working_directory=android/
-command=GRADLE_USER_HOME=/tmp/v623-qa/gradle-home ANDROID_HOME=<android-sdk> ANDROID_SDK_ROOT=<android-sdk> ./gradlew --offline --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
+command=GRADLE_USER_HOME=<tmp-qa-dir>/gradle-home ANDROID_HOME=<android-sdk> ANDROID_SDK_ROOT=<android-sdk> ./gradlew --offline --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
 result=BUILD SUCCESSFUL in 59s; 67 actionable tasks
 daemon=single-use daemon; Gradle reported it would stop at build completion

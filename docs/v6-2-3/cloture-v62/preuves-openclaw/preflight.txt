@@ -20,5 +20,5 @@ android_build_started=false
 instrumentation_started=false
 external_network_used=false
 personal_data_used=false
-runtime_directory=/run/user/1000
+runtime_directory=<runtime-dir>
 runtime_directory_removed_after_host_run=true

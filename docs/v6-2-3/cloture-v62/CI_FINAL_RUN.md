@@ -5,11 +5,11 @@
 ## SHA et environnement
 
 - SHA testé : `8890046012965f3a3112ff0c419014c74e189d11`.
-- `git status --short` était vide au départ. Le travail CI a été lancé depuis une archive propre de ce SHA dans `/tmp/atlas-v62-ci-final.PGRetd`, afin de garder les sorties de build hors du worktree.
+- `git status --short` était vide au départ. Le travail CI a été lancé depuis une archive propre de ce SHA dans `<tmp-ci-dir>`, afin de garder les sorties de build hors du worktree.
 - Linux x86_64, OpenJDK `21.0.12.1`, Gradle wrapper `9.6.0`, SDK Android `platforms;android-37.2`, build-tools `37.0.0`, Python backend `3.12.3`.
 - Le build Gradle a utilisé le `GRADLE_USER_HOME` par défaut, `<gradle-home>`. Aucun ADB, émulateur ou téléphone n’a été utilisé.
 
-Le détail de l’environnement est dans [environment.txt](preuves-ci/environment.txt). Les journaux complets et les sorties XML restent sous `/tmp/atlas-v62-ci-final.PGRetd/`.
+Le détail de l’environnement est dans [environment.txt](preuves-ci/environment.txt). Les journaux complets et les sorties XML restent sous `<tmp-ci-dir>/`.
 
 ## Résultats
 
@@ -42,7 +42,7 @@ Build Android, depuis `android/` de l’archive temporaire :
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --rerun-tasks --max-workers=1 --console=plain
 ```
 
-L’environnement du build fixait aussi `ANDROID_HOME=<android-sdk>` et `ANDROID_SDK_ROOT=<android-sdk>`. Le journal complet est `/tmp/atlas-v62-ci-final.PGRetd/gradle-ci.log`.
+L’environnement du build fixait aussi `ANDROID_HOME=<android-sdk>` et `ANDROID_SDK_ROOT=<android-sdk>`. Le journal complet est `<tmp-ci-dir>/gradle-ci.log`.
 
 Backend, depuis `backend/` du worktree, avec le venv externe présent :
 
@@ -51,9 +51,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider' PYTHONPATH=<workt
   <repo>/backend/.venv/bin/python -m pytest -q
 ```
 
-Les deux variables pytest désactivent seulement l’écriture de bytecode et du cache pytest ; la commande testée reste `python -m pytest -q`. Le journal correspondant est `/tmp/atlas-v62-ci-final.PGRetd/backend-pytest-corroboration.log`.
+Les deux variables pytest désactivent seulement l’écriture de bytecode et du cache pytest ; la commande testée reste `python -m pytest -q`. Le journal correspondant est `<tmp-ci-dir>/backend-pytest-corroboration.log`.
 
-Note de pré-vol : avant la correction d’environnement du parent, une sonde `--version` a téléchargé le wrapper Gradle dans `/tmp/atlas-v62-gradle-discovery`. Ce cache temporaire n’a pas servi au build ci-dessus, qui a utilisé `<gradle-home>`.
+Note de pré-vol : avant la correction d’environnement du parent, une sonde `--version` a téléchargé le wrapper Gradle dans `<tmp-gradle-dir>`. Ce cache temporaire n’a pas servi au build ci-dessus, qui a utilisé `<gradle-home>`.
 
 ## Addendum parent — backend sur le même SHA
 
@@ -104,3 +104,20 @@ Après le correctif R3 (`f21fa8e`/`18484e2` : pause nulle et revalidation `focus
 Backend, même checkout : `66 passed, 1 skipped, 1 warning in 2.59 s`.
 
 Artefacts : [preuves-finales-18484e2/PREUVES_FINALES.md](preuves-finales-18484e2/PREUVES_FINALES.md).
+
+## Run final `1a6f761` — 2026-10-25
+
+Après le correctif R4 (`edbb3f5`/`1a6f761` : refus du mode continu), la CI complète a été rejouée.
+
+| Vérification | Résultat |
+|---|---|
+| `:app:testDebugUnitTest` | **339 tests, 0 échec, 0 erreur, 0 ignoré** (57 classes) |
+| `:app:lintDebug` | **0 erreur, 47 avertissements** |
+| `:app:assembleDebug` + `assembleDebugAndroidTest` | **BUILD SUCCESSFUL**, 81 tâches exécutées, 1 min 16 s |
+| APK debug | SHA-256 `dc1c3e004fb7a3394c47dfc4b28407e211a06f48db51e86bbc7b665f05d62d87` |
+| APK androidTest | SHA-256 `4a916f12f324b4cf10574038d42750bc6fe006f8dbc856ad9903225c824afa00` |
+| Certificat debug | SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
+
+Backend, même checkout : `66 passed, 1 skipped, 1 warning in 2.72 s`.
+
+Artefacts : [preuves-finales-1a6f761/PREUVES_FINALES.md](preuves-finales-1a6f761/PREUVES_FINALES.md).

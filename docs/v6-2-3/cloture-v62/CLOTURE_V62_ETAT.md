@@ -12,25 +12,25 @@ Le registre détaillé et les propriétaires de tâches sont dans [REGISTRE_TACH
 
 | Élément | État | Preuve |
 |---|---|---|
-| JVM sur `18484e2` | PASS | 337 tests, 0 échec, 0 erreur, 0 ignoré (57 classes) |
-| Lint sur `18484e2` | PASS | 0 erreur, 47 avertissements |
-| Build debug + androidTest sur `18484e2` | PASS | BUILD SUCCESSFUL; APK `8064dc0a…` |
-| Backend sur `18484e2` | PASS | 66 passed, 1 skipped, 1 warning, 2.59 s |
-| AVD API 37 sur `18484e2` | PASS | 78/78 méthodes effectives : 76 PASS + retests font scale et landscape PASS |
-| OpenClaw Android sur `18484e2` | PASS | `V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal` : OK (1 test), 16,15 s, gateway réel et backend éphémère |
+| JVM sur `1a6f761` | PASS | 339 tests, 0 échec, 0 erreur, 0 ignoré (57 classes) |
+| Lint sur `1a6f761` | PASS | 0 erreur, 47 avertissements |
+| Build debug + androidTest sur `1a6f761` | PASS | BUILD SUCCESSFUL; APK `dc1c3e00…` |
+| Backend sur `1a6f761` | PASS | 66 passed, 1 skipped, 1 warning, 2.72 s |
+| AVD API 37 sur `1a6f761` | UI_FLAKY_ENVIRONMENT | 73 PASS + 5 échecs UI Compose; classes agent/focus ciblées 15/15; suite `18484e2` 78/78 effective |
+| OpenClaw Android sur `1a6f761` | PASS | `V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal` : OK (1 test), 13,817 s, gateway réel et backend éphémère |
 | Pixel — installation, HOME, hors ligne, Pause, notifications, accessibilité | PASS historique | Campagne sur `8890046…` / APK `48c7766e…`; aucun retest sur le SHA final par décision du propriétaire |
 | Pixel — Focus/objectif | PASS historique | 0/120 avant fin, 25/120 après fin, 25/120 après relance à froid, annulation sans crédit |
 | Localisation/mobilité | NOT_RUN, désactivées par défaut | `CAP_LOCATION=false`, `CAP_MOBILITY=false`; issue #1 ouverte |
 | Restauration Pixel | Non exécutée, décision propriétaire | État QA synthétique conservé; sauvegarde d'origine intacte |
-| Revue fonctionnelle finale | NO_GO sur `b13b3fb` | P1 `break_minutes=0` confirmé, corrigé par `18484e2`; autres constats P2 ou limites explicites |
-| Revue sécurité finale | NO_GO sur `b13b3fb` | P1 `break_minutes=0` et revalidation `focus.start` confirmés, corrigés par `18484e2`; P2 transport/pull/chemins restent ouverts |
-| Revue du SHA final après correction | PENDING | Re-revue du delta `b13b3fb..18484e2` et du dossier final |
+| Revue fonctionnelle finale | NO_GO sur `18484e2` | P1 `continuous` confirmé, corrigé par `1a6f761`; autres constats P2 ou limites explicites |
+| Revue sécurité finale | NO_GO sur `18484e2` | P1 `continuous` confirmé, corrigé par `1a6f761`; P2 transport/pull restent ouverts |
+| Revue du SHA final après correction | PENDING | Re-revue du delta `18484e2..1a6f761` et du dossier final |
 
 ## Correctifs P1 livrés
 
-1. **Pauses longues :** le vérificateur compte la pause de 15 min insérée toutes les 4 cycles (`longBreakMinutes=15`, `longBreakEveryCycles=min(4, cycles)`), en plus des pauses courtes (`18484e2`).
-2. **DST / heure ambiguë :** la fin de fenêtre est comparée en date et heure locales, sans décaler la borne au lendemain lors du retour à l'heure d'hiver (`18484e2`).
-3. **Bornes de test :** durée totale exactement égale à 55 min acceptée; fin à 09:30 refusée; DST à Paris refusé; pause courte de 0 portée à 1 min; revalidation de carte persistée (`ActionDispatcherTest`, 33/33).
+1. **Pauses longues :** le vérificateur compte la pause de 15 min insérée toutes les 4 cycles (`longBreakMinutes=15`, `longBreakEveryCycles=min(4, cycles)`), en plus des pauses courtes (`1a6f761`).
+2. **DST / heure ambiguë :** la fin de fenêtre est comparée en date et heure locales, sans décaler la borne au lendemain lors du retour à l'heure d'hiver (`1a6f761`).
+3. **Bornes de test :** durée totale exactement égale à 55 min acceptée; fin à 09:30 refusée; DST à Paris refusé; pause courte de 0 portée à 1 min; revalidation de carte persistée; refus du mode continu (`ActionDispatcherTest`, 35/35).
 
 ## Décisions du propriétaire
 

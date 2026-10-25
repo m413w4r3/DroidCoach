@@ -40,9 +40,10 @@ Trois vagues de correction ont été livrées :
 - `4aff91a` et `1251009` : durée totale, fin de fenêtre date/heure, traversée de minuit;
 - `b13b3fb`/`d718540` : pauses longues de 15 min toutes les 4 cycles, fin de fenêtre en heure locale et DST, test de borne exacte;
 - `18484e2`/`f21fa8e` : pauses courtes portées à au moins 1 minute, mode `continuous`, helpers partagés de durée/fenêtre, et revalidation complète de la carte persistée au démarrage (`focus.start`) avant toute mutation.
+- `1a6f761`/`edbb3f5` : refus explicite des cartes agent `continuous`, durée continue marquée non bornée, tests `focus.propose`/`focus.plan` refusant le paramètre.
 
-La re-revue de `b13b3fb` a rendu **NO_GO** : P1 `break_minutes=0` sous-compté (les deux reviewers) et P1 `focus.start` ne revalidant pas la carte persistée (reviewer sécurité). Ces deux P1 sont corrigés dans `18484e2`; la re-revue du delta `b13b3fb..18484e2` est en cours.
+La re-revue de `b13b3fb` a rendu **NO_GO** : P1 `break_minutes=0` sous-compté (les deux reviewers) et P1 `focus.start` ne revalidant pas la carte persistée (reviewer sécurité). La re-revue de `18484e2` a rendu **NO_GO** : P1 `continuous` non bornable, confirmé par les deux reviewers. Ces trois P1 sont corrigés dans `1a6f761`; la re-revue du delta `18484e2..1a6f761` est en cours.
 
 ## Verdict provisoire
 
-**NO_GO provisoire.** Aucun P0; les P1 identifiés ont été corrigés dans `18484e2`; des P2 de preuve et de transport restent ouverts. La clôture ne peut être déclarée qu'après re-revue du SHA final et acceptation explicite des limites restantes par le propriétaire.
+**NO_GO provisoire.** Aucun P0; les P1 identifiés ont été corrigés dans `1a6f761`; des P2 de preuve et de transport restent ouverts, et la suite AVD du SHA final est `UI_FLAKY_ENVIRONMENT`. La clôture ne peut être déclarée qu'après re-revue du SHA final et acceptation explicite des limites restantes par le propriétaire.

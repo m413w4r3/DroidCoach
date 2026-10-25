@@ -1,5 +1,5 @@
 BASE_SHA=8890046012965f3a3112ff0c419014c74e189d11
-Working directory: /tmp/atlas-v62-ci-final.PGRetd/android
+Working directory: <tmp-ci-dir>/android
 GRADLE_USER_HOME was left unset; the default <gradle-home> cache was used.
 
 Command (arguments exactly as requested):
@@ -11,6 +11,6 @@ JUnit XML: 57 files; 321 tests; 0 failures; 0 errors; 0 skipped.
 Lint XML: 52 Warning issues; 0 Error issues.
 Compiler output also contains 7 unchecked-cast Kotlin warnings in JVM test sources; these are not lint issues.
 
-Complete Gradle log: /tmp/atlas-v62-ci-final.PGRetd/gradle-ci.log
-JUnit XML directory: /tmp/atlas-v62-ci-final.PGRetd/android/app/build/test-results/testDebugUnitTest/
-Lint XML: /tmp/atlas-v62-ci-final.PGRetd/android/app/build/reports/lint-results-debug.xml
+Complete Gradle log: <tmp-ci-dir>/gradle-ci.log
+JUnit XML directory: <tmp-ci-dir>/android/app/build/test-results/testDebugUnitTest/
+Lint XML: <tmp-ci-dir>/android/app/build/reports/lint-results-debug.xml

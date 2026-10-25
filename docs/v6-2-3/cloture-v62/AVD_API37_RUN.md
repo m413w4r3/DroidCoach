@@ -10,7 +10,7 @@
 - Build local hors réseau, depuis `android/`:
 
   ```sh
-  GRADLE_USER_HOME=/tmp/v623-qa/gradle-home ANDROID_HOME=<android-sdk> ANDROID_SDK_ROOT=<android-sdk> ./gradlew --offline --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
+  GRADLE_USER_HOME=<tmp-qa-dir>/gradle-home ANDROID_HOME=<android-sdk> ANDROID_SDK_ROOT=<android-sdk> ./gradlew --offline --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
   ```
 
   Résultat: `BUILD SUCCESSFUL`, 67 tâches, 59 s. Le daemon Gradle à usage unique s’est arrêté à la fin.
@@ -117,3 +117,17 @@ Après le correctif R3 (`f21fa8e`/`18484e2` : pause nulle et revalidation `focus
 Le test landscape avait réussi lors des runs précédents et passe isolément sur le même APK; l'échec de la suite complète est classé flake de performance Compose, pas régression démontrée. L'émulateur a été redémarré à froid après un crash; aucun Pixel physique n'a été utilisé.
 
 Preuves : [preuves-finales-18484e2](preuves-finales-18484e2/PREUVES_FINALES.md).
+
+## Run final `1a6f761` — 2026-10-25
+
+Après le correctif R4 (`edbb3f5`/`1a6f761` : refus du mode continu), l'APK final `dc1c3e00…` a été installé et la suite locale rejouée sur `emulator-5554` :
+
+- suite complète : **78 méthodes, 73 PASS, 5 échecs, 0 skip, 171,931 s**;
+- 5 échecs, tous UI Compose : `HomeLandscapeFooterInstrumentationTest` (2 timeouts), `LauncherDrawerLazyInstrumentationTest` (SnapshotStateObserver multi-thread), `V62NativeUiCaptureTest` (harnais font scale + absence de hiérarchie Compose);
+- classes agent/focus ciblées : **15 tests, 15 PASS**, 18,218 s;
+- retest tiroir isolé : **1 PASS**, 20,428 s; retest font scale : **1 PASS**, 2,478 s; retest landscape isolé : **FAIL** (timeout Compose 10 s) sur l'état actuel de l'émulateur;
+- OpenClaw Android : **OK (1 test), 13,817 s**, gateway réel et backend éphémère.
+
+**Classification : `UI_FLAKY_ENVIRONMENT`.** Aucun test agent, mandat, Focus ou objectif n'a échoué; le delta `18484e2..1a6f761` ne touche que l'agent/mandat. La suite complète sur `18484e2` (même code UI) était 78/78 effective après deux retests. Les crashs UWB de l'image sont un artifact connu.
+
+Preuves : [preuves-finales-1a6f761](preuves-finales-1a6f761/PREUVES_FINALES.md).
