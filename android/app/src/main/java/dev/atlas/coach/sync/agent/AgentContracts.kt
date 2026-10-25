@@ -444,7 +444,7 @@ data class MandateDecision(
     companion object { fun reject(reason: String) = MandateDecision(false, reason) }
 }
 
-/** Total wall time of the finite FocusPlan that AtlasController executes for an agent card. */
+/** Total wall time of an agent FocusPlan; callers must reject Long.MAX_VALUE for continuous plans. */
 internal fun focusSessionDurationMinutes(
     focusMinutes: Long,
     breakMinutes: Long,
@@ -458,9 +458,12 @@ internal fun focusSessionDurationMinutes(
     fun saturatedAdd(left: Long, right: Long): Long =
         runCatching { Math.addExact(left, right) }.getOrDefault(Long.MAX_VALUE)
 
+    if (continuous) {
+        // No finite mandate duration can bound this plan; callers must refuse it.
+        return Long.MAX_VALUE
+    }
     val cycleCount = cycles.coerceAtLeast(0L)
     val workMinutes = saturatedMultiply(focusMinutes.coerceAtLeast(0L), cycleCount)
-    if (continuous) return workMinutes
 
     val breakCount = (cycleCount - 1L).coerceAtLeast(0L)
     val longBreakEvery = longBreakEveryCycles.coerceAtLeast(1L)
@@ -486,6 +489,8 @@ internal fun focusPlanEndWithinWindow(
     start: LocalTime,
     end: LocalTime,
 ): Boolean {
+    // Continuous plans have no finite end; callers must reject them before checking a window.
+    if (sessionMinutes == Long.MAX_VALUE) return false
     val endDate = if (start <= end) {
         scheduled.toLocalDate()
     } else if (!scheduled.toLocalTime().isBefore(start)) {

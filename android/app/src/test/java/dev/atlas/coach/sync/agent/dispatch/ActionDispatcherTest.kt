@@ -420,7 +420,7 @@ class ActionDispatcherTest {
     }
 
     @Test
-    fun focusSessionDurationMatchesPersistedFocusPlanPhases() {
+    fun focusSessionDurationMatchesFinitePersistedFocusPlanPhases() {
         assertEquals(
             100L,
             focusSessionDurationMinutes(
@@ -443,8 +443,12 @@ class ActionDispatcherTest {
                 continuous = false,
             ),
         )
+    }
+
+    @Test
+    fun focusSessionDurationMarksContinuousPlanUnbounded() {
         assertEquals(
-            160L,
+            Long.MAX_VALUE,
             focusSessionDurationMinutes(
                 focusMinutes = 20L,
                 breakMinutes = 0L,
@@ -454,6 +458,30 @@ class ActionDispatcherTest {
                 continuous = true,
             ),
         )
+    }
+
+    @Test
+    fun focusProposeAndPlanRejectContinuousParameter() {
+        val capabilities = setOf("focus", "focusRoutines")
+        val proposed = focusProposal()
+        val planned = focusPlanProposal(startAt = "2026-10-20T08:00:00Z")
+        val mandate = baseMandate.copy(allowedActions = setOf("focus.propose", "focus.plan"))
+
+        val proposeDecision = verifier.verify(
+            proposed.copy(parameters = proposed.parameters + ("continuous" to true)),
+            mandate,
+            context().copy(capabilities = capabilities),
+        )
+        val planDecision = verifier.verify(
+            planned.copy(parameters = planned.parameters + ("continuous" to true)),
+            mandate,
+            context().copy(capabilities = capabilities),
+        )
+
+        assertFalse(proposeDecision.accepted)
+        assertEquals("Paramètres invalides pour cette action.", proposeDecision.reason)
+        assertFalse(planDecision.accepted)
+        assertEquals("Paramètres invalides pour cette action.", planDecision.reason)
     }
 
     @Test

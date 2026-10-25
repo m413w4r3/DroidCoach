@@ -2836,6 +2836,9 @@ class AtlasController @JvmOverloads constructor(
         val card = agentHomeStateSnapshot.focusProposal?.takeIf {
             it.proposalId == ref && it.state !in setOf(AgentFocusCardState.CANCELLED, AgentFocusCardState.FINISHED)
         } ?: return AgentActionOutcome(false, "Session proposée absente ou annulée.")
+        if (card.continuous) {
+            return AgentActionOutcome(false, "Une session Focus continue n'est pas autorisée par un mandat à durée bornée.")
+        }
         val mandate = agentMandateStore.current()
         val focusWindow = mandate.focusWindow
         val zone = ZoneId.of(focusWindow.timezone)
