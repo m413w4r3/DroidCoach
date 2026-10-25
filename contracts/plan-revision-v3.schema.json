@@ -1,0 +1,395 @@
+{
+  "$defs": {
+    "FocusSpecV3": {
+      "additionalProperties": false,
+      "properties": {
+        "break_minutes": {
+          "maximum": 60,
+          "minimum": 0,
+          "title": "Break Minutes",
+          "type": "integer"
+        },
+        "cycles": {
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Cycles",
+          "type": "integer"
+        },
+        "focus_minutes": {
+          "maximum": 180,
+          "minimum": 1,
+          "title": "Focus Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "focus_minutes",
+        "break_minutes",
+        "cycles"
+      ],
+      "title": "FocusSpecV3",
+      "type": "object"
+    },
+    "PlanActivityV3": {
+      "additionalProperties": false,
+      "description": "One activity proposed for a day plan.\n\n``activity_id`` references an activity that already exists in the current\nplan. ``client_ref`` is a stable label inside this proposal only; it is\nmandatory and unique even for existing activities so that a diff can be\nrendered deterministically.",
+      "properties": {
+        "activity_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Id"
+        },
+        "client_ref": {
+          "maxLength": 40,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "title": "Client Ref",
+          "type": "string"
+        },
+        "duration_minutes": {
+          "maximum": 1440,
+          "minimum": 1,
+          "title": "Duration Minutes",
+          "type": "integer"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocusSpecV3"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "goal_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Goal Id"
+        },
+        "kind": {
+          "enum": [
+            "FOCUS",
+            "TRAINING",
+            "APPOINTMENT",
+            "ADMIN",
+            "MEAL",
+            "REST",
+            "BUFFER",
+            "OTHER"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "local_date": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Local Date",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 280,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "priority": {
+          "default": "IMPORTANT",
+          "enum": [
+            "REQUIRED",
+            "IMPORTANT",
+            "OPTIONAL"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "start_minute": {
+          "maximum": 1439,
+          "minimum": 0,
+          "title": "Start Minute",
+          "type": "integer"
+        },
+        "sub_goal_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sub Goal Id"
+        },
+        "timezone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Timezone",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "training_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrainingReferenceV3"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "client_ref",
+        "kind",
+        "title",
+        "local_date",
+        "start_minute",
+        "duration_minutes",
+        "timezone"
+      ],
+      "title": "PlanActivityV3",
+      "type": "object"
+    },
+    "PlanRevisionCandidateV3": {
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {
+          "const": "plan.revise_day",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "parameters": {
+          "$ref": "#/$defs/PlanRevisionParametersV3"
+        },
+        "reason": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_type",
+        "reason",
+        "parameters"
+      ],
+      "title": "PlanRevisionCandidateV3",
+      "type": "object"
+    },
+    "PlanRevisionParametersV3": {
+      "additionalProperties": false,
+      "properties": {
+        "activities": {
+          "items": {
+            "$ref": "#/$defs/PlanActivityV3"
+          },
+          "maxItems": 32,
+          "title": "Activities",
+          "type": "array"
+        },
+        "base_version": {
+          "minimum": 1,
+          "title": "Base Version",
+          "type": "integer"
+        },
+        "local_date": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Local Date",
+          "type": "string"
+        },
+        "plan_id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "timezone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_id",
+        "base_version",
+        "local_date",
+        "timezone",
+        "summary",
+        "activities"
+      ],
+      "title": "PlanRevisionParametersV3",
+      "type": "object"
+    },
+    "TrainingReferenceV3": {
+      "additionalProperties": false,
+      "properties": {
+        "day_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Day Id"
+        },
+        "provider": {
+          "const": "wger",
+          "default": "wger",
+          "title": "Provider",
+          "type": "string"
+        },
+        "routine_id": {
+          "minimum": 1,
+          "title": "Routine Id",
+          "type": "integer"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "routine_id"
+      ],
+      "title": "TrainingReferenceV3",
+      "type": "object"
+    }
+  },
+  "$id": "https://atlas.local/contracts/plan-revision-v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Proposal envelope for the future V3 inbox.\n\nIt is not accepted by the live V2 endpoint; a client that does not know\n``schema_version: 3`` must reject it rather than ignore it.",
+  "properties": {
+    "conversation_id": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Conversation Id"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "mandate_id": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Mandate Id",
+      "type": "string"
+    },
+    "mandate_version": {
+      "minimum": 1,
+      "title": "Mandate Version",
+      "type": "integer"
+    },
+    "proposal": {
+      "$ref": "#/$defs/PlanRevisionCandidateV3"
+    },
+    "proposal_id": {
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "required_level": {
+      "default": "confirm",
+      "enum": [
+        "proposal_only",
+        "confirm",
+        "preauthorized_ok"
+      ],
+      "title": "Required Level",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 3,
+      "default": 3,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "state": {
+      "const": "proposed",
+      "default": "proposed",
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "idempotency_key",
+    "mandate_id",
+    "mandate_version",
+    "created_at",
+    "expires_at",
+    "proposal"
+  ],
+  "title": "ATLAS V6.3 plan revision proposal (inactive until L3)",
+  "type": "object"
+}
