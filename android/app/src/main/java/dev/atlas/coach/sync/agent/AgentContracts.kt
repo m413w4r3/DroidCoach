@@ -497,7 +497,11 @@ class MandateVerifier {
             val sessionMinutes = if (type == AgentActionType.FOCUS_PROPOSE || type == AgentActionType.FOCUS_PLAN) {
                 val breakMinutes = (proposal.parameters["break_minutes"] as Number).toLong()
                 val cycles = (proposal.parameters["cycles"] as Number).toLong()
-                minutes.toLong() * cycles + breakMinutes * maxOf(0L, cycles - 1L)
+                val longEvery = minOf(4L, cycles)
+                val longBreaks = (cycles - 1L) / longEvery
+                val shortBreaks = (cycles - 1L) - longBreaks
+                // Match AtlasController's FocusPlan: each long break replaces a short break.
+                minutes.toLong() * cycles + shortBreaks * breakMinutes + longBreaks * 15L
             } else {
                 minutes.toLong()
             }
@@ -524,18 +528,24 @@ class MandateVerifier {
             val time = scheduled.toLocalTime()
             val start = LocalTime.parse(mandate.focusWindow.start)
             val end = LocalTime.parse(mandate.focusWindow.end)
-            fun inWindow(time: LocalTime, allowEndBoundary: Boolean = false): Boolean =
+            fun inWindow(time: LocalTime): Boolean =
                 if (start <= end) {
-                    !time.isBefore(start) && (time.isBefore(end) || allowEndBoundary && time == end)
+                    !time.isBefore(start) && time.isBefore(end)
                 } else {
-                    !time.isBefore(start) || time.isBefore(end) || allowEndBoundary && time == end
+                    !time.isBefore(start) || time.isBefore(end)
                 }
             if (!inWindow(time)) return MandateDecision.reject("Heure hors fenêtre du mandat.")
             if (type == AgentActionType.FOCUS_PLAN) {
-                val planEnd = scheduled.plusSeconds(sessionMinutes * 60L)
-                val windowEnd = scheduled.toLocalDate().atTime(end).atZone(zone)
-                    .let { if (it.isAfter(scheduled)) it else it.plusDays(1) }
-                if (planEnd.isAfter(windowEnd)) {
+                val endDate = if (start <= end) {
+                    scheduled.toLocalDate()
+                } else if (!scheduled.toLocalTime().isBefore(start)) {
+                    scheduled.toLocalDate().plusDays(1)
+                } else {
+                    scheduled.toLocalDate()
+                }
+                val windowEndLocal = endDate.atTime(end)
+                val planEndLocal = scheduled.plusSeconds(sessionMinutes * 60L).toLocalDateTime()
+                if (planEndLocal.isAfter(windowEndLocal)) {
                     return MandateDecision.reject("Fin du plan hors fenêtre du mandat.")
                 }
             }
