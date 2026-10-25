@@ -1,6 +1,6 @@
-# ATLAS Core — backend mock
+# ATLAS Core — backend FastAPI (mock local ou OpenClaw)
 
-Service optionnel de démonstration pour ATLAS. L’application Android n’en dépend pas et reste utilisable hors ligne. Le service est local, stocke les événements et réponses dans SQLite, et tourne sans clé IA ni appel réseau sortant.
+Service optionnel pour ATLAS. L’application Android fonctionne sans lui et conserve son état local ; le serveur utilise SQLite pour les événements et les échanges. **Par défaut**, `ATLAS_AGENT_ADAPTER=mock` fournit des réponses déterministes sans appel à une IA. En mode `ATLAS_AGENT_ADAPTER=openclaw`, le backend utilise l’adaptateur OpenClaw existant et un Gateway configuré séparément. Les actions sur Android restent soumises au mandat et à la vérification du client.
 
 ## Installation
 
@@ -72,7 +72,7 @@ OpenAPI généré : `curl -H "Authorization: Bearer $ATLAS_TOKEN" http://127.0.0
 - `GET /v1/plan/today`
 - `GET /v1/policy/effective`
 - `GET /v1/content/recommendations` (catalogue statique de trois URLs HTTPS au plus)
-- `POST /v1/coach/message` (mock déterministe)
+- `POST /v1/coach/message` (mode mock déterministe ; propositions OpenClaw via les contrats agent V2 lorsque configuré)
 - `POST /v1/sync`
 - `GET /v1/export`
 
@@ -82,7 +82,9 @@ OpenAPI généré : `curl -H "Authorization: Bearer $ATLAS_TOKEN" http://127.0.0
 
 Le contrat de synchronisation est versionné par `contract_version: 1` dans la requête et la réponse de `/v1/sync`; voir `contracts/sync-v1.schema.json`. Chaque événement utilise un UUID stable dans `event_id` (nom Android : `clientEventId`), une date RFC 3339 UTC avec suffixe `Z` et un payload scalaire limité. Un rejeu identique renvoie le même accusé sans nouvel enregistrement. Réutiliser un UUID avec un contenu différent renvoie `409 idempotency_conflict`. Les erreurs exposent la version et un code stable sous `error.code` (`contracts/error-v1.schema.json`); les requêtes mal formées renvoient `contract_validation_failed` sans refléter les valeurs fournies.
 
-OpenClaw est `unsupported` : **adaptateur non implémenté**. Il n’y a pas de client OpenClaw, LLM, RSS ou intégration externe. SQLite et ce jeton local conviennent uniquement à une démonstration sur la machine. Le serveur est conçu pour écouter sur loopback ; ce n’est pas un déploiement HTTPS pour réseau public. Les changements de policy et l’exécution d’actions Android restent la responsabilité déterministe du client, avec son propre consentement.
+L'adaptateur OpenClaw est implémenté (`atlas_backend/openclaw_adapter.py`) et activable par `ATLAS_AGENT_ADAPTER=openclaw`. Par défaut, il vise `OPENCLAW_BASE_URL=http://127.0.0.1:18789` et nécessite une configuration de jeton Gateway appropriée (`OPENCLAW_GATEWAY_TOKEN_FILE` ou `OPENCLAW_GATEWAY_TOKEN`). L'E2E avec un gateway réel et un client Android a été vérifié sur Android 17/API 37 ; voir [le rapport V6.2](../docs/v6-2-3/cloture-v62/E2E_PERSONNALISE.md). Ce test n'est pas un déploiement 24/7 : durcissement du réseau privé/HTTPS, authentification, permissions et sauvegardes à spécifier pour V6.3.
+
+Le mode mock local et SQLite conviennent à une démonstration ; le serveur est lié à loopback par défaut, pas exposé publiquement. Le backend propose des actions, mais les changements de politique et l'exécution d'effets Android restent soumis au consentement et à la vérification déterministe du client. Aucun lecteur RSS/Miniflux n'est intégré au périmètre actuel.
 
 ## Tests
 
