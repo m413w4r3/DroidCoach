@@ -1,0 +1,7 @@
+ATLAS V6.3 baseline JVM
+base SHA: acda7a967b26aa3ccc8325eb194c8daa2f9a58e4
+command: cd android && ./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin --max-workers=1 --console=plain
+result: BUILD SUCCESSFUL in 1m 27s
+suites=57 tests=339 failures=0 errors=0 skipped=0
+androidTest sources compiled: yes (compileDebugAndroidTestKotlin)
+instrumented execution: NOT_RUN (no device)
