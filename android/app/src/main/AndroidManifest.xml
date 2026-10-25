@@ -47,7 +47,6 @@
         <activity
             android:name=".app.LauncherActivity"
             android:exported="true"
-            android:label="ATLAS"
             android:launchMode="singleTask"
             android:excludeFromRecents="false">
             <intent-filter>

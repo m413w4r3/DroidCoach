@@ -6,7 +6,7 @@
 | Objectif | Un résultat observable, borné et démontrable |
 | Dépendances | Tickets `ACCEPTED` requis |
 | BASE_SHA | SHA Git complet, jamais une branche mouvante |
-| Profil constaté | `openai-codex:gpt-6-luna` / `xhigh` / ID de session |
+| Profil constaté | `codex:gpt-6-luna` / `xhigh` / ID de session |
 | Worktree / accès réel | Répertoire isolé, mode lecture seule ou écriture bornée |
 | Lire / écrire | 3–8 chemins utiles / propriété exclusive des fichiers écrits |
 | Oracle | Commande ciblée et condition de réussite ou grille de revue |

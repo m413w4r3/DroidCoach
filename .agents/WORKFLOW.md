@@ -12,7 +12,7 @@ Ce document fixe **la méthode d'exécution agentique**, pas le périmètre prod
 
 **Aucun enfant Luna High/Medium ou d'un autre fournisseur.** Si Paseo n'offre pas ce couple modèle/effort, marquer `BLOCKED` et demander une résolution au propriétaire, sans remplacement silencieux. Le repo ne configure **pas** les profils hôte Paseo : vérifier le provider/modèle/effort réels **dans les métadonnées des sessions**.
 
-**Concurrence :** 3 enfants actifs **maximum au total** (et non 3 par enfant), 1 propriétaire par fichier, 1 intégrateur parent, 1 seul propriétaire ADB/Pixel/AVD à la fois. Les agents enfants ne créent jamais d'autres agents. Utiliser des worktrees Git isolés pour les écritures ; accès techniquement lecture seule pour les relecteurs, pas une simple consigne textuelle.
+**Concurrence :** 6 enfants actifs **maximum au total** , 1 propriétaire par fichier, 1 intégrateur parent, 1 seul propriétaire ADB/Pixel/AVD à la fois. Les agents enfants peuvent créent d'autres agents.
 
 ## Pré-vol de chaque chantier
 
@@ -27,7 +27,7 @@ Ce document fixe **la méthode d'exécution agentique**, pas le périmètre prod
 Utiliser `.agents/TASK_TEMPLATE.md`. Toute session reçoit :
 - `TASK_ID`, objectif observable, dépendances et catégorie (scout/test/patch/revue).
 - `BASE_SHA` exact, scope de lecture, **scope d'écriture exclusif**, worktree et droits réels.
-- `MODEL=openai-codex:gpt-6-luna`, `EFFORT=xhigh` ; vérifier la session réellement lancée.
+- `MODEL=codex:gpt-6-luna`, `EFFORT=xhigh` ; vérifier la session réellement lancée.
 - **Oracle** : test discriminant, condition de réussite/échec, ou grille d'examen explicite si tâche de revue.
 - Interdictions, stop conditions, références à lire et livrables (diff, commit SHA, tests, preuves).
 - `notifyOnComplete` ou mécanisme d'événement **réellement disponible**.
