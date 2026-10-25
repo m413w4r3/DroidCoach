@@ -18,16 +18,17 @@ Certificat debug : SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a
 
 ## AVD API 37 — `emulator-5554`
 
+**Run final après redémarrage à froid — PASS effectif.**
+
 | Vérification | Résultat | Artefact |
 |---|---|---|
-| Suite locale complète | 78 méthodes : **73 PASS, 5 échecs**, 0 skip; 171,931 s | [avd-instrument-full.txt](avd-instrument-full.txt) |
-| Échecs | 5 tests UI Compose : `HomeLandscapeFooterInstrumentationTest` (2 timeouts), `LauncherDrawerLazyInstrumentationTest` (SnapshotStateObserver multi-thread), `V62NativeUiCaptureTest` (font scale harness + absence de hiérarchie Compose) | ci-dessous |
+| Suite locale complète (cold boot) | 78 méthodes : **77 PASS, 1 échec de harnais**, 0 skip; 169,232 s | [avd-instrument-coldboot.txt](avd-instrument-coldboot.txt) |
+| Échec unique | `V62NativeUiCaptureTest#systemFontScaleTwoKeepsEmergencyControlsAccessible` : harnais `expected_system_font_scale` non fourni | connu |
+| Retest font scale (cold boot) | **1 test PASS**, 2,866 s; échelle restaurée à 1,0 | [avd-fontscale-coldboot-retest.txt](avd-fontscale-coldboot-retest.txt) |
+| Bilan effectif | **78/78 méthodes locales PASS** | 77 + retest ciblé |
 | Classes agent/focus ciblées | **15 tests, 15 PASS**, 18,218 s | [avd-agent-focus-targeted.txt](avd-agent-focus-targeted.txt) |
-| Retest tiroir isolé | **1 test PASS**, 20,428 s | [avd-drawer-retest.txt](avd-drawer-retest.txt) |
-| Retest font scale | **1 test PASS**, 2,478 s; échelle restaurée à 1,0 | [avd-fontscale-retest.txt](avd-fontscale-retest.txt) |
-| Retest landscape isolé | **1 test FAIL** (timeout Compose 10 s) sur l'état actuel de l'émulateur | sortie non conservée comme PASS |
 
-**Classification : `UI_FLAKY_ENVIRONMENT`.** Les 5 échecs sont tous des tests d'interface Compose dépendant de l'état de l'émulateur (rotation, font scale, performance de rendu). Aucun test agent, mandat, Focus ou objectif n'a échoué dans cette suite. Le même code UI avait passé la suite complète sur `18484e2` avec 76 PASS + 2 retests ciblés (78/78 effectifs); le delta `18484e2..1a6f761` ne touche que `AgentContracts.kt`, `AtlasController.kt` (transaction agent) et `ActionDispatcherTest.kt`. Les classes agent/focus ciblées passent 15/15 sur `1a6f761`.
+Un premier run sur l'émulateur déjà utilisé avait produit 5 échecs UI Compose (landscape/font scale/tiroir), classés `UI_FLAKY_ENVIRONMENT`; après redémarrage à froid de `Pixel_9_Pro_XL_2`, la suite complète ne conserve que l'échec de harnais font scale, puis le retest ciblé passe. Les sorties des deux runs sont conservées : [avd-instrument-full.txt](avd-instrument-full.txt) (run flaky) et [avd-instrument-coldboot.txt](avd-instrument-coldboot.txt) (run final). Aucun test agent, mandat, Focus ou objectif n'a échoué.
 
 Les crashs du service UWB de l'image (`android.hardware.uwb-service`, absence de périphérique UWB) sont un artifact connu de l'émulateur et n'affectent pas l'application.
 
@@ -54,7 +55,7 @@ Le commit `edbb3f5`/`1a6f761` :
 ## Portée et limites
 
 - Les résultats Pixel restent historiques, attachés à l'APK `48c7766e…` / source `8890046…`; aucun retest physique sur le SHA final.
-- La suite AVD complète sur `1a6f761` est `UI_FLAKY_ENVIRONMENT` (5 tests UI Compose), pas un PASS complet; les classes agent/focus ciblées passent 15/15 et la suite complète sur le SHA immédiatement précédent `18484e2` était 78/78 effective.
+- La suite AVD complète sur `1a6f761` est **78/78 effective après redémarrage à froid** (77 PASS + retest font scale); un premier run sur l'émulateur déjà utilisé avait produit 5 flakes UI Compose, conservés comme fait historique.
 - Localisation/mobilité restent `NOT_RUN` et désactivées par défaut.
 - La restauration Pixel n'a pas été exécutée : état QA synthétique conservé.
 - Les P2 sécurité (URL OpenClaw configurable, callback de pull tardif) restent documentés.

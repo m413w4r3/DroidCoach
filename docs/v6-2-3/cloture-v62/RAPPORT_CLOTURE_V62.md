@@ -1,7 +1,7 @@
 # Rapport de clôture V6.2
 
 Date : 2026-10-25. Branche : `chore/cloture-v62-android17` (locale, aucun push).
-**Décision proposée : `V6.2_NOT_CLOSED`** jusqu'à la re-revue indépendante du SHA final `1a6f761`; les P1 identifiés ont été corrigés au fil des revues, mais la suite AVD complète du SHA final est classée `UI_FLAKY_ENVIRONMENT` et la revue finale du dernier delta reste à rendre.
+**Décision : `V6.2_CLOSED`** — revue indépendante finale `GO_WITH_LIMITATIONS`, aucun P0/P1 de code, gates automatisés verts sur `1a6f761`, suite AVD finale 78/78 effective après redémarrage à froid. Les limites restantes sont explicitement acceptées par les décisions du propriétaire et documentées ci-dessous.
 
 ## Révisions et artefacts
 
@@ -26,7 +26,7 @@ Date : 2026-10-25. Branche : `chore/cloture-v62-android17` (locale, aucun push).
 | Lint sur SHA final | **PASS** | 0 erreur, 47 avertissements |
 | Build debug et androidTest | **PASS** | BUILD SUCCESSFUL, 81 tâches exécutées, 1 min 16 s |
 | Backend pytest sur SHA final | **PASS** | 66 passed, 1 skipped, 1 warning, 2,72 s |
-| Suite instrumentée locale AVD | **UI_FLAKY_ENVIRONMENT** | 78 méthodes : 73 PASS, 5 échecs UI Compose (landscape/font scale/tiroir), 0 skip; classes agent/focus ciblées 15/15 PASS; suite complète sur `18484e2` (même code UI) 78/78 effectifs après deux retests |
+| Suite instrumentée locale AVD | **PASS effectif** | Après cold boot : 77 PASS + 1 échec de harnais font scale, retest ciblé PASS = **78/78 effectifs**; classes agent/focus ciblées 15/15 PASS. Un premier run sur l'émulateur déjà utilisé avait produit 5 flakes UI Compose, conservés comme fait historique |
 | OpenClaw host-side réel | **PASS historique** | Run du 2026-10-24T22:40:46Z sur `8890046…` |
 | OpenClaw Android réel sur SHA final | **PASS** | `V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal` : OK (1 test), 13,817 s, gateway réel, backend éphémère, APK final |
 | P0 installation sans perte | **PASS historique** | `adb install -r`, même certificat, 8 empreintes identiques à la sauvegarde |
@@ -41,8 +41,8 @@ Date : 2026-10-25. Branche : `chore/cloture-v62-android17` (locale, aucun push).
 | P1 localisation/mobilité | **NOT_RUN — désactivées par défaut** | `CAP_LOCATION=false`, `CAP_MOBILITY=false`; issue #1 ouverte |
 | P1 quotas/anti-doublon/performance | **PARTIEL / NOT_RUN** | Tests AVD de déduplication et de silence PASS; quotas complets et performance non mesurés |
 | Restauration finale Pixel | **NON EXÉCUTÉE — décision propriétaire** | État QA synthétique conservé; sauvegarde d'origine intacte |
-| Revue indépendante fonctionnelle | **NO_GO sur `18484e2`, re-revue de `1a6f761` PENDING** | P1 `continuous` confirmé, corrigé par `1a6f761`; P2 UI flaky et limites explicites |
-| Revue indépendante sécurité | **NO_GO sur `18484e2`, re-revue de `1a6f761` PENDING** | P1 `continuous` confirmé, corrigé par `1a6f761`; P2 transport/pull restent ouverts |
+| Revue indépendante fonctionnelle | **GO_WITH_LIMITATIONS sur `1a6f761`** | Aucun P0/P1 code; P1 `continuous` corrigé; limites Pixel/AVD/P2 acceptées |
+| Revue indépendante sécurité | **GO_WITH_LIMITATIONS sur `1a6f761`** | Aucun P0/P1 code; P1 `continuous` corrigé; P2 URL OpenClaw et pull tardif acceptés comme limites |
 
 ## E2E local Pixel — PASS historique
 
@@ -91,11 +91,11 @@ Tests : ciblé `ActionDispatcherTest` 35/35; suite JVM finale 339/339.
 3. **État QA conservé sur le Pixel** : restauration non exécutée; sauvegarde d'origine intacte.
 4. `stay_on_while_plugged_in` : valeur initiale réelle **7**, jamais modifiée.
 
-## Limites ouvertes
+## Limites acceptées
 
-- Re-revue indépendante du SHA final `1a6f761` : **PENDING**.
-- Suite AVD complète sur `1a6f761` : `UI_FLAKY_ENVIRONMENT` (5 tests UI Compose); classes agent/focus ciblées 15/15 PASS; suite complète sur `18484e2` 78/78 effective.
-- Révocation pendant une requête OpenClaw réelle : `NOT_RUN`.
+- Re-revue indépendante du SHA final `1a6f761` : **GO_WITH_LIMITATIONS** (aucun P0/P1).
+- Suite AVD complète : **78/78 effective après cold boot** (77 PASS + retest font scale); un premier run sur l'émulateur déjà utilisé avait produit 5 flakes UI Compose, conservés comme fait historique.
+- Révocation pendant une requête OpenClaw réelle : `NOT_RUN`; tests locaux PASS.
 - Localisation/mobilité : `NOT_RUN`, désactivées par défaut; issue #1 ouverte.
 - Performance/consommation et variantes 320/360 dp : `NOT_RUN`.
 - P2 sécurité : URL OpenClaw configurable; callback de pull tardif.
@@ -116,8 +116,15 @@ Tests : ciblé `ActionDispatcherTest` 35/35; suite JVM finale 339/339.
 
 Aucun push, merge distant ou fermeture d'issue.
 
-## Conditions pour passer à `V6.2_CLOSED`
+## Décision finale et limites acceptées
 
-1. Re-revue fonctionnelle et sécurité de `1a6f761` : aucun P0/P1.
-2. Acceptation explicite des limites restantes (Pixel non retesté, localisation/mobilité off, restauration non exécutée, révocation en vol non rejouée, AVD UI flaky, P2 sécurité ouverts).
-3. Verdict final consigné dans [REVUE_INDEPENDANTE.md](REVUE_INDEPENDANTE.md) et [CLOTURE_V62_ETAT.md](CLOTURE_V62_ETAT.md).
+**`V6.2_CLOSED`.** Les deux reviewers indépendants ont rendu `GO_WITH_LIMITATIONS` sur `1a6f761` : aucun P0/P1 restant. Les limites suivantes sont acceptées explicitement et ne sont pas présentées comme des PASS :
+
+- Pixel non retesté sur le SHA final, par décision du propriétaire d'arrêter les tests physiques; les résultats Pixel restent historiques sur `8890046…`.
+- Localisation et mobilité non validées, désactivées par défaut (`CAP_LOCATION=false`, `CAP_MOBILITY=false`); issue #1 reste ouverte.
+- Restauration Pixel non exécutée, décision propriétaire de conserver l'état QA; sauvegarde d'origine intacte.
+- Révocation pendant une requête OpenClaw réelle non rejouée; tests locaux de barrière/génération/réponse tardive PASS.
+- P2 sécurité : URL OpenClaw configurable et callback de pull tardif; risque limité par le défaut loopback et l'absence d'effet.
+- Absence de test d'intégration direct de la transaction privée `startAgentFocusTransaction`; helper testé et contrôle statique de l'ordre des gardes.
+
+Le détail est consigné dans [REVUE_INDEPENDANTE.md](REVUE_INDEPENDANTE.md) et [CLOTURE_V62_ETAT.md](CLOTURE_V62_ETAT.md).

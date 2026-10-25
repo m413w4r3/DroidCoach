@@ -120,14 +120,16 @@ Preuves : [preuves-finales-18484e2](preuves-finales-18484e2/PREUVES_FINALES.md).
 
 ## Run final `1a6f761` — 2026-10-25
 
-Après le correctif R4 (`edbb3f5`/`1a6f761` : refus du mode continu), l'APK final `dc1c3e00…` a été installé et la suite locale rejouée sur `emulator-5554` :
+Après le correctif R4 (`edbb3f5`/`1a6f761` : refus du mode continu), l'APK final `dc1c3e00…` a été installé et la suite locale rejouée sur `emulator-5554`.
 
-- suite complète : **78 méthodes, 73 PASS, 5 échecs, 0 skip, 171,931 s**;
-- 5 échecs, tous UI Compose : `HomeLandscapeFooterInstrumentationTest` (2 timeouts), `LauncherDrawerLazyInstrumentationTest` (SnapshotStateObserver multi-thread), `V62NativeUiCaptureTest` (harnais font scale + absence de hiérarchie Compose);
+Un premier run sur l'émulateur déjà utilisé a produit 5 échecs UI Compose (landscape/font scale/tiroir), classés `UI_FLAKY_ENVIRONMENT` et conservés dans [avd-instrument-full.txt](preuves-finales-1a6f761/avd-instrument-full.txt).
+
+Après redémarrage à froid de `Pixel_9_Pro_XL_2`, le run final donne :
+
+- suite complète : **78 méthodes, 77 PASS, 1 échec de harnais `expected_system_font_scale`, 0 skip, 169,232 s**;
+- retest font scale : **1 test PASS**, 2,866 s; échelle restaurée à 1,0;
+- bilan effectif : **78/78 méthodes locales PASS**;
 - classes agent/focus ciblées : **15 tests, 15 PASS**, 18,218 s;
-- retest tiroir isolé : **1 PASS**, 20,428 s; retest font scale : **1 PASS**, 2,478 s; retest landscape isolé : **FAIL** (timeout Compose 10 s) sur l'état actuel de l'émulateur;
 - OpenClaw Android : **OK (1 test), 13,817 s**, gateway réel et backend éphémère.
-
-**Classification : `UI_FLAKY_ENVIRONMENT`.** Aucun test agent, mandat, Focus ou objectif n'a échoué; le delta `18484e2..1a6f761` ne touche que l'agent/mandat. La suite complète sur `18484e2` (même code UI) était 78/78 effective après deux retests. Les crashs UWB de l'image sont un artifact connu.
 
 Preuves : [preuves-finales-1a6f761](preuves-finales-1a6f761/PREUVES_FINALES.md).

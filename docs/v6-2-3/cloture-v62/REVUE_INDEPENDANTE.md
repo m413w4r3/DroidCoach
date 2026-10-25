@@ -42,8 +42,23 @@ Trois vagues de correction ont été livrées :
 - `18484e2`/`f21fa8e` : pauses courtes portées à au moins 1 minute, mode `continuous`, helpers partagés de durée/fenêtre, et revalidation complète de la carte persistée au démarrage (`focus.start`) avant toute mutation.
 - `1a6f761`/`edbb3f5` : refus explicite des cartes agent `continuous`, durée continue marquée non bornée, tests `focus.propose`/`focus.plan` refusant le paramètre.
 
-La re-revue de `b13b3fb` a rendu **NO_GO** : P1 `break_minutes=0` sous-compté (les deux reviewers) et P1 `focus.start` ne revalidant pas la carte persistée (reviewer sécurité). La re-revue de `18484e2` a rendu **NO_GO** : P1 `continuous` non bornable, confirmé par les deux reviewers. Ces trois P1 sont corrigés dans `1a6f761`; la re-revue du delta `18484e2..1a6f761` est en cours.
+Historique des re-revues :
 
-## Verdict provisoire
+- `b13b3fb` : **NO_GO** — P1 `break_minutes=0` sous-compté (deux reviewers) et P1 `focus.start` ne revalidant pas la carte persistée (reviewer sécurité); corrigés par `18484e2`.
+- `18484e2` : **NO_GO** — P1 `continuous` non bornable (deux reviewers); corrigé par `1a6f761`.
+- `1a6f761` : **GO_WITH_LIMITATIONS** pour les deux reviewers, aucun P0/P1 restant.
 
-**NO_GO provisoire.** Aucun P0; les P1 identifiés ont été corrigés dans `1a6f761`; des P2 de preuve et de transport restent ouverts, et la suite AVD du SHA final est `UI_FLAKY_ENVIRONMENT`. La clôture ne peut être déclarée qu'après re-revue du SHA final et acceptation explicite des limites restantes par le propriétaire.
+## Verdict final
+
+**GO_WITH_LIMITATIONS — aucun P0/P1 de code.** Le P1 de durée non bornée est corrigé : refus explicite des cartes agent `continuous` avant le moteur, helper `Long.MAX_VALUE` fail-closed, tests des cas finis et refus du paramètre. Les reviewers ont lu les preuves `f3ee8a7` : JVM 339/339, lint 0 erreur/47 avertissements, APK `dc1c3e00…`, classes agent/focus ciblées 15/15 PASS, OpenClaw Android 13,817 s. Après redémarrage à froid, la suite AVD est 77 PASS + retest font scale = **78/78 effectifs**.
+
+Limites acceptées explicitement, non présentées comme PASS :
+
+- Pixel non retesté sur le SHA final (décision propriétaire); résultats Pixel historiques sur `8890046…`.
+- Localisation/mobilité non validées et désactivées par défaut; issue #1 ouverte.
+- Restauration Pixel non exécutée (état QA conservé).
+- Révocation pendant une requête OpenClaw réelle non rejouée.
+- P2 URL OpenClaw configurable et callback de pull tardif.
+- Absence de test d'intégration direct de la transaction privée `startAgentFocusTransaction`; helper testé et ordre des gardes contrôlé statiquement.
+
+Le premier run AVD sur l'émulateur déjà utilisé avait produit 5 flakes UI Compose; le run cold boot final ne conserve que l'échec de harnais font scale, puis le retest ciblé passe.
