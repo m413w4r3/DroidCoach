@@ -78,3 +78,28 @@ Les résultats détaillés par classe/méthode, avec le statut brut, le statut e
 - Les 16 tests backend/OpenClaw restent hors qualification; aucun accès réseau externe n’a été utilisé.
 - L’AVD jetable initial et son ADB isolé ont été arrêtés; le daemon Gradle à usage unique s’est terminé. Le serveur ADB par défaut reste vivant pour préserver la session destinée au parent.
 - Modifications limitées aux preuves et au présent rapport; aucun changement de code applicatif, manifeste, Gradle ou tests. Aucun push ni merge distant.
+
+## Run final `b13b3fb` — 2026-10-25
+
+Après les correctifs P1 de mandat (`4aff91a`, `1251009`, `d718540`/`b13b3fb`), l'APK final `2743688c…` a été installé sur `emulator-5554` (`Pixel_9_Pro_XL_2`, API 37) et la suite locale a été rejouée :
+
+```sh
+adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5554 install -r -t android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5554 shell am instrument -w -r dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Résultat : **78 méthodes, 77 PASS, 1 échec de harnais `expected_system_font_scale`, 0 skip, 169,07 s**. Le retest ciblé avec `font_scale=2.0` et `expected_system_font_scale=2.0` a réussi : **1 test PASS**, 3,401 s; l'échelle a été restaurée à 1,0. Bilan effectif : **78/78 méthodes locales PASS**.
+
+L'émulateur a disparu pendant une première tentative de suite; il a été redémarré à froid sur le port 5554 et la suite a été rejouée intégralement. Aucun Pixel physique n'a été utilisé.
+
+Le test OpenClaw Android final a également été rejoué sur ce même APK :
+
+```sh
+adb -s emulator-5554 shell am instrument -w -r \
+  -e class 'dev.atlas.coach.app.V62RealGatewayContextBridgeTest#realGatewayUsesAccelerated25MinuteFocusContextAndAcceptedProposal' \
+  -e backend_url "http://10.0.2.2:<port>" -e backend_token "<jeton éphémère>" \
+  dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Résultat : **OK (1 test), 17,743 s**, gateway réel et backend éphémère. Preuves : [preuves-finales-b13b3fb](preuves-finales-b13b3fb/PREUVES_FINALES.md).

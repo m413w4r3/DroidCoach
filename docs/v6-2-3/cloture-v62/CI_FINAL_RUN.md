@@ -64,3 +64,26 @@ cd backend && .venv/bin/python -m pytest -q
 ```
 
 Résultat réel : **66 passed, 1 skipped, 1 warning in 2.45 s**. Le journal complet est conservé hors dépôt. Ce run frais, sur le même SHA et dans l'environnement de référence, lève le `BLOCKED` du runner CI pour le gate backend ; les exécutions bloquées de l'agent restent consignées comme un artefact d'environnement de son archive temporaire, sans échec de code observé.
+
+## Run final `b13b3fb` — 2026-10-25
+
+Après les correctifs P1 de mandat (`4aff91a`, `1251009`, `d718540`/`b13b3fb`), une exécution finale complète a été lancée depuis le checkout de clôture :
+
+```sh
+cd android
+./gradlew --offline --no-daemon --console=plain --rerun-tasks \
+  :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+| Vérification | Résultat |
+|---|---|
+| `:app:testDebugUnitTest` | **332 tests, 0 échec, 0 erreur, 0 ignoré** (57 classes) |
+| `:app:lintDebug` | **0 erreur, 47 avertissements** |
+| `:app:assembleDebug` + `assembleDebugAndroidTest` | **BUILD SUCCESSFUL**, 81 tâches exécutées, 1 min 45 s |
+| APK debug | SHA-256 `2743688c830a3e3df42b9db3c4d251cbf796837160d252e5976098346b2448ac` |
+| APK androidTest | SHA-256 `4a916f12f324b4cf10574038d42750bc6fe006f8dbc856ad9903225c824afa00` |
+| Certificat debug | SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
+
+Backend, même checkout : `66 passed, 1 skipped, 1 warning in 2.28 s`.
+
+Les artefacts détaillés et le journal Gradle expurgé sont dans [preuves-finales-b13b3fb/PREUVES_FINALES.md](preuves-finales-b13b3fb/PREUVES_FINALES.md). Les résultats ci-dessus sont rattachés au SHA final, pas au SHA de base.

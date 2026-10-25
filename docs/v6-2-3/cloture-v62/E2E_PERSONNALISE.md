@@ -2,7 +2,7 @@
 
 ## Parcours local sans serveur — PASS
 
-Source de la campagne Pixel : `8890046012965f3a3112ff0c419014c74e189d11`; APK `48c7766e…`. Source finale du code : `1251009`; APK final AVD `80b1d004…`.
+Source de la campagne Pixel : `8890046012965f3a3112ff0c419014c74e189d11`; APK `48c7766e…`. Source finale du code : `b13b3fb`; APK final AVD `2743688c…`.
 
 Parcours réellement exécuté sur le Pixel, avec des données synthétiques :
 
@@ -15,7 +15,7 @@ Parcours réellement exécuté sur le Pixel, avec des données synthétiques :
 
 **Verdict Pixel : PASS** pour la progression 0 → 25 → 25 après redémarrage et l'annulation sans crédit. Limite : ce parcours a été exécuté sur l'APK `8890046…`, avant le correctif de mandat `1251009`. Ce correctif ne modifie ni `FocusEngine`, ni le calcul de progression, ni le lien objectif/Focus; il ne touche que les propositions d'agent. Le propriétaire a demandé l'arrêt des tests physiques après ce parcours.
 
-La suite JVM finale sur `1251009` passe **328 tests, 0 échec**. Elle comprend notamment :
+La suite JVM finale sur `b13b3fb` passe **332 tests, 0 échec**. Elle comprend notamment :
 
 - `FocusEngineTest#pauseResumeFinishAndCancelAreIdempotent` et `#snapshotRestoresRunningTimerUsingBoundedWallClockElapsedTime`.
 - `GoalProgressCalculatorTest#elapsedPomodoroWorkExcludesBreakAndCancelledWorkWithAControlledClock`.
@@ -48,10 +48,10 @@ Le parent a exécuté sur `emulator-5554` (Android 17/API 37) :
 
 avec un backend ATLAS éphémère lié à `127.0.0.1`, atteint par l'émulateur via `10.0.2.2`, et le gateway OpenClaw réel. Résultat : **OK (1 test), 11.143 s**. Le test a vérifié `agent_status=CONNECTED`, le contexte Focus/objectif, la proposition acceptée et `EXECUTED`, la directive HOME, l'ACK backend et l'effet dans le journal, puis le retrait de `goals` dans la requête suivante. Preuve brute sans jeton : [preuves-openclaw/android-avd-run.txt](preuves-openclaw/android-avd-run.txt).
 
-### Réexécution sur le SHA final `1251009` — BLOCKED_ENVIRONMENT
+### Réexécution sur le SHA final `b13b3fb` — PASS
 
-Le 2026-10-25, après installation de l'APK final `80b1d004…` sur `emulator-5554`, le test a été relancé avec un backend éphémère et le gateway réel. Le backend a répondu `POST /v2/agent/chat 200`, mais l'application a rapporté `AgentStatus.UNAVAILABLE`; le gateway local a ensuite répondu `HTTP 429` avec `Codex error: The usage limit has been reached` sur `/v1/chat/completions`. Le quota est annoncé comme réinitialisé à 02:44.
+Le 2026-10-25, après réinitialisation du quota Codex et installation de l'APK final `2743688c…` sur `emulator-5554`, le test a été relancé avec un backend ATLAS éphémère atteint via `10.0.2.2` et le gateway OpenClaw réel. Résultat : **OK (1 test), 17,743 s**. La sortie brute sans jeton est dans [preuves-finales-b13b3fb/openclaw-android.txt](preuves-finales-b13b3fb/openclaw-android.txt).
 
-**Verdict : BLOCKED_ENVIRONMENT**, pas un échec de code démontré. Le réseau de l'émulateur (`10.0.2.2` joignable) et le backend sont sains. Le PASS historique sur `8890046…` reste la preuve du transport, du contexte et de l'effet Android; la réexécution sur le SHA final reste à faire après réinitialisation du quota.
+Un premier essai sur `1251009` avait été bloqué par `HTTP 429` (`Codex error: The usage limit has been reached`), avec le réseau émulateur et le backend sains. Après réinitialisation du quota, le test final a réussi; le run bloqué reste un fait historique, pas un PASS.
 
 La révocation réellement *pendant* une requête en vol et le fallback Android restent des assertions distinctes non couvertes par ce seul test; les tests locaux de génération, de barrière de révocation et de réponse tardive sont PASS.
