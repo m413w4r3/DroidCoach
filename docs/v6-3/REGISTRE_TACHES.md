@@ -51,6 +51,22 @@ Contraintes communes : provider `codex`, modèle `gpt-6-luna`, effort `xhigh`,
 aucune sous-délégation, aucun push, aucune action ADB/Pixel, aucune permission
 manifeste, aucune donnée personnelle, commit local dans le worktree.
 
+## Faits d'intégration vérifiés (2026-10-26)
+
+- Etar : applicationId **`ws.xsoh.etar`** (debug `.debug`), licence GPL-3.0,
+  compile/target 37. La valeur `org.dmfs.calendar` était erronée et a été
+  corrigée avant intégration de V63-L2-01.
+- SDK 37.2 : `CUSTOM_APP_PACKAGE` et `CUSTOM_APP_URI` existent dans
+  `CalendarContract.EventsColumns` ; `CALENDAR_ACCESS_LEVEL` est déclaré dans
+  `CalendarColumns` (héritage statique).
+- Risque L4 : la création d'un calendrier local exige la sémantique d'un sync
+  adapter (`CALLER_IS_SYNCADAPTER`, `ACCOUNT_TYPE_LOCAL`). ATLAS ne doit donc
+  pas supposer qu'il peut créer son propre calendrier ; il faut qualifier un
+  calendrier existant modifiable ou marquer L4 `BLOCKED_ENVIRONMENT`.
+- OpenClaw Gateway : loopback `127.0.0.1:18789` actif ; aucune requête réelle
+  effectuée dans ce lot.
+- Bridge et wger : non configurés, non qualifiés.
+
 ## Portes nécessitant le propriétaire
 
 1. Connexion du Pixel et actions ADB (pré-vol, installation, permissions, sauvegarde).
@@ -65,4 +81,6 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
 
 | Date | Ticket | SHA base | SHA résultat | Oracle | Verdict |
 |---|---|---|---|---|---|
-| 2026-10-26 | V63-L0-01 | `acda7a9` | à compléter | revue documentaire | ACCEPTED (en attente commit) |
+| 2026-10-26 | V63-L0-01 | `acda7a9` | `51d126e` | revue documentaire | ACCEPTED / INTEGRATED |
+| 2026-10-26 | V63-L0-02 (contrat backend plan) | `51d126e` | `ba38524` | `pytest tests/test_plan_v3*.py` : 24 PASS ; suite backend 88 PASS, 1 skip | ACCEPTED / INTEGRATED |
+| 2026-10-26 | V63-L0-03 (références Etar/CalendarContract) | `ba38524` | à compléter | sources primaires + `javap` SDK 37.2 | ACCEPTED (en attente commit) |
