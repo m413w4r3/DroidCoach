@@ -1,6 +1,6 @@
 BASE_SHA=8890046012965f3a3112ff0c419014c74e189d11
 Both APKs verified with apksigner from Android build-tools 37.0.0.
-Commands: sha256sum <apk>; /home/nill/Android/Sdk/build-tools/37.0.0/apksigner verify --print-certs <apk>
+Commands: sha256sum <apk>; <android-sdk>/build-tools/37.0.0/apksigner verify --print-certs <apk>
 
 app-debug.apk
 Path: /tmp/atlas-v62-ci-final.PGRetd/android/app/build/outputs/apk/debug/app-debug.apk

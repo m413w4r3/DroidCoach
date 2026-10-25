@@ -1,9 +1,9 @@
 BASE_SHA=8890046012965f3a3112ff0c419014c74e189d11
 Working directory: /tmp/atlas-v62-ci-final.PGRetd/android
-GRADLE_USER_HOME was left unset; the default /home/nill/.gradle cache was used.
+GRADLE_USER_HOME was left unset; the default <gradle-home> cache was used.
 
 Command (arguments exactly as requested):
-ANDROID_HOME=/home/nill/Android/Sdk ANDROID_SDK_ROOT=/home/nill/Android/Sdk ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --rerun-tasks --max-workers=1 --console=plain
+ANDROID_HOME=<android-sdk> ANDROID_SDK_ROOT=<android-sdk> ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --rerun-tasks --max-workers=1 --console=plain
 
 Result: BUILD SUCCESSFUL in 3m; 81 actionable tasks, 81 executed.
 The requested test, lint, app APK and androidTest APK tasks ran without UP-TO-DATE.

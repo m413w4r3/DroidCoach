@@ -10,7 +10,7 @@
 - Build local hors réseau, depuis `android/`:
 
   ```sh
-  GRADLE_USER_HOME=/tmp/v623-qa/gradle-home ANDROID_HOME=/home/nill/Android/Sdk ANDROID_SDK_ROOT=/home/nill/Android/Sdk ./gradlew --offline --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
+  GRADLE_USER_HOME=/tmp/v623-qa/gradle-home ANDROID_HOME=<android-sdk> ANDROID_SDK_ROOT=<android-sdk> ./gradlew --offline --no-daemon --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
   ```
 
   Résultat: `BUILD SUCCESSFUL`, 67 tâches, 59 s. Le daemon Gradle à usage unique s’est arrêté à la fin.
@@ -103,3 +103,17 @@ adb -s emulator-5554 shell am instrument -w -r \
 ```
 
 Résultat : **OK (1 test), 17,743 s**, gateway réel et backend éphémère. Preuves : [preuves-finales-b13b3fb](preuves-finales-b13b3fb/PREUVES_FINALES.md).
+
+## Run final `18484e2` — 2026-10-25
+
+Après le correctif R3 (`f21fa8e`/`18484e2` : pause nulle et revalidation `focus.start`), l'APK final `8064dc0a…` a été installé et la suite locale rejouée sur `emulator-5554` :
+
+- suite complète : **78 méthodes, 76 PASS, 2 échecs, 0 skip, 169,807 s**;
+- échec 1 : `V62NativeUiCaptureTest#systemFontScaleTwoKeepsEmergencyControlsAccessible` (harnais `expected_system_font_scale`), retest ciblé **PASS** 2,912 s;
+- échec 2 : `HomeLandscapeFooterInstrumentationTest#directiveAndCtaCanScrollAboveTheFixedFooterInLandscape` (timeout Compose), retest isolé **PASS** 3,703 s;
+- bilan effectif : **78/78 méthodes locales PASS**;
+- OpenClaw Android : **OK (1 test), 16,15 s**, gateway réel et backend éphémère.
+
+Le test landscape avait réussi lors des runs précédents et passe isolément sur le même APK; l'échec de la suite complète est classé flake de performance Compose, pas régression démontrée. L'émulateur a été redémarré à froid après un crash; aucun Pixel physique n'a été utilisé.
+
+Preuves : [preuves-finales-18484e2](preuves-finales-18484e2/PREUVES_FINALES.md).

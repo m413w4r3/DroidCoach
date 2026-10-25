@@ -46,7 +46,7 @@ Le host-side réel est terminé. Pour le test instrumenté du parent, le gateway
 Préparer les variables dans un shell hôte privé :
 
 ```sh
-cd /home/nill/.paseo/worktrees/073527gm/v62-openclaw-e2e
+cd <worktree>/v62-openclaw-e2e
 case "$(realpath "$XDG_RUNTIME_DIR")" in /tmp|/tmp/*) exit 1 ;; esac
 export ATLAS_RUN_DIR="$(mktemp -d "$XDG_RUNTIME_DIR/atlas-openclaw.XXXXXX")"
 chmod 700 "$ATLAS_RUN_DIR"
@@ -84,7 +84,7 @@ curl -fsS --max-time 3 -H "Authorization: Bearer $ATLAS_TOKEN" \
 Après sauvegarde durable app-only, vérification de l’appareil Android 17/API 37, et comparaison du certificat installé avec les APK de build, exécuter le test ciblé ci-dessous. Il utilise uniquement le port backend via `adb reverse`; le backend reste lié à `127.0.0.1` sur l’hôte. Ne pas employer `pm clear` ni désinstaller l’application.
 
 ```sh
-cd /home/nill/.paseo/worktrees/073527gm/v62-openclaw-e2e/android
+cd <worktree>/v62-openclaw-e2e/android
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
 sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 apksigner verify --print-certs app/build/outputs/apk/debug/app-debug.apk

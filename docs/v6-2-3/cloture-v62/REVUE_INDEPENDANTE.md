@@ -33,17 +33,16 @@ P2 sécurité :
 
 Le reviewer confirme : pas de P0, pas de secret ni de numéro de série Pixel dans les pièces examinées; `allowBackup=false`, `usesCleartextTraffic=false`, aucun `AccessibilityService`; localisation/mobilité désactivées par défaut.
 
-## Correction des P1
+## Corrections des P1
 
-Les deux P1 sont en cours de correction dans `AgentContracts.kt` et `ActionDispatcherTest.kt` :
+Trois vagues de correction ont été livrées :
 
-- calcul de la durée réellement exécutée avec pauses longues;
-- comparaison de fin de fenêtre en date/heure locales, y compris DST;
-- test de durée totale exactement à la borne;
-- oracle DST.
+- `4aff91a` et `1251009` : durée totale, fin de fenêtre date/heure, traversée de minuit;
+- `b13b3fb`/`d718540` : pauses longues de 15 min toutes les 4 cycles, fin de fenêtre en heure locale et DST, test de borne exacte;
+- `18484e2`/`f21fa8e` : pauses courtes portées à au moins 1 minute, mode `continuous`, helpers partagés de durée/fenêtre, et revalidation complète de la carte persistée au démarrage (`focus.start`) avant toute mutation.
 
-Après intégration, les reviewers doivent examiner le **SHA final** (pas seulement `1251009`) et confirmer la disparition des P1. Le verdict final de cette pièce sera mis à jour à ce moment.
+La re-revue de `b13b3fb` a rendu **NO_GO** : P1 `break_minutes=0` sous-compté (les deux reviewers) et P1 `focus.start` ne revalidant pas la carte persistée (reviewer sécurité). Ces deux P1 sont corrigés dans `18484e2`; la re-revue du delta `b13b3fb..18484e2` est en cours.
 
 ## Verdict provisoire
 
-**NO_GO provisoire.** Aucun P0; deux P1 confirmés en correction; des P2 de preuve et de transport restent ouverts. La clôture ne peut être déclarée qu'après re-revue du SHA final et acceptation explicite des limites restantes par le propriétaire.
+**NO_GO provisoire.** Aucun P0; les P1 identifiés ont été corrigés dans `18484e2`; des P2 de preuve et de transport restent ouverts. La clôture ne peut être déclarée qu'après re-revue du SHA final et acceptation explicite des limites restantes par le propriétaire.
