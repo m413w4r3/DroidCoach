@@ -124,6 +124,9 @@ import dev.atlas.coach.sync.agent.AgentContentCard
 import dev.atlas.coach.sync.agent.AgentVerificationContext
 import dev.atlas.coach.sync.agent.LocalMandateStore
 import dev.atlas.coach.sync.agent.MandateVerifier
+import dev.atlas.coach.sync.agent.focusPlanEndWithinWindow
+import dev.atlas.coach.sync.agent.focusSessionDurationMinutes
+import dev.atlas.coach.sync.agent.focusTimeInWindow
 import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalState
@@ -2833,6 +2836,33 @@ class AtlasController @JvmOverloads constructor(
         val card = agentHomeStateSnapshot.focusProposal?.takeIf {
             it.proposalId == ref && it.state !in setOf(AgentFocusCardState.CANCELLED, AgentFocusCardState.FINISHED)
         } ?: return AgentActionOutcome(false, "Session proposée absente ou annulée.")
+        val mandate = agentMandateStore.current()
+        val focusWindow = mandate.focusWindow
+        val zone = ZoneId.of(focusWindow.timezone)
+        val now = clock.nowMillis()
+        val scheduled = Instant.ofEpochMilli(now).atZone(zone)
+        val sessionMinutes = focusSessionDurationMinutes(
+            focusMinutes = card.focusMinutes.toLong(),
+            breakMinutes = card.breakMinutes.toLong(),
+            cycles = card.cycles.toLong(),
+            longBreakMinutes = card.longBreakMinutes.toLong(),
+            longBreakEveryCycles = card.longBreakEveryCycles.toLong(),
+            continuous = card.continuous,
+        )
+        if (sessionMinutes > focusWindow.maxMinutesPerSession.toLong()) {
+            return AgentActionOutcome(false, "Durée totale supérieure à la borne du mandat.")
+        }
+        if (scheduled.dayOfWeek.value !in focusWindow.days) {
+            return AgentActionOutcome(false, "Jour hors fenêtre du mandat.")
+        }
+        val start = LocalTime.parse(focusWindow.start)
+        val end = LocalTime.parse(focusWindow.end)
+        if (!focusTimeInWindow(scheduled.toLocalTime(), start, end)) {
+            return AgentActionOutcome(false, "Heure hors fenêtre du mandat.")
+        }
+        if (!focusPlanEndWithinWindow(scheduled, sessionMinutes, start, end)) {
+            return AgentActionOutcome(false, "Fin du plan hors fenêtre du mandat.")
+        }
         val active = focusEngine.currentSession()
         if (active?.status in setOf(FocusStatus.RUNNING, FocusStatus.PAUSED)) {
             return AgentActionOutcome(false, "Une autre session Focus est déjà active.")
@@ -2847,7 +2877,6 @@ class AtlasController @JvmOverloads constructor(
             continuous = card.continuous,
             taskTitle = card.label,
         )
-        val now = clock.nowMillis()
         val preparedStart = try {
             focusEngine.prepareStart(
                 plan = plan,

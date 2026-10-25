@@ -12,6 +12,7 @@ import dev.atlas.coach.sync.agent.withRemoteDirective
 import dev.atlas.coach.sync.agent.LocalMandateStore
 import dev.atlas.coach.sync.agent.MandateStore
 import dev.atlas.coach.sync.agent.MandateVerifier
+import dev.atlas.coach.sync.agent.focusSessionDurationMinutes
 import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.ProposalV2
@@ -317,6 +318,142 @@ class ActionDispatcherTest {
 
         assertFalse(decision.accepted)
         assertEquals("Durée totale supérieure à la borne du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanRejectsZeroBreakCoercedDurationAboveLimit() {
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T08:00:00Z",
+            focusMinutes = 20,
+            breakMinutes = 0,
+            cycles = 8,
+        )
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(
+                start = "08:00", end = "20:00", timezone = "UTC", maxMinutesPerSession = 180,
+            ),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertFalse(decision.accepted)
+        assertEquals("Durée totale supérieure à la borne du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanRejectsZeroBreakEndAfterMandateWindow() {
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T08:00:00Z",
+            focusMinutes = 25,
+            breakMinutes = 0,
+            cycles = 2,
+        )
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(
+                start = "08:00", end = "08:50", timezone = "UTC", maxMinutesPerSession = 50,
+            ),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertFalse(decision.accepted)
+        assertEquals("Durée totale supérieure à la borne du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanRejectsZeroBreakEndAfterMandateWindowWhenDurationLimitAllowsIt() {
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T08:00:00Z",
+            focusMinutes = 25,
+            breakMinutes = 0,
+            cycles = 2,
+        )
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(
+                start = "08:00", end = "08:50", timezone = "UTC", maxMinutesPerSession = 51,
+            ),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertFalse(decision.accepted)
+        assertEquals("Fin du plan hors fenêtre du mandat.", decision.reason)
+    }
+
+    @Test
+    fun focusPlanAllowsZeroBreakEndExactlyAtMandateWindowBoundary() {
+        val plan = focusPlanProposal(
+            startAt = "2026-10-20T08:00:00Z",
+            focusMinutes = 25,
+            breakMinutes = 0,
+            cycles = 2,
+        )
+        val mandate = baseMandate.copy(
+            allowedActions = setOf("focus.plan"),
+            focusWindow = AgentFocusWindow(
+                start = "08:00", end = "08:51", timezone = "UTC", maxMinutesPerSession = 51,
+            ),
+        )
+
+        val decision = verifier.verify(
+            plan,
+            mandate,
+            context().copy(capabilities = setOf("focus", "focusRoutines")),
+        )
+
+        assertTrue(decision.reason, decision.accepted)
+    }
+
+    @Test
+    fun focusSessionDurationMatchesPersistedFocusPlanPhases() {
+        assertEquals(
+            100L,
+            focusSessionDurationMinutes(
+                focusMinutes = 14L,
+                breakMinutes = 5L,
+                cycles = 5L,
+                longBreakMinutes = 15L,
+                longBreakEveryCycles = 4L,
+                continuous = false,
+            ),
+        )
+        assertEquals(
+            181L,
+            focusSessionDurationMinutes(
+                focusMinutes = 20L,
+                breakMinutes = 0L,
+                cycles = 8L,
+                longBreakMinutes = 15L,
+                longBreakEveryCycles = 4L,
+                continuous = false,
+            ),
+        )
+        assertEquals(
+            160L,
+            focusSessionDurationMinutes(
+                focusMinutes = 20L,
+                breakMinutes = 0L,
+                cycles = 8L,
+                longBreakMinutes = 15L,
+                longBreakEveryCycles = 4L,
+                continuous = true,
+            ),
+        )
     }
 
     @Test
