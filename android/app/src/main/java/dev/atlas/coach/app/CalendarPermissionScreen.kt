@@ -82,12 +82,25 @@ internal fun shouldLaunchCalendarPermissionRequest(
 ): Boolean = userExplicitlyRequested && consentGranted && permission == CalendarPermissionState.DENIED
 
 internal fun CalendarDescriptor.toDiagnosticRow(): CalendarDiagnosticRow = CalendarDiagnosticRow(
-    displayName = displayName.ifBlank { "Calendrier sans nom" },
+    displayName = diagnosticCalendarName(),
     // Account values may be email addresses or other identifiers; they never enter the UI model.
     accountLabel = "Compte expurgé",
     accessLabel = accessLevelLabel(accessLevel),
     visibilityLabel = if (visible) "Visible" else "Masqué",
 )
+
+private val emailIdentifierPattern = Regex("\\S+@\\S+")
+
+private fun CalendarDescriptor.diagnosticCalendarName(): String = when {
+    displayName.isBlank() -> "Calendrier sans nom"
+    emailIdentifierPattern.containsMatchIn(displayName) -> "Calendrier expurgé"
+    matchesAccountIdentifier(displayName, accountName) -> "Calendrier expurgé"
+    matchesAccountIdentifier(displayName, ownerAccount) -> "Calendrier expurgé"
+    else -> displayName
+}
+
+private fun matchesAccountIdentifier(displayName: String, accountIdentifier: String?): Boolean =
+    accountIdentifier != null && displayName.trim().equals(accountIdentifier.trim(), ignoreCase = true)
 
 private fun accessLevelLabel(accessLevel: Int): String = when (accessLevel) {
     in 0..99 -> "Aucun accès"
