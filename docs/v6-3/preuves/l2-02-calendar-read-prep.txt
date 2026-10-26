@@ -1,0 +1,51 @@
+ATLAS V6.3 — V63-L2-02 — préparation READ_CALENDAR — preuves
+==============================================================
+
+Enfant: session d434f447-e4e5-4de3-ac26-88fb637c2891
+Profil: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh
+Base: 38c70d7e00e89685a8388a9f6b3bc0331dcaf220
+
+Commits enfant:
+- 1c34c565da3767139fabf04e37f4998e6f973ca5 Add calendar read permission diagnostics
+- bb15548be830ee768b44017b7d3ee1b946016fd4 (correction compilation etarInstalled)
+
+Intégration: merge c990a75408b82f141892fe0f4975c155f5f2570e
+
+Fichiers (5, +573):
+- android/app/src/main/AndroidManifest.xml (READ_CALENDAR seul + queries Etar)
+- android/app/src/main/java/dev/atlas/coach/app/CalendarPermissionScreen.kt (nouveau)
+- android/app/src/main/java/dev/atlas/coach/calendar/CalendarReadConsent.kt (nouveau)
+- android/app/src/test/java/dev/atlas/coach/app/CalendarPermissionPresentationTest.kt
+- android/app/src/test/java/dev/atlas/coach/calendar/CalendarReadConsentTest.kt
+
+Contenu vérifié:
+- manifeste: READ_CALENDAR uniquement; WRITE_CALENDAR absent.
+- consentement ATLAS séparé, révocable, stocké dans SharedPreferences privé.
+- écran non relié à la navigation globale; aucun événement lu, aucun log.
+- Etar détecté via ws.xsoh.etar / ws.xsoh.etar.debug.
+- comptes expurgés dans l'affichage.
+
+Oracle (parent, hors sandbox):
+Commande:
+  ./gradlew :app:testDebugUnitTest --tests '*CalendarPermission*' \
+    --tests 'dev.atlas.coach.calendar.*' :app:lintDebug :app:assembleDebug --max-workers=1
+Résultat: PASS — BUILD SUCCESSFUL in 1m33s, GRADLE_EXIT=0
+- ciblé: 3 suites, 31 tests, 0 failure, 0 error, 0 skipped
+- lint: 0 erreur, 54 avertissements
+- assembleDebug: PASS
+- APK: 5e3124f0ecde50a520bfbda72bd705c1055f5d03c20448c581ad238cf9ebb978
+
+Oracle intégré (c990a75):
+- JVM: 65 suites, 447 tests, 0 failure, 0 error, 0 skipped.
+
+Première tentative: compilation échouait `Boolean?` ligne 247; corrigé en
+`state.etarInstalled == true`, puis oracle repassé.
+
+Portes non franchies:
+- Aucune installation d'APK.
+- Aucun octroi runtime READ_CALENDAR.
+- Aucune lecture réelle de calendrier.
+- Aucune écriture calendrier.
+- Écran non câblé; aucun accès utilisateur dans cette version.
+
+Statut: INTEGRATED (préparation) ; installation/octroi BLOCKED_APPROVAL.
