@@ -19,12 +19,21 @@ import dev.atlas.coach.plan.PlanPreview
 import dev.atlas.coach.plan.PlanPreviewResult
 import dev.atlas.coach.plan.PlanRejectionReason
 import dev.atlas.coach.plan.PlanRevision
+import dev.atlas.coach.plan.PlanRevisionApiRequest
+import dev.atlas.coach.plan.PlanRevisionApiResult
 import dev.atlas.coach.plan.PlanRevisionEngine
+import dev.atlas.coach.plan.PlanRevisionMapper
+import dev.atlas.coach.plan.PlanRevisionMappingResult
+import dev.atlas.coach.plan.PlanRevisionProposalClient
 import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.PlanStatusPolicy
 import dev.atlas.coach.plan.PlanWriteResult
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.plan.RevisionOrigin
+import dev.atlas.coach.sync.agent.AgentMandate
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -43,6 +52,7 @@ class PlanController(
     private val zoneIdProvider: () -> ZoneId = { ZoneId.systemDefault() },
     private val todayProvider: () -> LocalDate = { LocalDate.now(zoneIdProvider()) },
     private val engine: PlanRevisionEngine = PlanRevisionEngine(),
+    private val agentRevisionMapper: PlanRevisionMapper = PlanRevisionMapper(engine),
 ) {
     private val directory = directory
     private var repository: DayPlanRepository? = null
@@ -311,7 +321,173 @@ class PlanController(
         message = null
     }
 
-    private fun propose(proposedActivities: List<PlanActivity>, summary: String): Boolean {
+    /** Sends only a consented, minimized plan and stages the resulting diff for confirmation. */
+    fun proposeAgentRevision(
+        client: PlanRevisionProposalClient,
+        conversationId: String?,
+        message: String,
+        mandate: AgentMandate,
+        planContextConsented: Boolean,
+        planRevisionCapabilityEnabled: Boolean,
+        requestId: String = UUID.randomUUID().toString(),
+    ): Boolean {
+        val request = prepareAgentRevisionRequest(
+            conversationId = conversationId,
+            message = message,
+            mandate = mandate,
+            planContextConsented = planContextConsented,
+            planRevisionCapabilityEnabled = planRevisionCapabilityEnabled,
+            requestId = requestId,
+        ) ?: return false
+        return applyAgentRevisionResult(client.propose(request))
+    }
+
+    /** Runs blocking HTTP on IO and resumes all Compose state changes on the caller's dispatcher. */
+    suspend fun proposeAgentRevisionSuspending(
+        client: PlanRevisionProposalClient,
+        conversationId: String?,
+        message: String,
+        mandate: AgentMandate,
+        planContextConsented: Boolean,
+        planRevisionCapabilityEnabled: Boolean,
+        requestId: String = UUID.randomUUID().toString(),
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    ): Boolean {
+        val request = prepareAgentRevisionRequest(
+            conversationId = conversationId,
+            message = message,
+            mandate = mandate,
+            planContextConsented = planContextConsented,
+            planRevisionCapabilityEnabled = planRevisionCapabilityEnabled,
+            requestId = requestId,
+        ) ?: return false
+        val result = withContext(ioDispatcher) { client.propose(request) }
+        return applyAgentRevisionResult(result)
+    }
+
+    private fun prepareAgentRevisionRequest(
+        conversationId: String?,
+        message: String,
+        mandate: AgentMandate,
+        planContextConsented: Boolean,
+        planRevisionCapabilityEnabled: Boolean,
+        requestId: String,
+    ): PlanRevisionApiRequest? {
+        val current = plan
+        if (current == null) {
+            fail("PLAN_MISMATCH: aucun programme local n'est chargé.")
+            return null
+        }
+        if (preview != null) {
+            fail("Confirmez ou annulez l'aperçu courant avant une nouvelle proposition.")
+            return null
+        }
+        if (!planContextConsented) {
+            fail("Le partage du programme n'a pas été consenti.")
+            return null
+        }
+        if (!planRevisionCapabilityEnabled) {
+            fail("La capability de révision agent est désactivée.")
+            return null
+        }
+        if (message.isBlank() || message.length > 2_000) {
+            fail("La demande agent doit contenir 1 à 2000 caractères.")
+            return null
+        }
+        if (conversationId != null && conversationId.length > 80) {
+            fail("L'identifiant de conversation est invalide.")
+            return null
+        }
+        if (mandate.revoked || mandate.suspended || clock.nowUtcMillis() >= mandate.expiresAtUtcMillis) {
+            fail("Le mandat n'autorise plus la planification agent.")
+            return null
+        }
+        if (current.state !in setOf(PlanState.DRAFT, PlanState.APPROVED)) {
+            fail("PLAN_MISMATCH: le programme n'est plus modifiable.")
+            return null
+        }
+        return PlanRevisionApiRequest(
+            requestId = requestId,
+            conversationId = conversationId,
+            message = message,
+            planContextConsented = true,
+            mandate = mandate,
+            plan = current,
+        )
+    }
+
+    private fun applyAgentRevisionResult(result: PlanRevisionApiResult): Boolean {
+        return when (result) {
+            PlanRevisionApiResult.Unauthorized -> fail("Requête plan agent non authentifiée (401).")
+            PlanRevisionApiResult.Forbidden -> fail("Mandat ou consentement agent refusé (403).")
+            PlanRevisionApiResult.Conflict -> fail("Requête plan agent en conflit (409).")
+            PlanRevisionApiResult.Unprocessable -> fail("Requête plan agent invalide (422).")
+            is PlanRevisionApiResult.ServerError -> fail("Service plan agent indisponible (${result.statusCode}).")
+            is PlanRevisionApiResult.HttpRejected -> fail("Requête plan agent refusée (${result.statusCode}).")
+            PlanRevisionApiResult.Timeout -> fail("Délai d'attente dépassé pour la proposition agent.")
+            PlanRevisionApiResult.InvalidResponse -> fail("Réponse plan agent V3 invalide.")
+            is PlanRevisionApiResult.InvalidProposal -> fail("${result.code}: la proposition agent a été rejetée.")
+            PlanRevisionApiResult.ResponseTooLarge -> fail("Réponse plan agent trop volumineuse.")
+            PlanRevisionApiResult.Unavailable -> fail("Service plan agent indisponible.")
+            PlanRevisionApiResult.InvalidRequest -> fail("Requête plan agent invalide.")
+            is PlanRevisionApiResult.Success -> {
+                if (preview != null) {
+                    return fail("Un autre aperçu a été créé pendant la requête agent.")
+                }
+                val response = result.response
+                if (response.agentStatus != "ok") {
+                    return fail("Agent status ${response.agentStatus}: ${response.reply}")
+                }
+                val proposal = response.proposal
+                    ?: return fail(response.reply.ifBlank { "Aucune proposition de révision n'a été reçue." })
+                val latestPlan = plan ?: return fail("PLAN_MISMATCH: aucun programme local n'est chargé.")
+                when (val mapped = agentRevisionMapper.map(proposal, latestPlan, clock.nowUtcMillis())) {
+                    PlanRevisionMappingResult.AlreadyApplied -> {
+                        message = "AlreadyApplied : cette révision a déjà été appliquée, sans doublon."
+                        revision++
+                        true
+                    }
+                    is PlanRevisionMappingResult.Rejected -> fail(agentRevisionRejection(mapped.code))
+                    is PlanRevisionMappingResult.Ready -> previewAgentRevision(mapped.revision)
+                }
+            }
+        }
+    }
+
+    private fun previewAgentRevision(revisionToPreview: PlanRevision): Boolean =
+        when (val result = requireRepository().preview(revisionToPreview)) {
+            is PlanPreviewResult.Ready -> {
+                pendingRevision = revisionToPreview
+                pendingPreview = result.preview
+                preview = result.preview
+                message = null
+                true
+            }
+            is PlanPreviewResult.Rejected -> fail(agentRevisionRejection(result.reason.name))
+            is PlanPreviewResult.Corrupt -> {
+                corruption = result.reason
+                false
+            }
+        }
+
+    private fun agentRevisionRejection(code: String): String = when (code) {
+        PlanRevisionMapper.PLAN_MISMATCH, PlanRejectionReason.PLAN_ID_MISMATCH.name ->
+            "PLAN_MISMATCH: la proposition vise un autre programme, une autre date ou un autre fuseau."
+        PlanRevisionMapper.STALE_AGENT_REVISION, PlanRejectionReason.STALE_REVISION.name ->
+            "STALE_AGENT_REVISION: le programme a changé depuis la création de la proposition."
+        PlanRevisionMapper.AGENT_REVISION_EXPIRED, PlanRejectionReason.REVISION_EXPIRED.name ->
+            "AGENT_REVISION_EXPIRED: la proposition a expiré."
+        PlanRevisionMapper.REVISION_ID_CONFLICT -> "REVISION_ID_CONFLICT: l'identifiant de révision est associé à un autre contenu."
+        PlanRevisionMapper.NO_APPLICABLE_DIFF, PlanRejectionReason.EMPTY_CHANGESET.name ->
+            "La proposition ne produit aucun changement applicable."
+        else -> "PLAN_MISMATCH: la proposition contient une activité absente du programme local."
+    }
+
+    private fun propose(
+        proposedActivities: List<PlanActivity>,
+        summary: String,
+        origin: RevisionOrigin = RevisionOrigin.USER,
+    ): Boolean {
         val current = plan ?: return fail("Aucun plan chargé.")
         val now = clock.nowUtcMillis()
         val revisionToPreview = try {
@@ -319,7 +495,7 @@ class PlanController(
                 current = current,
                 proposedActivities = proposedActivities,
                 revisionId = UUID.randomUUID().toString(),
-                origin = RevisionOrigin.USER,
+                origin = origin,
                 summary = summary,
                 createdAt = now,
                 ttlMillis = REVISION_TTL_MILLIS,
