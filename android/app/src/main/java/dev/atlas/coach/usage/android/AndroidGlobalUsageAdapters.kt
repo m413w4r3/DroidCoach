@@ -5,6 +5,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
+import androidx.core.content.edit
 import dev.atlas.coach.usage.GlobalUsageEvent
 import dev.atlas.coach.usage.GlobalUsageEventBatch
 import dev.atlas.coach.usage.GlobalUsageEventSource
@@ -84,9 +85,11 @@ class AndroidUsageAppRefProvider(context: Context) : UsageAppRefProvider {
                     ?.let { return it }
             }
             val salt = ByteArray(32).also(SecureRandom()::nextBytes)
-            check(
-                preferences.edit().putString(KEY_SALT, Base64.encodeToString(salt, Base64.NO_WRAP)).commit(),
-            ) { "Could not persist local usage pseudonym salt" }
+            val encoded = Base64.encodeToString(salt, Base64.NO_WRAP)
+            preferences.edit(commit = true) { putString(KEY_SALT, encoded) }
+            check(preferences.getString(KEY_SALT, null) == encoded) {
+                "Could not persist local usage pseudonym salt"
+            }
             return salt
         }
     }
