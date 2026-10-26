@@ -244,7 +244,7 @@ fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
             }
             if (state.etarInstalled != null && state.consentGranted && state.permission == CalendarPermissionState.GRANTED) {
                 Text(
-                    if (state.etarInstalled) {
+                    if (state.etarInstalled == true) {
                         "Etar détectée (ws.xsoh.etar ou ws.xsoh.etar.debug)."
                     } else {
                         "Etar non détectée (ws.xsoh.etar, ws.xsoh.etar.debug); la visibilité Android peut limiter cette vérification."
