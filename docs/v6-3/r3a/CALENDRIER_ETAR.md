@@ -79,11 +79,11 @@ content insert`, aucune donnée système fabriquée ne sert de preuve.
 | C4 | Création événement CalendarContract | `event_id` relu | **PASS** — `event_id=2` via `AndroidCalendarContractWriteProvider` |
 | C5 | Relecture provider | hash et marqueurs conformes | **PASS** — titre, fenêtre, `customAppPackage`, `customAppUri` relus |
 | C6 | Affichage réel dans Etar | capture + requête provider | **PASS** — `ATLAS TEST Etar visibility` visible, capture `preuves/captures/etar-month-view.png` |
-| C7 | Déplacement | `dtstart`/`dtend` relus | NOT_RUN |
-| C8 | Modification titre/durée | relecture | NOT_RUN |
-| C9 | Suppression autorisée | événement absent | NOT_RUN |
-| C10 | Disparition vérifiée | provider + Etar | NOT_RUN |
-| C11 | Répétition sans doublon | une seule ligne | NOT_RUN |
+| C7 | Déplacement | `dtstart`/`dtend` relus | **PASS** — déplacement 22:30→23:00 via provider, capture `etar-moved.png` |
+| C8 | Modification titre/durée | relecture | **PASS** — titre `ATLAS TEST Etar moved` relu et affiché |
+| C9 | Suppression autorisée | événement absent | **PASS** — suppression provider, `No result found` |
+| C10 | Disparition vérifiée | provider + Etar | **PASS** — capture `etar-deleted.png` sans événement |
+| C11 | Répétition sans doublon | une seule ligne | **PASS** — `findByCustomAppUri` renvoie exactement 1 avant/après restauration |
 | C12 | Arrêt du processus pendant l'opération | état `UNKNOWN` durable | NOT_RUN |
 | C13 | Relance et réconciliation | `RECONCILED` ou `MISSING` | NOT_RUN |
 | C14 | Modification manuelle dans Etar | état `DIVERGED` | NOT_RUN |

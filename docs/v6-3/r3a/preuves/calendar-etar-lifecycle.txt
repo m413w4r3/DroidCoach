@@ -1,0 +1,10 @@
+# Etar lifecycle: restore -> move/edit -> delete -> restore
+date_utc=2026-10-26T22:35:48Z
+device=emulator-5554 API 37
+calendar_id=1 account_type=dev.atlas.coach.calendar
+fixture_provenance=atlas://plan/00000000-0000-4000-8000-000000000001/activity/00000000-0000-4000-8000-000000000002
+restore_1=PASS
+move_edit=PASS title=ATLAS TEST Etar moved dtstart=23:00
+delete=PASS provider=No result found
+restore_2=PASS event_id=4 no_duplicate
+captures=etar-month-view.png etar-moved.png etar-deleted.png etar-month-view-after-reboot.png

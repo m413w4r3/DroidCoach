@@ -87,10 +87,10 @@ Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`; tous sont
 | K7 | Insertion réelle | **PASS** — `event_id=2` via provider réel |
 | K8 | Relecture réelle | **PASS** — marqueurs et fenêtre relus |
 | K9 | Visibilité Etar | **PASS** — capture `preuves/captures/etar-month-view.png` |
-| K10 | Modification | NOT_RUN |
-| K11 | Déplacement | NOT_RUN |
-| K12 | Suppression | NOT_RUN |
-| K13 | Doublon | NOT_RUN |
+| K10 | Modification | **PASS** — titre relu et affiché dans Etar |
+| K11 | Déplacement | **PASS** — 22:30→23:00, capture `etar-moved.png` |
+| K12 | Suppression | **PASS** — provider vide, capture `etar-deleted.png` |
+| K13 | Doublon | **PASS** — une seule ligne par `CUSTOM_APP_URI` |
 | K14 | Crash | NOT_RUN |
 | K15 | Reprise | NOT_RUN |
 | K16 | Modification extérieure | NOT_RUN |
