@@ -55,7 +55,7 @@ class PlanRevisionProposalV3Test {
     @Test
     fun rejectsNonCanonicalUuidAndIncorrectTypes() {
         val uuid = response()
-        uuid.getJSONObject("proposal").put("proposal_id", PROPOSAL_ID.uppercase())
+        uuid.getJSONObject("proposal").put("proposal_id", UUID_WITH_LETTER.uppercase())
         assertInvalid(uuid.toString())
 
         val type = response()
@@ -199,5 +199,6 @@ class PlanRevisionProposalV3Test {
 
     companion object {
         private const val PROPOSAL_ID = "60000000-0000-4000-8000-000000000001"
+        private const val UUID_WITH_LETTER = "80000000-0000-4000-8000-00000000000a"
     }
 }
