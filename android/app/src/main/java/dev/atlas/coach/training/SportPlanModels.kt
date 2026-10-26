@@ -73,3 +73,11 @@ data class SportPlan(
     val generatedAt: String?,
     val limits: SportPlanLimits,
 )
+
+/** Renderable result of a remote load, including failures with no cached plan. */
+data class SportPlanUiState(
+    val plan: SportPlan?,
+    val syncState: SyncState,
+    val lastSyncAt: String? = plan?.generatedAt,
+    val source: SportPlanSource = plan?.source ?: SportPlanSource.WGER_READ,
+)

@@ -44,6 +44,26 @@ internal fun activity(
     notes = "Préparer les éléments utiles",
 )
 
+internal fun trainingReference(
+    routineId: Int = 7,
+    dayId: Int? = 21,
+    slotId: Int? = 31,
+    activityId: String? = ACTIVITY_ID,
+    etag: String? = "\"sport-plan-v1\"",
+    syncState: TrainingReferenceSyncState = TrainingReferenceSyncState.FRESH,
+) = TrainingPlanReference(
+    baseUrl = "https://wger.de",
+    routineId = routineId,
+    dayId = dayId,
+    slotId = slotId,
+    planId = PLAN_ID,
+    activityId = activityId,
+    fetchedAt = "2026-10-26T09:00:00Z",
+    sourceUpdatedAt = "2026-10-26T08:30:00Z",
+    etag = etag,
+    syncState = syncState,
+)
+
 internal fun dayPlan(
     activities: List<PlanActivity> = listOf(activity()),
     version: Int = 1,

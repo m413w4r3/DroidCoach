@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timezone as datetime_timezone
 from typing import Any
+from zoneinfo import ZoneInfo
+
+from .wger import WGER_API_PREFIX, WgerError
 
 SCHEMA_VERSION = 1
 MAX_EXERCISES = 50
@@ -214,6 +217,158 @@ def wger_error_to_sync_state(code: str) -> str:
     if code in _STALE_CODES:
         return "STALE"
     return "UNAVAILABLE"
+
+
+def read_sport_plan(
+    client: Any,
+    *,
+    local_date: str | date,
+    timezone: str,
+    generated_at: str | datetime | None = None,
+) -> dict[str, Any]:
+    """Read a bounded, read-only routine/day projection through ``WgerClient``.
+
+    Wger routines describe a rotating sequence rather than calendar dates. A
+    weekday match is preferred when the API exposes one; otherwise the date's
+    ordinal selects a stable position in the routine's ordered day list.
+    """
+    target_date = date.fromisoformat(local_date) if isinstance(local_date, str) else local_date
+    zone = ZoneInfo(timezone)
+    routines, routines_truncated = _read_wger_resource(client, "routine")
+    days, days_truncated = _read_wger_resource(client, "day")
+    slots, slots_truncated = _read_wger_resource(client, "slot")
+    exercises, exercises_truncated = _read_wger_resource(client, "exercise")
+    logs, logs_truncated = _read_wger_resource(client, "workoutlog")
+    sessions, sessions_truncated = _read_wger_resource(client, "workoutsession")
+
+    routine = _select_routine(routines)
+    routine_id = _identifier(routine.get("id")) if routine is not None else None
+    routine_days = [
+        row for row in days
+        if routine_id is None or _relation_identifier(row.get("routine")) == routine_id
+    ]
+    routine_days.sort(key=_day_order)
+    day = _select_day(routine_days, target_date)
+    day_id = _identifier(day.get("id")) if day is not None else None
+
+    exercise_by_id = {
+        exercise_id: row
+        for row in exercises
+        if (exercise_id := _identifier(row.get("id"))) is not None
+    }
+    day_exercises: list[dict[str, Any]] = []
+    for slot in slots:
+        if day_id is None or _relation_identifier(slot.get("day")) != day_id:
+            continue
+        exercise_id = _relation_identifier(slot.get("exercise"))
+        exercise = exercise_by_id.get(exercise_id or "")
+        row = dict(slot)
+        if exercise_id is not None:
+            row["exercise"] = {
+                "id": exercise_id,
+                "name": exercise.get("name") if exercise is not None else slot.get("name"),
+            }
+        day_exercises.append(row)
+
+    plan = project_sport_plan(
+        routine=routine,
+        day=day,
+        day_exercises=day_exercises,
+        workout_logs=[row for row in logs if _belongs_to_local_date(row, target_date, zone)],
+        workout_sessions=[row for row in sessions if _belongs_to_local_date(row, target_date, zone)],
+        local_date=target_date,
+        timezone=timezone,
+        source="WGER_READ",
+        sync_state="FRESH",
+        generated_at=generated_at or datetime.now(datetime_timezone.utc),
+    )
+    plan["limits"]["truncated"] = plan["limits"]["truncated"] or any((
+        routines_truncated,
+        days_truncated,
+        slots_truncated,
+        exercises_truncated,
+        logs_truncated,
+        sessions_truncated,
+    ))
+    return plan
+
+
+def _read_wger_resource(client: Any, endpoint: str) -> tuple[list[dict[str, Any]], bool]:
+    """Use WgerClient's bounded GET/page parser for a single resource."""
+    if endpoint not in {"routine", "day", "slot", "exercise", "workoutlog", "workoutsession"}:
+        raise WgerError("UNAVAILABLE")
+    limits = client.limits
+    max_items = min(limits.max_items, MAX_SOURCE_ROWS + 1)
+    page_size = min(limits.page_size, max_items)
+    url = f"{client.base_url}{WGER_API_PREFIX}{endpoint}/"
+    params: dict[str, int] | None = {"limit": page_size, "offset": 0}
+    rows: list[dict[str, Any]] = []
+    pages = 0
+    truncated = False
+    while url and pages < limits.max_pages and len(rows) < max_items:
+        page = client._read_page(endpoint, url, params=params)
+        pages += 1
+        rows.extend(page.results[: max_items - len(rows)])
+        if page.next_url is None:
+            break
+        if pages >= limits.max_pages or len(rows) >= max_items:
+            truncated = True
+            break
+        url, params = page.next_url, None
+    return rows, truncated
+
+
+def _select_routine(routines: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+    if not routines:
+        return None
+    ordered = sorted(
+        (dict(row) for row in routines),
+        key=lambda row: (not bool(row.get("is_active", False)), _day_order(row)),
+    )
+    return ordered[0]
+
+
+def _select_day(days: Sequence[dict[str, Any]], target_date: date) -> dict[str, Any] | None:
+    if not days:
+        return None
+    weekday = target_date.weekday()
+    matching = [
+        day for day in days
+        if _integer(day.get("weekday"), minimum=0, maximum=6) == weekday
+    ]
+    if matching:
+        return matching[0]
+    return days[(target_date.toordinal() - 1) % len(days)]
+
+
+def _day_order(row: Mapping[str, Any]) -> tuple[int, str]:
+    order = _integer(row.get("order", row.get("position")), minimum=0, maximum=1_000_000)
+    identifier = _identifier(row.get("id")) or ""
+    return (order if order is not None else 1_000_001, identifier)
+
+
+def _relation_identifier(value: Any) -> str | None:
+    relation = _mapping(value)
+    return _identifier(relation.get("id") if relation is not None else value)
+
+
+def _belongs_to_local_date(row: Mapping[str, Any], target_date: date, zone: ZoneInfo) -> bool:
+    raw_time = row.get("datetime_start", row.get("datetime", row.get("date")))
+    if isinstance(raw_time, datetime):
+        parsed = raw_time
+    elif isinstance(raw_time, str) and 0 < len(raw_time) <= MAX_TIMESTAMP_LENGTH:
+        try:
+            parsed = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                return date.fromisoformat(raw_time[:10]) == target_date
+            except ValueError:
+                return False
+    else:
+        return False
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return False
+    return parsed.astimezone(zone).date() == target_date
 
 
 def _mapping(value: Any) -> Mapping[str, Any] | None:
