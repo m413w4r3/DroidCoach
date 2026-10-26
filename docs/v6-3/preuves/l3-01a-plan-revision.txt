@@ -8,8 +8,10 @@ Base: f625f0de21725485c91247e96986fdccd4eee597
 Commits enfant:
 - 6240ca123a00ff434ddcb03b788bbe2a0de00b75 feat(backend): add idempotent V3 plan revision endpoint
 - 9dc268531a60d9a89a7ee023c253a62d302c8965 fix(backend): reject unsupported plan activity fields
+- 6b64ddcd1957bb45ccd865ab8d83b5ae0f3d9260 fix(backend): harden plan revision validation
 
-Intégration: merge e574846f474cc418faf8d63297b7239f35fa6b37
+Intégrations: merge e574846f474cc418faf8d63297b7239f35fa6b37
+              puis merge 8c402ee124cdd79a5d1a509ee0f75fec414ee7e1
 
 Fichiers (6, +1215):
 - backend/atlas_backend/plan_agent_v3.py (nouveau)
@@ -28,22 +30,38 @@ Contrat:
 - focus/training_ref non nuls rejetés (invalid_output) pour compatibilité Android.
 
 Oracle enfant:
-- `pytest -q tests/test_plan_agent_v3.py` → PASS 23, FAIL 0.
-- Suite complète enfant bloquée par TestClient/AnyIO dans le sandbox (37 tests
-  observés, 1 bloqué, 71 non démarrés) — BLOCKED_ENVIRONMENT, pas un échec.
+- `pytest -q tests/test_plan_agent_v3.py` sur 9dc2685 → PASS 23.
+- Après durcissement sur 6b64ddc → PASS 30, FAIL 0.
+- Suite complète enfant bloquée par TestClient/AnyIO dans le sandbox
+  (BLOCKED_ENVIRONMENT), pas un échec.
 
 Oracle parent hors sandbox:
-- `cd backend && .venv/bin/python -m pytest -q` sur 9dc2685 → 114 passed, 1 skipped.
+- Sur 9dc2685 → 114 passed, 1 skipped.
+- Sur 6b64ddc → 121 passed, 1 skipped.
 - Sur le SHA intégré e574846 → 114 passed, 1 skipped.
+- Sur le SHA intégré final 8c402ee → 152 passed, 1 skipped.
 
 Relecture indépendante:
 - Session 97538bfb-56a2-4221-8bff-fac62c36aa5d, worktree RO
-  review-v63-l3-01a-plan-backend à 9dc2685, `chmod -R a-w`.
-- Verdict: à compléter.
+  review-v63-l3-01a-plan-backend, `chmod -R a-w`, aucun test exécuté.
+- Première revue sur 9dc2685: CORRECTION_REQUIRED — P1 scope `policy.py`
+  (documentation), P2 RecursionError, P2 UUID casse mixte, P2 concurrence,
+  P2 pending sans reprise, P2 couverture adaptateur.
+- Corrections 6b64ddc: normalisation casse UUID, RecursionError →
+  invalid_output, docstring concurrence/pending, tests timeout/transport/
+  payload/token.
+- Re-revue sur 6b64ddc: ACCEPTED_WITH_P2. P1 résolu par mise à jour du ticket;
+  UUID/RecursionError/concurrence/pending traités ou honnêtement documentés;
+  aucun nouveau P0/P1.
+- P2 résiduel: les compteurs breaker/quota ne sont pas spécifiquement vérifiés
+  via le chemin V3.
 
 Limites:
 - Aucun appel réel au gateway OpenClaw pour le nouvel endpoint; les tests
-  utilisent un faux adaptateur.
-- La suite backend enfant n'a pas pu être exécutée dans son sandbox.
+  utilisent un faux adaptateur/client HTTP.
+- La suite backend enfant n'a pas pu être exécutée dans son sandbox; le parent
+  l'a rejouée.
 - Le payload `tools` est vérifié absent par test, mais le comportement du
   gateway réel avec le prompt plan revision reste NOT_RUN.
+- Un claim `pending` après crash exige un nouveau `request_id` ou une
+  réconciliation opérateur; aucune reprise automatique.
