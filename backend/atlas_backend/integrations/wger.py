@@ -6,10 +6,11 @@ import contextlib
 import fcntl
 import json
 import os
+import re
 import tempfile
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -595,7 +596,7 @@ def _exercise_summary(value: dict[str, Any]) -> ExerciseSummary:
 def _workout_log_summary(value: dict[str, Any]) -> WorkoutLogSummary:
     return WorkoutLogSummary(
         id=_opaque_id(value["id"]),
-        date=_plain_text(value["date"], 64),
+        date=_iso_calendar_date(value["date"]),
         exercise_id=_optional_relation_id(value.get("exercise")),
         routine_id=_optional_relation_id(value.get("routine")),
         session_id=_optional_opaque_id(value.get("session")),
@@ -650,6 +651,14 @@ def _iso_datetime(value: Any) -> str:
     if normalized.endswith("Z"):
         normalized = f"{normalized[:-1]}+00:00"
     datetime.fromisoformat(normalized)
+    return text
+
+
+def _iso_calendar_date(value: Any) -> str:
+    text = _plain_text(value, 10)
+    if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text) is None:
+        raise ValueError
+    date.fromisoformat(text)
     return text
 
 

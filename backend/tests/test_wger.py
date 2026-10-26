@@ -195,9 +195,12 @@ def test_workout_logs_and_sessions_parse_real_shapes_across_pages():
     finally:
         http.close()
 
-    assert [(item.id, item.exercise_id, item.routine_id, item.session_id) for item in logs] == [
-        ("log-opaque-a", 12, 3, "session-opaque-a"),
-        ("17", 13, None, None),
+    assert [
+        (item.id, item.date, item.exercise_id, item.routine_id, item.session_id)
+        for item in logs
+    ] == [
+        ("log-opaque-a", "2026-10-26", 12, 3, "session-opaque-a"),
+        ("17", "2026-10-27", 13, None, None),
     ]
     assert [
         (item.id, item.datetime_start, item.datetime_end, item.day_id, item.routine_id)
@@ -218,6 +221,20 @@ def test_workout_logs_and_sessions_parse_real_shapes_across_pages():
         "/api/v2/workoutsession/",
         "/api/v2/workoutsession/",
     ]
+
+
+@pytest.mark.parametrize("date_value", ["0001-01-01", "9999-12-31"])
+def test_workout_log_accepts_iso_calendar_date_year_bounds(date_value):
+    def handler(request):
+        return httpx.Response(200, json=page([{"id": 1, "date": date_value}]))
+
+    client, http = make_client(handler)
+    try:
+        logs = client.list_workout_logs()
+    finally:
+        http.close()
+
+    assert logs[0].date == date_value
 
 
 @pytest.mark.parametrize(
@@ -325,6 +342,17 @@ def test_invalid_summary_schema_is_redacted():
             "workoutlog",
             {"id": "x" * 65, "date": "2026-10-26", "exercise": 1},
         ),
+        ("workoutlog", {"id": 1, "date": "2026-02-30", "exercise": 1}),
+        ("workoutlog", {"id": 1, "date": "26/10/2026", "exercise": 1}),
+        ("workoutlog", {"id": 1, "date": "not-a-date", "exercise": 1}),
+        ("workoutlog", {"id": 1, "date": "0000-01-01", "exercise": 1}),
+        (
+            "workoutlog",
+            {"id": 1, "date": "2026-10-26T08:30:00Z", "exercise": 1},
+        ),
+        ("workoutlog", {"id": 1, "date": None, "exercise": 1}),
+        ("workoutlog", {"id": 1, "date": 20261026, "exercise": 1}),
+        ("workoutlog", {"id": 1, "exercise": 1}),
         (
             "workoutsession",
             {
