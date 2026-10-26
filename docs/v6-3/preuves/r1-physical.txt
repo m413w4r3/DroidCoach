@@ -184,8 +184,17 @@ Instrumenté sur émulateur API 37 uniquement (jamais Pixel):
 Porte d'installation (P1 étendu)
 --------------------------------
 Le propriétaire a été sollicité pour installer 66c7d8f6 sur le Pixel.
-Décision reçue: NE PAS INSTALLER maintenant; accord explicite requis.
-Statut: BLOCKED_APPROVAL.
+Décision initiale (~14:30): NE PAS INSTALLER maintenant; accord explicite requis.
+P1bis (~14:32): accord explicite du propriétaire pour le SHA 66c7d8f6 (source
+  696eb9c); le refus précédent est supersédé.
+Installation (~14:33): `adb -s 45301FDAS001QT install -r` -> Success; versionName
+  0.1.0, versionCode 1; données app conservées (mêmes fichiers/tailles);
+  sauvegarde immédiate avant installation
+  app-data-before-install-66c7d8f6.tar, SHA-256
+  c1e5aa5b6d274b43233a4d9f59d854441a4bcef758674eb84997f1760453a7e1.
+Retour arrière: `adb install -r` de
+  /home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-5956bb6f.apk
+  (SHA-256 5956bb6f…).
 Conservés hors dépôt (0600):
   - APK installé actuel 5956bb6f:
     /home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-5956bb6f.apk
@@ -197,33 +206,122 @@ Conservés hors dépôt (0600):
   - APK candidat: android/app/build/outputs/apk/debug/app-debug.apk
     SHA-256 66c7d8f6… (non installé).
 
+Parcours R1 exécuté sur l'APK 66c7d8f6 (Pixel Android 17/API 37)
+--------------------------------------------------------------
+Plan du jour:
+  PASS  ouverture de Plus > Plan du jour sans crash (défaut corrigé).
+  PASS  création du programme du jour: version 1, APPROVED, 0 activité.
+  PASS  activité 1 « Travail profond », FOCUS, 15:00, 90 min, Importante:
+        aperçu « Version 1 → 2 · 2 effets », confirmation groupée,
+        application locale, version 2.
+  PASS  activité 2 « Seance courte », TRAINING, 18:00, 45 min, Importante:
+        aperçu « Version 2 → 3 · 2 effets », confirmation groupée,
+        application locale, version 3, 2 activités.
+  PASS  défilement bas/haut de l'écran: aucun crash, app au premier plan.
+  PASS  persistance: force-stop puis relance, Plus > Plan du jour ->
+        version 3, 2 activités, mêmes horaires.
+
+Mandat:
+  PASS  « Réactiver le mandat » (action UI explicite, Plus > Mandat du Coach).
+        État relu: mandat agent-local-v2 version 3, revoked=false,
+        suspended=false, barrière agent_blocked_v1=false. L'écran affiche
+        ensuite « Suspendre le mandat ».
+        Note mineure: l'écran ne se recompose pas immédiatement après l'action;
+        un retour/retour à l'écran rafraîchit l'état.
+
+Coach:
+  PASS  activation des révisions par le coach: dialogue de divulgation lu,
+        « Activer » confirmé; capability planRevision=true.
+  PASS  « Demander au coach » avec le message par défaut:
+        réponse réelle du modèle, sans proposition:
+        « Ton plan organise déjà bien le reste de la journée : garde le travail
+        profond de 15 h à 16 h 30, puis la séance courte à 18 h. Prévois une
+        pause entre les deux […] »
+        Aucun aperçu, aucun effet appliqué.
+  HIST  demande explicite suivante: `invalid_output` (voir diagnostic plus bas).
+        Réponse app: « Agent status invalid_output: La proposition du
+        planificateur est invalide et a été rejetée. Aucune action n'a été
+        exécutée. » Aucun effet appliqué.
+        Diagnostic Gateway: proposition sinon valide mais
+        "kind":"BREAK" et "priority":null; schéma V3 exige
+        FOCUS/TRAINING/APPOINTMENT/ADMIN/MEAL/REST/BUFFER/OTHER et
+        REQUIRED/IMPORTANT/OPTIONAL non nul. Correctif V63-R1-PLAN-PROMPT-2
+        (a6ee1c7, merge) appliqué; backend redémarré.
+  PASS  après correctif, sonde backend réelle sur le plan exact version 3:
+        agent_status=ok, proposition plan.revise_day, base_version=3,
+        3 activités dont Pause kind=BUFFER priority=OPTIONAL, overlaps=[].
+  PASS  parcours app: aperçu « Version 3 → 4 · 3 effet(s) », diff
+        « Ajouter Pause à 17:30 » + « Déplacer de 15:00 à 14:50 ».
+  PASS  aucun effet avant confirmation: fichier plan encore version 3,
+        2 activités pendant l'aperçu.
+  PASS  confirmation groupée -> version 4, 3 activités persistées:
+        Pause BUFFER OPTIONAL 17:30-17:45, Seance courte 18:00-18:45,
+        Travail profond déplacé à 14:50-16:20; applied_revisions=3,
+        confirmations=3.
+  PASS  idempotence réelle: rejeu du même POST backend (même request_id,
+        même corps) -> HTTP 200, même proposal_id, même idempotency_key,
+        même candidate. Aucun second effet.
+  PASS  hors-ligne: backend arrêté; plan version 4 toujours lisible,
+        actions locales visibles; demande coach -> « Service plan agent
+        indisponible. », aucun effet, aucun crash.
+
+P3 calendrier (lecture seule, après le plan)
+--------------------------------------------
+  PASS  consentement ATLAS donné via l'écran; READ_CALENDAR demandé
+        uniquement après action explicite; permission Android accordée.
+  PASS  liste de calendriers affichée (plusieurs calendriers, dont jours
+        fériés et calendriers locaux); Etar détectée
+        (ws.xsoh.etar / ws.xsoh.etar.debug).
+  PASS  aucun événement affiché: uniquement nom de calendrier, compte
+        expurgé, accès et visibilité; aucune écriture calendrier.
+  FAIL_PRIVACY (P1)  certains CALENDAR_DISPLAY_NAME sont des adresses e-mail
+        et s'affichaient tels quels malgré le libellé « Compte expurgé ».
+        Aucune adresse n'est recopiée dans ce fichier.
+        Cause: CalendarDescriptor.toDiagnosticRow() recopiait displayName sans
+        filtre; accountLabel était déjà expurgé, pas displayName.
+        Correctif V63-R1-CALENDAR-REDACT: commit db15715, merge; masque tout
+        nom contenant un email ou égal à accountName/ownerAccount (trim,
+        ignoreCase), conserve les noms normaux. Tests JVM ajoutés.
+  PASS  révocation: consentement ATLAS révoqué, puis
+        `pm revoke dev.atlas.coach android.permission.READ_CALENDAR`;
+        permission granted=false; écran « Refusée »; liste masquée;
+        aucune lecture après révocation. Le processus app est tué par la
+        révocation Android, puis relancé sans données perdues.
+  Statut P3: BLOCKED_APPROVAL_PRIVACY — correctif construit, installation
+        non approuvée maintenant; P3 n'est pas marqué définitivement bloqué.
+
+Nouvel APK avec correctif confidentiel (non installé)
+-----------------------------------------------------
+APK candidat: SHA-256
+  6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886
+  source HEAD 7ca862f89edaedd19e98d2391db20fa2f939cdb9.
+Oracles: JVM 70 suites/478 tests PASS; lint 0 erreur/54 avertissements;
+  assembleDebug PASS; compile/assemble AndroidTest PASS; 4/4 tests
+  instrumentés PASS sur émulateur API 37 uniquement.
+Conservés en 0600:
+  - /home/nill/.local/share/atlas-qa/r1/atlas-candidate-0.1.0-6ab95fac.apk
+  - rollback 66c7d8f6: atlas-installed-0.1.0-66c7d8f6.apk
+  - rollback initial 5956bb6f: atlas-installed-0.1.0-5956bb6f.apk
+  - sauvegarde app-only avant installation 6ab95fac:
+    app-data-before-install-6ab95fac.tar, SHA-256
+    8617727eb73f3b59a562026cfd684af62f84595adf7dad2b2916a10055aef2f5
+Installation: NON effectuée; décision propriétaire « ne pas installer
+  maintenant ». Un accord explicite par SHA est requis.
+
 État final du Pixel à cette passe
 ---------------------------------
-APK installé: 5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f
-  (0.1.0, versionCode 1) — INCHANGÉ.
-Plan du jour: crash P1 toujours présent avec cet APK (aucun plan créé).
-Diagnostic calendrier: non exécuté (même défaut de scroll + P3 après le plan).
-READ_CALENDAR: déclaré, granted=false; aucune lecture, aucune écriture.
-Données app: shared_prefs/atlas_local_state.xml présent; files/plans absent.
-Backend: 127.0.0.1:8010, adapter openclaw, breaker closed, plan_revision=true,
-  prompt corrigé chargé; /health 200; /v2/agent/status 200.
-adb reverse: tcp:8010 tcp:8010 actif.
-Aucune installation, désinstallation, pm clear, révocation ou écriture
-calendrier effectuée.
+APK installé: 66c7d8f6… (0.1.0, versionCode 1).
+Plan persisté: files/plans/day-plan-2026-10-26.json, version 4, 3 activités.
+Mandat: agent-local-v2 version 3, revoked=false, suspended=false,
+  mode proposals_only, barrière agent_blocked_v1=false.
+READ_CALENDAR: déclaré, granted=false; consentement ATLAS révoqué;
+  aucune lecture active, aucune écriture.
+Backend: arrêté après le test hors-ligne; port 8010 libre.
+adb reverse: tcp:8010 tcp:8010 encore actif (à retirer à la clôture).
+Aucune désinstallation, pm clear, écriture calendrier ou wger, activation
+OpenClaw, modification ~/.openclaw ou push.
 
-Reprise attendue après accord explicite sur 66c7d8f6
-----------------------------------------------------
-1. adb install -r de l'APK 66c7d8f6 (sans uninstall/pm clear), vérifier version.
-2. Plus > Plan du jour: affichage + scroll; créer le programme, deux activités,
-   aperçu, confirmation, fermer/rouvrir pour la persistance.
-3. Plus > Mandat du Coach: « Réactiver le mandat » (action UI explicite, le
-   mandat stocké est revoked=true et la barrière agent_blocked_v1=true).
-4. Coach: activer les révisions, consentement, demande, vérifier le diff,
-   confirmer, rejouer sans doublon, couper le backend pour le hors-ligne.
-5. P3 après le plan: Plus > Diagnostic calendrier, accorder READ_CALENDAR,
-   lister calendriers + Etar, aucun événement, aucune écriture; tester la
-   révocation.
-6. Consigner les résultats réels et mettre à jour ce fichier + le registre.
-
-Statut global final de cette passe: BLOCKED_APPROVAL (installation APK 66c7d8f6)
-  Les correctifs et preuves non-Pixel sont livrés; R1 physique n'est pas clos.
+Statut global de cette passe:
+  PLAN PASS ; COACH PASS (incluant idempotence et hors-ligne) ;
+  P3 BLOCKED_APPROVAL_PRIVACY (correctif 6ab95fac prêt, non installé) ;
+  R1 non clos.
