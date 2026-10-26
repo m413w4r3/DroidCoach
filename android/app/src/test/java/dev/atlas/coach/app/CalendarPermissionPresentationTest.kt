@@ -81,6 +81,53 @@ class CalendarPermissionPresentationTest {
     }
 
     @Test
+    fun redactsEmailUsedAsCalendarName() {
+        val row = descriptor(displayName = "user@example.invalid")
+
+        assertEquals("Calendrier expurgé", row.displayName)
+        assertFalse(row.toString().contains("@"))
+    }
+
+    @Test
+    fun redactsEmailEmbeddedInCalendarName() {
+        val row = descriptor(displayName = "Calendrier user@example.invalid")
+
+        assertEquals("Calendrier expurgé", row.displayName)
+        assertFalse(row.toString().contains("user@example.invalid"))
+    }
+
+    @Test
+    fun keepsNormalCalendarNameAndOmitsAccountIdentifiers() {
+        val row = descriptor(
+            displayName = "Personal calendar",
+            accountName = "user@example.invalid",
+            ownerAccount = "owner@example.invalid",
+        )
+
+        assertEquals("Personal calendar", row.displayName)
+        assertEquals("Compte expurgé", row.accountLabel)
+        assertFalse(row.toString().contains("user@example.invalid"))
+        assertFalse(row.toString().contains("owner@example.invalid"))
+        assertFalse(row.toString().contains("private.account.type"))
+        assertFalse(row.toString().contains("@"))
+    }
+
+    @Test
+    fun redactsCalendarNameMatchingAccountNameIgnoringCaseAndWhitespace() {
+        val accountNameRow = descriptor(
+            displayName = "  Shared-Account  ",
+            accountName = "shared-account",
+        )
+        val ownerAccountRow = descriptor(
+            displayName = "SHARED-OWNER",
+            ownerAccount = " shared-owner ",
+        )
+
+        assertEquals("Calendrier expurgé", accountNameRow.displayName)
+        assertEquals("Calendrier expurgé", ownerAccountRow.displayName)
+    }
+
+    @Test
     fun emptyNamesAndHiddenVisibilityHaveSafeLabels() {
         val row = CalendarDescriptor(
             id = 9,
@@ -100,4 +147,22 @@ class CalendarPermissionPresentationTest {
         assertEquals("Disponibilités uniquement", row.accessLabel)
         assertEquals("Masqué", row.visibilityLabel)
     }
+
+    private fun descriptor(
+        displayName: String,
+        accountName: String? = null,
+        ownerAccount: String? = null,
+    ) = CalendarDescriptor(
+        id = 10,
+        displayName = displayName,
+        accountName = accountName,
+        accountType = "private.account.type",
+        ownerAccount = ownerAccount,
+        accessLevel = 600,
+        visible = true,
+        syncEvents = true,
+        primary = false,
+        timezone = "Europe/Paris",
+        color = 0x112233,
+    ).toDiagnosticRow()
 }
