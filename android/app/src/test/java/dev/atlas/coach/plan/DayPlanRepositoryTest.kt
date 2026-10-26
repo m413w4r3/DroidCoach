@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -307,6 +308,41 @@ class DayPlanRepositoryTest {
             PlanRevisionEngine().effectIds(original.changes, original.revisionId),
             PlanRevisionEngine().effectIds(altered.changes, altered.revisionId),
         )
+        assertEquals(
+            PlanApplyResult.Rejected(PlanRejectionReason.EFFECT_SCOPE_MISMATCH),
+            repository.apply(altered, confirmation),
+        )
+    }
+
+    @Test
+    fun nullAndLiteralNullNotesCannotShareAConfirmation() {
+        val backend = MemoryPlanBackend()
+        val repository = repository(backend)
+        val current = dayPlan(listOf(activity().copy(notes = null)))
+        repository.create(current)
+        val original = revisionFor(
+            current,
+            listOf(activity(scheduled = schedule(10 * 60)).copy(notes = null)),
+        )
+        val preview = repository.preview(original) as PlanPreviewResult.Ready
+        val confirmation = confirmationFor(
+            original,
+            effects = preview.preview.effectIds,
+            scopeHash = preview.preview.scopeHash,
+        )
+        val altered = revisionFor(
+            current,
+            listOf(activity(scheduled = schedule(10 * 60)).copy(notes = "<null>")),
+        )
+
+        assertEquals(original.revisionId, altered.revisionId)
+        assertEquals(
+            PlanRevisionEngine().effectIds(original.changes, original.revisionId),
+            PlanRevisionEngine().effectIds(altered.changes, altered.revisionId),
+        )
+        assertNotEquals(preview.preview.scopeHash, repository.preview(altered).let {
+            (it as PlanPreviewResult.Ready).preview.scopeHash
+        })
         assertEquals(
             PlanApplyResult.Rejected(PlanRejectionReason.EFFECT_SCOPE_MISMATCH),
             repository.apply(altered, confirmation),

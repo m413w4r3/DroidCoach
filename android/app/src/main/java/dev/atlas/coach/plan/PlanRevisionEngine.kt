@@ -148,22 +148,22 @@ class PlanRevisionEngine {
         activity.createdRevisionId,
         activity.lastRevisionId,
         activity.notes,
-    ).joinToString(separator = "|") { escapeField(it) }
+    ).joinToString(separator = "|") { encodeField(it) }
 
     private fun canonicalSchedule(schedule: LocalSchedule): String = listOf(
         schedule.localDate,
         schedule.startMinute.toString(),
         schedule.durationMinutes.toString(),
         schedule.timezone,
-    ).joinToString(separator = "|") { escapeField(it) }
+    ).joinToString(separator = "|") { encodeField(it) }
 
-    private fun escapeField(value: String?): String = when (value) {
-        null -> "<null>"
-        else -> value
-            .replace("\\", "\\\\")
-            .replace("|", "\\|")
-            .replace("\n", "\\n")
-    }
+    /**
+     * Length-prefixed encoding: null is "N", any string is "S<length>:<value>".
+     * A literal "<null>" is therefore distinct from a null field, and embedded
+     * separators cannot make two different field sequences collide.
+     */
+    private fun encodeField(value: String?): String =
+        if (value == null) "N" else "S${value.length}:$value"
 
     /** Applies a reviewed diff only when every before-value still matches the current plan. */
     fun applyChanges(current: DayPlan, revision: PlanRevision): ChangeApplicationResult {

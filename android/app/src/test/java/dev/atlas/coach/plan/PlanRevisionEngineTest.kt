@@ -2,6 +2,7 @@ package dev.atlas.coach.plan
 
 import java.time.Instant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +65,22 @@ class PlanRevisionEngineTest {
         assertEquals(engine.scopeHash(ids), engine.scopeHash(ids.reversed()))
         assertEquals(64, engine.scopeHash(ids).length)
         assertTrue(engine.scopeHash(ids).all { it in "0123456789abcdef" })
+    }
+
+    @Test
+    fun nullAndLiteralNullFieldsProduceDifferentScopeHashes() {
+        val effects = listOf("PLAN_ACTIVITY_UPDATE:$ACTIVITY_ID", "PLAN_APPLY:$REVISION_ID")
+        val nullNotes = listOf(
+            PlanChange.SlotEdited(ACTIVITY_ID, activity(), activity().copy(notes = null)),
+        )
+        val literalNullNotes = listOf(
+            PlanChange.SlotEdited(ACTIVITY_ID, activity(), activity().copy(notes = "<null>")),
+        )
+
+        assertNotEquals(
+            engine.scopeHash(effects, nullNotes),
+            engine.scopeHash(effects, literalNullNotes),
+        )
     }
 
     @Test
