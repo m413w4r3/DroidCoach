@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -216,14 +214,16 @@ fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(context) {
-        effectController = withContext(Dispatchers.IO) { CalendarEffectController.fromContext(context) }
+        effectController = withContext(Dispatchers.IO) {
+            // A compose test host or unavailable private storage must not crash the diagnostic.
+            runCatching { CalendarEffectController.fromContext(context) }.getOrNull()
+        }
         refresh(ensureMessage = null)
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {

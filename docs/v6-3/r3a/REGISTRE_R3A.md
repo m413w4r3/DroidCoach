@@ -50,9 +50,9 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | `R3-RELAY-ANDROID-01` | client Kotlin Noise/WebSocket/protocole | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `android/app/src/test/java/dev/atlas/coach/sync/relay/**` | vecteurs upstream + tests JVM + records malformés | **ACCEPTED / INTEGRATED** — `8199350`, merge `8b0c9bd`, 25 tests JVM, vecteurs upstream + cross-vector Node |
 | `R3-CALENDAR-01` | journal durable, liens, reprise, divergence | `android/app/src/main/java/dev/atlas/coach/calendar/write/**`, `android/app/src/test/java/dev/atlas/coach/calendar/write/**` | tests JVM crash/reprise/idempotence | **ACCEPTED_WITH_P2 / INTEGRATED** — `fb335ee`, merge `b9a527a`, 33 ciblés + 578 JVM ; P2 atomicité inter-fichiers ; correctif parent type de compte local |
 | `R3-CALENDAR-LOCAL-01` | compte local + sync adapter + authentificateur + manifeste | parent : `calendar/local/**`, manifeste, XML | création provider + relecture + visibilité Etar | **ACCEPTED (parent)** — voir `preuves/calendar-local.txt` |
-| `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **PLANNED** — dépend du client Android intégré |
-| `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | `PlanScreen.kt`, `CalendarPermissionScreen.kt`, nouveaux `Calendar*.kt` | 22 scénarios calendrier | **RUNNING** — session `44871d16…` |
-| `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **RUNNING** — session `d2ad8ba9…` |
+| `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **ACCEPTED (parent)** — 4 phases + app controller, états UI |
+| `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | `PlanScreen.kt`, `CalendarPermissionScreen.kt`, nouveaux `Calendar*.kt` | 22 scénarios calendrier | **ACCEPTED_WITH_P1_FIXED / INTEGRATED** — `29b7439`, merge `eaad907` ; 18 ciblés, 589 JVM ; correctifs parent scroll imbriqué + init fail-closed |
+| `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI parent à faire |
 | `R3-MEMORY-UI-01` | parcours mémoire complet | selon ticket | JVM + UI | **PLANNED** |
 | `R3-USAGE-UI-01` | Usage Access réel sur émulateur | selon ticket | permission + statistiques | **PLANNED** |
 | `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **PLANNED** |
@@ -89,7 +89,16 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-26 | Vague B lancée | `R3-SPORT-WIRE-01` (`d2ad8ba9…`) et `R3-CALENDAR-ETAR-01` (`44871d16…`), profils vérifiés |
 | 2026-10-27 | Second crash AVD pendant build Gradle | **INCIDENT** — APK déjà construit, redémarrage sans wipe, E2E relancé sans Gradle |
 | 2026-10-27 | Connecteur PC + appareil synthétique | identité X25519 persistée, appareil `4812ce79…` appairé, capacités `plan.revision` |
-| 2026-10-27 | E2E Android relayé | **RUNNING** — test instrumenté `RelayE2eInstrumentedTest` via `10.0.2.2:4400`, sans `adb reverse` |
+| 2026-10-27 | E2E Android relayé phase 1 | **PASS** — Android → relais → Noise → connecteur → FastAPI, santé + révision V3 + rejeu |
+| 2026-10-27 | Coupure / reconnexion relais | **PASS** — phase 2 hors ligne, phase 3 reconnexion, phase 4 redémarrage connecteur |
+| 2026-10-27 | App controller en mode relais | **PASS** — `AtlasController.planRevisionClient()` → proposition FastAPI |
+| 2026-10-27 | Écran de connexion relayée | **PASS** — états LOCAL / RELAY_CONNECTED / OFFLINE, identité masquée, dernière connexion ; captures `relay-settings-*.png` |
+| 2026-10-27 | `R3-CALENDAR-ETAR-01` livré | `29b7439` ; 18 tests ciblés, 589 JVM, lint sans alerte sur les fichiers modifiés |
+| 2026-10-27 | Intégration calendrier UI | merge `eaad907` ; régression P1 détectée par la suite R2 (double scroll) puis corrigée ; init fail-closed si stockage test indisponible |
+| 2026-10-27 | Recette UI calendrier | **PASS** — plan v2→v3→v4, confirmations groupées, provider réel, Etar création/déplacement/suppression |
+| 2026-10-27 | Suite instrumentée de référence | **PASS** — 17/17 sur l'APK final |
+| 2026-10-27 | Écriture durable config relay | **FIX** — `apply()` → `commit()` ; préférences vérifiées après seed |
+| 2026-10-27 | APK final | SHA-256 `3ee62e6d10b7b6e91954f85b003ef66dfc05a85cd79079dd0514ec9a08aa0d0f` ; E2E + app controller + calendrier PASS |
 
 ## 5. Preuves
 

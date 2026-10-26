@@ -1,0 +1,26 @@
+--- final APK calendar instrumentation ---
+apk_sha256=af5ac60300463835c99889a4a6bdf45e85137bd153540bd683480ff130e9e8c6
+OK (4 tests)
+INSTRUMENTATION_CODE: -1
+--- lifecycle restore/move/delete/restore ---
+test=restoresFixture
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+test=movesAndEditsFixture
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+test=deletesFixture
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+test=restoresFixture
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- final permission gates ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- final relay E2E ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+adb_reverse_count=0

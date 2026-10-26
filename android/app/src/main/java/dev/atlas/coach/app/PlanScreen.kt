@@ -82,7 +82,8 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
 
     LaunchedEffect(appContext) {
         calendarEffectController = withContext(Dispatchers.IO) {
-            CalendarEffectController.fromContext(appContext)
+            // A compose test host or an unavailable private storage must not crash the plan UI.
+            runCatching { CalendarEffectController.fromContext(appContext) }.getOrNull()
         }
     }
 

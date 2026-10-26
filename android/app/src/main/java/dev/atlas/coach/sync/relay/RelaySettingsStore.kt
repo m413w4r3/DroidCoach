@@ -52,22 +52,22 @@ class AndroidRelaySettingsStore(context: Context) {
             putString(DEVICE_ID_KEY, settings.deviceId.trim())
             if (settings.lastConnectedAtUtcMillis == null) remove(LAST_CONNECTED_KEY)
             else putLong(LAST_CONNECTED_KEY, settings.lastConnectedAtUtcMillis)
-        }.apply()
+        }.commit()
     }
 
     fun updateIdentity(deviceId: String, serverPublicKey: String) {
         preferences.edit()
             .putString(DEVICE_ID_KEY, deviceId.trim())
             .putString(SERVER_PUBLIC_KEY_KEY, serverPublicKey.trim())
-            .apply()
+            .commit()
     }
 
     fun updateMode(mode: RelayTransportMode) {
-        preferences.edit().putString(MODE_KEY, mode.name).apply()
+        preferences.edit().putString(MODE_KEY, mode.name).commit()
     }
 
     fun updateLastConnected(atUtcMillis: Long) {
-        preferences.edit().putLong(LAST_CONNECTED_KEY, atUtcMillis).apply()
+        preferences.edit().putLong(LAST_CONNECTED_KEY, atUtcMillis).commit()
     }
 
     companion object {
@@ -116,11 +116,11 @@ class KeystoreRelayCredentialStore(
             TOKEN_KEY,
             Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" +
                 Base64.encodeToString(encrypted, Base64.NO_WRAP),
-        ).apply()
+        ).commit()
     }
 
     override fun clear() {
-        preferences.edit().remove(TOKEN_KEY).apply()
+        preferences.edit().remove(TOKEN_KEY).commit()
         settingsStore.updateIdentity("", "")
     }
 

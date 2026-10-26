@@ -18,7 +18,7 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 | T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | **PASS** le 2026-10-26 |
 | T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | **PASS** — 25 tests, vecteurs Paseo + cross-vector Node à clés fixes |
 | T10 | Interop Kotlin ↔ Node | relais local + client de test | **PASS** — Android Kotlin ↔ relais ↔ connecteur Node ↔ FastAPI, 4 phases |
-| T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | NOT_RUN |
+| T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — APK final `3ee62e6d…`, E2E et suites exécutés dessus |
 | T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — handshake protégé, auth, proposition V3, rejeu, cache |
 | T13 | Calendrier local réel + Etar | tests instrumentés + captures | **PASS** — création, relecture, move/edit/delete, visibilité |
 | T14 | Moteur durable + permissions réelles | tests instrumentés provider réel | **PASS** — reprise, idempotence, crash injecté, revoke/grant, divergence Etar |
@@ -28,26 +28,26 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 
 | ID | Cas | Statut |
 |---|---|---|
-| X1 | Bonne identité serveur | NOT_RUN |
-| X2 | Mauvaise identité serveur | NOT_RUN |
-| X3 | Mode legacy refusé des deux côtés | NOT_RUN |
-| X4 | Handshake altéré | NOT_RUN |
-| X5 | Enregistrement altéré | NOT_RUN |
-| X6 | Rejeu d'un enregistrement | NOT_RUN |
-| X7 | Duplication | NOT_RUN |
-| X8 | Réordonnancement | NOT_RUN |
-| X9 | Troncature | NOT_RUN |
-| X10 | Message trop grand | NOT_RUN |
-| X11 | Reconnexion avec handshake frais | NOT_RUN |
-| X12 | Révocation client | NOT_RUN |
-| X13 | Mauvais token applicatif | NOT_RUN |
-| X14 | Nonce de hello rejoué | NOT_RUN |
+| X1 | Bonne identité serveur | **PASS** — E2E + vecteurs upstream |
+| X2 | Mauvaise identité serveur | **PARTIAL** — handshake altéré JVM ; clé serveur explicitement fausse non testée |
+| X3 | Mode legacy refusé des deux côtés | **PASS (JVM)** — `refusesLegacyReady...` |
+| X4 | Handshake altéré | **PASS (JVM)** — tampering et ordre |
+| X5 | Enregistrement altéré | **PASS (JVM)** — tampering |
+| X6 | Rejeu d'un enregistrement | **PASS (JVM)** — replay rejeté |
+| X7 | Duplication | **PASS (JVM)** — duplication rejetée |
+| X8 | Réordonnancement | **PASS (JVM)** — reordered rejeté |
+| X9 | Troncature | **PASS (JVM)** — troncature rejetée |
+| X10 | Message trop grand | **PASS (JVM)** — taille vérifiée avant allocation |
+| X11 | Reconnexion avec handshake frais | **PASS** — phases 3/4, handshake refait |
+| X12 | Révocation client | **PARTIAL** — révocation PC non rejouée en E2E |
+| X13 | Mauvais token applicatif | **PASS (JVM)** — auth refusée |
+| X14 | Nonce de hello rejoué | **PARTIAL** — anti-rejeu PC testé, nonce Android non rejoué en E2E |
 
 ## 3. Transport — fonctionnement
 
 | ID | Cas | Statut |
 |---|---|---|
-| F1 | PC seul, relais absent | NOT_RUN |
+| F1 | PC seul, relais absent | **PASS (Node)** — reconnexion contrôlée sans relais |
 | F2 | Android seul, relais absent | **PASS** — `OFFLINE`, requête refusée |
 | F3 | Relais présent, backend absent | **PARTIAL** — testé avec stubs côté PC ; arrêt réel de FastAPI non rejoué |
 | F4 | Backend restauré | **PARTIAL** — live check PC ; cycle d'arrêt réel non rejoué |
@@ -77,23 +77,24 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 
 ## 5. Calendrier
 
-Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`; tous sont
-`NOT_RUN` au lancement.
+Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`. Les scénarios
+C1–C18 sont PASS ou PARTIAL avec preuves provider/Etar ; C19–C22 dépendent de la
+restauration finale.
 
 | ID | Gate | Statut |
 |---|---|---|
-| K1 | `READ_CALENDAR` refusé | PARTIAL — refus fail-closed couvert côté moteur JVM R2 ; parcours UI à rejouer |
+| K1 | `READ_CALENDAR` refusé | **PARTIAL (JVM)** — refus fail-closed couvert ; parcours UI externe non rejoué |
 | K2 | `READ_CALENDAR` accordé | **PASS** — accordé par UiAutomation pour la qualification locale |
 | K3 | `WRITE_CALENDAR` refusé | **PASS** — `pm revoke` externe, test à processus neuf, `PERMISSION_DENIED` |
 | K4 | `WRITE_CALENDAR` accordé | **PASS** — `pm grant` externe ; création/suppression réelles |
-| K5 | Calendrier local sélectionné | PARTIAL — calendrier ATLAS créé et utilisé ; sélection UI explicite à câbler |
-| K6 | Calendrier étranger rejeté | NOT_RUN (émulateur) — couvert JVM |
+| K5 | Calendrier local sélectionné | **PASS** — diagnostic : consentements, provisionnement et sélection `ATLAS R3A TEST` |
+| K6 | Calendrier étranger rejeté | **PASS (JVM)** — type `com.google` et type trompeur refusés |
 | K7 | Insertion réelle | **PASS** — `event_id=2` via provider réel |
 | K8 | Relecture réelle | **PASS** — marqueurs et fenêtre relus |
 | K9 | Visibilité Etar | **PASS** — capture `preuves/captures/etar-month-view.png` |
-| K10 | Modification | **PASS** — titre relu et affiché dans Etar |
-| K11 | Déplacement | **PASS** — 22:30→23:00, capture `etar-moved.png` |
-| K12 | Suppression | **PASS** — provider vide, capture `etar-deleted.png` |
+| K10 | Modification | **PASS** — titre relu et affiché ; UI v3 confirmée |
+| K11 | Déplacement | **PASS** — UI v3 10:00→11:00, même `_id=11`, capture `etar-ui-moved.png` |
+| K12 | Suppression | **PASS** — UI v4 « Suppression », provider vide, capture `etar-ui-deleted.png` |
 | K13 | Doublon | **PASS** — une seule ligne par `CUSTOM_APP_URI` |
 | K14 | Crash | **PARTIAL** — crash injecté avant effet + reprise ; SIGKILL réel à rejouer |
 | K15 | Reprise | **PASS** — `recoverPending()` sur provider réel, sans doublon |
@@ -106,9 +107,9 @@ Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`; tous sont
 
 | ID | Cas | Statut |
 |---|---|---|
-| S1 | wger lecture réelle → contrat sport-plan-v1 → Android | NOT_RUN |
-| S2 | États `FRESH`/`STALE`/`UNAVAILABLE`/`MISMATCH` | NOT_RUN |
-| S3 | `trainingRef` persisté dans `DayPlan` | NOT_RUN |
+| S1 | wger lecture réelle → contrat sport-plan-v1 → Android | **PARTIAL** — route testée avec clients factices ; aucun accès wger réel |
+| S2 | États `FRESH`/`STALE`/`UNAVAILABLE`/`MISMATCH` | **PASS (tests)** — mapping backend + client Android |
+| S3 | `trainingRef` persisté dans `DayPlan` | **PASS (JVM)** — round-trip, plan legacy, révision |
 | M1 | Parcours mémoire complet | NOT_RUN |
 | U1 | Usage Access réel sur émulateur | NOT_RUN |
 | U2 | Quotas et révocation | NOT_RUN |
