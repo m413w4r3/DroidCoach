@@ -248,4 +248,18 @@ réception.
 | Deux enfants dans deux worktrees | **PASS (lancement)** — `V63-R3-SCOUT-01` et `V63-R5-SCOUT-01`, worktrees distincts, branches distinctes |
 | Notification de fin reçue | en attente |
 | Modèle/effort effectifs vérifiés | **PASS** — `provider=codex`, `model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`, `modeId=auto-review` pour les 5 enfants (`get_agent_status`) |
-| Sous-délégation refusée | **PASS** — interdition explicite dans chaque prompt ; à re-vérifier sur les traces de fin |
+| Sous-délégation refusée | **PASS** — interdiction explicite dans chaque prompt ; à re-vérifier sur les traces de fin |
+
+### 11.8 Baselines de la reprise sur `f625f0d`
+
+| Suite | Commande | Résultat |
+|---|---|---|
+| Backend | `cd backend && .venv/bin/python -m pytest -q` | **PASS** — 91 passed, 1 skipped (2,65 s) |
+| Android JVM | `cd android && ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest --max-workers=1` | **PASS** — 62 suites, **426 tests**, 0 failure, 0 error, 0 skipped |
+| Android lint/build | non rejoué dans R0 | **NOT_RUN** |
+| Instrumenté / Pixel | non exécuté | **NOT_RUN** |
+| OpenClaw V2 réel | backend éphémère `ATLAS_AGENT_ADAPTER=openclaw`, port libre, `OPENCLAW_GATEWAY_TOKEN_FILE` mode 600 | **PASS** — `/health` 200, `/v2/agent/status` adapter `openclaw`, chat 200, `agent_status=connected`, 2 propositions (`home.set_directive`, `focus.propose`), aucune action sur l'appareil, backend arrêté proprement |
+| Bridge réel | `/v1/bridge/capabilities` et `/metrics` avec Bearer du `.env` | **PASS lecture** — voir §11.3 ; recherche vérifiée non disponible |
+
+Les compteurs ci-dessus sont liés à `f625f0d` et ne valent pas preuve pour les
+SHA des tickets enfants.

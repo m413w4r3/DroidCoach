@@ -148,3 +148,5 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 | 2026-10-26 | V63-R5-SCOUT-01 | `f625f0d` | — | premier rapport | **BLOCKED_CONTEXT** : clones Paseo absents du worktree (`references/repos/` ignoré) ; réengagé sur le checkout principal aux SHA exacts |
 | 2026-10-26 | Diagnostic Bridge réel | `f625f0d` | — | `/capabilities` + `/metrics` authentifiés, secrets non affichés | **PASS lecture** ; recherche vérifiée **NON DISPONIBLE** (`prompt_instructed`) |
 | 2026-10-26 | Pré-vol Pixel | `f625f0d` | — | appareil, packages, signature, HOME, stockage | **PASS lecture seule** ; ATLAS installé signé debug, HOME = NexusLauncher |
+| 2026-10-26 | Baseline JVM Android | `f625f0d` | — | `:app:testDebugUnitTest` forcé | **PASS** — 62 suites, 426 tests, 0 échec |
+| 2026-10-26 | Smoke OpenClaw V2 réel | `f625f0d` | — | backend éphémère + gateway loopback | **PASS** — adapter `openclaw`, chat 200, 2 propositions, aucune action appareil |
