@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.atlas.coach.app.ui.LocalAtlasSemanticColors
 import dev.atlas.coach.habits.HabitHistory
 import dev.atlas.coach.habits.HabitHistoryDay
 import java.time.LocalDate
@@ -61,12 +61,13 @@ internal fun HabitHistoryGrid(
 private fun HabitHistoryCell(day: HabitHistoryDay, today: LocalDate, createdDate: LocalDate?, modifier: Modifier = Modifier) {
     val state = day.uiState(today, createdDate)
     val scheme = MaterialTheme.colorScheme
+    val semantic = LocalAtlasSemanticColors.current
     val (glyph, label, shape, color, contentColor, borderColor) = when (state) {
         HabitDayUiState.DONE -> Sextuple("✓", "validé", CircleShape, scheme.primaryContainer, scheme.onPrimaryContainer, null)
         HabitDayUiState.MISSED -> Sextuple("!", "dû et manqué", RoundedCornerShape(4.dp), scheme.errorContainer, scheme.onErrorContainer, null)
         HabitDayUiState.NOT_PLANNED -> Sextuple("–", "non planifié", CircleShape, scheme.surface, scheme.onSurfaceVariant, scheme.outline)
         HabitDayUiState.BEFORE_START -> Sextuple("·", "avant le début", CutCornerShape(2.dp), scheme.surface, scheme.onSurfaceVariant, scheme.outlineVariant)
-        HabitDayUiState.DUE_TODAY -> Sextuple("·", "à faire aujourd'hui", CutCornerShape(6.dp), scheme.tertiaryContainer, scheme.onTertiaryContainer, null)
+        HabitDayUiState.DUE_TODAY -> Sextuple("·", "à faire aujourd'hui", CutCornerShape(6.dp), semantic.warning.container, semantic.warning.onContainer, null)
         HabitDayUiState.SCHEDULED -> Sextuple("›", "prévu", RoundedCornerShape(4.dp), scheme.surfaceVariant, scheme.onSurfaceVariant, scheme.outlineVariant)
     }
     Column(

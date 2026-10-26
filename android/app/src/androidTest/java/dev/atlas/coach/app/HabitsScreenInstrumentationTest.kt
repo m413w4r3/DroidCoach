@@ -1,7 +1,12 @@
 package dev.atlas.coach.app
 
 import android.content.Context
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -19,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.ui.AtlasTheme
+import dev.atlas.coach.habits.HabitDayStatus
+import dev.atlas.coach.habits.HabitHistory
+import dev.atlas.coach.habits.HabitHistoryDay
 import dev.atlas.coach.habits.HabitSchedule
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
@@ -45,7 +53,9 @@ class HabitsScreenInstrumentationTest {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 AtlasTheme {
-                    HabitsScreen(controller, controller.revision, onExport = {})
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        HabitsScreen(controller, controller.revision, onExport = {})
+                    }
                 }
             }
         }
@@ -103,18 +113,55 @@ class HabitsScreenInstrumentationTest {
 
     @Test
     fun missedAndNotPlannedDaysHaveDifferentAccessibleLabels() {
-        val controller = newController()
         val today = LocalDate.now()
-        controller.addHabit("Alternée", HabitSchedule.alternatingDays(today.minusDays(6)))
-        val habitId = requireNotNull(controller.activeHabits.firstOrNull()).id
-        show(controller)
+        val history = HabitHistory(
+            habitId = "grid-fixture",
+            startDateEpochDay = today.minusDays(6).toEpochDay(),
+            endDateEpochDay = today.toEpochDay(),
+            days = listOf(
+                gridDay(today.minusDays(6), due = true, checked = true),
+                gridDay(today.minusDays(5), due = true),
+                gridDay(today.minusDays(4), due = false),
+                gridDay(today.minusDays(3), due = true, checked = true),
+                gridDay(today.minusDays(2), due = true),
+                gridDay(today.minusDays(1), due = false),
+                gridDay(today, due = true, checked = true),
+            ),
+            dueDays = 5,
+            completedDueDays = 3,
+            completionRate = 0.6,
+            currentStreak = 1,
+            bestStreak = 2,
+            notDueDays = 2,
+        )
+        composeRule.setContent {
+            AtlasTheme {
+                HabitHistoryGrid(
+                    history = history,
+                    today = today,
+                    createdDate = today.minusDays(10),
+                )
+            }
+        }
 
-        composeRule.onNodeWithTag("habit_open_$habitId").performScrollTo().performClick()
-        composeRule.onNodeWithContentDescription("${today.minusDays(2)}, dû et manqué").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("${today.minusDays(1)}, non planifié").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("${today.minusDays(2)}, dû et manqué")
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("${today.minusDays(1)}, non planifié")
+            .assertIsDisplayed()
         composeRule.onNodeWithText("! Dû et manqué").assertIsDisplayed()
         composeRule.onNodeWithText("– Non planifié").assertIsDisplayed()
     }
+
+    private fun gridDay(date: LocalDate, due: Boolean, checked: Boolean = false) = HabitHistoryDay(
+        dateEpochDay = date.toEpochDay(),
+        status = when {
+            checked -> HabitDayStatus.DONE
+            due -> HabitDayStatus.DUE
+            else -> HabitDayStatus.NOT_DUE
+        },
+        isDue = due,
+        isCheckedIn = checked,
+    )
 
     @Test
     fun dailyEditorNeedsOnlyNameAndSave() {

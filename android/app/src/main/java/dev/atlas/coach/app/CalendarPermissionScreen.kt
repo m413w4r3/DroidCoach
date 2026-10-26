@@ -34,6 +34,11 @@ import dev.atlas.coach.calendar.CalendarReadService
 import dev.atlas.coach.calendar.ConsentGatedCalendarReadService
 import dev.atlas.coach.calendar.EtarProbe
 import dev.atlas.coach.calendar.SharedPreferencesCalendarReadConsentStore
+import dev.atlas.coach.calendar.write.AndroidCalendarContractWriteProvider
+import dev.atlas.coach.calendar.write.CalendarWriteCatalog
+import dev.atlas.coach.calendar.write.CalendarWriteError
+import dev.atlas.coach.calendar.write.CalendarWriteService
+import dev.atlas.coach.calendar.write.InMemoryCalendarWriteJournal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -61,6 +66,12 @@ internal data class CalendarPermissionScreenState(
     val etarInstalled: Boolean? = null,
     val providerUnavailable: Boolean = false,
     val consentStorageUnavailable: Boolean = false,
+)
+
+internal data class CalendarWriteDiagnosticState(
+    val loading: Boolean = true,
+    val catalog: CalendarWriteCatalog? = null,
+    val selectionError: CalendarWriteError? = null,
 )
 
 internal fun CalendarPermissionState.toUiStatus(): CalendarPermissionUiStatus = when (this) {
@@ -129,6 +140,11 @@ fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(CalendarPermissionScreenState()) }
     var refreshGeneration by remember { mutableIntStateOf(0) }
+    val writeProvider = remember(context) { AndroidCalendarContractWriteProvider(context) }
+    val writeService = remember(writeProvider) {
+        CalendarWriteService(writeProvider, InMemoryCalendarWriteJournal())
+    }
+    var writeDiagnostic by remember { mutableStateOf(CalendarWriteDiagnosticState()) }
 
     fun refresh() {
         refreshGeneration++
@@ -150,6 +166,21 @@ fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(provider, consentStore) { refresh() }
+
+    LaunchedEffect(writeService, state.permission, state.consentGranted) {
+        writeDiagnostic = if (state.consentGranted && state.permission == CalendarPermissionState.GRANTED) {
+            withContext(Dispatchers.IO) {
+                val catalog = writeService.inspectCatalog()
+                CalendarWriteDiagnosticState(
+                    loading = false,
+                    catalog = catalog,
+                    selectionError = writeService.selectCalendar(catalog, null).error,
+                )
+            }
+        } else {
+            CalendarWriteDiagnosticState(loading = false)
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxSize().padding(20.dp),
@@ -262,6 +293,54 @@ fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
                     },
                 )
             }
+        }
+
+        AtlasSection("Écriture calendrier (désactivée par défaut)") {
+            AtlasStatus("Écriture désactivée par défaut", AtlasStatusKind.SIMULATED)
+            Text(
+                "Le moteur d'écriture est compilé et testé sur provider simulé. " +
+                    "Aucune écriture réelle n'est effectuée par cet écran.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!state.consentGranted || state.permission != CalendarPermissionState.GRANTED) {
+                Text("Le diagnostic d'écriture suit le consentement ATLAS et READ_CALENDAR; aucune écriture ne sera tentée.")
+            } else if (writeDiagnostic.loading) {
+                Text("Vérification en cours…")
+            } else {
+                val catalog = writeDiagnostic.catalog
+                if (catalog == null) {
+                    Text("Le fournisseur d'écriture est indisponible. Aucune écriture ne sera tentée.")
+                } else {
+                    val writeState = when (catalog.permissions.write) {
+                        CalendarPermissionState.GRANTED -> "accordée"
+                        CalendarPermissionState.DENIED -> "non accordée"
+                        CalendarPermissionState.NOT_DECLARED -> "non déclarée"
+                        CalendarPermissionState.UNKNOWN -> "inconnue"
+                    }
+                    Text("WRITE_CALENDAR : $writeState")
+                    val localWritable = catalog.calendars.count {
+                        it.accountType == "LOCAL" && it.visible && it.accessLevel >= 500
+                    }
+                    if (localWritable == 0) {
+                        Text("Aucun calendrier local inscriptible détecté. Aucune écriture ne sera tentée; aucun fallback Google.")
+                    } else {
+                        Text("$localWritable calendrier(s) local(aux) inscriptible(s) détecté(s); l'écriture reste désactivée par défaut.")
+                    }
+                    writeDiagnostic.selectionError?.let { error ->
+                        Text(
+                            "Sélection : ${error.name}",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+            Text(
+                "WRITE_CALENDAR n'est pas déclarée dans le build courant. " +
+                    "Toute activation réelle exige un accord ciblé et un calendrier synthétique.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

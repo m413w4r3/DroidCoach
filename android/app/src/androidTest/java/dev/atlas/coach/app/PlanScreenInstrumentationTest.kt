@@ -11,9 +11,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -58,7 +59,7 @@ class PlanScreenInstrumentationTest {
         setPlanScreen(controller, context)
 
         composeRule.onNodeWithText("Créer le programme du jour").assertIsDisplayed()
-        composeRule.onNodeWithText("Ajouter une activité").assertDoesNotExist()
+        composeRule.onAllNodesWithText("Ajouter une activité").assertCountEquals(0)
     }
 
     @Test
@@ -177,12 +178,13 @@ class PlanScreenInstrumentationTest {
 
         composeRule.onNodeWithText("Réorganisation proposée", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Version 1 → 2 · 6 effet(s) local(aux)").assertIsDisplayed()
-        composeRule.onNodeWithText("Ajouter « Marche » à 18:30").assertIsDisplayed()
-        composeRule.onNodeWithText("Supprimer « Ancien créneau »").assertIsDisplayed()
-        composeRule.onNodeWithText("Déplacer de 10:00 à 10:30").assertIsDisplayed()
-        composeRule.onNodeWithText("Modifier « Lecture active »").assertIsDisplayed()
-        composeRule.onNodeWithText("Statut : Prévue → Terminée").assertIsDisplayed()
-        composeRule.onNodeWithText("2 chevauchement(s) signalé(s)", substring = true).assertIsDisplayed()
+        // The dialog body is scrollable; every effect must exist even when below the fold.
+        composeRule.onAllNodesWithText("Ajouter « Marche » à 18:30", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Supprimer « Ancien créneau »", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Déplacer de 10:00 à 10:30", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Modifier « Lecture active »", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Statut : Prévue → Terminée", substring = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("2 chevauchement(s) signalé(s)", substring = true).assertCountEquals(1)
     }
 
     private fun setPlanScreen(controller: PlanController, context: Context) {

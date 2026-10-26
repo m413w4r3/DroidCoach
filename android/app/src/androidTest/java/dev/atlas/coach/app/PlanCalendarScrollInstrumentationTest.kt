@@ -60,7 +60,8 @@ class PlanCalendarScrollInstrumentationTest {
             }
         }
 
-        composeRule.onAllNodesWithText("Plan du jour").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Plan du jour").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Aujourd’hui").assertCountEquals(1)
     }
 
     @Test

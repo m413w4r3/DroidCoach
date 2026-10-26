@@ -372,7 +372,6 @@ internal fun FocusScreen(controller: AtlasController, revision: Int, onChooseHab
 }
 
 @Composable
-@Composable
 internal fun FilterButton(label: String, selected: Boolean, onClick: () -> Unit) {
     if (selected) Button(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = onClick) { Text(label) }
     else OutlinedButton(modifier = Modifier.sizeIn(minHeight = 48.dp), onClick = onClick) { Text(label) }
@@ -499,6 +498,7 @@ internal fun MoreScreen(controller: AtlasController) {
         Text("Autres espaces", style = MaterialTheme.typography.headlineSmall)
         AtlasSection("Programme") {
             AtlasSecondaryButton("Plan du jour", onClick = { controller.navigationState.navigate(AtlasScreenId.PLAN) })
+            AtlasSecondaryButton("Sport", onClick = { controller.navigationState.navigate(AtlasScreenId.SPORT) })
             AtlasSecondaryButton("Diagnostic calendrier", onClick = { controller.navigationState.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) })
         }
         AtlasSection("Bibliothèque et journal") {

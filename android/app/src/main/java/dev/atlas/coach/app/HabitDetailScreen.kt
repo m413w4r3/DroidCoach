@@ -6,8 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.weight
-import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -86,8 +85,9 @@ internal fun HabitDetailScreen(
                 modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("habit_edit"),
                 onClick = onEdit,
             ) { Text("Modifier") }
-            Button(
+            OutlinedButton(
                 modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("habit_archive"),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 onClick = onArchive,
             ) { Text("Archiver") }
         }

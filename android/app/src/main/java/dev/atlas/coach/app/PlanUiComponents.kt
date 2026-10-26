@@ -170,7 +170,7 @@ internal fun PlanActivityRow(
                     color = when (timing) {
                         PlanActivityTiming.PAST -> MaterialTheme.colorScheme.onSurfaceVariant
                         PlanActivityTiming.CURRENT -> MaterialTheme.colorScheme.primary
-                        PlanActivityTiming.UPCOMING -> MaterialTheme.colorScheme.tertiary
+                        PlanActivityTiming.UPCOMING -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
             }

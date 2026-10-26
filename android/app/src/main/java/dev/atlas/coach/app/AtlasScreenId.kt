@@ -4,6 +4,7 @@ package dev.atlas.coach.app
 internal object AtlasScreenId {
     const val HOME = "Accueil"
     const val PLAN = "Plan du jour"
+    const val SPORT = "Sport"
     const val FOCUS = "Focus"
     const val HABITS = "Habitudes"
     const val LIBRARY = "Bibliothèque"
