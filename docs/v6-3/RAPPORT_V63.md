@@ -1,4 +1,9 @@
-# ATLAS V6.3 — Rapport de mission (état au 2026-10-26)
+# ATLAS V6.3 — Rapport d'étape, jalon L1/L2-lecture (2026-10-26)
+
+> **Ce document ne clôt pas V6.3.** Il qualifie le premier incrément intégré
+> localement. Les parcours calendrier réels, wger, Bridge, usage/restrictions,
+> mémoire, localisation, OpenClaw négocié et Pixel restent non livrés ou
+> `BLOCKED`/`NOT_RUN`. Voir la section 7.
 
 Branche locale : `feat/atlas-v6-3`. Base : `acda7a967b26aa3ccc8325eb194c8daa2f9a58e4`.
 Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
@@ -9,9 +14,9 @@ Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
 |---|---|---|
 | Contrats de domaine V6.3 (plan, calendrier, mémoire, mandat, effets) | **LIVRÉ (document)** | `docs/v6-3/CONTRATS_V63.md` |
 | Contrat backend `plan.revise_day` inactif, validation stricte | **LIVRÉ (module + tests)** | `backend/atlas_backend/plan_v3.py`, 24 tests |
-| Programme journalier local `DayPlan` versionné et persistant | **LIVRÉ (JVM)** | package `dev.atlas.coach.plan`, tests à compléter |
+| Programme journalier local `DayPlan` versionné et persistant | **LIVRÉ (JVM)** | package `dev.atlas.coach.plan`, 42 tests |
 | Révisions avec diff, aperçu, confirmation groupée, idempotence | **LIVRÉ (JVM)** | `PlanRevisionEngine`, `DayPlanRepository` |
-| Écran « Plan du jour » + navigation depuis Plus | **LIVRÉ (compile/JVM)** | `PlanScreen.kt`, `AtlasApp.kt` |
+| Écran « Plan du jour » + navigation depuis Plus | **LIVRÉ (compile/JVM)** | `PlanScreen.kt`, `PlanController.kt`, 10 tests contrôleur |
 | Sonde CalendarContract lecture seule + détection Etar | **LIVRÉ (JVM/compile)** | package `dev.atlas.coach.calendar`, 23 tests |
 | Permissions calendrier | **NON DEMANDÉES** | manifeste inchangé |
 | Écriture calendrier / Etar | **NON LIVRÉ** | dépend de l'accord permission + appareil |
@@ -31,11 +36,18 @@ Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
 | JVM baseline | `testDebugUnitTest` | **PASS** 339 | `acda7a9` |
 | Calendar read ciblé | `--tests dev.atlas.coach.calendar.*` | **PASS** 23 | `81e1bd2` |
 | JVM après calendar | `testDebugUnitTest` | **PASS** 362 | `81e1bd2` |
-| Plan domain ciblé | à compléter | à compléter | à compléter |
-| JVM final | à compléter | à compléter | à compléter |
-| Lint | à compléter | à compléter | à compléter |
-| Build APK debug | à compléter | à compléter | à compléter |
+| Plan domain ciblé | `testDebugUnitTest --tests dev.atlas.coach.plan.*` | **PASS** 42 | `17bb723` |
+| Plan/contrôleur/navigation ciblé | 3 filtres de classes | **PASS** 66 | `6cef04b` |
+| JVM final | `testDebugUnitTest` | **PASS** 424, 0 échec, 0 ignoré, 62 suites | `6cef04b` |
+| Lint | `lintDebug` | **PASS** 0 erreur, 52 avertissements | `6cef04b` |
+| Build APK debug | `assembleDebug` | **PASS** | `6cef04b` |
+| Compilation androidTest | `compileDebugAndroidTestKotlin` | **PASS** | `6cef04b` |
+| Backend final | `pytest -q` | **PASS** 91 passed, 1 skipped | `6cef04b` |
 | Instrumenté AVD/Pixel | non exécuté | **NOT_RUN** | — |
+
+APK debug : SHA-256 `7d80cbe6b260864ac2eb5a309c4ce380da175293e54d84ce7c182bf4d3164ec4`
+(source `6cef04b`). L'APK est un artefact de build local non versionné ; son
+empreinte et la commande de build sont consignées.
 
 ## 3. État du Pixel et permissions
 
@@ -67,6 +79,17 @@ Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
 6. La révocation/le mandat agent ne couvrent pas encore les révisions de plan,
    car aucune action agent `plan.revise_day` n'est branchée.
 7. Le document de plan est local et non chiffré ; il ne contient pas de secret.
+8. Le lien objectif/sous-objectif n'est **pas encore exposé dans l'écran Plan**.
+   `PlanActivity.goalId` exige un UUID canonique ; les nouveaux objectifs en
+   utilisent un, mais d'éventuels identifiants historiques non-UUID devraient
+   être migrés avant liaison. Aucun modèle `SubGoal` local n'est implémenté.
+9. La création d'un plan initial approuvé ne produit pas de `PlanRevision`
+   version 1 : elle est une création locale explicite, pas un effet externe.
+   L'audit des révisions commence à la première modification.
+10. Le plan local est une capacité de base active par défaut, sans effet
+    externe ; il n'a pas encore d'interrupteur dédié dans les réglages. Toutes
+    les capacités externes (calendrier, wger, Bridge, mémoire) restent
+    désactivées et non exposées.
 
 ## 6. Actions manuelles nécessaires
 
@@ -76,10 +99,32 @@ Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
 - Déployer/configurer le Bridge avant toute recherche réelle.
 - Décider du push/PR/merge distant.
 
-## 7. Verdict proposé
+## 7. Verdict
 
-**`GO_WITH_LIMITATIONS` pour le périmètre L1/L2-lecture**, sous réserve des gates
-JVM/lint/build finaux et de la revue indépendante. **Aucun GO** pour les parcours
-calendrier réels, wger, Bridge, Pixel, localisation ou blocage inter-applications :
-ces éléments sont `NOT_RUN` ou `BLOCKED` et ne doivent pas être présentés comme
-livrés.
+### Jalon L1/L2-lecture
+
+**`GO_WITH_LIMITATIONS`** sous réserve de la revue indépendante finale : les
+gates JVM/lint/build sont verts sur `5dedcf6`, le programme journalier local et
+la sonde calendrier en lecture seule sont testés, mais aucun appareil n'a été
+utilisé et le calendrier réel n'est pas branché.
+
+### V6.3 complète
+
+**`NO_GO`** : le périmètre demandé n'est pas terminé. Ne sont pas livrés ou
+qualifiés :
+
+1. négociation OpenClaw d'une révision de journée et confirmation groupée
+   côté Android ;
+2. lecture/écriture réelles Etar et création d'un calendrier local ;
+3. wger (lecture, écriture, conflits de synchronisation) ;
+4. Bridge ChatGPT et recherche récente vérifiée ;
+5. mémoire contrôlable, proactivité bornée et quotas ;
+6. observation globale de durée et restrictions inter-applications ;
+7. localisation contextuelle ;
+8. parcours Pixel Android 17 et tests instrumentés du nouvel écran ;
+9. accès privé au PC hors Wi-Fi ;
+10. dossier de clôture complet avec tous les scénarios critiques.
+
+Ces éléments sont `NOT_RUN`, `BLOCKED_APPROVAL`, `BLOCKED_CREDENTIALS`,
+`BLOCKED_SERVICE` ou `BLOCKED_DEVICE` selon le registre. Aucun ne doit être
+présenté comme un `PASS`.

@@ -148,5 +148,6 @@ politique stricte Pydantic (`models_v2.py`), 4 fichiers de tests.
 |---|---|
 | Enfant Luna XHigh en lecture seule | **PASS** — `provider=codex`, `model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`, worktree `chmod a-w`, écriture refusée (`Permission denied`), `git status` vide |
 | Notification de fin reçue | **PASS** — notification Paseo reçue, session `2a439817-31b5-47c9-8fc7-dca41c2d397e` |
-| Deux enfants dans deux worktrees | **RUNNING** — voir `REGISTRE_TACHES.md` |
-| Revue du parent avant intégration | appliquée à chaque ticket |
+| Deux enfants dans deux worktrees | **PASS** — `feat/v63-plan-domain` (`17bb723`) et `feat/v63-calendar-read` (`dd9760d`), worktrees distincts, notifications reçues |
+| Revue du parent avant intégration | **PASS** — diffs bornés inspectés, oracles rejoués sur `81e1bd2` puis `f78e3d9`/`5dedcf6` |
+| Sous-délégation | **REFUSÉE** — un enfant a demandé `list_agents`, refus explicite ; aucun enfant n'a créé d'agent |

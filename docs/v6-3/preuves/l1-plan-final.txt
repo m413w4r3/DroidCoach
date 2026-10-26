@@ -31,3 +31,19 @@ Non exécuté / non revendiqué :
 - Etar réel / CalendarContract provider : NOT_RUN
 - écriture calendrier : non implémentée
 - wger, Bridge, localisation : NOT_RUN / non configurés
+
+Ré-exécution sur le SHA de code intégré 5dedcf667dff1479996f8bb99858e19ebdb7b643 :
+  ./gradlew :app:testDebugUnitTest -> BUILD SUCCESSFUL, suites=62 tests=415, failures=0, errors=0, skipped=0
+
+Correctifs de revue indépendante (SHA de code 6cef04b11c05f6405199e348ee70cf926dad1aa2) :
+  ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.plan.*' \
+      --tests 'dev.atlas.coach.app.PlanControllerTest' \
+      --tests 'dev.atlas.coach.app.AtlasNavigationStateTest'
+  -> 66 tests : plan 45 (20+14+11), PlanController 16, Navigation 5 ; 0 échec
+  ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug \
+      :app:compileDebugAndroidTestKotlin
+  -> 62 suites, 424 tests, 0 failure, 0 error, 0 skipped
+  -> lint 0 error, 52 warnings ; build et androidTest compile PASS
+  -> APK SHA-256 7d80cbe6b260864ac2eb5a309c4ce380da175293e54d84ce7c182bf4d3164ec4
+  backend pytest -q -> 91 passed, 1 skipped
+  Pixel / Etar / instrumenté -> NOT_RUN
