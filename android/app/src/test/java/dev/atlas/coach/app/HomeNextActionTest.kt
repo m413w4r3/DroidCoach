@@ -201,22 +201,43 @@ class HomeNextActionTest {
     }
 
     @Test
-    fun accessibleLabelIncludesTitleTimeDurationPriorityAndGoal() {
-        val activity = activity(
+    fun accessibleLabelUsesSingularOnlyForOneMinuteAndPreservesOtherFields() {
+        val oneMinute = activity(
             40,
             "Préparer le dossier",
             startMinute = 9 * 60 + 30,
-            durationMinutes = 45,
+            durationMinutes = 1,
+            priority = Priority.REQUIRED,
+            goalId = "00000000-0000-0000-0000-000000000099",
+        )
+        val twoMinutes = activity(
+            41,
+            "Préparer le dossier",
+            startMinute = 9 * 60 + 30,
+            durationMinutes = 2,
+            priority = Priority.REQUIRED,
+            goalId = "00000000-0000-0000-0000-000000000099",
+        )
+        val longDuration = activity(
+            42,
+            "Préparer le dossier",
+            startMinute = 9 * 60 + 30,
+            durationMinutes = 480,
             priority = Priority.REQUIRED,
             goalId = "00000000-0000-0000-0000-000000000099",
         )
 
-        val label = homeNextActionAccessibilityLabel(activity, "Dossier final")
-
-        assertTrue(label.contains("Préparer le dossier"))
-        assertTrue(label.contains("09:30 – 10:15"))
-        assertTrue(label.contains("45 minutes"))
-        assertTrue(label.contains("priorité requise"))
-        assertTrue(label.contains("objectif Dossier final"))
+        assertEquals(
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final.",
+            homeNextActionAccessibilityLabel(oneMinute, "Dossier final"),
+        )
+        assertEquals(
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:32, 2 minutes, priorité requise, objectif Dossier final.",
+            homeNextActionAccessibilityLabel(twoMinutes, "Dossier final"),
+        )
+        assertEquals(
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 17:30, 480 minutes, priorité requise, objectif Dossier final.",
+            homeNextActionAccessibilityLabel(longDuration, "Dossier final"),
+        )
     }
 }
