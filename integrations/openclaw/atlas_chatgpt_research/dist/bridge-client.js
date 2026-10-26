@@ -147,6 +147,21 @@ export class BridgeClient {
         const postUrl = new URL("/v1/bridge/runs", this.config.bridgeUrl).toString();
         let postAttempts = 0;
         let retryAfterMs;
+        const recoverForSubmission = async () => {
+            try {
+                return await this.recoverByKey(requestId, postContext, (milliseconds) => {
+                    retryAfterMs = milliseconds;
+                });
+            }
+            catch (error) {
+                const normalized = this.normalizeRequestError(error, postContext);
+                if (normalized.code !== "rate_limited")
+                    throw normalized;
+                if (postAttempts < 2)
+                    retryAfterMs = normalized.retryAfterMs ?? DEFAULT_POLL_START_MS;
+                return undefined;
+            }
+        };
         while (postAttempts < 2) {
             postAttempts += 1;
             if (retryAfterMs !== undefined) {
@@ -169,7 +184,7 @@ export class BridgeClient {
                 const normalized = this.normalizeRequestError(error, postContext);
                 if (normalized.code === "aborted" || normalized.code === "deadline")
                     throw normalized;
-                const recovered = await this.recoverByKey(requestId, postContext);
+                const recovered = await recoverForSubmission();
                 if (recovered)
                     return this.followOrFinish(recovered, requestId, postContext);
                 if (postAttempts < 2 && normalized.code !== "unauthorized" && normalized.code !== "conflict")
@@ -188,7 +203,7 @@ export class BridgeClient {
                 throw error;
             }
             if (response.status >= 500) {
-                const recovered = await this.recoverByKey(requestId, postContext);
+                const recovered = await recoverForSubmission();
                 if (recovered)
                     return this.followOrFinish(recovered, requestId, postContext);
                 if (postAttempts < 2)
@@ -201,7 +216,7 @@ export class BridgeClient {
             const terminal = this.readRunResponse(response, postContext, false);
             if (terminal)
                 return this.followOrFinish(terminal, requestId, postContext);
-            const recovered = await this.recoverByKey(requestId, postContext);
+            const recovered = await recoverForSubmission();
             if (recovered)
                 return this.followOrFinish(recovered, requestId, postContext);
             if (postAttempts < 2)
@@ -210,7 +225,7 @@ export class BridgeClient {
         }
         throw new BridgeClientError("deadline", "Bridge run did not complete before its deadline.", postContext);
     }
-    async recoverByKey(requestId, context) {
+    async recoverByKey(requestId, context, onRetryDelay) {
         const url = new URL(`/v1/bridge/runs/${encodeURIComponent(requestId)}`, this.config.bridgeUrl).toString();
         try {
             const response = await this.requestJson(url, {
@@ -222,8 +237,15 @@ export class BridgeClient {
             if (response.status === 401 || response.status === 409) {
                 throw makeHttpError(response, context, this.now());
             }
-            if (response.status === 429 || response.status >= 500)
+            if (response.status === 429) {
+                const error = makeHttpError(response, context, this.now());
+                onRetryDelay?.(error.retryAfterMs ?? DEFAULT_POLL_START_MS);
+                throw error;
+            }
+            if (response.status >= 500) {
+                onRetryDelay?.(DEFAULT_POLL_START_MS);
                 return undefined;
+            }
             if (response.status < 200 || response.status >= 300) {
                 throw makeHttpError(response, context, this.now());
             }
@@ -234,7 +256,9 @@ export class BridgeClient {
         }
         catch (error) {
             const normalized = this.normalizeRequestError(error, context);
-            if (normalized.code === "aborted" || normalized.code === "deadline" || normalized.code === "unauthorized") {
+            if (normalized.code === "aborted" || normalized.code === "deadline" ||
+                normalized.code === "unauthorized" || normalized.code === "conflict" ||
+                normalized.code === "rate_limited") {
                 throw normalized;
             }
             return undefined;
@@ -270,7 +294,19 @@ export class BridgeClient {
                 throw makeHttpError(response, pollContext, this.now());
             }
             if (response.status === 404) {
-                const recovered = await this.recoverByKey(requestId, pollContext);
+                let retryAfterRecoveryMs;
+                let recovered;
+                try {
+                    recovered = await this.recoverByKey(requestId, pollContext, (milliseconds) => {
+                        retryAfterRecoveryMs = milliseconds;
+                    });
+                }
+                catch (error) {
+                    const normalized = this.normalizeRequestError(error, pollContext);
+                    if (normalized.code !== "rate_limited")
+                        throw normalized;
+                    retryAfterRecoveryMs = normalized.retryAfterMs ?? DEFAULT_POLL_START_MS;
+                }
                 if (recovered) {
                     if (recovered.id !== runId) {
                         throw new BridgeClientError("conflict", "Bridge idempotency key resolved to a different run.", {
@@ -282,6 +318,11 @@ export class BridgeClient {
                         return recovered;
                     }
                     await this.wait(delayMs, pollContext);
+                    delayMs = Math.min(delayMs * 2, MAX_POLL_DELAY_MS);
+                    continue;
+                }
+                if (retryAfterRecoveryMs !== undefined) {
+                    await this.wait(retryAfterRecoveryMs, pollContext);
                     delayMs = Math.min(delayMs * 2, MAX_POLL_DELAY_MS);
                     continue;
                 }

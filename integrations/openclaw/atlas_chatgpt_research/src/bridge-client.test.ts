@@ -114,6 +114,146 @@ describe("BridgeClient", () => {
     expect(lookup).toBe(1);
   });
 
+  it("honors Retry-After from an idempotency recovery lookup before retrying the same POST", async () => {
+    const sleeps: number[] = [];
+    const postBodies: string[] = [];
+    const postKeys: Array<string | null> = [];
+    let postAttempts = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      if (init?.method === "POST") {
+        postAttempts += 1;
+        postBodies.push(String(init.body));
+        postKeys.push(new Headers(init.headers).get("X-Idempotency-Key"));
+        if (postAttempts === 1) throw new TypeError("simulated lost response");
+        return jsonResponse(200, completed("retried-run"));
+      }
+      return jsonResponse(429, completed("rate-limit-payload"), { "Retry-After": "4" });
+    });
+    const client = new BridgeClient(config, {
+      fetchImpl: fetchMock,
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+    });
+
+    const result = await client.research(params, "retry-after-key");
+
+    expect(result.id).toBe("retried-run");
+    expect(sleeps).toEqual([4_000]);
+    expect(postBodies).toHaveLength(2);
+    expect(postBodies[0]).toBe(postBodies[1]);
+    expect(postKeys).toEqual(["retry-after-key", "retry-after-key"]);
+  });
+
+  it("uses the default bounded backoff when recovery is rate limited without Retry-After", async () => {
+    const sleeps: number[] = [];
+    let postAttempts = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      if (init?.method === "POST") {
+        postAttempts += 1;
+        if (postAttempts === 1) throw new TypeError("simulated lost response");
+        return jsonResponse(200, completed("retried-run"));
+      }
+      return jsonResponse(429, completed("rate-limit-payload"));
+    });
+    const client = new BridgeClient(config, {
+      fetchImpl: fetchMock,
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+    });
+
+    const result = await client.research(params, "default-retry-key");
+
+    expect(result.id).toBe("retried-run");
+    expect(sleeps).toEqual([1_000]);
+    expect(postAttempts).toBe(2);
+  });
+
+  it("never accepts a completed payload from a rate-limited recovery lookup", async () => {
+    const sleeps: number[] = [];
+    let postAttempts = 0;
+    let recoveryAttempts = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      if (init?.method === "POST") {
+        postAttempts += 1;
+        throw new TypeError("simulated lost response");
+      }
+      recoveryAttempts += 1;
+      return recoveryAttempts === 1
+        ? jsonResponse(429, completed("must-not-be-accepted"), { "Retry-After": "4" })
+        : jsonResponse(404, { detail: "not persisted" });
+    });
+    const client = new BridgeClient(config, {
+      fetchImpl: fetchMock,
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+    });
+
+    await expect(client.research(params, "payload-recovery-key")).rejects.toMatchObject({ code: "network" });
+
+    expect(sleeps).toEqual([4_000]);
+    expect(postAttempts).toBe(2);
+    expect(recoveryAttempts).toBe(2);
+  });
+
+  it("keeps a 404 recovery lookup absent and retries the same request", async () => {
+    let postAttempts = 0;
+    let recoveryAttempts = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      if (init?.method === "POST") {
+        postAttempts += 1;
+        if (postAttempts === 1) throw new TypeError("simulated lost response");
+        return jsonResponse(200, completed("retried-after-miss"));
+      }
+      recoveryAttempts += 1;
+      return jsonResponse(404, { detail: "not persisted yet" });
+    });
+    const client = new BridgeClient(config, { fetchImpl: fetchMock });
+
+    const result = await client.research(params, "missing-recovery-key");
+
+    expect(result.id).toBe("retried-after-miss");
+    expect(postAttempts).toBe(2);
+    expect(recoveryAttempts).toBe(1);
+  });
+
+  it.each([
+    [401, "unauthorized"],
+    [409, "conflict"],
+  ] as const)("keeps recovery status %i as a %s error", async (status, code) => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      if (init?.method === "POST") throw new TypeError("simulated lost response");
+      return jsonResponse(status, { detail: "recovery rejected" });
+    });
+    const client = new BridgeClient(config, { fetchImpl: fetchMock });
+
+    await expect(client.research(params, "recovery-error-key")).rejects.toMatchObject({ code });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a 5xx recovery lookup absent and retries after the default backoff", async () => {
+    const sleeps: number[] = [];
+    let postAttempts = 0;
+    let recoveryAttempts = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      if (init?.method === "POST") {
+        postAttempts += 1;
+        if (postAttempts === 1) throw new TypeError("simulated lost response");
+        return jsonResponse(200, completed("retried-after-server-error"));
+      }
+      recoveryAttempts += 1;
+      return jsonResponse(503, completed("server-error-payload"));
+    });
+    const client = new BridgeClient(config, {
+      fetchImpl: fetchMock,
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+    });
+
+    const result = await client.research(params, "recovery-server-error-key");
+
+    expect(result.id).toBe("retried-after-server-error");
+    expect(sleeps).toEqual([1_000]);
+    expect(postAttempts).toBe(2);
+    expect(recoveryAttempts).toBe(1);
+  });
+
   it("does not retry a 409 idempotency conflict", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(409, { detail: "conflict" }));
     const client = new BridgeClient(config, { fetchImpl: fetchMock });
