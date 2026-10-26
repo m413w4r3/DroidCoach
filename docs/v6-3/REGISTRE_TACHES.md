@@ -109,8 +109,8 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 | TASK_ID | Objectif observable | Dépendances | Scope d'écriture exclusif | Oracle | Statut |
 |---|---|---|---|---|---|
 | V63-R0-01 | Pré-vol, alignement documentaire, registre, décisions, smoke Paseo | — | `.agents/WORKFLOW.md`, `.agents/skills/README.md`, `docs/v6-3/PREFLIGHT.md`, `REGISTRE_TACHES.md`, `docs/DECISIONS_AUTOMATIQUES.md`, `docs/v6-3/tickets/**` | revue parent + smoke Paseo | **RUNNING** |
-| V63-R3-SCOUT-01 | Audit lecture seule Bridge local + SDK plugin OpenClaw ; plan d'implémentation `atlas_chatgpt_research` | — | aucun (lecture seule) | rapport avec chemins, API, prérequis, risques, oracle de recette | **READY** |
-| V63-R5-SCOUT-01 | Audit lecture seule transport Paseo/Relay : composants, licences, vecteurs, plan de réemploi | — | aucun (lecture seule) | rapport avec SHA, fichiers, licences, gaps Android | **READY** |
+| V63-R3-SCOUT-01 | Audit lecture seule Bridge local + SDK plugin OpenClaw ; plan d'implémentation `atlas_chatgpt_research` | — | aucun (lecture seule) | rapport avec chemins, API, prérequis, risques, oracle de recette | **ACCEPTED (audit)** — `AUDIT_BRIDGE_PLUGIN.md` ; `BLOCKED_POLICY` pour la délégation tant que `deny:["*"]` reste |
+| V63-R5-SCOUT-01 | Audit lecture seule transport Paseo/Relay : composants, licences, vecteurs, plan de réemploi | — | aucun (lecture seule) | rapport avec SHA, fichiers, licences, gaps Android | **ACCEPTED (audit)** — `AUDIT_TRANSPORT_PASEO.md` ; `protected`-only obligatoire |
 | V63-L3-01a | Endpoint backend `POST /v3/agent/plan-revision` : OpenClaw propose `plan.revise_day`, validation stricte, idempotence durable, aucun outil | L0-02 | `backend/atlas_backend/plan_agent_v3.py`, `openclaw_adapter.py`, `main.py`, `store.py`, `backend/tests/test_plan_agent_v3*.py` | pytest ciblé + suite backend ; 2e POST idempotent ; contenu différent même clé → 409 ; proposition invalide rejetée | **READY** |
 | V63-L5-01 | Client wger lecture seule `ApiTokenWgerAuth` + `RotatingJwtWgerAuth` sous interface unique, stockage JWT atomique 0600, diagnostic sans secret | accord lecture | `backend/atlas_backend/integrations/**`, `backend/atlas_backend/config.py`, `backend/tests/test_wger*.py` | pytest mock 200/pagination/401/403/429/5xx/timeout/schéma ; aucun secret dans logs | **READY** |
 | V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **READY** |
@@ -125,8 +125,8 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 
 | Enfant | Worktree | Périmètre | Session Paseo | Statut |
 |---|---|---|---|---|
-| `V63-R3-SCOUT-01` | `audit-v63-r3-bridge-plugin` (`chmod a-w`) | Bridge + SDK OpenClaw | `c818a83c-46db-473b-b38c-823be3a108f3` | RUNNING |
-| `V63-R5-SCOUT-01` | `audit-v63-r5-paseo-transport` (`chmod a-w`) | transport Paseo | `5c393291-ad7a-467a-80ee-e90a78595b0b` | RUNNING |
+| `V63-R3-SCOUT-01` | `audit-v63-r3-bridge-plugin` (`chmod a-w`) | Bridge + SDK OpenClaw | `c818a83c-46db-473b-b38c-823be3a108f3` | **ACCEPTED (audit)** ; worktree `f625f0d`, statut vide |
+| `V63-R5-SCOUT-01` | `audit-v63-r5-paseo-transport` (`chmod a-w`) | transport Paseo | `5c393291-ad7a-467a-80ee-e90a78595b0b` | **ACCEPTED (audit)** ; worktree `f625f0d`, statut vide |
 | `V63-L3-01a` | `feat-v63-l3-01a-plan-backend` | backend plan revision | `6d98e14c-ec23-4b3d-aa28-1b2d7f5c0398` | RUNNING |
 | `V63-L5-01` | `feat-v63-l5-01-wger-read` | backend integrations wger | `998e3ac3-de59-42af-88e5-d184092e9ea6` | RUNNING |
 | `V63-L1-03` | `feat-v63-l1-03-home-next` | HOME next action | `b5722d8a-db34-42eb-8ac8-2086021a99ce` | RUNNING |
@@ -150,3 +150,5 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 | 2026-10-26 | Pré-vol Pixel | `f625f0d` | — | appareil, packages, signature, HOME, stockage | **PASS lecture seule** ; ATLAS installé signé debug, HOME = NexusLauncher |
 | 2026-10-26 | Baseline JVM Android | `f625f0d` | — | `:app:testDebugUnitTest` forcé | **PASS** — 62 suites, 426 tests, 0 échec |
 | 2026-10-26 | Smoke OpenClaw V2 réel | `f625f0d` | — | backend éphémère + gateway loopback | **PASS** — adapter `openclaw`, chat 200, 2 propositions, aucune action appareil |
+| 2026-10-26 | V63-R3-SCOUT-01 | `f625f0d` | `f625f0d` | audit statique Bridge + SDK | **ACCEPTED (audit)** ; `GO_WITH_LIMITATIONS` plugin hors activation ; `BLOCKED_POLICY` délégation |
+| 2026-10-26 | V63-R5-SCOUT-01 | `f625f0d` | `f625f0d` | audit statique Paseo/Relay | **ACCEPTED (audit)** ; Noise NK + vecteurs + Apache-2.0 ; legacy permissif à interdire |
