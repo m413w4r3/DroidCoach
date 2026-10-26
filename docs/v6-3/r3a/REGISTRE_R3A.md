@@ -47,12 +47,12 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 |---|---|---|---|---|
 | `R3-PREFLIGHT-01` | pré-vol, backups, contrats, relais local | `docs/v6-3/r3a/**`, `contracts/atlas-remote-v1.schema.json` | pré-vol + build relais + doc | **RUNNING** |
 | `R3-RELAY-PC-01` | connecteur PC Node sur Paseo e2ee | `integrations/relay/pc/**` | tests Node + interop Noise + relais réel | **ACCEPTED / INTEGRATED** — `fd66b0d`, merge `43c1204`, 23 tests + relais réel + live FastAPI |
-| `R3-RELAY-ANDROID-01` | client Kotlin Noise/WebSocket/protocole | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `android/app/src/test/java/dev/atlas/coach/sync/relay/**` | vecteurs upstream + tests JVM + records malformés | **RUNNING** — session `7697f6dd…` |
+| `R3-RELAY-ANDROID-01` | client Kotlin Noise/WebSocket/protocole | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `android/app/src/test/java/dev/atlas/coach/sync/relay/**` | vecteurs upstream + tests JVM + records malformés | **ACCEPTED / INTEGRATED** — `8199350`, merge `8b0c9bd`, 25 tests JVM, vecteurs upstream + cross-vector Node |
 | `R3-CALENDAR-01` | journal durable, liens, reprise, divergence | `android/app/src/main/java/dev/atlas/coach/calendar/write/**`, `android/app/src/test/java/dev/atlas/coach/calendar/write/**` | tests JVM crash/reprise/idempotence | **ACCEPTED_WITH_P2 / INTEGRATED** — `fb335ee`, merge `b9a527a`, 33 ciblés + 578 JVM ; P2 atomicité inter-fichiers ; correctif parent type de compte local |
 | `R3-CALENDAR-LOCAL-01` | compte local + sync adapter + authentificateur + manifeste | parent : `calendar/local/**`, manifeste, XML | création provider + relecture + visibilité Etar | **ACCEPTED (parent)** — voir `preuves/calendar-local.txt` |
-| `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **PLANNED** |
-| `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | parent : `PlanScreen.kt`, écrans calendrier | 22 scénarios calendrier | **PLANNED** |
-| `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | selon ticket | backend + JVM + UI | **PLANNED** |
+| `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **PLANNED** — dépend du client Android intégré |
+| `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | `PlanScreen.kt`, `CalendarPermissionScreen.kt`, nouveaux `Calendar*.kt` | 22 scénarios calendrier | **RUNNING** — session `44871d16…` |
+| `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **RUNNING** — session `d2ad8ba9…` |
 | `R3-MEMORY-UI-01` | parcours mémoire complet | selon ticket | JVM + UI | **PLANNED** |
 | `R3-USAGE-UI-01` | Usage Access réel sur émulateur | selon ticket | permission + statistiques | **PLANNED** |
 | `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **PLANNED** |
@@ -81,6 +81,12 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-26 | Correctif intégration calendrier | type `dev.atlas.coach.calendar` accepté avec `LOCAL`, test de type trompeur ajouté |
 | 2026-10-26 | Backend démo V3 déterministe | ajout `MockAgentAdapter.propose_plan_revision`, 34 tests backend PASS |
 | 2026-10-26 | Live PC : Node → relais → connecteur → FastAPI | **PASS** — `backend.health`, révision V3, rejeu idempotent, cache ; voir `preuves/pc-live-fastapi.txt` |
+| 2026-10-26 | `R3-RELAY-ANDROID-01` livré | `8199350` ; 25 tests JVM PASS, compilation PASS, vecteurs upstream + Node cross-vector ; Bouncy Castle 1.86 + OkHttp 4.12.0 |
+| 2026-10-26 | Client Android relayé intégré | merge `8b0c9bd` ; 25 tests rejoués PASS sur le SHA intégré |
+| 2026-10-26 | Moteur durable sur provider réel | **PASS** — création, relecture, redémarrage, idempotence, divergence, suppression, reprise après crash injecté |
+| 2026-10-26 | Permissions réelles `WRITE_CALENDAR` | **PASS** — `pm revoke` → refus sans effet ; `pm grant` → création/suppression ; processus neuf à chaque fois |
+| 2026-10-26 | Modification manuelle dans Etar | **PASS** — titre édité dans `EditEventActivity`, marqueurs conservés, `verify` → `DIVERGED` ; capture `captures/etar-manual-edit.png` |
+| 2026-10-26 | Vague B lancée | `R3-SPORT-WIRE-01` (`d2ad8ba9…`) et `R3-CALENDAR-ETAR-01` (`44871d16…`), profils vérifiés |
 
 ## 5. Preuves
 

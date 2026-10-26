@@ -1,0 +1,10 @@
+# Manual Etar edit -> durable divergence
+date_utc=2026-10-26T22:58:55Z
+device=emulator-5554 API 37 / Etar 1.0.56
+event_id=10 title_before='ATLAS TEST manual divergence original'
+manual_edit=vendor UI ws.xsoh.etar/com.android.calendar.EditEventActivity via EventInfoActivity
+title_after='ATLAS test edited in Etar'
+markers_preserved=customAppPackage=dev.atlas.coach customAppUri=atlas://plan/88888888-8888-4888-8888-888888888888/activity/99999999-9999-4999-8999-999999999999
+verify_result=DIVERGED / READ_BACK_MISMATCH
+capture=captures/etar-manual-edit.png
+cleanup=event deleted by the detection test; ATLAS fixture event _id=4 preserved

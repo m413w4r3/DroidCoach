@@ -1,0 +1,20 @@
+# Durable calendar engine + real permission gates (emulator-5554, API 37)
+date_utc=2026-10-26T22:52:46Z
+apk_sha256=983d47aec9f5b83c9e46efad039b0d9b5cae048f66b790312a1916d30cb3e0cf
+--- revoke WRITE_CALENDAR externally ---
+        android.permission.READ_CALENDAR: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.WRITE_CALENDAR: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+--- denied test ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- grant WRITE_CALENDAR externally ---
+        android.permission.READ_CALENDAR: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.WRITE_CALENDAR: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+--- granted test ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- durable engine tests ---
+OK (2 tests)
+INSTRUMENTATION_CODE: -1
+--- provider events after tests ---
+Row: 0 _id=4, calendar_id=1, title=ATLAS TEST Etar visibility, customAppUri=atlas://plan/00000000-0000-4000-8000-000000000001/activity/00000000-0000-4000-8000-000000000002, deleted=0

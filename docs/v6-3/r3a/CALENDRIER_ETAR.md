@@ -84,13 +84,13 @@ content insert`, aucune donnée système fabriquée ne sert de preuve.
 | C9 | Suppression autorisée | événement absent | **PASS** — suppression provider, `No result found` |
 | C10 | Disparition vérifiée | provider + Etar | **PASS** — capture `etar-deleted.png` sans événement |
 | C11 | Répétition sans doublon | une seule ligne | **PASS** — `findByCustomAppUri` renvoie exactement 1 avant/après restauration |
-| C12 | Arrêt du processus pendant l'opération | état `UNKNOWN` durable | NOT_RUN |
-| C13 | Relance et réconciliation | `RECONCILED` ou `MISSING` | NOT_RUN |
-| C14 | Modification manuelle dans Etar | état `DIVERGED` | NOT_RUN |
-| C15 | Détection de divergence | UI/état | NOT_RUN |
-| C16 | Révocation `WRITE_CALENDAR` | refus fail-closed | NOT_RUN |
-| C17 | Refus d'effet après révocation | aucun nouvel événement | NOT_RUN |
-| C18 | Événement étranger non modifié | `FOREIGN_EVENT` | NOT_RUN |
+| C12 | Arrêt du processus pendant l'opération | état `UNKNOWN` durable | **PARTIAL** — crash injecté avant effet + nouveau service sur le même journal ; aucun événement créé, reprise sans doublon. Un SIGKILL réel reste à rejouer. |
+| C13 | Relance et réconciliation | `RECONCILED` ou `MISSING` | **PASS** — `recoverPending()` sur provider réel, aucun doublon |
+| C14 | Modification manuelle dans Etar | état `DIVERGED` | **PASS** — titre modifié via l'UI Etar, marqueurs ATLAS conservés, capture `captures/etar-manual-edit.png` |
+| C15 | Détection de divergence | UI/état | **PASS** — `verify(link)` retourne `DIVERGED` / `READ_BACK_MISMATCH` |
+| C16 | Révocation `WRITE_CALENDAR` | refus fail-closed | **PASS** — `pm revoke` externe puis test à processus neuf |
+| C17 | Refus d'effet après révocation | aucun nouvel événement | **PASS** — `PERMISSION_DENIED`, provider inchangé |
+| C18 | Événement étranger non modifié | `FOREIGN_EVENT` | **PASS (JVM)** — provider réel non testé avec un événement étranger |
 | C19 | Calendrier supprimé/indisponible | `PROVIDER_UNAVAILABLE`/`CALENDAR_NOT_LOCAL` | NOT_RUN |
 | C20 | READ_CALENDAR refusé | aucune lecture | NOT_RUN |
 | C21 | WRITE_CALENDAR refusé | aucune écriture | NOT_RUN |

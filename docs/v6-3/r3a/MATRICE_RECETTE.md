@@ -82,8 +82,8 @@ Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`; tous sont
 |---|---|---|
 | K1 | `READ_CALENDAR` refusé | PARTIAL — refus fail-closed couvert côté moteur JVM R2 ; parcours UI à rejouer |
 | K2 | `READ_CALENDAR` accordé | **PASS** — accordé par UiAutomation pour la qualification locale |
-| K3 | `WRITE_CALENDAR` refusé | PARTIAL — couvert par le moteur ; parcours UI à rejouer |
-| K4 | `WRITE_CALENDAR` accordé | **PASS** — accordé par UiAutomation ; écriture réelle effectuée |
+| K3 | `WRITE_CALENDAR` refusé | **PASS** — `pm revoke` externe, test à processus neuf, `PERMISSION_DENIED` |
+| K4 | `WRITE_CALENDAR` accordé | **PASS** — `pm grant` externe ; création/suppression réelles |
 | K5 | Calendrier local sélectionné | PARTIAL — calendrier ATLAS créé et utilisé ; sélection UI explicite à câbler |
 | K6 | Calendrier étranger rejeté | NOT_RUN (émulateur) — couvert JVM |
 | K7 | Insertion réelle | **PASS** — `event_id=2` via provider réel |
@@ -93,11 +93,11 @@ Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`; tous sont
 | K11 | Déplacement | **PASS** — 22:30→23:00, capture `etar-moved.png` |
 | K12 | Suppression | **PASS** — provider vide, capture `etar-deleted.png` |
 | K13 | Doublon | **PASS** — une seule ligne par `CUSTOM_APP_URI` |
-| K14 | Crash | NOT_RUN |
-| K15 | Reprise | NOT_RUN |
-| K16 | Modification extérieure | NOT_RUN |
-| K17 | Divergence | NOT_RUN |
-| K18 | Révocation | NOT_RUN |
+| K14 | Crash | **PARTIAL** — crash injecté avant effet + reprise ; SIGKILL réel à rejouer |
+| K15 | Reprise | **PASS** — `recoverPending()` sur provider réel, sans doublon |
+| K16 | Modification extérieure | **PASS** — titre modifié dans l'UI Etar |
+| K17 | Divergence | **PASS** — `DIVERGED` / `READ_BACK_MISMATCH` |
+| K18 | Révocation | **PASS** — révocation externe + refus d'effet |
 | K19 | Restauration fixtures | NOT_RUN |
 
 ## 6. Intégrations C

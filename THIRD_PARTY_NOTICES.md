@@ -15,12 +15,40 @@ ATLAS is a public source repository distributed under GNU GPL version 3; see [LI
 | AOSP LocationFudger | https://android.googlesource.com/platform/frameworks/base/+/81f52b053da6/services/core/java/com/android/server/location/fudger/LocationFudger.java | Apache License 2.0 | Offset-plus-grid location coarsening approach adapted in `LocationCoarsener.kt`; attribution below. |
 | Paseo | https://github.com/getpaseo/paseo/tree/902b0c7a1637cc7a6c2ee268dca8161965a35def | Apache License 2.0 | No source copied. `integrations/relay/pc` depends on the public `@getpaseo/relay/e2ee` entry point built from this revision; its notice and license apply to that dependency. |
 | Paseo Relay | https://github.com/getpaseo/paseo-relay/tree/3fc41c96c8c63f3a7109e832899cc57d473c4531 | Apache License 2.0 | No source copied. The upstream Elixir relay image is built from this revision and run locally for R3-A tests. |
+| OkHttp | https://github.com/square/okhttp/tree/parent-4.12.0 | Apache License 2.0 | Runtime dependency only (`com.squareup.okhttp3:okhttp:4.12.0`); no source copied. |
+| Bouncy Castle | https://github.com/bcgit/bc-java/tree/r1rv86 | Bouncy Castle Licence (MIT-style) | Runtime dependency only (`org.bouncycastle:bcprov-jdk18on:1.86`); no source copied. License text below. |
 
 Lot G refactored the Compose presentation in `android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt`. Its historical Olauncher adaptation remains attributed to `app/src/main/java/app/olauncher/ui/HomeFragment.kt` at `f8e8d6497c457734c7a3171d36374157678e1f33` under GPLv3; Lot G adds no new Olauncher source or assets. `docs/AUDIT_CIBLE.md` records the same provenance.
 
 ## Reef attribution condition
 
 Reef’s README requires every derivative work or redistribution to show a prominent link to the original repository in the application. ATLAS provides this link in **À propos / Licences** and in this notice. The adaptation does not use Reef’s name as its product name or use its official icon. The URL is <https://github.com/aload0/Reef>.
+
+## Bouncy Castle Licence
+
+The following notice applies to `org.bouncycastle:bcprov-jdk18on:1.86`, used at runtime
+for X25519 and ChaCha20-Poly1305 in the Android relay transport:
+
+```text
+Copyright (c) 2000 - 2025 The Legion of the Bouncy Castle Inc. (https://www.bouncycastle.org)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be included in all copies
+or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
 
 ## Apache-2.0 components
 
