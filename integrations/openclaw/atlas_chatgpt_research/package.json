@@ -8,9 +8,10 @@
     "node": ">=24.16.0 <25 || >=26.1.0"
   },
   "scripts": {
+    "clean": "rm -rf dist",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "plugin:build": "npm run build && openclaw plugins build --entry ./dist/index.js",
+    "plugin:build": "npm run clean && npm run build && openclaw plugins build --entry ./dist/index.js",
     "plugin:validate": "npm run plugin:build && openclaw plugins validate --entry ./dist/index.js"
   },
   "dependencies": {
@@ -26,6 +27,8 @@
     "vitest": "3.2.6"
   },
   "openclaw": {
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   }
 }

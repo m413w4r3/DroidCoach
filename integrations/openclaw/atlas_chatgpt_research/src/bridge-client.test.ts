@@ -244,11 +244,14 @@ describe("BridgeClient", () => {
     });
     const client = new BridgeClient(config, { fetchImpl: fetchMock, requestTimeoutMs: 5 });
     const result = await client.research(params, "timeout-key");
+    const postCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
 
     expect(result.id).toBe("timeout-recovered");
     expect(postCount).toBe(2);
+    expect(postCalls).toHaveLength(2);
     expect(firstBody).toBe(secondBody);
-    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("X-Idempotency-Key")).toBe("timeout-key");
+    expect(postCalls[1]?.[1]?.body).toBe(postCalls[0]?.[1]?.body);
+    expect(new Headers(postCalls[1]?.[1]?.headers).get("X-Idempotency-Key")).toBe("timeout-key");
   });
 
   it("stops immediately when the caller aborts", async () => {
