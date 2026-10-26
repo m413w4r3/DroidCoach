@@ -20,4 +20,5 @@ internal object AtlasScreenId {
     const val FOCUS_STATS = "Statistiques de focus"
     const val ROUTINES = "Routines de focus"
     const val SYNC_SETTINGS = "Partage backend"
+    const val CALENDAR_DIAGNOSTIC = "Diagnostic calendrier"
 }
