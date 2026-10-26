@@ -35,8 +35,15 @@ Oracle:
 - JVM: 70 suites, 474 tests, 0 failure, 0 error, 0 skipped;
 - lint: 0 erreur, 54 avertissements;
 - assembleDebug: PASS;
-- APK debug: SHA-256
+- APK debug (worktree de câblage): SHA-256
   4d931fa75d97e3b165ca607598351fdd755db82a6e589bffab77bc9c6470f905.
+
+Build intégré final (code 1791030, branche 668ed4b):
+- JVM: 70 suites, 474 tests, 0 failure, 0 error, 0 skipped;
+- lint: 0 erreur, 54 avertissements;
+- assembleDebug: PASS;
+- APK debug: SHA-256
+  5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f.
 
 Limites:
 - Aucun test réel Pixel ni backend V3.

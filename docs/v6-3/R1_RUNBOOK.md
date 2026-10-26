@@ -74,7 +74,8 @@ chmod 600 /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
 sha256sum /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
 tar -tf /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar | head
 
-# APK final (SHA à reporter depuis le build intégré)
+# APK final du build intégré (code 1791030, branche 668ed4b)
+# SHA-256 : 5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f
 APK=/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
 sha256sum "$APK"
 adb -s 45301FDAS001QT install -r "$APK"
