@@ -1,12 +1,18 @@
 package dev.atlas.coach.app
 
 import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,14 +40,24 @@ import dev.atlas.coach.calendar.CalendarReadService
 import dev.atlas.coach.calendar.ConsentGatedCalendarReadService
 import dev.atlas.coach.calendar.EtarProbe
 import dev.atlas.coach.calendar.SharedPreferencesCalendarReadConsentStore
-import dev.atlas.coach.calendar.write.AndroidCalendarContractWriteProvider
-import dev.atlas.coach.calendar.write.CalendarWriteCatalog
-import dev.atlas.coach.calendar.write.CalendarWriteError
-import dev.atlas.coach.calendar.write.CalendarWriteService
-import dev.atlas.coach.calendar.write.InMemoryCalendarWriteJournal
+import dev.atlas.coach.calendar.local.AtlasLocalCalendar
+import dev.atlas.coach.calendar.write.CalendarWriteOperation
+import dev.atlas.coach.calendar.write.CalendarWriteOperationState
+import dev.atlas.coach.calendar.write.CalendarWriteOperationType
+import dev.atlas.coach.plan.DayPlan
+import dev.atlas.coach.plan.DayPlanRepository
+import dev.atlas.coach.plan.FilePlanBackend
+import dev.atlas.coach.plan.PlanClock
+import dev.atlas.coach.plan.PlanLoadResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 internal enum class CalendarPermissionUiStatus {
     GRANTED,
@@ -70,8 +86,17 @@ internal data class CalendarPermissionScreenState(
 
 internal data class CalendarWriteDiagnosticState(
     val loading: Boolean = true,
-    val catalog: CalendarWriteCatalog? = null,
-    val selectionError: CalendarWriteError? = null,
+    val readPermission: CalendarPermissionState = CalendarPermissionState.UNKNOWN,
+    val writePermission: CalendarPermissionState = CalendarPermissionState.UNKNOWN,
+    val consentGranted: Boolean = false,
+    val localCalendars: List<CalendarDescriptor> = emptyList(),
+    val selectedCalendarId: Long? = null,
+    val providerUnavailable: Boolean = false,
+    val ensureMessage: String? = null,
+    val operations: List<CalendarWriteOperation> = emptyList(),
+    val verification: List<CalendarPlanVerification> = emptyList(),
+    val planLoaded: Boolean = false,
+    val lastStatus: CalendarEffectLastStatus? = null,
 )
 
 internal fun CalendarPermissionState.toUiStatus(): CalendarPermissionUiStatus = when (this) {
@@ -91,6 +116,17 @@ internal fun shouldLaunchCalendarPermissionRequest(
     consentGranted: Boolean,
     userExplicitlyRequested: Boolean,
 ): Boolean = userExplicitlyRequested && consentGranted && permission == CalendarPermissionState.DENIED
+
+internal fun shouldLaunchCalendarWritePermissionRequest(
+    readPermission: CalendarPermissionState,
+    writePermission: CalendarPermissionState,
+    readConsentGranted: Boolean,
+    writeConsentGranted: Boolean,
+    userExplicitlyRequested: Boolean,
+): Boolean = userExplicitlyRequested &&
+    readConsentGranted && writeConsentGranted &&
+    readPermission == CalendarPermissionState.GRANTED &&
+    writePermission == CalendarPermissionState.DENIED
 
 internal fun CalendarDescriptor.toDiagnosticRow(): CalendarDiagnosticRow = CalendarDiagnosticRow(
     displayName = diagnosticCalendarName(),
@@ -125,155 +161,133 @@ private fun accessLevelLabel(accessLevel: Int): String = when (accessLevel) {
     else -> "Administrateur"
 }
 
-/** Diagnostic non connecté à la navigation globale; no events or account identifiers are shown. */
+/** Diagnostic séparé du HOME : aucune permission ni aucun calendrier n'est demandé automatiquement. */
 @Composable
 fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current.applicationContext
     val provider = remember(context) { AndroidCalendarProvider(context) }
-    val service = remember(provider) { CalendarReadService(provider) }
-    val consentStore: CalendarReadConsentStore = remember(context) {
+    val readService = remember(provider) { CalendarReadService(provider) }
+    val readConsentStore: CalendarReadConsentStore = remember(context) {
         SharedPreferencesCalendarReadConsentStore(context)
     }
-    val gatedService = remember(service, consentStore) {
-        ConsentGatedCalendarReadService(service, consentStore)
+    val gatedReadService = remember(readService, readConsentStore) {
+        ConsentGatedCalendarReadService(readService, readConsentStore)
     }
+    val writeConsentStore = remember(context) { SharedPreferencesCalendarWriteConsentStore(context) }
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(CalendarPermissionScreenState()) }
+    var writeState by remember { mutableStateOf(CalendarWriteDiagnosticState()) }
     var refreshGeneration by remember { mutableIntStateOf(0) }
-    val writeProvider = remember(context) { AndroidCalendarContractWriteProvider(context) }
-    val writeService = remember(writeProvider) {
-        CalendarWriteService(writeProvider, InMemoryCalendarWriteJournal())
-    }
-    var writeDiagnostic by remember { mutableStateOf(CalendarWriteDiagnosticState()) }
+    var effectController by remember { mutableStateOf<CalendarEffectController?>(null) }
 
-    fun refresh() {
+    fun refresh(ensureMessage: String? = writeState.ensureMessage) {
         refreshGeneration++
         val generation = refreshGeneration
+        val currentEffectController = effectController
         scope.launch {
             state = state.copy(loading = true)
-            val refreshedState = withContext(Dispatchers.IO) {
-                loadCalendarPermissionScreenState(provider, gatedService, consentStore)
+            writeState = writeState.copy(loading = true)
+            val refreshed = withContext(Dispatchers.IO) {
+                loadCalendarPermissionScreenState(provider, gatedReadService, readConsentStore)
             }
-            if (refreshGeneration == generation) state = refreshedState
+            val refreshedWrite = withContext(Dispatchers.IO) {
+                currentEffectController?.let {
+                    loadCalendarWriteDiagnosticState(context, it, readConsentStore, writeConsentStore, ensureMessage)
+                } ?: CalendarWriteDiagnosticState(
+                    loading = false,
+                    readPermission = refreshed.permission,
+                    writePermission = manifestPermissionState(context, Manifest.permission.WRITE_CALENDAR),
+                    consentGranted = runCatching(writeConsentStore::isGranted).getOrDefault(false),
+                    ensureMessage = ensureMessage,
+                )
+            }
+            if (refreshGeneration == generation) {
+                state = refreshed
+                writeState = refreshedWrite
+            }
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) {
-        // The result is re-read from PackageManager; no read follows a denied result.
+    val readPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        refresh()
+    }
+    val writePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         refresh()
     }
 
-    LaunchedEffect(provider, consentStore) { refresh() }
-
-    LaunchedEffect(writeService, state.permission, state.consentGranted) {
-        writeDiagnostic = if (state.consentGranted && state.permission == CalendarPermissionState.GRANTED) {
-            withContext(Dispatchers.IO) {
-                val catalog = writeService.inspectCatalog()
-                CalendarWriteDiagnosticState(
-                    loading = false,
-                    catalog = catalog,
-                    selectionError = writeService.selectCalendar(catalog, null).error,
-                )
-            }
-        } else {
-            CalendarWriteDiagnosticState(loading = false)
-        }
+    LaunchedEffect(context) {
+        effectController = withContext(Dispatchers.IO) { CalendarEffectController.fromContext(context) }
+        refresh(ensureMessage = null)
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(20.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Calendrier", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "Ce diagnostic affiche uniquement les noms de calendriers, un compte expurgé, " +
-                    "le niveau d’accès et la visibilité. Il ne consulte ni n’affiche aucun événement et n’écrit rien.",
+                "La lecture et l’écriture ont des consentements ATLAS et des permissions Android distincts. " +
+                    "Aucune demande ne part sans votre action.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
 
-        AtlasSection("Consentement ATLAS") {
-            Text("Le consentement local est distinct de la permission Android et peut être révoqué ici.")
+        AtlasSection("Consentement de lecture") {
+            Text("Ce choix autorise l’affichage des noms de calendriers; il n’autorise aucune écriture.")
             if (state.consentGranted) {
-                AtlasStatus("Consentement donné sur cet appareil", AtlasStatusKind.AUTHORIZED)
+                AtlasStatus("Consentement de lecture donné sur cet appareil", AtlasStatusKind.AUTHORIZED)
                 AtlasTertiaryButton(
-                    label = "Révoquer le consentement calendrier",
+                    label = "Révoquer le consentement de lecture",
                     onClick = {
-                        refreshGeneration++
-                        val permission = state.permission
-                        state = CalendarPermissionScreenState(
-                            permission = permission,
-                            consentGranted = false,
-                            loading = true,
-                        )
                         scope.launch {
-                            val revoked = try {
-                                withContext(Dispatchers.IO) { consentStore.revoke() }
-                            } catch (_: Exception) {
-                                false
-                            }
-                            state = state.copy(loading = false, consentStorageUnavailable = !revoked)
+                            val revoked = withContext(Dispatchers.IO) { readConsentStore.revoke() }
+                            refresh(if (revoked) null else "Le consentement de lecture n’a pas pu être révoqué.")
                         }
                     },
                 )
             } else {
                 AtlasPrimaryButton(
-                    label = "Consentir à la lecture des noms de calendriers",
+                    label = "Consentir à la lecture des noms",
                     enabled = !state.loading,
                     onClick = {
                         scope.launch {
-                            val granted = try {
-                                withContext(Dispatchers.IO) { consentStore.grant() }
-                            } catch (_: Exception) {
-                                false
-                            }
-                            if (granted) refresh()
-                            else state = state.copy(consentStorageUnavailable = true, loading = false)
+                            val granted = withContext(Dispatchers.IO) { readConsentStore.grant() }
+                            refresh(if (granted) null else "Le consentement de lecture n’a pas pu être enregistré.")
                         }
                     },
                 )
             }
             if (state.consentStorageUnavailable) {
-                Text("Le choix n’a pas pu être enregistré. Aucun calendrier n’a été lu.", color = MaterialTheme.colorScheme.error)
+                Text("Le consentement n’a pas pu être enregistré.", color = MaterialTheme.colorScheme.error)
             }
         }
 
-        AtlasSection("Permission Android") {
-            Text("État : ${state.permission.toUiStatus().permissionLabel()}")
-            when (state.permission.toUiStatus()) {
-                CalendarPermissionUiStatus.GRANTED -> Text("Android autorise la lecture; le consentement ATLAS reste requis.")
-                CalendarPermissionUiStatus.DENIED -> Text("La demande n’est envoyée qu’après votre action explicite.")
-                CalendarPermissionUiStatus.NOT_DECLARED -> Text("READ_CALENDAR n’est pas déclaré dans cette version; aucune demande ne sera lancée.")
-                CalendarPermissionUiStatus.UNAVAILABLE -> Text("L’état de la permission n’a pas pu être vérifié.")
-            }
-            if (state.permission.toUiStatus() == CalendarPermissionUiStatus.DENIED) {
+        AtlasSection("Permission Android de lecture") {
+            Text("READ_CALENDAR : ${state.permission.permissionLabel()}")
+            Text(state.permission.explanation("lecture"), style = MaterialTheme.typography.bodySmall)
+            if (state.permission == CalendarPermissionState.DENIED) {
                 AtlasPrimaryButton(
-                    label = "Autoriser la lecture du calendrier",
+                    label = "Demander READ_CALENDAR",
                     enabled = state.consentGranted && !state.loading,
                     onClick = {
-                        if (shouldLaunchCalendarPermissionRequest(
-                                permission = state.permission,
-                                consentGranted = state.consentGranted,
-                                userExplicitlyRequested = true,
-                            )
-                        ) {
-                            permissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+                        if (shouldLaunchCalendarPermissionRequest(state.permission, state.consentGranted, true)) {
+                            readPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
                         }
                     },
                 )
             }
-            AtlasSecondaryButton(label = "Actualiser l’état", enabled = !state.loading, onClick = ::refresh)
         }
 
-        AtlasSection("Calendriers détectés") {
+        AtlasSection("Calendriers lisibles") {
             when {
-                !state.consentGranted -> Text("Donnez d’abord le consentement ATLAS pour consulter la liste.")
-                state.permission != CalendarPermissionState.GRANTED -> Text("La liste reste masquée tant que la permission Android n’est pas accordée.")
+                !state.consentGranted -> Text("Donnez le consentement de lecture pour consulter les noms.")
+                state.permission != CalendarPermissionState.GRANTED -> Text("Aucun calendrier n’est lu avant l’accord Android READ_CALENDAR.")
                 state.loading -> Text("Vérification en cours…")
-                state.providerUnavailable -> Text("Le fournisseur de calendrier est indisponible. Aucune donnée personnelle n’a été enregistrée.")
+                state.providerUnavailable -> Text("Le fournisseur est indisponible. Aucun événement n’a été lu.")
                 !state.catalogLoaded -> Text("La liste n’a pas été consultée.")
                 state.calendars.isEmpty() -> Text("Aucun calendrier lisible et visible n’a été détecté.")
                 else -> state.calendars.forEach { calendar ->
@@ -286,70 +300,171 @@ fun CalendarPermissionScreen(modifier: Modifier = Modifier) {
             }
             if (state.etarInstalled != null && state.consentGranted && state.permission == CalendarPermissionState.GRANTED) {
                 Text(
-                    if (state.etarInstalled == true) {
-                        "Etar détectée (ws.xsoh.etar ou ws.xsoh.etar.debug)."
-                    } else {
-                        "Etar non détectée (ws.xsoh.etar, ws.xsoh.etar.debug); la visibilité Android peut limiter cette vérification."
+                    if (state.etarInstalled == true) "Etar détectée (ws.xsoh.etar ou ws.xsoh.etar.debug)."
+                    else "Etar non détectée (ws.xsoh.etar, ws.xsoh.etar.debug); la visibilité Android peut limiter cette vérification.",
+                )
+            }
+        }
+
+        AtlasSection("Consentement ATLAS d’écriture") {
+            Text("Ce consentement est indépendant de READ_CALENDAR, WRITE_CALENDAR et du consentement de lecture.")
+            if (writeState.consentGranted) {
+                AtlasStatus("Consentement d’écriture donné sur cet appareil", AtlasStatusKind.AUTHORIZED)
+                AtlasTertiaryButton(
+                    label = "Révoquer immédiatement le consentement d’écriture",
+                    onClick = {
+                        // The store closes its in-process write gate synchronously before persisting revocation.
+                        val revoked = writeConsentStore.revoke()
+                        refresh(if (revoked) null else "Consentement révoqué en mémoire; vérifiez le stockage local.")
+                    },
+                )
+            } else {
+                AtlasPrimaryButton(
+                    label = "Consentir à l’écriture calendrier",
+                    enabled = !writeState.loading,
+                    onClick = {
+                        scope.launch {
+                            val granted = withContext(Dispatchers.IO) { writeConsentStore.grant() }
+                            refresh(if (granted) null else "Le consentement d’écriture n’a pas pu être enregistré.")
+                        }
                     },
                 )
             }
         }
 
-        AtlasSection("Écriture calendrier (désactivée par défaut)") {
-            AtlasStatus("Écriture désactivée par défaut", AtlasStatusKind.SIMULATED)
-            Text(
-                "Le moteur d'écriture est compilé et testé sur provider simulé. " +
-                    "Aucune écriture réelle n'est effectuée par cet écran.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (!state.consentGranted || state.permission != CalendarPermissionState.GRANTED) {
-                Text("Le diagnostic d'écriture suit le consentement ATLAS et READ_CALENDAR; aucune écriture ne sera tentée.")
-            } else if (writeDiagnostic.loading) {
-                Text("Vérification en cours…")
+        AtlasSection("Permission Android d’écriture") {
+            Text("WRITE_CALENDAR : ${writeState.writePermission.permissionLabel()}")
+            Text(writeState.writePermission.explanation("écriture"), style = MaterialTheme.typography.bodySmall)
+            if (writeState.writePermission == CalendarPermissionState.DENIED) {
+                AtlasPrimaryButton(
+                    label = "Demander WRITE_CALENDAR",
+                    enabled = !writeState.loading && writeState.consentGranted &&
+                        state.consentGranted && state.permission == CalendarPermissionState.GRANTED,
+                    onClick = {
+                        if (shouldLaunchCalendarWritePermissionRequest(
+                                readPermission = state.permission,
+                                writePermission = writeState.writePermission,
+                                readConsentGranted = state.consentGranted,
+                                writeConsentGranted = writeState.consentGranted,
+                                userExplicitlyRequested = true,
+                            )
+                        ) {
+                            writePermissionLauncher.launch(Manifest.permission.WRITE_CALENDAR)
+                        }
+                    },
+                )
+            }
+        }
+
+        AtlasSection("Calendrier local sélectionné") {
+            Text("ATLAS accepte uniquement ATLAS R3A TEST avec le compte local dédié, ou un compte de type LOCAL.")
+            val selected = writeState.localCalendars.firstOrNull { it.id == writeState.selectedCalendarId }
+            if (selected != null) {
+                AtlasStatus("Sélection : ${selected.toDiagnosticRow().displayName}", AtlasStatusKind.AUTHORIZED)
+                AtlasSecondaryButton(
+                    label = "Effacer la sélection locale",
+                    enabled = !writeState.loading,
+                    onClick = {
+                        val currentEffectController = effectController
+                        scope.launch {
+                            val cleared = withContext(Dispatchers.IO) { currentEffectController?.clearSelection() == true }
+                            refresh(if (cleared) "Sélection effacée." else "La sélection n’a pas pu être effacée.")
+                        }
+                    },
+                )
             } else {
-                val catalog = writeDiagnostic.catalog
-                if (catalog == null) {
-                    Text("Le fournisseur d'écriture est indisponible. Aucune écriture ne sera tentée.")
-                } else {
-                    val writeState = when (catalog.permissions.write) {
-                        CalendarPermissionState.GRANTED -> "accordée"
-                        CalendarPermissionState.DENIED -> "non accordée"
-                        CalendarPermissionState.NOT_DECLARED -> "non déclarée"
-                        CalendarPermissionState.UNKNOWN -> "inconnue"
+                Text("Aucun calendrier local ATLAS ou LOCAL n’est sélectionné.")
+            }
+            when {
+                !writeState.consentGranted || !state.consentGranted -> Text("Les deux consentements ATLAS sont requis pour configurer l’écriture.")
+                writeState.readPermission != CalendarPermissionState.GRANTED || writeState.writePermission != CalendarPermissionState.GRANTED ->
+                    Text("Accordez d’abord READ_CALENDAR puis WRITE_CALENDAR.")
+                writeState.loading -> Text("Calendriers locaux en cours de vérification…")
+                writeState.providerUnavailable -> Text("Le fournisseur calendrier est indisponible.")
+                writeState.localCalendars.isEmpty() -> Text("Aucun calendrier local autorisé n’est disponible.")
+                else -> writeState.localCalendars.forEach { calendar ->
+                    val safeName = calendar.toDiagnosticRow().displayName
+                    AtlasSecondaryButton(
+                        label = if (calendar.id == writeState.selectedCalendarId) "Sélectionné : $safeName"
+                        else "Sélectionner $safeName",
+                        enabled = calendar.id != writeState.selectedCalendarId && !writeState.loading,
+                        onClick = {
+                            val currentEffectController = effectController
+                            scope.launch {
+                                val issue = withContext(Dispatchers.IO) {
+                                    currentEffectController?.selectCalendar(calendar.id) ?: CalendarEffectIssue.PROVIDER_UNAVAILABLE
+                                }
+                                refresh(issue?.userLabel())
+                            }
+                        },
+                    )
+                }
+            }
+            AtlasPrimaryButton(
+                label = "Créer ou vérifier ATLAS R3A TEST",
+                enabled = !writeState.loading && writeState.consentGranted && state.consentGranted &&
+                    writeState.readPermission == CalendarPermissionState.GRANTED &&
+                    writeState.writePermission == CalendarPermissionState.GRANTED,
+                onClick = {
+                    // AtlasLocalCalendar.ensure is deliberately reachable only from this explicit action.
+                    val currentEffectController = effectController
+                    scope.launch {
+                        val message = withContext(Dispatchers.IO) {
+                            when (val ensured = AtlasLocalCalendar.ensure(context)) {
+                                is AtlasLocalCalendar.Result.Ready -> {
+                                    val issue = currentEffectController?.selectCalendar(ensured.calendarId)
+                                    issue?.userLabel() ?: "${ensured.displayName} prêt et sélectionné."
+                                }
+                                is AtlasLocalCalendar.Result.Failed -> "Calendrier local non prêt (${ensured.code.name})."
+                            }
+                        }
+                        refresh(message)
                     }
-                    Text("WRITE_CALENDAR : $writeState")
-                    val localWritable = catalog.calendars.count {
-                        it.accountType == "LOCAL" && it.visible && it.accessLevel >= 500
-                    }
-                    if (localWritable == 0) {
-                        Text("Aucun calendrier local inscriptible détecté. Aucune écriture ne sera tentée; aucun fallback Google.")
-                    } else {
-                        Text("$localWritable calendrier(s) local(aux) inscriptible(s) détecté(s); l'écriture reste désactivée par défaut.")
-                    }
-                    writeDiagnostic.selectionError?.let { error ->
-                        Text(
-                            "Sélection : ${error.name}",
-                            color = MaterialTheme.colorScheme.error,
-                        )
+                },
+            )
+            writeState.ensureMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+
+        AtlasSection("Journal d’effets et dernière vérification") {
+            Text("Le journal durable n’affiche ni clés, ni titres d’événements, ni URL.")
+            val last = writeState.lastStatus
+            Text(
+                if (last == null) "Dernier statut : aucun effet calendrier enregistré."
+                else "Dernier statut : ${last.code} · ${last.completedCount}/${last.effectCount} effet(s) · ${formatTimestamp(last.atMillis)}",
+            )
+            Text("Opérations durables : ${writeState.operations.size}")
+            writeState.operations.takeLast(8).asReversed().forEach { operation ->
+                Text(
+                    "${operation.type.toDiagnosticLabel()} · ${operation.state.toDiagnosticLabel()}" +
+                        (operation.errorCode?.let { " · ${it.name}" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            when {
+                !writeState.consentGranted || !state.consentGranted -> Text("Les deux consentements sont requis pour vérifier le calendrier.")
+                writeState.readPermission != CalendarPermissionState.GRANTED || writeState.writePermission != CalendarPermissionState.GRANTED ->
+                    Text("La vérification attend READ_CALENDAR et WRITE_CALENDAR.")
+                !writeState.planLoaded -> Text("Aucun programme local du jour à vérifier.")
+                writeState.verification.isEmpty() -> Text("Aucun lien calendrier à vérifier.")
+                else -> {
+                    val counts = writeState.verification.groupingBy { it.state }.eachCount()
+                    Text("État des liens : ${counts.entries.joinToString(" · ") { (status, count) -> "${status.name} $count" }}")
+                    if (writeState.verification.any {
+                            it.state in setOf(CalendarPlanVerificationState.DIVERGED, CalendarPlanVerificationState.ORPHANED)
+                        }
+                    ) {
+                        AtlasStatus("Divergence ou lien orphelin détecté", AtlasStatusKind.UNAVAILABLE)
                     }
                 }
             }
-            Text(
-                "WRITE_CALENDAR n'est pas déclarée dans le build courant. " +
-                    "Toute activation réelle exige un accord ciblé et un calendrier synthétique.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
-    }
-}
 
-private fun CalendarPermissionUiStatus.permissionLabel(): String = when (this) {
-    CalendarPermissionUiStatus.GRANTED -> "Accordée"
-    CalendarPermissionUiStatus.DENIED -> "Refusée"
-    CalendarPermissionUiStatus.NOT_DECLARED -> "Non déclarée"
-    CalendarPermissionUiStatus.UNAVAILABLE -> "Indisponible"
+        AtlasSecondaryButton(
+            label = "Actualiser le diagnostic",
+            enabled = !state.loading && !writeState.loading,
+            onClick = { refresh() },
+        )
+    }
 }
 
 private fun loadCalendarPermissionScreenState(
@@ -387,11 +502,7 @@ private fun loadCalendarPermissionScreenState(
         false
     }
     if (!catalog.providerAvailable) {
-        return baseState.copy(
-            providerUnavailable = true,
-            catalogLoaded = true,
-            etarInstalled = etarInstalled,
-        )
+        return baseState.copy(providerUnavailable = true, catalogLoaded = true, etarInstalled = etarInstalled)
     }
     return baseState.copy(
         catalogLoaded = true,
@@ -399,3 +510,103 @@ private fun loadCalendarPermissionScreenState(
         etarInstalled = etarInstalled,
     )
 }
+
+private fun loadCalendarWriteDiagnosticState(
+    context: Context,
+    controller: CalendarEffectController,
+    readConsentStore: CalendarReadConsentStore,
+    writeConsentStore: CalendarWriteConsentStore,
+    ensureMessage: String?,
+): CalendarWriteDiagnosticState {
+    val readPermission = try {
+        AndroidCalendarProvider(context).permissionState()
+    } catch (_: Exception) {
+        CalendarPermissionState.UNKNOWN
+    }
+    val writePermission = manifestPermissionState(context, Manifest.permission.WRITE_CALENDAR)
+    val writeConsent = runCatching(writeConsentStore::isGranted).getOrDefault(false)
+    val readConsent = runCatching(readConsentStore::isGranted).getOrDefault(false)
+    val canInspect = writeConsent && readConsent &&
+        readPermission == CalendarPermissionState.GRANTED && writePermission == CalendarPermissionState.GRANTED
+    val localCalendars = if (canInspect) controller.localCalendars() else emptyList()
+    val plan = if (canInspect && controller.selectedCalendarId() != null) loadTodayPlan(context) else null
+    val verification = if (plan != null) controller.verifyPlan(plan) else emptyList()
+    return CalendarWriteDiagnosticState(
+        loading = false,
+        readPermission = readPermission,
+        writePermission = writePermission,
+        consentGranted = writeConsent,
+        localCalendars = localCalendars,
+        selectedCalendarId = controller.selectedCalendarId(),
+        providerUnavailable = canInspect && !controller.providerAvailable(),
+        ensureMessage = ensureMessage,
+        operations = controller.operationHistory(),
+        verification = verification,
+        planLoaded = plan != null,
+        lastStatus = controller.lastStatus(),
+    )
+}
+
+private fun loadTodayPlan(context: Context): DayPlan? {
+    val date = LocalDate.now(ZoneId.systemDefault())
+    val file = File(File(context.filesDir, "plans"), "day-plan-$date.json")
+    val repository = DayPlanRepository(FilePlanBackend(file), PlanClock { System.currentTimeMillis() })
+    return (repository.load() as? PlanLoadResult.Loaded)?.plan
+}
+
+private fun manifestPermissionState(context: Context, permission: String): CalendarPermissionState {
+    val requested = try {
+        val packageInfo = if (Build.VERSION.SDK_INT >= 33) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        }
+        permission in packageInfo.requestedPermissions.orEmpty()
+    } catch (_: Exception) {
+        return CalendarPermissionState.UNKNOWN
+    }
+    if (!requested) return CalendarPermissionState.NOT_DECLARED
+    return if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+        CalendarPermissionState.GRANTED
+    } else {
+        CalendarPermissionState.DENIED
+    }
+}
+
+private fun CalendarPermissionState.permissionLabel(): String = when (this) {
+    CalendarPermissionState.GRANTED -> "Accordée"
+    CalendarPermissionState.DENIED -> "Refusée"
+    CalendarPermissionState.NOT_DECLARED -> "Non déclarée"
+    CalendarPermissionState.UNKNOWN -> "Indisponible"
+}
+
+private fun CalendarPermissionState.explanation(action: String): String = when (this) {
+    CalendarPermissionState.GRANTED -> "Android autorise la $action. Le consentement ATLAS correspondant reste requis."
+    CalendarPermissionState.DENIED -> "La demande n’est envoyée qu’après votre appui explicite."
+    CalendarPermissionState.NOT_DECLARED -> "Cette permission n’est pas déclarée dans le build; aucune demande ne sera lancée."
+    CalendarPermissionState.UNKNOWN -> "L’état de cette permission n’a pas pu être vérifié."
+}
+
+private fun CalendarWriteOperationType.toDiagnosticLabel(): String = when (this) {
+    CalendarWriteOperationType.CREATE -> "Création"
+    CalendarWriteOperationType.UPDATE -> "Mise à jour"
+    CalendarWriteOperationType.DELETE -> "Suppression"
+}
+
+private fun CalendarWriteOperationState.toDiagnosticLabel(): String = when (this) {
+    CalendarWriteOperationState.PREPARED -> "Préparée"
+    CalendarWriteOperationState.APPLIED -> "Appliquée"
+    CalendarWriteOperationState.NOT_APPLIED -> "Non appliquée"
+    CalendarWriteOperationState.UNKNOWN -> "Inconnue"
+    CalendarWriteOperationState.RECONCILED -> "Réconciliée"
+    CalendarWriteOperationState.ABANDONED -> "Abandonnée"
+}
+
+private fun formatTimestamp(timestamp: Long): String = runCatching {
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", Locale.getDefault()))
+}.getOrDefault("heure inconnue")
