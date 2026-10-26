@@ -4,7 +4,7 @@
 
 - **Un seul orchestrateur parent Paseo**, modèle choisi par l'utilisateur (ex. GPT-6.1 Sol Medium). Le parent découpe, délègue, reçoit les notifications, vérifie, intègre localement et sollicite les accords.
 - **TOUS les sous-agents** (scouts, implémenteurs, diagnostics, testeurs, correcteurs et relecteurs) sont **Codex GPT-6 Luna XHigh** : `codex:gpt-6-luna`, `effort=xhigh`. Pas de High/Medium de substitution ; en cas d'indisponibilité : `BLOCKED`. Vérifier le modèle/effort effectif de chaque session.
-- **3 enfants simultanés au maximum**, aucune sous-délégation, worktrees séparés, fichier possédé par un seul agent, un opérateur ADB/Pixel/AVD à la fois. Les relecteurs doivent être techniquement en lecture seule.
+- **6 enfants simultanés au maximum**, aucune sous-délégation, worktrees séparés, fichier possédé par un seul agent, un opérateur ADB/Pixel/AVD à la fois. Les relecteurs doivent être techniquement en lecture seule.
 - **Lire `.agents/WORKFLOW.md`**, appliquer le contrat `.agents/TASK_TEMPLATE.md`, et charger le skill pertinent depuis `.agents/skills/README.md`. Chaque ticket exige base SHA, scope, permissions, oracle et preuve. Une notification n'est pas une validation.
 - Notifications de fin et reprise événementielle ; **jamais de boucle `sleep` ou polling de statut**. Si le réveil n'existe pas, handoff et reprise explicite.
 - Clôture V6.2 : **Android 17/API 37 Pixel physique**, pas de suite Android 14 ; JVM, lint, build, backend et contrats restent obligatoires. Les actions sensibles sur téléphone demandent consentement ciblé et sauvegarde, selon `android17-device-qa`.
