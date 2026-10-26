@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -19,14 +20,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -39,9 +39,7 @@ import dev.atlas.coach.app.ui.AtlasStatus
 import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
-import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.PlanActivity
-import dev.atlas.coach.plan.PlanPreview
 import dev.atlas.coach.plan.Priority
 import java.time.Duration
 import java.time.ZoneId
@@ -57,11 +55,20 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun PlanScreen(controller: PlanController, atlasController: AtlasController? = null) {
     val plan = controller.plan
-    var showAdd by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<PlanActivity?>(null) }
-    var moving by remember { mutableStateOf<PlanActivity?>(null) }
-    var changingStatus by remember { mutableStateOf<PlanActivity?>(null) }
-    var removing by remember { mutableStateOf<PlanActivity?>(null) }
+    var showAdd by rememberSaveable { mutableStateOf(false) }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+    var showCoachRequest by rememberSaveable { mutableStateOf(false) }
+    var agentMessage by rememberSaveable { mutableStateOf("Propose une organisation de ma journée.") }
+    var configurationMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var coachBusy by rememberSaveable { mutableStateOf(false) }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var movingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var changingStatusId by rememberSaveable { mutableStateOf<String?>(null) }
+    var removingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var currentMinute by remember(controller.timezone) {
+        mutableIntStateOf(ZonedDateTime.now(ZoneId.of(controller.timezone)).let { it.hour * 60 + it.minute })
+    }
+    val scope = rememberCoroutineScope()
 
     // Reload on foreground return and at the next local midnight so a long-lived
     // process never shows yesterday's plan under today's date.
@@ -82,6 +89,21 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
             controller.refresh()
         }
     }
+    LaunchedEffect(controller.timezone) {
+        val zone = ZoneId.of(controller.timezone)
+        while (true) {
+            val now = ZonedDateTime.now(zone)
+            currentMinute = now.hour * 60 + now.minute
+            delay(30_000L)
+        }
+    }
+
+    val coachReady = isCoachRequestReady(atlasController)
+    val activitiesById = plan?.activities?.associateBy(PlanActivity::activityId).orEmpty()
+    val editing = editingId?.let(activitiesById::get)
+    val moving = movingId?.let(activitiesById::get)
+    val changingStatus = changingStatusId?.let(activitiesById::get)
+    val removing = removingId?.let(activitiesById::get)
 
     Column(
         modifier = Modifier
@@ -89,18 +111,27 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
             .padding(AtlasSpacing.page),
         verticalArrangement = Arrangement.spacedBy(AtlasSpacing.medium),
     ) {
-        Text("Plan du jour", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Text(
-            "${controller.today} · ${controller.timezone}" +
-                (plan?.let { " · version ${it.version}" } ?: " · aucun programme"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Aujourd’hui", style = MaterialTheme.typography.headlineSmall)
+            Text(PlanUiLogic.readableDate(controller.today), style = MaterialTheme.typography.titleSmall)
+            Text(
+                plan?.let { PlanUiLogic.progressLabel(it.activities) }
+                    ?: PlanUiLogic.emptyStateLabel(hasDocument = false, activityCount = 0).orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (plan != null) {
+                TextButton(
+                    onClick = { showDetails = true },
+                    modifier = Modifier.sizeIn(minHeight = 48.dp),
+                ) { Text("Détails") }
+            }
+        }
 
         controller.corruption?.let { reason ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(AtlasSpacing.medium), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Stockage du plan illisible", style = MaterialTheme.typography.titleMedium)
+                    AtlasStatus("Programme illisible", AtlasStatusKind.UNAVAILABLE)
                     Text(
                         "Le programme local n'a pas pu être relu ($reason). ATLAS ne l'écrase pas automatiquement.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -111,45 +142,58 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    AtlasSecondaryButton("Relire le stockage local", onClick = { controller.refresh() })
                 }
             }
         }
 
         if (plan == null) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            if (controller.corruption == null) Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(AtlasSpacing.medium), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Construire la journée", style = MaterialTheme.typography.titleMedium)
+                    Text("Préparer la journée", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     AtlasPrimaryButton("Créer le programme du jour", onClick = { controller.createTodayPlan() })
-                    AtlasSecondaryButton("Relire le stockage local", onClick = { controller.refresh() })
                 }
             }
         } else {
-            PlanHeaderCard(plan)
-            PlanAgentSection(controller, atlasController)
-            AtlasPrimaryButton("Ajouter une activité", onClick = { showAdd = true })
-            AtlasSection("Créneaux") {
-                if (plan.activities.isEmpty()) {
+            AtlasPrimaryButton(
+                label = when {
+                    coachBusy -> "Demande en cours…"
+                    coachReady -> "Demander au coach"
+                    else -> "Ajouter une activité"
+                },
+                onClick = {
+                    if (coachReady) {
+                        configurationMessage = null
+                        showCoachRequest = true
+                    } else {
+                        showAdd = true
+                    }
+                },
+                enabled = !coachBusy,
+            )
+            AtlasSection("Activités") {
+                if (PlanUiLogic.emptyStateLabel(hasDocument = true, activityCount = plan.activities.size) != null) {
                     Text(
-                        "Aucune activité. Un jour de repos est un programme valide : ajoutez seulement ce qui est utile.",
+                        "Aucune activité planifiée. Un jour libre est un programme valide.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    plan.activities.sortedBy { it.scheduledLocal.startMinute }.forEach { activity ->
-                        PlanActivityCard(
-                            activity = activity,
-                            onMove = { moving = activity },
-                            onEdit = { editing = activity },
-                            onStatus = { changingStatus = activity },
-                            onRemove = { removing = activity },
-                        )
-                    }
+                    PlanActivityList(
+                        activities = plan.activities,
+                        nowMinute = currentMinute,
+                        onMove = { movingId = it.activityId },
+                        onEdit = { editingId = it.activityId },
+                        onStatus = { changingStatusId = it.activityId },
+                        onRemove = { removingId = it.activityId },
+                    )
                 }
             }
+            PlanAgentSection(controller, atlasController, configurationMessage)
             Text(
                 "Les modifications sont locales. Aucun événement de calendrier n'est créé par cet écran tant que la permission calendrier n'a pas été approuvée.",
                 style = MaterialTheme.typography.bodySmall,
@@ -187,12 +231,75 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
         )
     }
 
+    if (showDetails && plan != null) {
+        PlanDetailsDialog(
+            date = plan.localDate,
+            version = plan.version,
+            timezone = plan.timezone,
+            onDismiss = { showDetails = false },
+        )
+    }
+
+    if (showCoachRequest && atlasController != null) {
+        AlertDialog(
+            onDismissRequest = { if (!coachBusy) showCoachRequest = false },
+            title = { Text("Demander une révision au coach") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Décrivez la journée souhaitée. La proposition restera un aperçu jusqu'à votre confirmation.")
+                    OutlinedTextField(
+                        value = agentMessage,
+                        onValueChange = { if (it.length <= 2_000) agentMessage = it },
+                        label = { Text("Message") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !coachBusy && agentMessage.isNotBlank(),
+                    onClick = {
+                        val client = atlasController.planRevisionClient()
+                        val mandate = atlasController.planRevisionMandate
+                        if (client == null || mandate == null) {
+                            configurationMessage = "Configurez le backend, le jeton et le mandat du Coach avant de demander une révision."
+                            showCoachRequest = false
+                            return@TextButton
+                        }
+                        showCoachRequest = false
+                        coachBusy = true
+                        scope.launch {
+                            try {
+                                controller.proposeAgentRevisionSuspending(
+                                    client = client,
+                                    conversationId = null,
+                                    message = agentMessage,
+                                    mandate = mandate,
+                                    planContextConsented = true,
+                                    planRevisionCapabilityEnabled = true,
+                                )
+                            } finally {
+                                coachBusy = false
+                            }
+                        }
+                    },
+                ) { Text(if (coachBusy) "Envoi…" else "Envoyer") }
+            },
+            dismissButton = {
+                TextButton(enabled = !coachBusy, onClick = { showCoachRequest = false }) { Text("Annuler") }
+            },
+        )
+    }
+
     editing?.let { activity ->
         ActivityEditorDialog(
             title = "Modifier l'activité",
             initial = activity,
             withTime = false,
-            onDismiss = { editing = null },
+            onDismiss = { editingId = null },
             onConfirm = { draft ->
                 val edited = controller.editActivity(
                     activityId = activity.activityId,
@@ -201,7 +308,7 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
                     priority = draft.priority,
                     notes = draft.notes,
                 )
-                if (edited) editing = null
+                if (edited) editingId = null
             },
         )
     }
@@ -209,9 +316,9 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
     moving?.let { activity ->
         MoveActivityDialog(
             activity = activity,
-            onDismiss = { moving = null },
+            onDismiss = { movingId = null },
             onConfirm = { minute ->
-                if (controller.moveActivity(activity.activityId, minute)) moving = null
+                if (controller.moveActivity(activity.activityId, minute)) movingId = null
             },
         )
     }
@@ -220,24 +327,20 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
         StatusDialog(
             activity = activity,
             allowed = controller.allowedStatuses(activity),
-            onDismiss = { changingStatus = null },
+            onDismiss = { changingStatusId = null },
             onSelect = { status ->
-                if (controller.setStatus(activity.activityId, status)) changingStatus = null
+                if (controller.setStatus(activity.activityId, status)) changingStatusId = null
             },
         )
     }
 
     removing?.let { activity ->
-        AlertDialog(
-            onDismissRequest = { removing = null },
-            title = { Text("Supprimer cette activité ?") },
-            text = { Text("« ${activity.title} » sera retirée du programme après confirmation. Une activité terminée ne peut pas être supprimée par ce chemin.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (controller.removeActivity(activity.activityId)) removing = null
-                }) { Text("Supprimer") }
+        PlanRemoveConfirmationDialog(
+            activity = activity,
+            onDismiss = { removingId = null },
+            onConfirm = {
+                if (controller.removeActivity(activity.activityId)) removingId = null
             },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Annuler") } },
         )
     }
 
@@ -255,16 +358,20 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
 }
 
 @Composable
-private fun PlanAgentSection(controller: PlanController, atlasController: AtlasController?) {
+private fun PlanAgentSection(
+    controller: PlanController,
+    atlasController: AtlasController?,
+    configurationMessage: String?,
+) {
     if (atlasController == null) return
-    var showConsent by remember { mutableStateOf(false) }
-    var showRequest by remember { mutableStateOf(false) }
-    var agentMessage by remember { mutableStateOf("Propose une organisation de ma journée.") }
-    var configurationMessage by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    var showConsent by rememberSaveable { mutableStateOf(false) }
     val enabled = atlasController.capabilities[AtlasController.CAP_PLAN_REVISION] == true
     val configured = atlasController.syncTokenConfigured && atlasController.syncBaseUrl.isNotBlank()
+    val agentEnabled = atlasController.capabilities[AtlasController.CAP_AGENT] == true
+    val hasMandate = atlasController.planRevisionMandate.let { mandate ->
+        !mandate.revoked && !mandate.suspended && System.currentTimeMillis() < mandate.expiresAtUtcMillis
+    }
+    val hasClient = atlasController.planRevisionClient() != null
 
     AtlasSection("Coach") {
         if (!enabled) {
@@ -273,7 +380,7 @@ private fun PlanAgentSection(controller: PlanController, atlasController: AtlasC
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            AtlasPrimaryButton("Activer les révisions par le coach", onClick = { showConsent = true })
+            AtlasSecondaryButton("Activer les révisions par le coach", onClick = { showConsent = true })
         } else {
             Text(
                 "Le coach peut proposer une révision du programme. Rien n'est appliqué sans votre confirmation groupée.",
@@ -293,15 +400,11 @@ private fun PlanAgentSection(controller: PlanController, atlasController: AtlasC
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
-            } else {
-                AtlasPrimaryButton(
-                    if (busy) "Demande en cours…" else "Demander au coach",
-                    onClick = {
-                        if (!busy) {
-                            configurationMessage = null
-                            showRequest = true
-                        }
-                    },
+            } else if (!agentEnabled || !hasMandate || !hasClient) {
+                Text(
+                    "Activez le Coach et vérifiez son mandat et sa connexion avant d'envoyer une demande.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
             AtlasSecondaryButton(
@@ -333,142 +436,6 @@ private fun PlanAgentSection(controller: PlanController, atlasController: AtlasC
         )
     }
 
-    if (showRequest) {
-        AlertDialog(
-            onDismissRequest = { if (!busy) showRequest = false },
-            title = { Text("Demander une révision au coach") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Décrivez la journée souhaitée. La proposition restera un aperçu jusqu'à votre confirmation.")
-                    OutlinedTextField(
-                        value = agentMessage,
-                        onValueChange = { if (it.length <= 2_000) agentMessage = it },
-                        label = { Text("Message") },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !busy && agentMessage.isNotBlank(),
-                    onClick = {
-                        val client = atlasController.planRevisionClient()
-                        val mandate = atlasController.planRevisionMandate
-                        if (client == null || mandate == null) {
-                            configurationMessage = "Configurez le backend, le jeton et le mandat du Coach avant de demander une révision."
-                            showRequest = false
-                            return@TextButton
-                        }
-                        showRequest = false
-                        busy = true
-                        scope.launch {
-                            try {
-                                controller.proposeAgentRevisionSuspending(
-                                    client = client,
-                                    conversationId = null,
-                                    message = agentMessage,
-                                    mandate = mandate,
-                                    planContextConsented = true,
-                                    planRevisionCapabilityEnabled = true,
-                                )
-                            } finally {
-                                busy = false
-                            }
-                        }
-                    },
-                ) { Text(if (busy) "Envoi…" else "Envoyer") }
-            },
-            dismissButton = {
-                TextButton(enabled = !busy, onClick = { showRequest = false }) { Text("Annuler") }
-            },
-        )
-    }
-}
-
-@Composable
-private fun PlanHeaderCard(plan: DayPlan) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(AtlasSpacing.medium), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                if (plan.activities.isEmpty()) "Journée libre" else "${plan.activities.size} activité(s)",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            AtlasStatus(
-                label = when (plan.state) {
-                    dev.atlas.coach.plan.PlanState.APPROVED -> "Programme local approuvé"
-                    dev.atlas.coach.plan.PlanState.DRAFT -> "Brouillon local"
-                    dev.atlas.coach.plan.PlanState.SUPERSEDED -> "Programme remplacé"
-                    dev.atlas.coach.plan.PlanState.ARCHIVED -> "Programme archivé"
-                },
-                kind = if (plan.state == dev.atlas.coach.plan.PlanState.APPROVED) AtlasStatusKind.ACTIVE else AtlasStatusKind.SIMULATED,
-            )
-            Text(
-                "Version ${plan.version} · fuseau ${plan.timezone} · stockage privé atomique",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PlanActivityCard(
-    activity: PlanActivity,
-    onMove: () -> Unit,
-    onEdit: () -> Unit,
-    onStatus: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(AtlasSpacing.medium), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    "${PlanController.timeLabel(activity.scheduledLocal.startMinute)} – " +
-                        PlanController.endTimeLabel(activity.scheduledLocal.startMinute, activity.scheduledLocal.durationMinutes),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                AtlasStatus(
-                    label = PlanController.statusLabel(activity.status),
-                    kind = when (activity.status) {
-                        ActivityStatus.DONE -> AtlasStatusKind.ACTIVE
-                        ActivityStatus.IN_PROGRESS -> AtlasStatusKind.AUTHORIZED
-                        ActivityStatus.MISSED, ActivityStatus.CANCELLED -> AtlasStatusKind.UNAVAILABLE
-                        ActivityStatus.PLANNED, ActivityStatus.POSTPONED -> AtlasStatusKind.SIMULATED
-                    },
-                )
-            }
-            Text(activity.title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                "${PlanController.kindLabel(activity.kind)} · ${PlanController.priorityLabel(activity.priority)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            activity.notes?.let { notes ->
-                Text(notes, style = MaterialTheme.typography.bodySmall)
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    onClick = onMove,
-                    modifier = Modifier.weight(1f).semantics { contentDescription = "Déplacer ${activity.title}" },
-                ) { Text("Déplacer") }
-                TextButton(
-                    onClick = onEdit,
-                    modifier = Modifier.weight(1f).semantics { contentDescription = "Modifier ${activity.title}" },
-                ) { Text("Modifier") }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    onClick = onStatus,
-                    modifier = Modifier.weight(1f).semantics { contentDescription = "Changer le statut de ${activity.title}" },
-                ) { Text("Statut") }
-                TextButton(
-                    onClick = onRemove,
-                    modifier = Modifier.weight(1f).semantics { contentDescription = "Supprimer ${activity.title}" },
-                ) { Text("Supprimer") }
-            }
-        }
-    }
 }
 
 private data class ActivityDraft(
@@ -489,13 +456,17 @@ private fun ActivityEditorDialog(
     onDismiss: () -> Unit,
     onConfirm: (ActivityDraft) -> Unit,
 ) {
-    var titleValue by remember { mutableStateOf(initial?.title.orEmpty()) }
-    var kind by remember { mutableStateOf(initial?.kind ?: ActivityKind.FOCUS) }
-    var priority by remember { mutableStateOf(initial?.priority ?: Priority.IMPORTANT) }
-    var startText by remember { mutableStateOf(initial?.scheduledLocal?.startMinute?.let(PlanController::timeLabel) ?: "09:00") }
-    var durationText by remember { mutableStateOf((initial?.scheduledLocal?.durationMinutes ?: 50).toString()) }
-    var notes by remember { mutableStateOf(initial?.notes.orEmpty()) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var titleValue by rememberSaveable(initial?.activityId) { mutableStateOf(initial?.title.orEmpty()) }
+    var kind by rememberSaveable(initial?.activityId) { mutableStateOf(initial?.kind ?: ActivityKind.FOCUS) }
+    var priority by rememberSaveable(initial?.activityId) { mutableStateOf(initial?.priority ?: Priority.IMPORTANT) }
+    var startText by rememberSaveable(initial?.activityId) {
+        mutableStateOf(initial?.scheduledLocal?.startMinute?.let(PlanController::timeLabel) ?: "09:00")
+    }
+    var durationText by rememberSaveable(initial?.activityId) {
+        mutableStateOf((initial?.scheduledLocal?.durationMinutes ?: 50).toString())
+    }
+    var notes by rememberSaveable(initial?.activityId) { mutableStateOf(initial?.notes.orEmpty()) }
+    var error by rememberSaveable(initial?.activityId) { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -598,8 +569,10 @@ private fun MoveActivityDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit,
 ) {
-    var startText by remember { mutableStateOf(PlanController.timeLabel(activity.scheduledLocal.startMinute)) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var startText by rememberSaveable(activity.activityId) {
+        mutableStateOf(PlanController.timeLabel(activity.scheduledLocal.startMinute))
+    }
+    var error by rememberSaveable(activity.activityId) { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Déplacer « ${activity.title} »") },
@@ -667,47 +640,16 @@ private fun StatusDialog(
     )
 }
 
-@Composable
-private fun RevisionPreviewDialog(
-    preview: PlanPreview,
-    onCancel: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Aperçu de la révision") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(preview.revision.summary, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "Version ${preview.before.version} → ${preview.after.version} · ${preview.effectIds.size} effet(s) local(aux)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                preview.revision.changes.forEach { change ->
-                    Text("• ${PlanController.revisionChangeLabel(change)}", style = MaterialTheme.typography.bodyMedium)
-                }
-                if (preview.overlapWarnings.isNotEmpty()) {
-                    Text(
-                        "${preview.overlapWarnings.size} chevauchement(s) signalé(s). Ils restent autorisés mais doivent être relus.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Text(
-                    "Confirmer applique exactement cet ensemble d'effets locaux. Un effet supplémentaire demanderait une nouvelle autorisation.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Confirmer") } },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Abandonner") } },
-    )
-}
+private fun isCoachRequestReady(controller: AtlasController?): Boolean =
+    controller != null &&
+        controller.capabilities[AtlasController.CAP_PLAN_REVISION] == true &&
+        controller.capabilities[AtlasController.CAP_AGENT] == true &&
+        controller.syncTokenConfigured &&
+        controller.syncBaseUrl.isNotBlank() &&
+        !controller.planRevisionMandate.revoked &&
+        !controller.planRevisionMandate.suspended &&
+        System.currentTimeMillis() < controller.planRevisionMandate.expiresAtUtcMillis &&
+        controller.planRevisionClient() != null
 
 private fun validWindow(startMinute: Int, durationMinutes: Int): Boolean =
     startMinute in 0..1439 && durationMinutes in 1..1440 &&
