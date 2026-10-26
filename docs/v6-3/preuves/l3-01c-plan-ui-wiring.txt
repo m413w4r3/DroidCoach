@@ -1,0 +1,46 @@
+ATLAS V6.3 — V63-L3-01c — câblage Plan/coach/calendrier — preuves
+===================================================================
+
+Propriétaire: parent
+Base: 4df7e6851e61487c028f58c0ef0059b5439a0385
+Commit de câblage: c2f6fea63769aaba4af2d048cd23f3da6a4591c3
+Intégration: merge 17910303e7393e7109439875413f0bb1ff64ada6
+
+Fichiers (8, +232/-13):
+- android/.../app/BackendUrlPolicy.kt (nouveau)
+- android/.../app/PlanScreen.kt
+- android/.../app/AtlasController.kt
+- android/.../app/AtlasApp.kt
+- android/.../app/AtlasScreenId.kt
+- android/.../app/AtlasScreens.kt
+- android/.../app/SyncSettingsScreen.kt
+- android/.../app/BackendUrlPolicyTest.kt (nouveau)
+
+Contenu:
+- `BackendUrlPolicy`: release HTTPS-only; debug accepte `10.0.2.2`,
+  `127.0.0.1`, `localhost` en cleartext; rejette userinfo/query/fragment et
+  tout autre hôte HTTP.
+- `AtlasController.planRevisionClient()`: token + URL requis, capability
+  `planRevision` et `agent`, mandat vivant, barrière de révocation vérifiés à
+  chaque requête. `planRevisionMandate` exposé.
+- `CAP_PLAN_REVISION = "planRevision"` ajouté, désactivé par défaut.
+- Écran Plan: section Coach, consentement explicite, champ message, bouton
+  Demander au coach, désactivation; le flux suspendu applique l'aperçu sur le
+  dispatcher appelant.
+- Navigation: route `Diagnostic calendrier` et bouton dans Plus, sans octroi
+  de permission ni lecture réelle.
+- Texte Sync mis à jour pour `10.0.2.2`, `127.0.0.1`, `localhost` en debug.
+
+Oracle:
+- JVM: 70 suites, 474 tests, 0 failure, 0 error, 0 skipped;
+- lint: 0 erreur, 54 avertissements;
+- assembleDebug: PASS;
+- APK debug: SHA-256
+  4d931fa75d97e3b165ca607598351fdd755db82a6e589bffab77bc9c6470f905.
+
+Limites:
+- Aucun test réel Pixel ni backend V3.
+- La section Coach n'est visible que si un plan existe et si
+  `atlasController != null`; les tests Compose réels ne sont pas exécutés.
+- L'écran de diagnostic calendrier reste non accordé; aucune permission n'a
+  été demandée.

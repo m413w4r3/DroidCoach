@@ -1,0 +1,54 @@
+ATLAS V6.3 — V63-L3-01b — Android plan revision — preuves
+==========================================================
+
+Enfant: session 65d84b7e-c1a2-4279-a03b-0272ebe30af8
+Profil: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh
+Base: 9d51021cd2d81175815be956dda5daca2b4d4e3e
+
+Commits enfant:
+- 039ce02f3494979ed707df6113dee47033041bdd feat(android): handle V3 agent plan revisions
+- 76da709f868e241e80985cc81956c032e0b3245e fix(test): balance V3 response JSON helper
+- 10f4b1aa84341c8318ea46d176eb20c1a8986622 test: use a letter-bearing UUID
+- 6d78fa02d3e1964c2057c2df615991a17fff7926 test: use non-integral wrong types
+
+Intégration: merge 4df7e6851e61487c028f58c0ef0059b5439a0385
+
+Fichiers (8, +1912):
+- android/app/src/main/java/dev/atlas/coach/app/PlanController.kt
+- android/app/src/main/java/dev/atlas/coach/plan/PlanRevisionApiClient.kt (nouveau)
+- android/app/src/main/java/dev/atlas/coach/plan/PlanRevisionMapper.kt (nouveau)
+- android/app/src/main/java/dev/atlas/coach/plan/PlanRevisionProposalV3.kt (nouveau)
+- 4 fichiers de tests (parser, mapper, client, contrôleur)
+
+Contenu vérifié:
+- parseur JSON strict maison: clés inconnues/dupliquées rejetées, profondeur
+  maximale 32, réponse limitée à 256 KiB, UUID canoniques, TTL <= 24 h;
+- `focus`/`training_ref` non nuls -> `UNSUPPORTED_PROPOSAL_FIELD`, sans drop;
+- mapper: UUID d'activité déterministe, revision ID déterministe depuis
+  `proposal_id`, préservation des champs existants sur null, rejeu
+  `AlreadyApplied`, rejets `PLAN_MISMATCH`/`STALE_AGENT_REVISION`/
+  `AGENT_REVISION_EXPIRED`;
+- contrôleur: preview seulement, confirmation groupée existante, consentement
+  et capability explicites, aucun gating `focus.plan`;
+- variante `suspend` : client HTTP sur le dispatcher IO, état Compose appliqué
+  sur le dispatcher appelant;
+- client: Bearer, pas de redirection, timeouts, taille de réponse bornée,
+  erreurs 401/403/409/422/5xx/timeout/JSON invalide, aucun log de token.
+
+Oracle enfant:
+- compilation des tests d'abord en échec (parenthèses du helper JSON), puis
+  deux défauts de test (UUID sans lettre, `540.0` normalisé en `540`), corrigés;
+- ciblé final: 8 suites, 87 tests, 0 failure, 0 error, 0 skipped.
+
+Oracle intégré (4df7e68):
+- JVM: 69 suites, 471 tests, 0 failure, 0 error, 0 skipped;
+- lint: 0 erreur, 54 avertissements;
+- assembleDebug: PASS;
+- APK debug: SHA-256
+  230c31189b905c403a30691c107232ff61479b299209d273f76d44a7308d48d8.
+
+Limites:
+- Aucun appel réel au backend V3 ni au gateway OpenClaw pour ce flux.
+- Aucun test instrumenté/Pixel.
+- Le parseur maison est couvert par des tests mais n'a pas été comparé à une
+  bibliothèque JSON de référence au-delà des cas listés.
