@@ -84,6 +84,34 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
   persistance, hors ligne, puis diagnostic calendrier (P3).
 - Détail et reprise : `docs/v6-3/HANDOFF_R1.md`.
 
+## R1 — état au 2026-10-26 ~14:35 (après corrections)
+
+- **Crash P1 reproduit** sur l'APK installé `5956bb6f` : ouverture de
+  Plan du jour → `IllegalStateException` de contrainte de hauteur infinie
+  (scroll racine imbriqué dans `AtlasScreenFrame`). Aucun plan créé.
+- **Correctifs intégrés** : `V63-R1-FIX-SCROLL` (`44991e9` → `7b36a90`),
+  `V63-R1-PLAN-PROMPT` (`19e08a6` → `77e1565`),
+  `V63-L1-03-ACCESS-P3` (`bc5e68a` → `40c8693`), correction de tests
+  d'instrumentation `696eb9c`.
+- **APK candidat** : SHA-256
+  `66c7d8f669b895fcec00e363b24cc7c771938c078ec8d91210484346fef6472a`,
+  source `696eb9c` (sources app inchangées depuis `40c8693`).
+- **Oracles non-Pixel** : JVM 70 suites/474 tests PASS ; lint 0 erreur/54
+  avertissements ; assembleDebug PASS ; compile/assemble AndroidTest PASS ;
+  4/4 tests instrumentés PASS sur émulateur API 37 (jamais Pixel).
+- **Sonde OpenClaw réelle après correctif** : proposition `plan.revise_day`
+  valide, `base_version=1`, 2 activités, `overlaps=[]` — le refus précédent
+  venait du prompt/mandat, pas d'un quota/timeout/invalid_output.
+- **Installation Pixel** : **BLOCKED_APPROVAL** — le propriétaire a demandé de
+  ne pas installer `66c7d8f6` maintenant. Le Pixel reste sur `5956bb6f` ; Plan
+  du jour crashe toujours ; P3 calendrier NON exécuté.
+- **Sauvegardes conservées** : APK `5956bb6f` hors dépôt ; app-only
+  `app-data-before-scroll-fix.tar` SHA-256 `6077daee…` ; app-only P1
+  `app-data-before-r1.tar` SHA-256 `28a74099…`.
+- **Reprise** : accord explicite par SHA sur `66c7d8f6`, puis installation
+  `adb install -r`, parcours Plan/coach, réactivation explicite du mandat
+  (`revoked=true`), P3 calendrier. Détail : `preuves/r1-physical.txt`.
+
 ## Portes nécessitant le propriétaire
 
 1. Connexion du Pixel et actions ADB (pré-vol, installation, permissions, sauvegarde).
@@ -129,11 +157,11 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 | V63-R3-SCOUT-01 | Audit lecture seule Bridge local + SDK plugin OpenClaw ; plan d'implémentation `atlas_chatgpt_research` | — | aucun (lecture seule) | rapport avec chemins, API, prérequis, risques, oracle de recette | **ACCEPTED (audit)** — `AUDIT_BRIDGE_PLUGIN.md` ; `BLOCKED_POLICY` pour la délégation tant que `deny:["*"]` reste |
 | V63-R5-SCOUT-01 | Audit lecture seule transport Paseo/Relay : composants, licences, vecteurs, plan de réemploi | — | aucun (lecture seule) | rapport avec SHA, fichiers, licences, gaps Android | **ACCEPTED (audit)** — `AUDIT_TRANSPORT_PASEO.md` ; `protected`-only obligatoire |
 | V63-L3-01a | Endpoint backend `POST /v3/agent/plan-revision` : OpenClaw propose `plan.revise_day`, validation stricte, idempotence durable, aucun outil | L0-02 | `backend/atlas_backend/plan_agent_v3.py`, `openclaw_adapter.py`, `main.py`, `store.py`, `policy.py`, `plan_v3.py`, `backend/tests/test_plan_agent_v3*.py` | pytest ciblé + suite backend ; 2e POST idempotent ; contenu différent même clé → 409 ; proposition invalide rejetée | **ACCEPTED / INTEGRATED** (`6240ca1` → `9dc2685` → `6b64ddc` → `8c402ee`) ; 30 ciblés, 152 backend + 1 skip ; re-revue `ACCEPTED_WITH_P2` |
-| V63-L5-01 | Client wger lecture seule `ApiTokenWgerAuth` + `RotatingJwtWgerAuth` sous interface unique, stockage JWT atomique 0600, diagnostic sans secret | accord lecture | `backend/atlas_backend/integrations/**`, `backend/atlas_backend/config.py`, `backend/scripts/wger_diagnostic.py`, `backend/tests/test_wger*.py` | pytest mock 200/pagination/401/403/429/5xx/timeout/schéma ; aucun secret dans logs | **ACCEPTED / INTEGRATED** (`0f0702c` → `6e17e11` → `6aee55a` → `5f68c88` → `a56de74`) ; 37 ciblés, 158 backend + 1 skip ; re-revue `ACCEPTED_WITH_P2` ; diagnostic réel 4 ressources 200/200/200/200 ; `.env` 0600 |
-| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/HomeNextAction.kt`, `LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **ACCEPTED / INTEGRATED** (`6f5941d` → `b6d4a7b` → `38c70d7`) ; P1 corrigé ; intégré 439 tests, lint 0 erreur/52 avert., APK PASS ; `preuves/l1-03-home-next.txt` |
+| V63-L5-01 | Client wger lecture seule `ApiTokenWgerAuth` + `RotatingJwtWgerAuth` sous interface unique, stockage JWT atomique 0600, diagnostic sans secret | accord lecture | `backend/atlas_backend/integrations/**`, `backend/atlas_backend/config.py`, `backend/scripts/wger_diagnostic.py`, `backend/tests/test_wger*.py` | pytest mock 200/pagination/401/403/429/5xx/timeout/schéma ; aucun secret dans logs | **ACCEPTED / INTEGRATED** (`0f0702c` → `6e17e11` → `6aee55a` → `5f68c88` → `a56de74`) ; 37 ciblés, 158 backend + 1 skip ; re-revue `ACCEPTED_WITH_P2` ; diagnostic réel 4 ressources 200/200/200/200 ; `.env` 0600 ; P2 date ISO corrigé par `1d4a236` → merge `65901ab` (47 ciblés, suite 168 passed/1 skip) |
+| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/HomeNextAction.kt`, `LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **ACCEPTED / INTEGRATED** (`6f5941d` → `b6d4a7b` → `38c70d7`) ; P1 corrigé ; intégré 439 tests, lint 0 erreur/52 avert., APK PASS ; `preuves/l1-03-home-next.txt` ; audit ACCESS `GO_WITH_LIMITATIONS` (P3 singulier, evidence gap Compose/TalkBack) → `preuves/l1-03-access-audit.txt` |
 | V63-L3-01b | Android : parse strict V3, diff, confirmation groupée, application locale idempotente | L3-01a (contrat gelé) | `android/.../plan/**` (nouveaux fichiers + tests) | JVM stale/expiry/idempotence/contenu altéré | **ACCEPTED / INTEGRATED** (`039ce02` → `6d78fa0` → `4df7e68`) ; 87 ciblés, 471 JVM intégrés, lint 0/54, APK PASS |
 | V63-L3-01c | Câblage UI « Demander au coach », consentement, URL loopback debug, diagnostic calendrier | L3-01b | `PlanScreen.kt`, `AtlasController.kt`, `AtlasApp.kt`, `AtlasScreens.kt`, `AtlasScreenId.kt`, `SyncSettingsScreen.kt`, `BackendUrlPolicy.kt` | JVM + lint + build ; visibilité/consentement vérifiés statiquement | **ACCEPTED / INTEGRATED** (`c2f6fea` → `1791030`) ; 474 JVM, lint 0/54, APK PASS |
-| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `integrations/openclaw/atlas_chatgpt_research/**` | `npm test` + build + `openclaw plugins validate` + recette Bridge mock | **ACCEPTED_WITH_P2 (code, non fusionné)** — `c6efa58` ; `npm ci`, 34 tests, build, validate PASS ; P2 Retry-After de reprise à corriger avant activation ; non installé/activé |
+| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `integrations/openclaw/atlas_chatgpt_research/**` | `npm test` + build + `openclaw plugins validate` + recette Bridge mock | **ACCEPTED / INTEGRATED (code)** — `c6efa58` puis P2 `ba510d3` → merge `fcbe8c3` ; `npm ci`, 41 tests, build, validate PASS ; P2 Retry-After corrigé ; **non installé/activé**, activation `BLOCKED_POLICY` |
 | V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers | accord explicite | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **INTEGRATED (préparation)** (`1c34c56` → `bb15548` → `c990a75`) ; 31 ciblés, lint 0/54, APK PASS ; install/octroi `BLOCKED_APPROVAL` |
 | V63-L4-SCOUT-01 | Audit lecture seule du chemin d'écriture calendrier, propriété, réconciliation, plan Pixel | — | aucun (lecture seule) | rapport + proposition de ticket L4 | **ACCEPTED (audit)** — `AUDIT_CALENDAR_WRITE.md` ; écriture réelle `BLOCKED_APPROVAL`/`BLOCKED_ENVIRONMENT` |
 | V63-L4-01 | Écritures calendrier réelles, liens stables, réconciliation | L2-03 + L3-01 + accord | `dev/atlas/coach/calendar/write/**` | provider fake + Pixel/Etar | **BLOCKED_APPROVAL** |
@@ -190,3 +218,12 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 | 2026-10-26 | V63-L8-02 | `9d51021` | `3c5738a` → `c6efa58` | npm ci/test/build/validate | **ACCEPTED_WITH_P2 (code)** — 34 tests, build, manifeste, validate PASS ; P2 Retry-After ; non fusionné, non activé |
 | 2026-10-26 | R1 démarrage physique | `1791030` / APK `5956bb6f` | — | Pixel + backend 8010 + adb reverse | **EN COURS** — app installée, URL/jeton configurés ; prochaine étape Plan/coach |
 | 2026-10-26 | V63-L3-01a-REVIEW | `9dc2685` → `6b64ddc` | — | relecture indépendante | **ACCEPTED_WITH_P2** — session `97538bfb-56a2-4221-8bff-fac62c36aa5d` ; P1 scope résolu par ticket, P2 traités/documentés |
+| 2026-10-26 | V63-L8-02-P2 | `c6efa58` | `ba510d3` → merge `fcbe8c3` | `npm ci`, `npm test`, `npm run plugin:build`, `openclaw plugins validate` | **ACCEPTED / INTEGRATED** — 41/41 tests, build/validate PASS ; Retry-After de reprise conservé, clé/corps identiques, payload 429 jamais accepté ; non installé/activé |
+| 2026-10-26 | V63-L5-02-P2 | `932c8d2` | `1d4a236` → merge `65901ab` | pytest wger 47 ciblés + suite backend | **ACCEPTED / INTEGRATED** — 168 passed, 1 skipped ; `_iso_calendar_date` strict, datetimes/non ISO/invalides rejetés ; suite complète rejouée par le parent (le run enfant avait été interrompu) |
+| 2026-10-26 | V63-L1-03-ACCESS audit | `932c8d2` | — | audit statique RO | **ACCEPTED (audit)** — `GO_WITH_LIMITATIONS` ; P3 singulier « 1 minutes », evidence gap Compose/TalkBack, risque locale conditionnel ; `preuves/l1-03-access-audit.txt` |
+| 2026-10-26 | R1 crash Plan/Settings | APK `5956bb6f` | — | Pixel 9 Pro XL Android 17/API 37 | **BLOCKED_P1** — `IllegalStateException` de scroll imbriqué à l'ouverture de Plan du jour ; CalendarPermissionScreen exposé au même défaut ; correctif `V63-R1-FIX-SCROLL` livré et intégré ; nouvelle APK soumise à accord |
+| 2026-10-26 | V63-R1-FIX-SCROLL | `932c8d2` | `44991e9` → merge `7b36a90` | JVM + compile AndroidTest + lint (enfant) ; instrumenté rejoué parent | **ACCEPTED / INTEGRATED** — suppression des scrolls racine imbriqués ; 474 JVM PASS, lint 0/45 enfant ; 2/2 instrumentés API 37 PASS côté parent ; recette Pixel NON exécutée |
+| 2026-10-26 | V63-R1-PLAN-PROMPT | `932c8d2` | `19e08a6` → merge `77e1565` | pytest ciblé 31 PASS + suite intégrée | **ACCEPTED / INTEGRATED** — payload sans `allowed_actions`, attestations consentement/capability, prompt borné à `plan.revise_day` ; sonde OpenClaw réelle: proposition valide (base_version 1, 2 activités, overlaps=[]) |
+| 2026-10-26 | V63-L1-03-ACCESS-P3 | `65901ab` | `bc5e68a` → merge `40c8693` | JVM ciblé parent + instrumenté API 37 | **ACCEPTED / INTEGRATED** — « 1 minute » vs « N minutes » ; tests JVM 1/2/480 min ; 2/2 instrumentés accessibilité PASS ; lint intégré 0/54 |
+| 2026-10-26 | Build intégré R1 | `696eb9c` | APK `66c7d8f6` | JVM 474, lint 0/54, assembleDebug, compile/assemble AndroidTest, 4/4 instrumentés API 37 | **PASS (non-Pixel)** — APK candidat construit et vérifié ; installation Pixel **BLOCKED_APPROVAL** |
+| 2026-10-26 | R1 installation APK `66c7d8f6` | `696eb9c` | — | accord propriétaire par SHA | **BLOCKED_APPROVAL** — le propriétaire demande de ne pas installer maintenant ; APK et sauvegarde `6077daee…` conservés ; R1 physique non clos |
