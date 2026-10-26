@@ -95,6 +95,131 @@ def test_all_list_methods_use_expected_read_only_endpoints():
     ]
 
 
+def test_probe_checks_all_resources_with_limit_one():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=page([]))
+
+    client, http = make_client(handler)
+    try:
+        probe = client.probe()
+    finally:
+        http.close()
+
+    assert [request.url.path for request in requests] == [
+        "/api/v2/routine/",
+        "/api/v2/exercise/",
+        "/api/v2/workoutlog/",
+        "/api/v2/workoutsession/",
+    ]
+    assert [request.url.params["limit"] for request in requests] == ["1"] * 4
+    assert all(resource.status_http == 200 for resource in vars(probe).values())
+
+
+def test_workout_logs_and_sessions_parse_real_shapes_across_pages():
+    entries = {
+        "/api/v2/workoutlog/": [
+            {
+                "id": "log-opaque-a",
+                "date": "2026-10-26",
+                "exercise": 12,
+                "routine": 3,
+                "session": "session-opaque-a",
+                "slot_entry": 4,
+                "repetitions": "8",
+                "weight": "42.5",
+            },
+            {
+                "id": 17,
+                "date": "2026-10-27",
+                "exercise": 13,
+                "routine": None,
+                "session": None,
+                "slot_entry": 5,
+                "repetitions": "9",
+                "weight": "45",
+            },
+        ],
+        "/api/v2/workoutsession/": [
+            {
+                "id": "session-opaque-a",
+                "datetime_start": "2026-10-26T08:30:00Z",
+                "datetime_end": "2026-10-26T09:15:00Z",
+                "day": 2,
+                "routine": 3,
+                "impression": "Good",
+                "notes": "Synthetic note",
+            },
+            {
+                "id": "session-opaque-b",
+                "datetime_start": "2026-10-27T08:30:00+02:00",
+                "datetime_end": "2026-10-27T09:15:00+02:00",
+                "day": None,
+                "routine": None,
+                "impression": "",
+                "notes": "",
+            },
+        ],
+    }
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        records = entries[request.url.path]
+        offset = int(request.url.params["offset"])
+        next_url = (
+            f"{BASE}{request.url.path}?limit=1&offset=1" if offset == 0 else None
+        )
+        previous_url = (
+            f"{BASE}{request.url.path}?limit=1&offset=0" if offset == 1 else None
+        )
+        return httpx.Response(
+            200,
+            json=page(
+                records[offset : offset + 1],
+                count=len(records),
+                next_url=next_url,
+                previous_url=previous_url,
+            ),
+        )
+
+    client, http = make_client(
+        handler, limits=WgerLimits(page_size=1, max_pages=3, max_items=10)
+    )
+    try:
+        logs = client.list_workout_logs()
+        sessions = client.list_workout_sessions()
+    finally:
+        http.close()
+
+    assert [(item.id, item.exercise_id, item.routine_id, item.session_id) for item in logs] == [
+        ("log-opaque-a", 12, 3, "session-opaque-a"),
+        ("17", 13, None, None),
+    ]
+    assert [
+        (item.id, item.datetime_start, item.datetime_end, item.day_id, item.routine_id)
+        for item in sessions
+    ] == [
+        ("session-opaque-a", "2026-10-26T08:30:00Z", "2026-10-26T09:15:00Z", 2, 3),
+        (
+            "session-opaque-b",
+            "2026-10-27T08:30:00+02:00",
+            "2026-10-27T09:15:00+02:00",
+            None,
+            None,
+        ),
+    ]
+    assert [request.url.path for request in requests] == [
+        "/api/v2/workoutlog/",
+        "/api/v2/workoutlog/",
+        "/api/v2/workoutsession/",
+        "/api/v2/workoutsession/",
+    ]
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [(401, "AUTH_INVALID"), (403, "FORBIDDEN"), (429, "RATE_LIMITED"), (503, "SERVER_ERROR")],
@@ -184,6 +309,51 @@ def test_invalid_summary_schema_is_redacted():
     try:
         with pytest.raises(WgerError) as captured:
             client.list_routines()
+    finally:
+        http.close()
+    assert captured.value.code == "SCHEMA_ERROR"
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "entry"),
+    [
+        (
+            "workoutlog",
+            {"id": "bad\u0000id", "date": "2026-10-26", "exercise": 1},
+        ),
+        (
+            "workoutlog",
+            {"id": "x" * 65, "date": "2026-10-26", "exercise": 1},
+        ),
+        (
+            "workoutsession",
+            {
+                "id": "session-a",
+                "datetime_start": "not-a-date",
+                "datetime_end": "2026-10-26T09:15:00Z",
+            },
+        ),
+        (
+            "workoutsession",
+            {
+                "id": "session-a",
+                "datetime_start": "2026-10-26T08:30:00Z",
+                "datetime_end": "2026-10-26",
+            },
+        ),
+    ],
+)
+def test_workout_log_and_session_invalid_shapes_are_schema_errors(endpoint, entry):
+    def handler(request):
+        return httpx.Response(200, json=page([entry]))
+
+    client, http = make_client(handler, limits=WgerLimits(page_size=1))
+    try:
+        with pytest.raises(WgerError) as captured:
+            if endpoint == "workoutlog":
+                client.list_workout_logs()
+            else:
+                client.list_workout_sessions()
     finally:
         http.close()
     assert captured.value.code == "SCHEMA_ERROR"
@@ -289,7 +459,12 @@ def test_diagnostic_uses_configured_base_url_and_disables_redirects(monkeypatch,
 
         def probe(self):
             result = WgerResourceProbe(200, None, 1, False)
-            return SimpleNamespace(routines=result, exercises=result)
+            return SimpleNamespace(
+                routines=result,
+                exercises=result,
+                workout_logs=result,
+                workout_sessions=result,
+            )
 
     monkeypatch.setattr(diagnostic.httpx, "Client", FakeHttp)
     monkeypatch.setattr(diagnostic, "WgerClient", FakeWgerClient)
@@ -301,6 +476,15 @@ def test_diagnostic_uses_configured_base_url_and_disables_redirects(monkeypatch,
     assert observed["http_options"] == {"follow_redirects": False}
     assert base_url not in output
     assert "diagnostic-token-canary" not in output
+    assert len(output.splitlines()) == 4
+    for line in output.splitlines():
+        assert set(json.loads(line)) == {
+            "mode",
+            "status_http",
+            "error_category",
+            "element_count",
+            "pagination_present",
+        }
 
 
 def test_diagnostic_rejects_non_https_base_url_without_echoing_it(monkeypatch, capsys):

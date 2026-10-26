@@ -9,6 +9,8 @@ from .wger import (
     WgerLimits,
     WgerTokenRecord,
     WgerTokenStore,
+    WorkoutLogSummary,
+    WorkoutSessionSummary,
 )
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "WgerLimits",
     "WgerTokenRecord",
     "WgerTokenStore",
+    "WorkoutLogSummary",
+    "WorkoutSessionSummary",
 ]
