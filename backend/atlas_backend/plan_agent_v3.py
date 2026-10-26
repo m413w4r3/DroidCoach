@@ -177,7 +177,7 @@ def _model_output(value: object) -> PlanRevisionModelOutputV3:
         if isinstance(value, str):
             return PlanRevisionModelOutputV3.model_validate_json(value)
         return PlanRevisionModelOutputV3.model_validate(value)
-    except (ValidationError, ValueError, TypeError) as exc:
+    except (ValidationError, ValueError, TypeError, RecursionError) as exc:
         raise PlanRevisionInvalidOutput("invalid plan revision output") from exc
 
 
@@ -208,7 +208,15 @@ def propose_plan_revision(
     ttl: timedelta = timedelta(hours=24),
     now: datetime | None = None,
 ) -> PlanRevisionResult:
-    """Call one proposal adapter at most once for this durable request id."""
+    """Call one proposal adapter at most once for this durable request id.
+
+    A completed claim supports identical sequential retries by replaying its
+    stored response. A concurrent retry while the claim is pending fails with
+    503; the same-response guarantee applies after completion, not while two
+    calls overlap. A pending claim left by a crash is never retried
+    automatically; an operator must reconcile the uncertain model call, or a
+    caller must use a new request_id once it is safe to abandon the old one.
+    """
     if not body.plan_context_consented:
         raise PermissionError("plan context consent is required")
 
@@ -228,6 +236,9 @@ def propose_plan_revision(
             )
         # A durable in-flight marker means a prior call may already have
         # reached the model. Fail closed instead of creating another proposal.
+        # The same-response guarantee applies only to sequential calls after
+        # completion. After a crash, operator reconciliation or a new
+        # request_id is required; this pending claim is never auto-retried.
         return PlanRevisionResult(
             status_code=503,
             response=_response(reply=IN_PROGRESS_REPLY, agent_status="unavailable"),

@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
@@ -23,6 +24,7 @@ from atlas_backend.openclaw_adapter import (
 )
 from atlas_backend.plan_agent_v3 import (
     PlanRevisionAdapterUnavailable,
+    PlanRevisionModelOutputV3,
     PlanRevisionRequestV3,
     PlanRevisionQuotaLimited,
     _canonical_body_hash,
@@ -99,6 +101,14 @@ class PlanAgent(MockAgentAdapter):
         )
 
 
+class PendingReplayPlanAgent(PlanAgent):
+    def propose_plan_revision(self, **kwargs):
+        self.calls += 1
+        self.last_args = kwargs
+        self.pending_response = post_revision(self.client)
+        return self.output
+
+
 class FakeHTTPResponse:
     def __init__(self, status_code: int, body: dict):
         self.status_code = status_code
@@ -109,16 +119,24 @@ class FakeHTTPResponse:
         return self._body
 
 
+class RecursiveHTTPResponse(FakeHTTPResponse):
+    def json(self) -> dict:
+        raise RecursionError("synthetic deeply nested response")
+
+
 class FakeHTTPClient:
     def __init__(self, response: FakeHTTPResponse):
         self.response = response
         self.calls = 0
         self.payload = None
+        self.exception = None
 
     def post(self, _url, *, headers, content):
         self.calls += 1
         self.payload = jsonlib.loads(content)
         assert headers["Authorization"] == "Bearer fixture-only-token"
+        if self.exception is not None:
+            raise self.exception
         return self.response
 
 
@@ -342,6 +360,25 @@ def test_unknown_activity_id_is_rejected(tmp_path):
     assert "activity_id inconnu" in result["reply"]
 
 
+def test_mixed_case_duplicate_activity_ids_are_rejected(tmp_path):
+    duplicate_uuid_upper = "ABCDEF12-3456-7890-ABCD-EF1234567890"
+    duplicate_uuid_lower = duplicate_uuid_upper.lower()
+    output = revision_output(activity_id=duplicate_uuid_upper)
+    duplicate = dict(output["proposal"]["parameters"]["activities"][0])
+    duplicate.update({"client_ref": "focus-copy", "activity_id": duplicate_uuid_lower})
+    output["proposal"]["parameters"]["activities"].append(duplicate)
+    agent = PlanAgent(output=output)
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == 200
+    assert response.json()["agent_status"] == "invalid_output"
+    assert response.json()["proposal"] is None
+    assert agent.calls == 1
+
+
 def test_overlaps_are_reported_and_activities_are_preserved(tmp_path):
     output = revision_output()
     first = output["proposal"]["parameters"]["activities"][0]
@@ -394,6 +431,26 @@ def test_invalid_model_output_returns_200_without_proposal(tmp_path):
     assert response.json()["agent_status"] == "invalid_output"
     assert response.json()["proposal"] is None
     assert "invalide" in response.json()["reply"]
+
+
+def test_model_output_recursion_error_is_invalid_output(tmp_path, monkeypatch):
+    def recursive_validation(_cls, _value):
+        raise RecursionError("synthetic nested model output")
+
+    monkeypatch.setattr(
+        PlanRevisionModelOutputV3,
+        "model_validate_json",
+        classmethod(recursive_validation),
+    )
+    agent = PlanAgent(output='{"reply":"réponse", "proposal":null}')
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == 200
+    assert response.json()["agent_status"] == "invalid_output"
+    assert response.json()["proposal"] is None
 
 
 def test_non_null_focus_is_rejected_without_proposal(tmp_path):
@@ -488,6 +545,22 @@ def test_pending_idempotency_reservation_after_crash_never_calls_adapter(tmp_pat
     assert agent.calls == 0
 
 
+def test_pending_duplicate_gets_503_then_completed_result_replays(tmp_path):
+    agent = PendingReplayPlanAgent()
+    _app, client, _db = create_test_client(tmp_path, agent)
+    agent.client = client
+
+    with client:
+        first = post_revision(client)
+        sequential_replay = post_revision(client)
+
+    assert agent.pending_response.status_code == 503
+    assert agent.pending_response.json()["agent_status"] == "unavailable"
+    assert agent.calls == 1
+    assert first.status_code == sequential_replay.status_code == 200
+    assert first.json() == sequential_replay.json()
+
+
 def test_same_request_id_with_different_body_returns_409(tmp_path):
     agent = PlanAgent()
     _app, client, _db = create_test_client(tmp_path, agent)
@@ -553,8 +626,9 @@ def test_plan_revision_prompt_disallows_focus_and_training_refs():
             200,
             "invalid_output",
         ),
+        (RecursiveHTTPResponse(200, {}), 200, "invalid_output"),
     ],
-    ids=["quota-429", "server-500", "invalid-json"],
+    ids=["quota-429", "server-500", "invalid-json", "parser-recursion"],
 )
 def test_fake_openclaw_http_responses_map_to_agent_status(
     tmp_path, fake_response, expected_http_status, expected_agent_status
@@ -571,6 +645,50 @@ def test_fake_openclaw_http_responses_map_to_agent_status(
     assert response.json()["proposal"] is None
     assert fake_client.calls == 1
     assert "tools" not in fake_client.payload
+
+
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        httpx.ReadTimeout("fixture-only-token timeout"),
+        httpx.ConnectError("fixture-only-token transport failure"),
+    ],
+    ids=["timeout", "transport"],
+)
+def test_openclaw_transport_errors_are_unavailable_without_token_leak(
+    tmp_path, caplog, transport_error
+):
+    adapter, fake_client = make_fake_http_adapter(FakeHTTPResponse(200, {}))
+    fake_client.exception = transport_error
+    agent = AdapterBackedPlanAgent(adapter)
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == 503
+    assert response.json()["agent_status"] == "unavailable"
+    assert "fixture-only-token" not in str(response.json())
+    assert "fixture-only-token" not in caplog.text
+    assert fake_client.calls == 1
+
+
+def test_openclaw_oversized_payload_is_rejected_without_http_call_or_token_leak(
+    tmp_path, caplog
+):
+    adapter, fake_client = make_fake_http_adapter(FakeHTTPResponse(200, {}))
+    adapter.payload_limit = 1
+    agent = AdapterBackedPlanAgent(adapter)
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == 503
+    assert response.json()["agent_status"] == "unavailable"
+    assert "fixture-only-token" not in str(response.json())
+    assert "fixture-only-token" not in caplog.text
+    assert fake_client.calls == 0
 
 
 def test_expired_plan_revision_is_rejected():
