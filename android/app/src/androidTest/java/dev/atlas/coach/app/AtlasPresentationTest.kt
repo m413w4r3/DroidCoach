@@ -27,6 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 
 @RunWith(AndroidJUnit4::class)
@@ -117,7 +118,13 @@ class AtlasPresentationTest {
         }
         composeRule.setContent {
             AtlasTheme {
-                AtlasApp(controller, context, requestHomeRole = {}, openSystemHome = {})
+                AtlasApp(
+                    controller = controller,
+                    planController = PlanController(File(context.cacheDir, "v63-plan-presentation")),
+                    context = context,
+                    requestHomeRole = {},
+                    openSystemHome = {},
+                )
             }
         }
 

@@ -173,3 +173,20 @@
 | 2026-10-25 | Corrections P1 successives : pauses longues, DST, pause courte minimale, revalidation de `focus.start`, refus du mode continu; code final `1a6f761` | Trois re-revues indépendantes ont confirmé chaque P1; tests JVM finaux 339/339. |
 | 2026-10-25 | La suite AVD finale est rejouée après redémarrage à froid pour éliminer les flakes Compose; résultat 78/78 effectif (77 PASS + retest font scale) | Le premier run sur l'émulateur déjà utilisé avait produit 5 flakes UI; le cold boot ne conserve que le harnais font scale connu. |
 | 2026-10-25 | Décision finale : `V6.2_CLOSED` avec `GO_WITH_LIMITATIONS` des deux reviewers, aucun P0/P1; limites acceptées : Pixel non retesté, localisation/mobilité off, restauration non exécutée, révocation en vol non rejouée, P2 URL OpenClaw/pull tardif | Revue finale `1a6f761`; limites documentées, aucune revendication de PASS pour les éléments non exécutés. |
+
+## V6.3 — Ouverture de mission (2026-10-26)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-10-26 | Branche locale `feat/atlas-v6-3` depuis `acda7a9`; aucun push/merge distant | Le prompt maître autorise le développement local et interdit toute opération distante sans accord ciblé. |
+| 2026-10-26 | Limite appliquée : **3 enfants maximum, aucune sous-délégation**, malgré une modification locale non commitée d'`AGENTS.md` passant à 6 | La version initiale d'`AGENTS.md` et le prompt maître imposent 3; la modification externe est préservée mais non adoptée. |
+| 2026-10-26 | Provider enfant vérifié `codex`, modèle `gpt-6-luna`, effort effectif `xhigh`; worktrees séparés | Seul profil conforme au contrat; métadonnées relues dans chaque session. |
+| 2026-10-26 | Le package `dev.atlas.coach.plan` est autonome et persisté dans un fichier privé atomique distinct du document global | Évite les conflits avec `AtlasController` et le risque de corruption du document `schemaVersion=1`. |
+| 2026-10-26 | Aucune permission `READ_CALENDAR`/`WRITE_CALENDAR` ajoutée au manifeste dans le lot L1/L2 | Permission sensible non encore approuvée; l'adaptateur reste derrière une abstraction et un état `NOT_DECLARED`. |
+| 2026-10-26 | Les nouvelles capabilities V6.3 (`dayPlan`, `calendarRead`, `calendarWrite`, `wgerRead`, `wgerWrite`, `bridgeResearch`, `memoryFacts`) sont désactivées par défaut | Préserve le comportement V6.2 et permet une révocation indépendante. |
+| 2026-10-26 | Le contrat `plan.revise_day` est ajouté dans un module backend inactif, non branché aux endpoints V2 | Évite d'élargir la surface d'autorisation avant l'implémentation Android et la revue. |
+| 2026-10-26 | Etar identifié par `ws.xsoh.etar` (debug `.debug`), pas `org.dmfs.calendar` | Vérification du `applicationId` upstream; correction transmise avant intégration. |
+| 2026-10-26 | ATLAS ne présume pas pouvoir créer un calendrier local : la création relève d'un sync adapter; L4 devra qualifier un calendrier existant modifiable | Documentation Android officielle; évite un faux sync adapter non qualifié ou une manipulation de base privée. |
+| 2026-10-26 | Les événements ATLAS seront marqués par `CUSTOM_APP_PACKAGE` + `CUSTOM_APP_URI`; tout marqueur ambigu est en lecture seule | Colonnes vérifiées dans le SDK 37.2; protège les événements étrangers. |
+| 2026-10-26 | Aucune action Pixel/ADB : aucun appareil connecté au pré-vol | Ne jamais inventer un test physique; les gates physiques restent `BLOCKED_DEVICE`/`NOT_RUN`. |
+| 2026-10-26 | Les exécutions Gradle des enfants sont autorisées uniquement pour compiler/tester et accéder au cache `~/.gradle` | Opération réversible, sans réseau ni donnée personnelle; aucune installation ni action ADB. |

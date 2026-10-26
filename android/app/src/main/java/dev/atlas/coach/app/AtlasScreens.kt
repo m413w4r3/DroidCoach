@@ -583,6 +583,9 @@ internal fun CoachScreen(controller: AtlasController, revision: Int) {
 internal fun MoreScreen(controller: AtlasController) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Autres espaces", style = MaterialTheme.typography.headlineSmall)
+        AtlasSection("Programme") {
+            AtlasSecondaryButton("Plan du jour", onClick = { controller.navigationState.navigate(AtlasScreenId.PLAN) })
+        }
         AtlasSection("Bibliothèque et journal") {
             AtlasSecondaryButton("Bibliothèque", onClick = { controller.navigationState.navigate(AtlasScreenId.LIBRARY) })
             AtlasSecondaryButton("Coach", onClick = { controller.navigationState.navigate(AtlasScreenId.COACH) })

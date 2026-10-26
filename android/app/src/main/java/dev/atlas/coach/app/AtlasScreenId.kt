@@ -3,6 +3,7 @@ package dev.atlas.coach.app
 /** Route identifiers shared by the app host and its independently tested screens. */
 internal object AtlasScreenId {
     const val HOME = "Accueil"
+    const val PLAN = "Plan du jour"
     const val FOCUS = "Focus"
     const val HABITS = "Habitudes"
     const val LIBRARY = "Bibliothèque"
