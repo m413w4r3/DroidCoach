@@ -283,6 +283,8 @@ P1ter — installation approuvée de l'APK correctif:
         6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886.
   PASS  données conservées: plan v4/3 activités, mandat v3, consentement
         calendrier révoqué, READ_CALENDAR granted=false.
+  PASS  vérification UI après installation: Plus > Plan du jour affiche
+        « version 4 », « 3 activité(s) » et les trois créneaux locaux.
 
 Rejeu P3 sur APK 6ab95fac:
   PASS  consentement ATLAS donné, READ_CALENDAR accordé via le dialogue
