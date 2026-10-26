@@ -43,6 +43,14 @@ kotlin {
 }
 
 dependencies {
+    // Pinned maintained WebSocket client; supports the app's minSdk 26.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Bouncy Castle Licence; 1.86 exposes supported lightweight X25519 and
+    // explicit-nonce ChaCha20-Poly1305 APIs; Tink's corresponding X25519 API is
+    // @Alpha and its nonce-taking AEAD lives in an internal package. BC uses
+    // Java 8 APIs and works with minSdk 26; verified against the published API.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
+
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.ui:ui")
