@@ -16,7 +16,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from atlas_backend.agent import AgentStatus, MockAgentAdapter
 from atlas_backend.main import create_app
 from atlas_backend.models_v2 import MandateSummary
-from atlas_backend.openclaw_adapter import build_plan_revision_payload
+from atlas_backend.openclaw_adapter import (
+    PLAN_REVISION_SYSTEM_PROMPT,
+    OpenClawAgentAdapter,
+    build_plan_revision_payload,
+)
 from atlas_backend.plan_agent_v3 import (
     PlanRevisionAdapterUnavailable,
     PlanRevisionRequestV3,
@@ -93,6 +97,52 @@ class PlanAgent(MockAgentAdapter):
             breaker="closed",
             quota={"calls_last_minute": 0, "daily_tokens": 0, "limited": False},
         )
+
+
+class FakeHTTPResponse:
+    def __init__(self, status_code: int, body: dict):
+        self.status_code = status_code
+        self._body = body
+        self.is_success = 200 <= status_code < 300
+
+    def json(self) -> dict:
+        return self._body
+
+
+class FakeHTTPClient:
+    def __init__(self, response: FakeHTTPResponse):
+        self.response = response
+        self.calls = 0
+        self.payload = None
+
+    def post(self, _url, *, headers, content):
+        self.calls += 1
+        self.payload = jsonlib.loads(content)
+        assert headers["Authorization"] == "Bearer fixture-only-token"
+        return self.response
+
+
+class AdapterBackedPlanAgent(PlanAgent):
+    def __init__(self, adapter: OpenClawAgentAdapter):
+        super().__init__()
+        self.adapter = adapter
+
+    def propose_plan_revision(self, **kwargs):
+        self.calls += 1
+        self.last_args = kwargs
+        return self.adapter.propose_plan_revision(**kwargs)
+
+
+def make_fake_http_adapter(response: FakeHTTPResponse):
+    adapter = OpenClawAgentAdapter(
+        base_url="http://gateway.invalid",
+        token="fixture-only-token",
+        daily_tokens=100_000,
+    )
+    adapter._client.close()
+    client = FakeHTTPClient(response)
+    adapter._client = client
+    return adapter, client
 
 
 class DirectResponse:
@@ -346,6 +396,41 @@ def test_invalid_model_output_returns_200_without_proposal(tmp_path):
     assert "invalide" in response.json()["reply"]
 
 
+def test_non_null_focus_is_rejected_without_proposal(tmp_path):
+    output = revision_output()
+    output["proposal"]["parameters"]["activities"][0]["focus"] = {
+        "focus_minutes": 25,
+        "break_minutes": 5,
+        "cycles": 1,
+    }
+    agent = PlanAgent(output=output)
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == 200
+    assert response.json()["agent_status"] == "invalid_output"
+    assert response.json()["proposal"] is None
+
+
+def test_non_null_training_ref_is_rejected_without_proposal(tmp_path):
+    output = revision_output()
+    output["proposal"]["parameters"]["activities"][0]["training_ref"] = {
+        "provider": "wger",
+        "routine_id": 1,
+    }
+    agent = PlanAgent(output=output)
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == 200
+    assert response.json()["agent_status"] == "invalid_output"
+    assert response.json()["proposal"] is None
+
+
 def test_quota_limited_status_is_explicit(tmp_path):
     agent = PlanAgent(error=PlanRevisionQuotaLimited("synthetic quota"))
     _app, client, _db = create_test_client(tmp_path, agent)
@@ -446,6 +531,46 @@ def test_openclaw_plan_revision_payload_has_no_tools_field():
     assert payload["messages"][0]["content"] != ""
     assert "plan.revise_day" in payload["messages"][0]["content"]
     assert jsonlib.loads(payload["messages"][1]["content"])["plan"]["plan_id"] == PLAN_ID
+
+
+def test_plan_revision_prompt_disallows_focus_and_training_refs():
+    instruction = (
+        "Dans ce lot, focus et training_ref doivent toujours être null ; ne les renseigne pas."
+    )
+    assert instruction in PLAN_REVISION_SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize(
+    ("fake_response", "expected_http_status", "expected_agent_status"),
+    [
+        (FakeHTTPResponse(429, {}), 200, "quota_limited"),
+        (FakeHTTPResponse(500, {}), 503, "unavailable"),
+        (
+            FakeHTTPResponse(
+                200,
+                {"choices": [{"message": {"content": "not-json"}}]},
+            ),
+            200,
+            "invalid_output",
+        ),
+    ],
+    ids=["quota-429", "server-500", "invalid-json"],
+)
+def test_fake_openclaw_http_responses_map_to_agent_status(
+    tmp_path, fake_response, expected_http_status, expected_agent_status
+):
+    adapter, fake_client = make_fake_http_adapter(fake_response)
+    agent = AdapterBackedPlanAgent(adapter)
+    _app, client, _db = create_test_client(tmp_path, agent)
+
+    with client:
+        response = post_revision(client)
+
+    assert response.status_code == expected_http_status
+    assert response.json()["agent_status"] == expected_agent_status
+    assert response.json()["proposal"] is None
+    assert fake_client.calls == 1
+    assert "tools" not in fake_client.payload
 
 
 def test_expired_plan_revision_is_rejected():

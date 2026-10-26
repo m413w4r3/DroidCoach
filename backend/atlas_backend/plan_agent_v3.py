@@ -288,6 +288,18 @@ def propose_plan_revision(
             _response(reply=output.reply, agent_status="ok"),
         )
 
+    if any(
+        activity.focus is not None or activity.training_ref is not None
+        for activity in output.proposal.parameters.activities
+    ):
+        return _finish_result(
+            store,
+            request_id,
+            body_hash,
+            200,
+            _response(reply=INVALID_OUTPUT_REPLY, agent_status="invalid_output"),
+        )
+
     created_at = current_time
     expires_at = created_at + ttl
     idempotency_key = "v3plan-" + hashlib.sha256(
