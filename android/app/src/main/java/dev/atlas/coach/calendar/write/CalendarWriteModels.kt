@@ -47,6 +47,7 @@ enum class CalendarWriteError {
     CALENDAR_NOT_SELECTED,
     WRONG_CALENDAR,
     INVALID_LINK,
+    STORAGE_UNAVAILABLE,
 }
 
 enum class CalendarWriteMarker {
@@ -143,6 +144,8 @@ data class CalendarWriteOperation(
     val idempotencyKey: String,
     val state: CalendarWriteOperationState,
     val errorCode: CalendarWriteError? = null,
+    /** Previous provider content during UPDATE recovery; null for CREATE and legacy records. */
+    val previousContentHash: String? = null,
 ) {
     init {
         requireCanonicalUuid(operationId, "operationId")
@@ -151,6 +154,9 @@ data class CalendarWriteOperation(
         require(calendarId >= 0L) { "calendarId must be non-negative" }
         require(eventId == null || eventId >= 0L) { "eventId must be non-negative" }
         require(SHA_256.matches(payloadHash)) { "payloadHash must be lowercase SHA-256" }
+        require(previousContentHash == null || SHA_256.matches(previousContentHash)) {
+            "previousContentHash must be lowercase SHA-256"
+        }
         require(IDEMPOTENCY_KEY.matches(idempotencyKey)) { "idempotencyKey must be an opaque identifier" }
     }
 }

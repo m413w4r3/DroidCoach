@@ -79,9 +79,9 @@ class AndroidCalendarContractWriteProvider(context: Context) : CalendarWriteProv
         if (updated != 1) throw IllegalStateException("calendar update did not affect one row")
     }
 
-    override fun delete(eventId: Long, calendarId: Long, provenanceUri: String) {
+    override fun delete(eventId: Long, calendarId: Long, provenanceUri: String): Int {
         requireWritePermissions()
-        resolver.delete(
+        return resolver.delete(
             CalendarContract.Events.CONTENT_URI,
             ownershipSelection(),
             ownershipArguments(eventId, calendarId, provenanceUri),
