@@ -631,6 +631,20 @@ def test_plan_revision_prompt_disallows_focus_and_training_refs():
     assert instruction in PLAN_REVISION_SYSTEM_PROMPT
 
 
+def test_plan_revision_prompt_limits_activity_kind_and_requires_priority():
+    assert (
+        "kind doit être exactement l'une de ces valeurs : "
+        "FOCUS, TRAINING, APPOINTMENT, ADMIN, MEAL, REST, BUFFER, OTHER"
+    ) in PLAN_REVISION_SYSTEM_PROMPT
+    assert (
+        "priority est obligatoire pour toute activity, y compris une nouvelle activité"
+    ) in PLAN_REVISION_SYSTEM_PROMPT
+    assert (
+        "priority doit être exactement l'une de ces valeurs : REQUIRED, IMPORTANT, OPTIONAL"
+    ) in PLAN_REVISION_SYSTEM_PROMPT
+    assert "priority ne peut jamais être null" in PLAN_REVISION_SYSTEM_PROMPT
+
+
 @pytest.mark.parametrize(
     ("fake_response", "expected_http_status", "expected_agent_status"),
     [
