@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -44,8 +45,10 @@ import dev.atlas.coach.plan.Priority
 import java.time.Duration
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Local day-plan surface. Local mutations are previewed before application.
@@ -65,10 +68,32 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
     var changingStatusId by rememberSaveable { mutableStateOf<String?>(null) }
     var removingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var calendarPreview by remember { mutableStateOf<CalendarSyncPreview?>(null) }
+    var calendarPlanAtDialogOpen by remember { mutableStateOf<dev.atlas.coach.plan.DayPlan?>(null) }
+    var calendarSyncBusy by remember { mutableStateOf(false) }
+    var calendarSyncMessage by remember { mutableStateOf<String?>(null) }
+    var calendarDiverged by remember { mutableStateOf(false) }
+    val appContext = LocalContext.current.applicationContext
+    var calendarEffectController by remember { mutableStateOf<CalendarEffectController?>(null) }
     var currentMinute by remember(controller.timezone) {
         mutableIntStateOf(ZonedDateTime.now(ZoneId.of(controller.timezone)).let { it.hour * 60 + it.minute })
     }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(appContext) {
+        calendarEffectController = withContext(Dispatchers.IO) {
+            CalendarEffectController.fromContext(appContext)
+        }
+    }
+
+    LaunchedEffect(calendarEffectController, controller.revision, plan?.version) {
+        val effectController = calendarEffectController ?: return@LaunchedEffect
+        val appliedPlan = plan?.takeIf { it.version >= 2 } ?: return@LaunchedEffect
+        val verification = withContext(Dispatchers.IO) { effectController.verifyPlan(appliedPlan) }
+        calendarDiverged = verification.any {
+            it.state in setOf(CalendarPlanVerificationState.DIVERGED, CalendarPlanVerificationState.ORPHANED)
+        }
+    }
 
     // Reload on foreground return and at the next local midnight so a long-lived
     // process never shows yesterday's plan under today's date.
@@ -194,8 +219,51 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
                 }
             }
             PlanAgentSection(controller, atlasController, configurationMessage)
+            if (plan.version >= 2) {
+                AtlasSection("Calendrier") {
+                    val effectController = calendarEffectController
+                    if (effectController == null) {
+                        Text("Diagnostic calendrier en cours de chargement…", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        AtlasSecondaryButton(
+                            label = if (calendarSyncBusy) "Synchronisation…" else "Synchroniser avec le calendrier",
+                            enabled = !calendarSyncBusy,
+                            onClick = {
+                                calendarSyncBusy = true
+                                scope.launch {
+                                    val preview = withContext(Dispatchers.IO) {
+                                        effectController.syncAppliedPlan(plan)
+                                    }
+                                    calendarSyncBusy = false
+                                    if (!preview.ready) {
+                                        calendarSyncMessage = preview.issue?.userLabel()
+                                        calendarDiverged = preview.issue == CalendarEffectIssue.DIVERGENCE_REQUIRES_REVIEW
+                                    } else if (preview.effects.isEmpty()) {
+                                        calendarSyncMessage = "Le calendrier correspond déjà à la version ${plan.version}."
+                                        calendarDiverged = false
+                                    } else {
+                                        calendarPlanAtDialogOpen = plan
+                                        calendarPreview = preview
+                                        calendarSyncMessage = null
+                                    }
+                                }
+                            },
+                        )
+                        calendarSyncMessage?.let { message ->
+                            Text(message, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (calendarDiverged) {
+                            AtlasStatus("Divergence calendrier à vérifier", AtlasStatusKind.UNAVAILABLE)
+                            TextButton(
+                                onClick = { atlasController?.navigationState?.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) },
+                                modifier = Modifier.sizeIn(minHeight = 48.dp),
+                            ) { Text("Ouvrir le diagnostic calendrier") }
+                        }
+                    }
+                }
+            }
             Text(
-                "Les modifications sont locales. Aucun événement de calendrier n'est créé par cet écran tant que la permission calendrier n'a pas été approuvée.",
+                "Les modifications du programme restent locales. Le calendrier ne change qu’après une confirmation groupée.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -290,6 +358,74 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
             },
             dismissButton = {
                 TextButton(enabled = !coachBusy, onClick = { showCoachRequest = false }) { Text("Annuler") }
+            },
+        )
+    }
+
+    calendarPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = {
+                calendarPreview = null
+                calendarPlanAtDialogOpen = null
+            },
+            title = { Text("Confirmer la synchronisation calendrier") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Programme v${preview.planVersion} · ${preview.effects.size} effet(s)")
+                    preview.effects.forEach { effect ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("${effect.operationLabel()} : ${effect.title}", style = MaterialTheme.typography.titleSmall)
+                            Text(effect.localTimeLabel(), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Text(
+                        "Annuler laisse le calendrier inchangé. Si le programme change, cette confirmation expirera.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !calendarSyncBusy,
+                    onClick = {
+                        val confirmedPreview = preview
+                        val planAtOpen = calendarPlanAtDialogOpen
+                        val currentPlan = controller.plan
+                        calendarPreview = null
+                        calendarPlanAtDialogOpen = null
+                        val effectController = calendarEffectController
+                        if (planAtOpen == null || currentPlan == null || effectController == null) {
+                            calendarSyncMessage = "Le programme a changé. Rouvrez la confirmation."
+                            return@TextButton
+                        }
+                        calendarSyncBusy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                effectController.syncAppliedPlan(planAtOpen, confirmedPreview, currentPlan)
+                            }
+                            val verification = withContext(Dispatchers.IO) {
+                                effectController.verifyPlan(currentPlan)
+                            }
+                            calendarSyncBusy = false
+                            calendarSyncMessage = result.issue?.userLabel() ?: result.status.userLabel()
+                            calendarDiverged = result.status == CalendarSyncStatus.DIVERGED ||
+                                verification.any { it.state in setOf(CalendarPlanVerificationState.DIVERGED, CalendarPlanVerificationState.ORPHANED) }
+                        }
+                    },
+                ) { Text(if (calendarSyncBusy) "Traitement…" else "Confirmer") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !calendarSyncBusy,
+                    onClick = {
+                        calendarPreview = null
+                        calendarPlanAtDialogOpen = null
+                        calendarSyncMessage = "Synchronisation annulée. Aucun effet effectué."
+                    },
+                ) { Text("Annuler") }
             },
         )
     }
