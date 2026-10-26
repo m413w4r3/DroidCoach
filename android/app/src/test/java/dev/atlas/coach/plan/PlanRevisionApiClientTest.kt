@@ -247,7 +247,7 @@ class PlanRevisionApiClientTest {
                         .put("sub_goal_id", JSONObject.NULL)
                         .put("training_ref", JSONObject.NULL)
                         .put("focus", JSONObject().put("cycles", 1))
-                        .put("notes", JSONObject.NULL)))))))
+                        .put("notes", JSONObject.NULL))))))
         .put("overlaps", org.json.JSONArray())
         .toString()
 
