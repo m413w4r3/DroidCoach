@@ -72,13 +72,23 @@ Qualification réelle complémentaire (2026-10-26):
 - `GET /api/v2/workoutsession/?limit=1` → 200, count=1, sans pagination.
   Item: `id` chaîne, `datetime_start`/`datetime_end` chaînes, `day` int,
   `routine` int, `impression`/`notes` chaînes.
-- `WgerClient.list_workout_logs()` réel → `SCHEMA_ERROR`, car le parseur
-  attendait un `id` entier. **Défaut réel confirmé**, correction demandée:
-  IDs opaques chaîne, `WorkoutSessionSummary`, `list_workout_sessions()`,
-  tests avec les types réels, diagnostic étendu. Re-test et re-revue à faire.
+- Première tentative `list_workout_logs()` → `SCHEMA_ERROR` (ID entier attendu).
+  Correction `5f68c88`: IDs opaques chaîne, `WorkoutSessionSummary`,
+  `list_workout_sessions()`, probe des quatre ressources, tests types réels.
+- Re-revue indépendante: ACCEPTED_WITH_P2. P2: `WorkoutLogSummary.date` n'est
+  validée que par longueur, pas ISO-8601; à renforcer en L5-02/L6.
+- Diagnostic réel final (SHA intégré a56de74, `.env` 0600):
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":false}
+  → routine, exercise, workoutlog et workoutsession accessibles en lecture;
+    pagination présente sauf workoutsession (count=1).
+- Backend intégré final: 158 passed, 1 skipped.
 
 Limites:
 - Pas de rotation JWT réelle; mode JWT non activé.
 - Aucune écriture wger.
+- Validation ISO de la date workoutlog à renforcer (P2).
 - Redirections HTTP désactivées; URL non affichée.
 - P2 mémoire documenté; panne fsync/replace simulée par monkeypatch.
