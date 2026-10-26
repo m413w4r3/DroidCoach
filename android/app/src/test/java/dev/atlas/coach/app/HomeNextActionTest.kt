@@ -75,6 +75,67 @@ class HomeNextActionTest {
     }
 
     @Test
+    fun plannedActivityWhoseSlotContainsNowIsSelectedBeforeFutureActivity() {
+        val currentSlot = activity(41, "Créneau en cours", startMinute = 8 * 60 + 30, durationMinutes = 60)
+        val future = activity(42, "Plus tard", startMinute = 10 * 60 + 30)
+
+        val result = selectHomeNextAction(
+            plan(listOf(future, currentSlot)),
+            today,
+            currentMinute = 9 * 60,
+        )
+
+        assertEquals(currentSlot, (result as HomeNextActionState.Selected).activity)
+    }
+
+    @Test
+    fun plannedActivityWhoseSlotEndedIsExcluded() {
+        val ended = activity(43, "Créneau terminé", startMinute = 8 * 60, durationMinutes = 60)
+        val future = activity(44, "Prochaine", startMinute = 10 * 60 + 30)
+
+        val result = selectHomeNextAction(
+            plan(listOf(ended, future)),
+            today,
+            currentMinute = 9 * 60,
+        )
+
+        assertEquals(future, (result as HomeNextActionState.Selected).activity)
+    }
+
+    @Test
+    fun inProgressActivityTakesPriorityOverPlannedActivityWhoseSlotContainsNow() {
+        val currentSlot = activity(45, "Créneau planifié", startMinute = 8 * 60 + 30, durationMinutes = 60)
+        val inProgress = activity(
+            46,
+            "En cours explicitement",
+            startMinute = 7 * 60 + 30,
+            status = ActivityStatus.IN_PROGRESS,
+        )
+
+        val result = selectHomeNextAction(
+            plan(listOf(currentSlot, inProgress)),
+            today,
+            currentMinute = 9 * 60,
+        )
+
+        assertEquals(inProgress, (result as HomeNextActionState.Selected).activity)
+    }
+
+    @Test
+    fun earliestOfTwoPlannedActivitiesWhoseSlotsContainNowIsSelected() {
+        val laterCurrentSlot = activity(47, "Créneau plus tardif", startMinute = 8 * 60 + 45, durationMinutes = 60)
+        val earliestCurrentSlot = activity(48, "Premier créneau", startMinute = 8 * 60 + 30, durationMinutes = 60)
+
+        val result = selectHomeNextAction(
+            plan(listOf(laterCurrentSlot, earliestCurrentSlot)),
+            today,
+            currentMinute = 9 * 60,
+        )
+
+        assertEquals(earliestCurrentSlot, (result as HomeNextActionState.Selected).activity)
+    }
+
+    @Test
     fun inProgressActivityTakesPriorityOverFuturePlannedActivity() {
         val future = activity(5, "À venir", startMinute = 10 * 60)
         val inProgress = activity(6, "En cours", startMinute = 8 * 60, status = ActivityStatus.IN_PROGRESS)

@@ -14,7 +14,7 @@ internal sealed interface HomeNextActionState {
     data class Selected(val activity: PlanActivity) : HomeNextActionState
 }
 
-/** Selects an explicit in-progress activity first, then the earliest future planned activity. */
+/** Selects explicit progress first, then the earliest active planned slot, then the future. */
 internal fun selectHomeNextAction(
     plan: DayPlan?,
     today: LocalDate,
@@ -31,14 +31,24 @@ internal fun selectHomeNextAction(
         .minByOrNull { it.scheduledLocal.startMinute }
     if (inProgress != null) return HomeNextActionState.Selected(inProgress)
 
-    val upcoming = plan.activities
+    val plannedInCurrentSlot = plan.activities
         .asSequence()
         .filter {
             it.status == ActivityStatus.PLANNED &&
-                it.scheduledLocal.startMinute >= currentMinute
+                it.scheduledLocal.startMinute <= currentMinute &&
+                currentMinute < it.scheduledLocal.startMinute + it.scheduledLocal.durationMinutes
         }
         .minByOrNull { it.scheduledLocal.startMinute }
-    return upcoming?.let(HomeNextActionState::Selected) ?: HomeNextActionState.NonePlanned
+    if (plannedInCurrentSlot != null) return HomeNextActionState.Selected(plannedInCurrentSlot)
+
+    val futurePlanned = plan.activities
+        .asSequence()
+        .filter {
+            it.status == ActivityStatus.PLANNED &&
+                it.scheduledLocal.startMinute > currentMinute
+        }
+        .minByOrNull { it.scheduledLocal.startMinute }
+    return futurePlanned?.let(HomeNextActionState::Selected) ?: HomeNextActionState.NonePlanned
 }
 
 internal fun homeNextActionAccessibilityLabel(
