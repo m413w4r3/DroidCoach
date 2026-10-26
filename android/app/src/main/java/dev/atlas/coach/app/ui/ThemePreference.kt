@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
@@ -101,7 +102,7 @@ fun ThemePreferenceSection() {
     val context = LocalContext.current
     val store = ThemePreferenceStore.get(context)
     val accentStore = AccentPreferenceStore.get(context)
-    val selected = store.currentPreference
+    val selectedTheme = store.currentPreference
     val selectedAccent = accentStore.currentAccent
     val dynamicColorEnabled = accentStore.dynamicColorEnabled
     val systemIsDark = isSystemInDarkTheme()
@@ -119,14 +120,14 @@ fun ThemePreferenceSection() {
                     .clickable(role = Role.RadioButton) { store.setPreference(option) },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = selected == option, onClick = { store.setPreference(option) })
+                RadioButton(selected = selectedTheme == option, onClick = { store.setPreference(option) })
                 Text(option.label, style = MaterialTheme.typography.bodyLarge)
             }
         }
 
         Text("Palette d’accent", style = MaterialTheme.typography.titleSmall)
         AtlasAccentPreference.entries.forEach { option ->
-            val preview = AtlasThemePalettes.forPreference(selected, systemIsDark, option)
+            val preview = AtlasThemePalettes.forPreference(selectedTheme, systemIsDark, option)
             Row(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
                     .semantics(mergeDescendants = true) {
@@ -165,7 +166,7 @@ fun ThemePreferenceSection() {
                 Column(Modifier.weight(1f)) {
                     Text("Couleurs dynamiques Android", style = MaterialTheme.typography.bodyLarge)
                     val dynamicColorHint = when {
-                        selected == AtlasThemePreference.AMOLED ->
+                        selectedTheme == AtlasThemePreference.AMOLED ->
                             "Couleur dynamique non appliquée au mode AMOLED."
                         dynamicColorEnabled -> "L’accent ATLAS est remplacé."
                         else -> null
@@ -180,7 +181,7 @@ fun ThemePreferenceSection() {
                 }
                 Switch(
                     checked = dynamicColorEnabled,
-                    onCheckedChange = accentStore::setDynamicColorEnabled,
+                    onCheckedChange = accentStore::setDynamicColor,
                 )
             }
         } else {

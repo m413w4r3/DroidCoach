@@ -66,7 +66,7 @@ class AccentPreferenceStore private constructor(context: Context) {
         preferences.edit { putString(KEY_ACCENT, AtlasAccentPreferenceCodec.encode(accent)) }
     }
 
-    fun setDynamicColorEnabled(enabled: Boolean) {
+    fun setDynamicColor(enabled: Boolean) {
         dynamicColorEnabled = enabled
         preferences.edit { putBoolean(KEY_DYNAMIC_COLOR, enabled) }
     }
