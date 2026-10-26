@@ -46,6 +46,16 @@ class AtlasNavigationStateTest {
     }
 
     @Test
+    fun planIsReachableFromMoreAndBackReturnsToMore() {
+        val navigation = AtlasNavigationState()
+        navigation.navigate(AtlasScreenId.MORE)
+        navigation.navigate(AtlasScreenId.PLAN)
+
+        assertEquals(AtlasScreenId.PLAN, navigation.current)
+        assertEquals(AtlasScreenId.MORE, navigation.back())
+    }
+
+    @Test
     fun launcherCoachShortcutSelectsTheCoachDestinationDirectly() {
         val navigation = AtlasNavigationState()
 

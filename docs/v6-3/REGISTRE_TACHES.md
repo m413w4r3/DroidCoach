@@ -21,9 +21,9 @@ diff, exécute l'oracle sur le SHA intégré et met à jour ce registre.
 | TASK_ID | Objectif observable | Dépendances | Scope d'écriture exclusif | Oracle | Statut |
 |---|---|---|---|---|---|
 | V63-L0-01 | Pré-vol, contrats de domaine, registre | — | `docs/v6-3/PREFLIGHT.md`, `CONTRATS_V63.md`, `REGISTRE_TACHES.md` | revue parent + JSON/schémas valides | **INTEGRATED** |
-| V63-L1-01 | Domaine `DayPlan`/`PlanRevision` + stockage atomique + idempotence + DST, JVM | L0-01 | `android/.../plan/**` (main+test), aucune autre modification | `:app:testDebugUnitTest --tests dev.atlas.coach.plan.*` + suite complète | **READY** |
-| V63-L1-02 | Écran Plan + navigation + actions locales, intégré par le parent | L1-01 | `android/.../app/PlanScreen.kt`, `AtlasApp.kt`, `AtlasController.kt`, `AtlasNavigationState.kt`, `AtlasApplication.kt` | build + test navigation + capture AVD si dispo | **READY** |
-| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `LauncherHomeScreen.kt`/`AtlasScreens.kt` (parent) | JVM + UI test | **READY** |
+| V63-L1-01 | Domaine `DayPlan`/`PlanRevision` + stockage atomique + idempotence + DST, JVM | L0-01 | `android/.../plan/**` (main+test), aucune autre modification | `:app:testDebugUnitTest --tests dev.atlas.coach.plan.*` + suite complète | **INTEGRATED** (`17bb723` → `f78e3d9`) |
+| V63-L1-02 | Écran Plan + navigation + actions locales, intégré par le parent | L1-01 | `android/.../app/PlanScreen.kt`, `PlanController.kt`, `AtlasApp.kt`, `AtlasApplication.kt`, `AtlasScreenId.kt`, `AtlasScreens.kt`, `MainActivity.kt` | 57 tests ciblés + JVM 415 + lint/build | **INTEGRATED** (résultat à compléter) |
+| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `LauncherHomeScreen.kt`/`AtlasScreens.kt` (parent) | JVM + UI test | **READY — non livré** |
 | V63-L2-01 | Sonde CalendarContract lecture seule + abstraction testable, sans permission manifeste | L0-01 | `android/.../calendar/**` (main+test) | JVM fake provider + compile Android | **INTEGRATED** (`81e1bd2`) |
 | V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers, **accord propriétaire requis** | L2-01 + accord | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **BLOCKED_APPROVAL** |
 | V63-L2-03 | Lecture événements/conflits réels sur Pixel + Etar installé | L2-02 + appareil | preuves `docs/v6-3/preuves/**` | Pixel + Etar, `PASS/FAIL` | **BLOCKED_DEVICE** |
@@ -85,3 +85,5 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
 | 2026-10-26 | V63-L0-02 (contrat backend plan) | `51d126e` | `ba38524` | `pytest tests/test_plan_v3*.py` : 24 PASS ; suite backend 88 PASS, 1 skip | ACCEPTED / INTEGRATED |
 | 2026-10-26 | V63-L0-03 (références Etar/CalendarContract) | `ba38524` | `bc10afe` | sources primaires + `javap` SDK 37.2 | ACCEPTED / INTEGRATED |
 | 2026-10-26 | V63-L2-01 (calendar read) | `51d126e` | `dd9760d` (enfant) → `81e1bd2` (intégration) | ciblé 23 PASS ; JVM complet 362 PASS, 0 échec ; manifeste/Gradle inchangés | ACCEPTED / INTEGRATED |
+| 2026-10-26 | V63-L1-01 (plan domain) | `51d126e` | `17bb723` (enfant) → `f78e3d9` (intégration) | ciblé 42 PASS ; JVM enfant 381 PASS | ACCEPTED / INTEGRATED |
+| 2026-10-26 | V63-L1-02 (plan UI) | `f78e3d9` | à compléter | ciblé 57 PASS ; JVM 415 PASS, lint 0 erreur, build PASS | ACCEPTED (en attente commit) |

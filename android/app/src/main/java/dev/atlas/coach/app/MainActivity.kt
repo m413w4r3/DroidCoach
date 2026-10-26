@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
             AtlasTheme(preference = themePreferenceStore.currentPreference) {
                 AtlasApp(
                     controller = controller,
+                    planController = (application as AtlasApplication).planController,
                     context = this,
                     requestHomeRole = ::requestHomeRoleExplicitly,
                     openSystemHome = ::openSystemHomeSettings,

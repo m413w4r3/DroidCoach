@@ -34,6 +34,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun AtlasApp(
     controller: AtlasController,
+    planController: PlanController,
     context: Context,
     requestHomeRole: () -> Unit,
     openSystemHome: () -> Unit,
@@ -110,6 +111,7 @@ fun AtlasApp(
     }
     val screenTitle = when (controller.navigationState.current) {
         AtlasScreenId.HOME -> "Tableau de bord"
+        AtlasScreenId.PLAN -> "Plan du jour"
         AtlasScreenId.AGENT_SETTINGS -> "Mandat du Coach"
         AtlasScreenId.AGENT_SHARING -> "Données partagées"
         AtlasScreenId.AGENT_EFFECTS -> "Journal des effets"
@@ -136,6 +138,7 @@ fun AtlasApp(
     ) {
         when (controller.navigationState.current) {
             AtlasScreenId.HOME -> HomeScreen(controller, revision)
+            AtlasScreenId.PLAN -> PlanScreen(planController)
             AtlasScreenId.FOCUS -> FocusScreen(controller, revision, onChooseHabit = { showLinkChoices = true })
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)
