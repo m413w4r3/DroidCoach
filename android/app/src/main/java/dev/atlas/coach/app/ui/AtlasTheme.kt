@@ -72,7 +72,7 @@ fun AtlasTheme(
     val accentStore = AccentPreferenceStore.get(context)
     val accent = accentStore.currentAccent
     val dynamicColorEnabled = accentStore.dynamicColorEnabled
-    val useDynamicColor = shouldUseDynamicColor(Build.VERSION.SDK_INT, dynamicColorEnabled)
+    val useDynamicColor = shouldUseDynamicColor(Build.VERSION.SDK_INT, dynamicColorEnabled, preference)
     val palette = AtlasThemePalettes.forPreference(preference, systemIsDark, accent)
     val configuration = LocalConfiguration.current
     val themedConfiguration = remember(configuration, dark) {
@@ -86,8 +86,8 @@ fun AtlasTheme(
         StaticPressIndication(Color(palette.onSurface).copy(alpha = 0.14f))
     } else LocalIndication.current
     val scheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColorEnabled && dark -> dynamicDarkColorScheme(context)
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColorEnabled -> dynamicLightColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useDynamicColor && dark -> dynamicDarkColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useDynamicColor -> dynamicLightColorScheme(context)
         dark -> darkColorScheme(
             primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
             primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
