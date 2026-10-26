@@ -86,7 +86,6 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(AtlasSpacing.page),
         verticalArrangement = Arrangement.spacedBy(AtlasSpacing.medium),
     ) {
