@@ -1,7 +1,7 @@
 package dev.atlas.coach.app
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -53,7 +53,7 @@ class HomeNextActionAccessibilityInstrumentationTest {
         composeRule.onAllNodesWithContentDescription(
             "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final.",
         ).assertCountEquals(1)
-        composeRule.onNodeWithTag("home_next_action_card").assertExists()
+        composeRule.onNodeWithTag("home_next_action_card").assertIsDisplayed()
     }
 
     @Test
@@ -68,6 +68,6 @@ class HomeNextActionAccessibilityInstrumentationTest {
         }
 
         composeRule.onAllNodesWithContentDescription("Aucune action planifiée.").assertCountEquals(1)
-        composeRule.onNodeWithTag("home_next_action_card").assertExists()
+        composeRule.onNodeWithTag("home_next_action_card").assertIsDisplayed()
     }
 }

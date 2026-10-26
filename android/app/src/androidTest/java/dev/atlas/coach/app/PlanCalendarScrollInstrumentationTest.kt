@@ -3,6 +3,7 @@ package dev.atlas.coach.app
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertCountEquals
@@ -67,7 +68,10 @@ class PlanCalendarScrollInstrumentationTest {
         val context = isolatedContext()
 
         composeRule.setContent {
-            CompositionLocalProvider(LocalContext provides context) {
+            CompositionLocalProvider(
+                LocalContext provides context,
+                LocalActivityResultRegistryOwner provides composeRule.activity,
+            ) {
                 AtlasTheme {
                     AtlasScreenFrame(
                         title = "Diagnostic calendrier",
