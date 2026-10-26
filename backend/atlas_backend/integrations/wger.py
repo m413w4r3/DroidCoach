@@ -20,6 +20,8 @@ WGER_API_PREFIX = "/api/v2/"
 DEFAULT_TOKEN_STORE = Path(__file__).resolve().parents[2] / "data" / "wger_tokens.json"
 DEFAULT_JWT_REFRESH_URL = "https://wger.de/api/v2/token/refresh/"
 MAX_RETRY_AFTER_SECONDS = 60
+# HTTPX buffers response bodies; this bounds JSON parsing input, not total memory use.
+MAX_RESPONSE_BYTES = 2_000_000
 _SAFE_ERROR_MESSAGES = {
     "AUTH_INVALID": "wger authentication was rejected",
     "FORBIDDEN": "wger access is forbidden",
@@ -29,6 +31,7 @@ _SAFE_ERROR_MESSAGES = {
     "SCHEMA_ERROR": "wger response schema is invalid",
     "UNAVAILABLE": "wger service is unavailable",
     "CONFIG_REQUIRED": "wger configuration is required",
+    "ENV_PERMISSIONS": "environment file permissions are too open",
     "RECONCILIATION_REQUIRED": "wger token state requires reconciliation",
 }
 
@@ -479,6 +482,17 @@ class WgerClient:
             raise WgerError("UNAVAILABLE") from None
         if not 200 <= response.status_code < 300:
             raise _http_error(response)
+        # HTTPX has already buffered the body; this caps parsing input, not peak memory.
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise WgerError("SCHEMA_ERROR")
+        content_length = response.headers.get("Content-Length")
+        if content_length is not None:
+            try:
+                declared_length = int(content_length)
+            except (TypeError, ValueError):
+                raise WgerError("SCHEMA_ERROR") from None
+            if declared_length < 0 or declared_length > MAX_RESPONSE_BYTES:
+                raise WgerError("SCHEMA_ERROR")
         try:
             payload = response.json()
             count = payload["count"]

@@ -153,6 +153,29 @@ def test_invalid_schema_is_redacted():
     assert captured.value.code == "SCHEMA_ERROR"
 
 
+def test_oversized_response_is_rejected_before_json_decode(monkeypatch):
+    from atlas_backend.integrations import wger as wger_module
+
+    monkeypatch.setattr(wger_module, "MAX_RESPONSE_BYTES", 8)
+
+    class OversizedResponse:
+        status_code = 200
+        content = b"x" * 9
+        headers = {"Content-Length": "9"}
+
+        def json(self):
+            raise AssertionError("oversized response must not be decoded")
+
+    class FakeHttp:
+        def get(self, *args, **kwargs):
+            return OversizedResponse()
+
+    client = WgerClient(BASE, ApiTokenWgerAuth("unit-test-value"), FakeHttp())
+    with pytest.raises(WgerError) as captured:
+        client.list_routines()
+    assert captured.value.code == "SCHEMA_ERROR"
+
+
 def test_invalid_summary_schema_is_redacted():
     def handler(request):
         return httpx.Response(200, json=page([{"id": 1, "name": {"fr": "texte"}}]))

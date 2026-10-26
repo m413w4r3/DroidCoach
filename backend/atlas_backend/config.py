@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import stat
 import subprocess
 from collections.abc import MutableMapping
 from pathlib import Path
@@ -24,6 +25,9 @@ def load_dotenv_if_enabled(
 
     Passing ``env_file`` is explicit opt-in. Otherwise ATLAS_LOAD_DOTENV must
     equal ``1``; an existing process variable always wins over file contents.
+    On POSIX, the file must be private (``chmod 600``); this is checked before
+    reading its contents. Platforms without POSIX mode bits do not get this
+    permissions check.
     """
     target_env = os.environ if environ is None else environ
     explicit = env_file is not None
@@ -39,8 +43,14 @@ def load_dotenv_if_enabled(
     if relative is None:
         raise WgerError("CONFIG_REQUIRED")
     try:
-        contents = path.read_text(encoding="utf-8")
-    except OSError:
+        with path.open("rb") as env_file_handle:
+            file_mode = stat.S_IMODE(os.fstat(env_file_handle.fileno()).st_mode)
+            if os.name == "posix" and file_mode & 0o077 != 0:
+                raise WgerError("ENV_PERMISSIONS")
+            contents = env_file_handle.read().decode("utf-8")
+    except WgerError:
+        raise
+    except (OSError, UnicodeError):
         raise WgerError("CONFIG_REQUIRED") from None
     try:
         parsed = _parse_env(contents)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 import subprocess
 import threading
@@ -134,6 +135,7 @@ def test_two_concurrent_refreshes_send_only_one_request(tmp_path):
 
 
 def test_persistence_failure_keeps_store_reconciliation_required(tmp_path, monkeypatch):
+    """Simulates save failure; it does not inject a real fsync/replace fault."""
     store = seeded_store(tmp_path)
     posts = 0
 
@@ -257,6 +259,7 @@ def test_dotenv_load_requires_ignored_untracked_file_and_never_overwrites(tmp_pa
     env_path.write_text(
         "WGER_API_TOKEN=file-value\nATLAS_SAMPLE=loaded\n", encoding="utf-8"
     )
+    os.chmod(env_path, 0o600)
     environ = {"WGER_API_TOKEN": "process-value"}
     assert load_dotenv_if_enabled(env_path, environ=environ, repo_root=tmp_path) is True
     assert environ["WGER_API_TOKEN"] == "process-value"
@@ -268,6 +271,27 @@ def test_dotenv_load_requires_ignored_untracked_file_and_never_overwrites(tmp_pa
     with pytest.raises(WgerError) as captured:
         load_dotenv_if_enabled(tracked_path, environ={}, repo_root=tmp_path)
     assert captured.value.code == "CONFIG_REQUIRED"
+
+
+def test_dotenv_requires_private_posix_mode_before_loading(tmp_path):
+    if os.name != "posix":
+        pytest.skip("POSIX mode-bit check is not available")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text(".env\n", encoding="utf-8")
+    env_path = tmp_path / ".env"
+    env_path.write_text("ATLAS_SAMPLE=loaded\n", encoding="utf-8")
+    os.chmod(env_path, 0o644)
+
+    environ = {}
+    with pytest.raises(WgerError) as captured:
+        load_dotenv_if_enabled(env_path, environ=environ, repo_root=tmp_path)
+    assert captured.value.code == "ENV_PERMISSIONS"
+    assert str(captured.value) == "environment file permissions are too open"
+    assert environ == {}
+
+    os.chmod(env_path, 0o600)
+    assert load_dotenv_if_enabled(env_path, environ=environ, repo_root=tmp_path) is True
+    assert environ == {"ATLAS_SAMPLE": "loaded"}
 
 
 def test_dotenv_load_refuses_file_not_ignored_by_git(tmp_path):
