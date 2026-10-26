@@ -60,8 +60,13 @@ class PlanRevisionProposalV3Test {
 
         val type = response()
         type.getJSONObject("proposal").getJSONObject("proposal").getJSONObject("parameters")
-            .getJSONArray("activities").getJSONObject(0).put("start_minute", 540.0)
+            .getJSONArray("activities").getJSONObject(0).put("start_minute", "540")
         assertInvalid(type.toString())
+
+        val fraction = response()
+        fraction.getJSONObject("proposal").getJSONObject("proposal").getJSONObject("parameters")
+            .getJSONArray("activities").getJSONObject(0).put("start_minute", 540.5)
+        assertInvalid(fraction.toString())
     }
 
     @Test
