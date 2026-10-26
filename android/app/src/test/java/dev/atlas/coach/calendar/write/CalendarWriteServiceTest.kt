@@ -8,6 +8,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
+import java.io.File
+import java.nio.file.Files
 import java.time.Instant
 
 class CalendarWriteServiceTest {
@@ -52,6 +55,246 @@ class CalendarWriteServiceTest {
 
         assertEquals(CalendarWriteError.IDEMPOTENCY_CONFLICT, result.error)
         assertEquals(1, harness.provider.insertCalls)
+    }
+
+    @Test
+    fun fileJournalAndLinkIndexesSurviveServiceRestart() {
+        val directory = Files.createTempDirectory("calendar-write-restart").toFile()
+        val provider = FakeCalendarWriteProvider()
+        val firstService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(File(directory, "journal")),
+            nowMillis = { NOW },
+            linkStore = FileCalendarWriteLinkStore(File(directory, "links")),
+        )
+
+        val created = firstService.create(CALENDAR_ID, draft(), "durable-create")
+        val eventId = requireNotNull(created.link?.eventId)
+
+        val restartedLinks = FileCalendarWriteLinkStore(File(directory, "links"))
+        assertEquals(created.link, restartedLinks.findByActivity(ACTIVITY_ID))
+        assertEquals(created.link, restartedLinks.findByEventId(eventId))
+        assertEquals(created.link, restartedLinks.findByProvenanceUri(draft().provenanceUri))
+
+        val restartedService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(File(directory, "journal")),
+            nowMillis = { NOW },
+            linkStore = restartedLinks,
+        )
+        val replay = restartedService.create(CALENDAR_ID, draft(), "durable-create")
+
+        assertEquals(1, provider.insertCalls)
+        assertEquals(CalendarEventLinkState.CONFIRMED, replay.link?.state)
+        assertEquals(CalendarWriteOperationState.RECONCILED, replay.operation?.state)
+    }
+
+    @Test
+    fun restartRecoversCrashBeforeEffectWithoutRetrying() {
+        val directory = Files.createTempDirectory("calendar-write-before-effect").toFile()
+        val provider = FakeCalendarWriteProvider()
+        val journalPath = File(directory, "journal")
+        val linksPath = File(directory, "links")
+        val crashedService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(journalPath),
+            nowMillis = { NOW },
+            beforeProviderEffect = { throw SimulatedCrash() },
+            linkStore = FileCalendarWriteLinkStore(linksPath),
+        )
+
+        try {
+            crashedService.create(CALENDAR_ID, draft(), "crash-before-effect")
+            throw AssertionError("expected simulated process death")
+        } catch (_: SimulatedCrash) {
+            // PREPARED plus its pending link were committed before the provider request.
+        }
+
+        val restartedJournal = FileCalendarWriteJournal(journalPath)
+        val restartedLinks = FileCalendarWriteLinkStore(linksPath)
+        val restartedService = CalendarWriteService(provider, restartedJournal, nowMillis = { NOW }, linkStore = restartedLinks)
+        val recovered = restartedService.recoverPending().single()
+        val replay = restartedService.create(CALENDAR_ID, draft(), "crash-before-effect")
+
+        assertEquals(0, provider.insertCalls)
+        assertEquals(CalendarWriteOperationState.NOT_APPLIED, recovered.operation?.state)
+        assertEquals(CalendarEventLinkState.MISSING, recovered.link?.state)
+        assertEquals(CalendarWriteError.MISSING_EVENT, recovered.error)
+        assertEquals(CalendarWriteOperationState.NOT_APPLIED, replay.operation?.state)
+    }
+
+    @Test
+    fun restartRecoversCrashAfterEffectByUriWithoutDuplicate() {
+        val directory = Files.createTempDirectory("calendar-write-after-effect").toFile()
+        val provider = FakeCalendarWriteProvider()
+        val journalPath = File(directory, "journal")
+        val linksPath = File(directory, "links")
+        val crashedService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(journalPath),
+            nowMillis = { NOW },
+            linkStore = FileCalendarWriteLinkStore(linksPath),
+            afterProviderEffect = { throw SimulatedCrash() },
+        )
+
+        try {
+            crashedService.create(CALENDAR_ID, draft(), "crash-after-effect")
+            throw AssertionError("expected simulated process death")
+        } catch (_: SimulatedCrash) {
+            // The provider row exists while the last durable operation is still PREPARED.
+        }
+
+        val restartedJournal = FileCalendarWriteJournal(journalPath)
+        val restartedLinks = FileCalendarWriteLinkStore(linksPath)
+        val restartedService = CalendarWriteService(provider, restartedJournal, nowMillis = { NOW }, linkStore = restartedLinks)
+        val recovered = restartedService.recoverPending().single()
+
+        assertEquals(1, provider.insertCalls)
+        assertEquals(CalendarWriteOperationState.RECONCILED, recovered.operation?.state)
+        assertEquals(CalendarEventLinkState.CONFIRMED, recovered.link?.state)
+        assertEquals(recovered.link, restartedLinks.findByActivity(ACTIVITY_ID))
+        assertEquals(1, provider.findByCustomAppUri(draft().provenanceUri).size)
+    }
+
+    @Test
+    fun restartReconcilesUnknownOperationWithoutBlindRetry() {
+        val directory = Files.createTempDirectory("calendar-write-unknown-restart").toFile()
+        val provider = FakeCalendarWriteProvider().apply { throwAfterInsertWithoutCommit = true }
+        val journalPath = File(directory, "journal")
+        val linksPath = File(directory, "links")
+        val firstService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(journalPath),
+            nowMillis = { NOW },
+            linkStore = FileCalendarWriteLinkStore(linksPath),
+        )
+
+        val first = firstService.create(CALENDAR_ID, draft(), "unknown-restart")
+        provider.throwAfterInsertWithoutCommit = false
+        val restartedService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(journalPath),
+            nowMillis = { NOW },
+            linkStore = FileCalendarWriteLinkStore(linksPath),
+        )
+        val recovered = restartedService.recoverPending().single()
+        val replay = restartedService.create(CALENDAR_ID, draft(), "unknown-restart")
+
+        assertEquals(CalendarWriteOperationState.UNKNOWN, first.operation?.state)
+        assertEquals(CalendarWriteOperationState.NOT_APPLIED, recovered.operation?.state)
+        assertEquals(CalendarEventLinkState.MISSING, recovered.link?.state)
+        assertEquals(CalendarWriteOperationState.NOT_APPLIED, replay.operation?.state)
+        assertEquals(1, provider.insertCalls)
+        assertTrue(provider.events.isEmpty())
+    }
+
+    @Test
+    fun appliedIdempotentReplayReverifiesExternalChanges() {
+        val harness = Harness()
+        val created = harness.service.create(CALENDAR_ID, draft(), "applied-reverify")
+        harness.provider.mutate(requireNotNull(created.link?.eventId)) {
+            it.copy(dtendMillis = it.dtendMillis + 60_000)
+        }
+
+        val replay = harness.service.create(CALENDAR_ID, draft(), "applied-reverify")
+
+        assertEquals(CalendarWriteError.READ_BACK_MISMATCH, replay.error)
+        assertEquals(CalendarEventLinkState.DIVERGED, replay.link?.state)
+        assertEquals(1, harness.provider.insertCalls)
+        assertEquals(0, harness.provider.updateCalls)
+    }
+
+    @Test
+    fun externalTitleOrTimeEditDivergesAndIsNeverAutoRewritten() {
+        val harness = Harness()
+        val created = harness.service.create(CALENDAR_ID, draft(), "external-edit-source")
+        val eventId = requireNotNull(created.link?.eventId)
+        harness.provider.mutate(eventId) { it.copy(title = "Changed outside ATLAS") }
+
+        val verified = harness.service.verify(requireNotNull(created.link))
+        val update = harness.service.update(requireNotNull(created.link), draft(title = "ATLAS rewrite"), "external-edit-update")
+        val delete = harness.service.delete(requireNotNull(created.link), "external-edit-delete")
+
+        assertEquals(CalendarEventLinkState.DIVERGED, verified.link?.state)
+        assertEquals(CalendarWriteError.READ_BACK_MISMATCH, verified.error)
+        assertEquals(CalendarWriteError.READ_BACK_MISMATCH, update.error)
+        assertEquals(CalendarWriteError.READ_BACK_MISMATCH, delete.error)
+        assertEquals(0, harness.provider.updateCalls)
+        assertEquals(0, harness.provider.deleteCalls)
+        assertEquals("Changed outside ATLAS", harness.provider.getEvent(eventId)?.title)
+    }
+
+    @Test
+    fun duplicateIdempotencyKeyIsRejectedByFileJournal() {
+        val directory = Files.createTempDirectory("calendar-write-collision").toFile()
+        val journal = FileCalendarWriteJournal(directory)
+        journal.record(operation(OPERATION_ID_1, "shared-key"))
+
+        try {
+            journal.record(operation(OPERATION_ID_2, "shared-key"))
+            throw AssertionError("expected idempotency collision rejection")
+        } catch (_: IllegalArgumentException) {
+            // A second complete operation cannot claim the same key.
+        }
+
+        assertEquals(OPERATION_ID_1, journal.findByIdempotencyKey("shared-key")?.operationId)
+        assertNull(journal.findByOperation(OPERATION_ID_2))
+    }
+
+    @Test
+    fun corruptAndIncompleteFilesDoNotHideCompleteJournalRecords() {
+        val directory = Files.createTempDirectory("calendar-write-corrupt").toFile()
+        val journal = FileCalendarWriteJournal(directory)
+        journal.record(operation(OPERATION_ID_1, "complete-one"))
+        journal.record(operation(OPERATION_ID_2, "complete-two"))
+        journal.updateState(OPERATION_ID_1, CalendarWriteOperationState.APPLIED, eventId = 15L)
+        File(directory, "${OPERATION_ID_1}.json.interrupted.tmp").writeText("{partial")
+        File(directory, "$OPERATION_ID_3.json").writeText("{broken json")
+
+        val restarted = FileCalendarWriteJournal(directory)
+
+        assertEquals(CalendarWriteOperationState.APPLIED, restarted.findByOperation(OPERATION_ID_1)?.state)
+        assertEquals(OPERATION_ID_2, restarted.findByIdempotencyKey("complete-two")?.operationId)
+        assertNull(restarted.findByOperation(OPERATION_ID_3))
+        assertTrue(File(directory, "$OPERATION_ID_3.json").exists())
+    }
+
+    @Test
+    fun corruptReplacementKeepsLastCompleteInMemoryState() {
+        val directory = Files.createTempDirectory("calendar-write-last-complete").toFile()
+        val journal = FileCalendarWriteJournal(directory)
+        journal.record(operation(OPERATION_ID_1, "last-complete"))
+        journal.updateState(OPERATION_ID_1, CalendarWriteOperationState.APPLIED, eventId = 19L)
+        File(directory, "$OPERATION_ID_1.json").writeText("{broken replacement")
+
+        assertEquals(CalendarWriteOperationState.APPLIED, journal.findByOperation(OPERATION_ID_1)?.state)
+        assertEquals(19L, journal.findByOperation(OPERATION_ID_1)?.eventId)
+    }
+
+    @Test
+    fun journalMigrationHookCanUpgradeOlderRecordVersion() {
+        val directory = Files.createTempDirectory("calendar-write-migration").toFile()
+        val expected = operation(OPERATION_ID_1, "migrated-key")
+        val oldRecord = JSONObject()
+            .put("schema_version", 0)
+            .put("operation_id", expected.operationId)
+            .put("type", expected.type.name)
+            .put("activity_id", expected.activityId)
+            .put("plan_id", expected.planId)
+            .put("calendar_id", expected.calendarId)
+            .put("event_id", JSONObject.NULL)
+            .put("payload_hash", expected.payloadHash)
+            .put("idempotency_key", expected.idempotencyKey)
+            .put("state", expected.state.name)
+            .put("error_code", JSONObject.NULL)
+        File(directory, "${expected.operationId}.json").writeText(oldRecord.toString())
+
+        val journal = FileCalendarWriteJournal(directory) { version, record ->
+            assertEquals(0, version)
+            record.put("schema_version", 1)
+        }
+
+        assertEquals(expected, journal.findByOperation(expected.operationId))
     }
 
     @Test
@@ -225,6 +468,51 @@ class CalendarWriteServiceTest {
     }
 
     @Test
+    fun permissionRevokedAtFinalCreateCheckStopsMutation() {
+        val provider = FakeCalendarWriteProvider().apply {
+            permissionsForCall = { call -> if (call >= 3) deniedPermissions() else grantedPermissions() }
+        }
+        val result = CalendarWriteService(provider, InMemoryCalendarWriteJournal(), nowMillis = { NOW })
+            .create(CALENDAR_ID, draft(), "revoked-at-effect")
+
+        assertEquals(CalendarWriteError.PERMISSION_DENIED, result.error)
+        assertEquals(0, provider.insertCalls)
+        assertTrue(provider.events.isEmpty())
+    }
+
+    @Test
+    fun permissionRevocationBeforeUpdateAndDeleteEffectsStopsMutation() {
+        val provider = FakeCalendarWriteProvider()
+        val service = CalendarWriteService(provider, InMemoryCalendarWriteJournal(), nowMillis = { NOW })
+        val created = service.create(CALENDAR_ID, draft(), "revocation-source")
+        val link = requireNotNull(created.link)
+        val revokeAt = provider.permissionCalls + 3
+        provider.permissionsForCall = { call ->
+            if (call >= revokeAt) deniedPermissions() else grantedPermissions()
+        }
+
+        val update = service.update(link, draft(title = "Denied update"), "revoked-update")
+        val delete = service.delete(link, "revoked-delete")
+
+        assertEquals(CalendarWriteError.PERMISSION_DENIED, update.error)
+        assertEquals(CalendarWriteError.PERMISSION_DENIED, delete.error)
+        assertEquals(0, provider.updateCalls)
+        assertEquals(0, provider.deleteCalls)
+        assertEquals(1, provider.events.size)
+    }
+
+    @Test
+    fun unavailableCalendarProviderFailsClosed() {
+        val provider = FakeCalendarWriteProvider().apply { calendarListUnavailable = true }
+
+        val result = CalendarWriteService(provider, InMemoryCalendarWriteJournal(), nowMillis = { NOW })
+            .create(CALENDAR_ID, draft(), "provider-unavailable")
+
+        assertEquals(CalendarWriteError.PROVIDER_UNAVAILABLE, result.error)
+        assertEquals(0, provider.insertCalls)
+    }
+
+    @Test
     fun nonLocalCalendarIsRejected() {
         val remote = FakeCalendarWriteProvider().apply {
             calendars = listOf(calendar(accountType = "com.google"))
@@ -326,6 +614,35 @@ class CalendarWriteServiceTest {
         assertEquals(CalendarWriteError.INVALID_LINK, rejected.error)
         assertEquals(1, harness.provider.deleteCalls)
     }
+
+    @Test
+    fun deleteWithZeroRowsAndSilentDisappearanceIsNotReportedSuccessful() {
+        val harness = Harness()
+        val created = harness.service.create(CALENDAR_ID, draft(), "silent-delete-source")
+        harness.provider.deleteReturnsZero = true
+        harness.provider.removeRowDespiteZeroDeleteCount = true
+
+        val result = harness.service.delete(requireNotNull(created.link), "silent-delete")
+
+        assertEquals(0, harness.provider.events.size)
+        assertEquals(CalendarWriteError.MISSING_EVENT, result.error)
+        assertEquals(CalendarEventLinkState.MISSING, result.link?.state)
+        assertFalse(result.successful)
+    }
+
+    @Test
+    fun deleteWithZeroRowsAndPresentEventIsNotReportedSuccessful() {
+        val harness = Harness()
+        val created = harness.service.create(CALENDAR_ID, draft(), "zero-row-delete-source")
+        harness.provider.deleteReturnsZero = true
+
+        val result = harness.service.delete(requireNotNull(created.link), "zero-row-delete")
+
+        assertEquals(1, harness.provider.events.size)
+        assertEquals(CalendarWriteError.READ_BACK_MISMATCH, result.error)
+        assertFalse(result.successful)
+        assertEquals(1, harness.provider.deleteCalls)
+    }
 }
 
 private class Harness {
@@ -344,13 +661,19 @@ private class FakeCalendarWriteProvider : CalendarWriteProvider {
     var uriSearchCalls = 0
     var afterInsertCommit: (() -> Unit)? = null
     var throwAfterInsertWithoutCommit = false
+    var calendarListUnavailable = false
+    var deleteReturnsZero = false
+    var removeRowDespiteZeroDeleteCount = false
     var readBackTransform: (CalendarWriteEvent) -> CalendarWriteEvent = { it }
     val events = linkedMapOf<Long, CalendarWriteEvent>()
     private var nextId = 1L
 
     override fun permissions(): CalendarWritePermissions = permissionsForCall(++permissionCalls)
 
-    override fun listCalendars(): List<CalendarDescriptor> = calendars
+    override fun listCalendars(): List<CalendarDescriptor> {
+        if (calendarListUnavailable) throw IllegalStateException("calendar provider unavailable")
+        return calendars
+    }
 
     override fun insert(calendarId: Long, draft: CalendarEventDraft, provenanceUri: String): Long {
         insertCalls++
@@ -371,20 +694,25 @@ private class FakeCalendarWriteProvider : CalendarWriteProvider {
         events[eventId] = event(calendarId, eventId, draft, provenanceUri).copy(rrule = current.rrule)
     }
 
-    override fun delete(eventId: Long, calendarId: Long, provenanceUri: String) {
+    override fun delete(eventId: Long, calendarId: Long, provenanceUri: String): Int {
         deleteCalls++
-        val current = events[eventId] ?: return
+        val current = events[eventId] ?: return 0
         if (current.calendarId != calendarId || current.customAppPackage != ATLAS_WRITE_PACKAGE ||
             current.customAppUri != provenanceUri || current.rrule != null || current.deleted
-        ) return
+        ) return 0
+        if (deleteReturnsZero) {
+            if (removeRowDespiteZeroDeleteCount) events.remove(eventId)
+            return 0
+        }
         events.remove(eventId)
+        return 1
     }
 
     override fun getEvent(eventId: Long): CalendarWriteEvent? = events[eventId]?.let(readBackTransform)
 
     override fun findByCustomAppUri(provenanceUri: String): List<CalendarWriteEvent> {
         uriSearchCalls++
-        return events.values.filter { it.customAppUri == provenanceUri }
+        return events.values.filter { it.customAppUri == provenanceUri }.map(readBackTransform)
     }
 
     fun seed(
@@ -463,10 +791,25 @@ private fun deniedPermissions() = CalendarWritePermissions(
     write = CalendarPermissionState.DENIED,
 )
 
+private fun operation(operationId: String, idempotencyKey: String) = CalendarWriteOperation(
+    operationId = operationId,
+    type = CalendarWriteOperationType.CREATE,
+    activityId = ACTIVITY_ID,
+    planId = PLAN_ID,
+    calendarId = CALENDAR_ID,
+    eventId = null,
+    payloadHash = draft().contentHash(CALENDAR_ID),
+    idempotencyKey = idempotencyKey,
+    state = CalendarWriteOperationState.PREPARED,
+)
+
 private class SimulatedCrash : RuntimeException()
 
 private const val PLAN_ID = "00000000-0000-0000-0000-000000000001"
 private const val ACTIVITY_ID = "00000000-0000-0000-0000-000000000002"
+private const val OPERATION_ID_1 = "00000000-0000-0000-0000-000000000011"
+private const val OPERATION_ID_2 = "00000000-0000-0000-0000-000000000012"
+private const val OPERATION_ID_3 = "00000000-0000-0000-0000-000000000013"
 private const val CALENDAR_ID = 10L
 private const val OTHER_CALENDAR_ID = 11L
 private const val NOW = 1_800_000_000_000L

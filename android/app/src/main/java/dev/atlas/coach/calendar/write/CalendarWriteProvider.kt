@@ -12,7 +12,8 @@ interface CalendarWriteProvider {
 
     fun update(eventId: Long, calendarId: Long, draft: CalendarEventDraft, provenanceUri: String)
 
-    fun delete(eventId: Long, calendarId: Long, provenanceUri: String)
+    /** Returns the number of provider rows affected by the ownership-scoped delete. */
+    fun delete(eventId: Long, calendarId: Long, provenanceUri: String): Int
 
     fun getEvent(eventId: Long): CalendarWriteEvent?
 
