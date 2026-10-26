@@ -25,18 +25,20 @@
 
 | Ticket | Branche/worktree | Session | Statut | Preuve |
 |---|---|---|---|---|
-| R2-CAL-01 | à créer | — | READY | — |
-| R2-UI-01 | à créer | — | READY | — |
-| R2-SPORT-01 | à créer | — | READY | — |
+| R2-CAL-01 | `feat/r2-calendar-write` | `ed02e2cd…` | ACCEPTED_WITH_P2 / INTEGRATED | 18 ciblés, 514 JVM ; `preuves/gates-wave-a.txt` |
+| R2-UI-01 | `feat/r2-ui-accent` | `2bb09cbf…` | ACCEPTED / INTEGRATED | 11 tests UI ; correctifs parent `54b4183` |
+| R2-SPORT-01 | `feat/r2-sport-projection` | `ca7f5e7a…` | ACCEPTED_WITH_P3 / INTEGRATED | 8 backend + 7 JVM ; 178 backend |
+| R2-PLAN-UI-01 | `feat/r2-plan-ui` | à lancer | READY (vague B) | — |
+| R2-HABITS-UI-01 | `feat/r2-habits-ui` | à lancer | READY (vague B) | — |
+| R2-MEMORY-01 | `feat/r2-memory-core` | à lancer | READY (vague B) | — |
 
 ## 4. Prochaines actions
 
-1. Vague A : lancer trois enfants `codex:gpt-6-luna` / `xhigh` sur worktrees
-   séparés ; vérifier modèle/effort dans les métadonnées.
-2. Pendant l'exécution : audit de confidentialité des preuves R1, captures
-   complémentaires, préparation des fixtures de recette.
-3. Intégrer chaque ticket après revue du diff et oracle rejoué.
-4. Vague B après `R2-UI-01`.
+1. Vague B : lancer `R2-PLAN-UI-01`, `R2-HABITS-UI-01` et `R2-MEMORY-01` sur
+   worktrees séparés, avec base `d59437650342c58d66b8c845aac313245f369372`.
+2. Intégrer chaque ticket après revue du diff et oracle rejoué.
+3. Vague C : `R2-USAGE-01`, `R2-BRIDGE-QA-01`, raccordement sport/calendrier.
+4. Vague D : recette émulateur, captures après, accessibilité, handoff Pixel.
 
 ## 5. Limites connues
 

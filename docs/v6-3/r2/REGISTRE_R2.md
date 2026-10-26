@@ -57,9 +57,9 @@ jamais « Pixel ».
 | TASK_ID | Objectif | Dépendances | Scope d'écriture exclusif | Oracle | Statut |
 |---|---|---|---|---|---|
 | `R2-PREFLIGHT-01` | Pré-vol, campagne documentaire, audit UI, fixtures, preuves | — | `docs/v6-3/r2/**` | pré-vol Git/outils/AVD + captures | **RUNNING** |
-| `R2-CAL-01` | Moteur d'écriture CalendarContract : opérations, liens durables, idempotence, réconciliation, fake provider | préflight | `android/.../calendar/write/**` (main+test), fichiers neufs uniquement | JVM ciblés + suite ; compile debug | **READY** |
-| `R2-UI-01` | Palettes d'accent, préférences indépendantes, sémantique, contrastes, primitives | préflight | `android/.../app/ui/**` (main+test), fichiers neufs ou existants listés | JVM contrastes + build | **READY** |
-| `R2-SPORT-01` | Projection sportive wger lecture seule, contrat borné, fixtures, modèles Android | préflight | `backend/.../integrations/wger_plan.py`, `contracts/sport-plan-v1.schema.json`, `android/.../training/**` (neufs), tests neufs | pytest ciblé + suite ; JVM ciblés | **READY** |
+| `R2-CAL-01` | Moteur d'écriture CalendarContract : opérations, liens durables, idempotence, réconciliation, fake provider | préflight | `android/.../calendar/write/**` (main+test), fichiers neufs uniquement | JVM ciblés + suite ; compile debug | **ACCEPTED_WITH_P2 / INTEGRATED** (`595b224`) ; 18 ciblés, 514 JVM ; P2 rejeu APPLIED à réconcilier |
+| `R2-UI-01` | Palettes d'accent, préférences indépendantes, sémantique, contrastes, primitives | préflight | `android/.../app/ui/**` (main+test), fichiers neufs ou existants listés | JVM contrastes + build | **ACCEPTED / INTEGRATED** (`3b06030` + `f0c136f`, correctifs parent `54b4183`) ; 11 tests UI |
+| `R2-SPORT-01` | Projection sportive wger lecture seule, contrat borné, fixtures, modèles Android | préflight | `backend/.../integrations/wger_plan.py`, `contracts/sport-plan-v1.schema.json`, `android/.../training/**` (neufs), tests neufs | pytest ciblé + suite ; JVM ciblés | **ACCEPTED_WITH_P3 / INTEGRATED** (`005f4a9`) ; 8 backend, 178 backend, 7 JVM |
 | `R2-PLAN-UI-01` | Refonte Plan du jour (hiérarchie, prochaine activité, menu secondaire, diff exact) | R2-UI-01 intégré | `android/.../app/PlanScreen.kt` + composants neufs `app/Plan*` | JVM + captures émulateur + sémantique | **READY (vague B)** |
 | `R2-HABITS-UI-01` | Refonte Habitudes en 3 espaces, extraction de `AtlasScreens.kt` | R2-UI-01 intégré | `android/.../app/AtlasScreens.kt` puis nouveaux fichiers Habitudes | JVM + captures + 16 cas UI | **READY (vague B)** |
 | `R2-MEMORY-01` | Noyau `MemoryFact` local : provenance, catégorie, rétention, révocation | préflight | `android/.../memory/**` (main+test), neufs | JVM | **READY (vague B)** |
@@ -91,6 +91,10 @@ jamais « Pixel ».
 | 2026-10-26 | Audit confidentialité des preuves | **PASS avec correctifs** — serial, nom de calendrier personnel et chemins `$HOME` masqués ; historique Git non réécrit ; voir `PREUVES_CONFIDENTIALITE.md` |
 | 2026-10-26 | Fixtures UI avant | **PASS** — plan vide, 0 puis 3 activités, habitudes 0/1/5, historique, thème, HOME |
 | 2026-10-26 | Wave A lancée | 3 enfants `codex:gpt-6-luna` / `xhigh` vérifiés : `ed02e2cd…` (CAL), `2bb09cbf…` (UI), `ca7f5e7a…` (SPORT) |
+| 2026-10-26 | R2-UI-01 livré | `3b06030` + correctif `f0c136f` ; intégré ; 2 correctifs de compilation parent `54b4183` ; tests UI ciblés PASS |
+| 2026-10-26 | R2-CAL-01 livré | `595b224` ; 18 tests ciblés PASS, 496 JVM dans le worktree ; intégré ; P2 rejeu APPLIED documenté |
+| 2026-10-26 | R2-SPORT-01 livré | `005f4a9` ; 8 tests backend, 178 backend + 1 skip, 7 JVM ; intégré ; P3 validateur de schéma local |
+| 2026-10-26 | Gates vague A sur SHA intégré | backend `178 passed, 1 skipped` ; JVM `73 suites, 514 tests, 0 échec` ; lint/build/androidTest en cours |
 
 ## 7. Preuves
 

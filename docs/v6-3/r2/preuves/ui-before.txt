@@ -1,0 +1,44 @@
+ATLAS V6.3 — R2 — Audit UI avant refonte
+========================================
+
+Environnement: emulator-5554, API 37.2, Android 17, 1344x2992 @480 dpi.
+APK: build debug de la base de campagne (code de main 4386169).
+Thème: Sombre, police 1.0, fuseau Europe/Paris, date 2026-10-26.
+Données: fixtures synthétiques uniquement.
+
+Captures (hors dépôt, $HOME/.local/share/atlas-v63-r2/screenshots/pre/)
+- 01-dashboard-before.png
+- 02-more-before.png
+- 03-plan-empty-before.png
+- 04-plan-zero-activities-before.png
+- 05-plan-3-activities-before.png
+- 06-plan-3-activities-scrolled-before.png
+- 07-habits-1-before.png
+- 08-home-launcher-before.png
+- 09-theme-settings-before.png
+- 10-habits-empty-before.png
+- 11-habits-5-before-top.png
+- 12-habits-5-before-mid.png
+- 13-habits-5-before-bottom.png
+- 14-coach-preview-before.png
+
+Constats mesurables
+- Plan, 3 activités: 4 boutons de gestion par activité, soit 12 boutons
+  visibles; la liste dépasse un écran.
+- En-tête permanent: version, fuseau, « stockage privé atomique ».
+- Aucune mise en avant de la prochaine activité; passé et futur ont le même
+  poids visuel.
+- Habitudes: formulaire complet avant la liste; 5 habitudes = 3 écrans.
+- Résumé de progression sur une ligne dense:
+  « 1/3 échéances · taux 33% · 4 jours sans échéance · série 1 ... ».
+- Jours non planifiés et manqués distingués par « – » et « · » sans légende.
+- Thème: 4 modes, aucun accent; contrastes AA des palettes existantes testés
+  en JVM.
+- Statut: texte + barre, glyphes identiques entre états.
+
+Vérifications
+- Aucun crash Compose pendant les captures.
+- Aucune écriture calendrier/wger, aucune activation OpenClaw.
+- Aucune donnée personnelle; l'identifiant matériel n'est pas consigné.
+
+Comparaison après: `AUDIT_UI_APRES.md` et captures `screenshots/post/`.

@@ -1,0 +1,41 @@
+ATLAS V6.3 — R2 — Gates après intégration vague A
+==================================================
+
+SHA code intégré: d59437650342c58d66b8c845aac313245f369372
+Environnement: hôte Linux, JDK 21, Gradle 9.6.0, émulateur non utilisé pour ces gates.
+
+Backend
+-------
+Commande: cd backend && .venv/bin/python -m pytest -q
+Résultat: 178 passed, 1 skipped, 1 warning in 6.01s
+Verdict: PASS
+
+JVM Android
+-----------
+Commande: cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1
+Résultat: 73 suites, 514 tests, 0 failure, 0 error, 0 skipped
+Verdict: PASS
+Détail des nouveaux tests:
+- calendar/write: 18
+- training: 7
+- app/ui: 11 (AtlasAccentThemeTest + AtlasThemePreferenceTest)
+
+Lint / build
+------------
+Commande: ./gradlew :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1
+Résultat: BUILD SUCCESSFUL; lint 0 erreur, 54 avertissements
+APK debug: SHA-256 2d5f31ae5abc2941f5616a8eb76a2b651aa24772aa3be022d35e4571f6a0510d
+androidTest APK: compilation/assemblage PASS
+Verdict: PASS
+
+Tickets
+-------
+- R2-CAL-01: 18 ciblés PASS; P2 rejeu APPLIED documenté.
+- R2-UI-01: tests UI PASS après 3 correctifs d'intégration parent.
+- R2-SPORT-01: 8 backend ciblés + 7 JVM PASS; 178 backend intégrés.
+
+Limites
+-------
+- Aucun test instrumenté exécuté dans ce gate.
+- Aucun CalendarContract réel, aucun wger réel, aucun OpenClaw.
+- APK non installé sur l'émulateur à ce stade.

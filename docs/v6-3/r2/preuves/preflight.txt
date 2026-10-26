@@ -1,0 +1,48 @@
+ATLAS V6.3 — R2 — Pré-vol
+=========================
+
+Date: 2026-10-26
+Branche: feat/atlas-v6-3-r2-emulator-ui
+Base main: 438616923a88eff814e96347d031506c6ea12f60
+Arbre de travail: propre avant création de la branche.
+Aucun push, aucune PR, aucune fusion distante.
+
+Outillage
+- JDK: OpenJDK 21.0.12.1
+- Gradle wrapper: 9.6.0
+- Android SDK: ANDROID_HOME défini (chemin utilisateur masqué)
+- Python: 3.12.3
+- Node: v24.18.0
+- ADB: 1.0.41
+
+Émulateur autorisé
+- Cible: emulator-5554
+- AVD: Pixel_9_Pro_XL_2, API 37.2, Android 17, x86_64
+- Écran: 1344x2992, densité 480
+- Démarrage headless, cold boot, snapshot load/save désactivés
+- Modèle: sdk_gphone16k_x86_64
+- Identifiant matériel: non consigné (masqué)
+
+Sauvegardes avant essais
+- Données AVD (qcow2) hors dépôt: SHA-256 182de36671fd31fea768834a8b993f43502592f8b860031e21f114a4a05089df
+- Carte SD AVD hors dépôt: SHA-256 c86313709d23d739d4a9e516044ac89f2ecb830f0fa243eaa6ca566b031ffa4f
+- Données ATLAS (tar app-only) hors dépôt: SHA-256 674d17da954329c78187b832a48c0b88182e9138df0f973406df10763868751c
+
+État AVD préexistant
+- dev.atlas.coach 0.1.0 installé; ATLAS est l'application HOME par défaut (état préexistant, conservé).
+- Données: 1 habitude synthétique, aucun plan persisté.
+- Calendrier: provider disponible, aucun calendrier retourné.
+- Etar: non installé.
+- Aucun compte Google réel dans les paquets tiers observés; aucune donnée personnelle utilisée.
+
+Baseline
+- Backend: `cd backend && .venv/bin/python -m pytest -q`
+  Résultat: 170 passed, 1 skipped, 1 warning in 6.97s — PASS.
+- APK debug construit depuis la base de campagne: build PASS.
+- Aucun test instrumenté lancé lors du pré-vol.
+
+Limites
+- Aucun calendrier local inscriptible: l'écriture CalendarContract réelle est
+  BLOCKED_ENVIRONMENT (aucune création de calendrier, aucun fallback Google).
+- Etar absent: la visibilité réelle Etar est BLOCKED_ENVIRONMENT.
+- Aucun appareil physique consulté.
