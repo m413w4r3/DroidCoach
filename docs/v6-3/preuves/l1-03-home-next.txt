@@ -1,0 +1,41 @@
+ATLAS V6.3 — V63-L1-03 — carte « prochaine action » HOME — preuves
+====================================================================
+
+Enfant: session b5722d8a-db34-42eb-8ac8-2086021a99ce
+Profil: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh
+Base: f625f0de21725485c91247e96986fdccd4eee597
+
+Commits enfant:
+- 6f5941dfc235b47463dc86d6a6a2ddf3e6b2a908 feat(home): show next planned action
+- b6d4a7b5d55b724347bce04635da6d987109c050 fix(home): select planned activity in active slot
+
+Intégration: merge 38c70d7e00e89685a8388a9f6b3bc0331dcaf220
+
+Fichiers:
+- android/app/src/main/java/dev/atlas/coach/app/HomeNextAction.kt (nouveau)
+- android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt
+- android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt
+- android/app/src/test/java/dev/atlas/coach/app/HomeNextActionTest.kt (nouveau)
+
+Oracle enfant (worktree b6d4a7b, hors sandbox):
+Commande: cd android && ./gradlew :app:testDebugUnitTest --max-workers=1
+Résultat: PASS — 63 suites, 439 tests, 0 failure, 0 error, 0 skipped
+Note: l'enfant n'a pas pu exécuter Gradle dans son sandbox
+      (`Could not determine a usable wildcard IP`, SocketException EPERM).
+
+Oracle intégré (38c70d7, hors sandbox):
+Commande: cd android && ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --max-workers=1
+Résultat: PASS — BUILD SUCCESSFUL in 1m47s
+- JVM: 63 suites, 439 tests, 0 failure, 0 error, 0 skipped
+- Lint: 0 erreur, 52 avertissements
+- assembleDebug: PASS
+- APK: android/app/build/outputs/apk/debug/app-debug.apk
+       SHA-256 61fa83e585987ac1510b1a703f7c65c880690f100755217fe9745c9717b3a514
+
+Correction P1 appliquée:
+- Une activité PLANNED dont le créneau contient l'heure courante est sélectionnée
+  avant les activités futures, après IN_PROGRESS.
+- Tests ajoutés: créneau en cours, créneau terminé, IN_PROGRESS prioritaire,
+  deux créneaux en cours.
+
+Limites: pas de test Compose/TalkBack réel, pas d'instrumenté, pas de Pixel.

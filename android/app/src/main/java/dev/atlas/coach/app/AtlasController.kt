@@ -113,6 +113,7 @@ import dev.atlas.coach.sync.SyncEventType
 import dev.atlas.coach.sync.SyncGateway
 import dev.atlas.coach.sync.SyncResult
 import dev.atlas.coach.sync.SyncStatus
+import dev.atlas.coach.plan.PlanRevisionApiClient
 import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.sync.agent.AgentActionType
 import dev.atlas.coach.sync.agent.AgentMode
@@ -2638,14 +2639,35 @@ class AtlasController @JvmOverloads constructor(
             !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null
     }.getOrDefault(false)
 
-    private fun isAllowedAgentBackendUrl(value: String): Boolean = isAllowedBackendUrl(value) && runCatching {
-        val uri = URI(value)
-        uri.scheme.equals("https", ignoreCase = true) || (
-            uri.scheme.equals("http", ignoreCase = true) &&
-                uri.host.equals("10.0.2.2", ignoreCase = true) &&
-                appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-            )
-    }.getOrDefault(false)
+    private fun isAllowedAgentBackendUrl(value: String): Boolean {
+        if (!isAllowedBackendUrl(value)) return false
+        val debuggable = appContext.applicationInfo.flags and
+            android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+        return BackendUrlPolicy.isAllowedAgentBackendUrl(value, debuggable)
+    }
+
+    /**
+     * Plan-revision client for the explicit coach flow. Proposal-only: the
+     * capability and a live mandate are rechecked on every request.
+     */
+    fun planRevisionClient(): PlanRevisionApiClient? {
+        if (syncTokenStore.token() == null) return null
+        if (syncBaseUrl.isBlank() || !isAllowedAgentBackendUrl(syncBaseUrl)) return null
+        return PlanRevisionApiClient(
+            baseUrl = syncBaseUrl,
+            tokenProvider = syncTokenStore,
+            requestAllowed = {
+                capabilities[CAP_PLAN_REVISION] == true &&
+                    capabilities[CAP_AGENT] == true &&
+                    !revocationBarrier.isAgentBlocked() &&
+                    !agentMandateStore.current().let { mandate ->
+                        mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis
+                    }
+            },
+        )
+    }
+
+    val planRevisionMandate: AgentMandate get() = agentMandateStore.current()
 
     fun respond(choice: DirectiveChoice) {
         if (choice == DirectiveChoice.START && capabilities[CAP_FOCUS] != true) {
@@ -4190,6 +4212,7 @@ class AtlasController @JvmOverloads constructor(
         const val CAP_HABITS = "habits"
         const val CAP_CONTENT = "content"
         const val CAP_COACH = "coach"
+        const val CAP_PLAN_REVISION = "planRevision"
         const val CAP_SIMULATED_RULES = "simulatedRules"
         const val CAP_APP_TRACKING = "appTrackingConsent"
         const val CAP_LAUNCHER_HOME = "launcherHome"
@@ -4237,6 +4260,7 @@ class AtlasController @JvmOverloads constructor(
                 CAP_HABITS to true,
                 CAP_CONTENT to true,
                 CAP_COACH to true,
+                CAP_PLAN_REVISION to false,
                 CAP_SIMULATED_RULES to true,
                 CAP_APP_TRACKING to false,
                 CAP_LAUNCHER_HOME to false,

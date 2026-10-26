@@ -153,7 +153,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             onClick = { showDisableSync = true },
         ) { Text("Désactiver et purger") }
         Text(
-            "Le jeton est chiffré avec Android Keystore. HTTP n'est permis qu'en debug vers 10.0.2.2; les builds release exigent HTTPS.",
+            "Le jeton est chiffré avec Android Keystore. HTTP n'est permis qu'en debug vers 10.0.2.2, 127.0.0.1 ou localhost; les builds release exigent HTTPS.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

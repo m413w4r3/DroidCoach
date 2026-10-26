@@ -1,0 +1,94 @@
+ATLAS V6.3 — V63-L5-01 — client wger lecture seule — preuves
+==============================================================
+
+Enfant: session 998e3ac3-de59-42af-88e5-d184092e9ea6
+Profil: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh
+Base: f625f0de21725485c91247e96986fdccd4eee597
+
+Commits enfant:
+- 0f0702c6a9ede25e415b7925cdefc65c8489ba7e feat(backend): add read-only wger client
+- 6e17e1180277fec9d629d2e7b2acd9ea7496bad1 fix(backend): honor configured wger base URL
+- 6aee55afd7e9fc41b0b5482f3df1b53ca87ddbe2 fix(backend): harden wger env and response bounds
+
+Intégration: merge e4b480cb2ad8e1c0af3eceff01e7a434861f87b4
+
+Fichiers (6):
+- backend/atlas_backend/config.py (chargeur .env explicite, Git + permissions)
+- backend/atlas_backend/integrations/__init__.py
+- backend/atlas_backend/integrations/wger.py (auth, tokens, client, erreurs)
+- backend/scripts/wger_diagnostic.py
+- backend/tests/test_wger.py
+- backend/tests/test_wger_auth.py
+
+Oracle enfant:
+- `pytest -q tests/test_wger.py tests/test_wger_auth.py` → PASS 31.
+- Suite complète enfant bloquée par TestClient/AnyIO dans le sandbox.
+
+Oracle parent:
+- `cd backend && .venv/bin/python -m pytest -q` sur 6aee55a → 122 passed, 1 skipped.
+- Sur le SHA intégré e4b480c → 145 passed, 1 skipped.
+
+Relecture indépendante:
+- Première revue: CORRECTION_REQUIRED — P1 permissions .env (0644 accepté),
+  P2 taille de réponse non bornée, P2 fault injection JWT simulée.
+- Corrections: contrôle POSIX groupe/autres avant lecture (`ENV_PERMISSIONS`),
+  borne 2 000 000 octets avant décodage JSON, documentation des limites.
+- Re-revue: ACCEPTED_WITH_P2 — P1 corrigé, aucun nouveau P0/P1.
+  P2 restant: HTTPX met le corps en mémoire avant la borne; la borne limite le
+  décodage, pas le pic mémoire. Documenté.
+
+Stockage JWT:
+- Défaut `backend/data/wger_tokens.json`, ignoré par `backend/.gitignore: data/`.
+- Écriture 0600, temp+fsync+os.replace, verrou flock, état
+  RECONCILIATION_REQUIRED, aucun fallback silencieux.
+- Mode `jwt_refresh` implémenté et testé avec faux serveur, mais INACTIF.
+  `WGER_REFRESH_TOKEN` n'est jamais consommé automatiquement.
+
+Sécurisation du .env local (décision parent):
+- Avant: mode 664, 940 octets.
+- Après: mode 600, 940 octets, contenu inchangé.
+- `.env` ignoré par `.gitignore:8` et non suivi.
+- Aucun contenu ni secret affiché.
+
+Diagnostic réel (api_token, lecture seule):
+Commande:
+  backend/.venv/bin/python backend/scripts/wger_diagnostic.py \
+    --mode api_token --read-only --env-file .env
+Sortie:
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+Exit: 0
+Interprétation: /api/v2/routine/ et /api/v2/exercise/ répondent 200 avec
+pagination; le jeton API est valide. Aucun nom, aucune donnée personnelle,
+aucun token affiché.
+
+Qualification réelle complémentaire (2026-10-26):
+- `GET /api/v2/` → 200; endpoints présents: `routine`, `exercise`, `workoutlog`,
+  `workoutsession`, `slot`, `slot-entry`, `day`, etc.
+- `GET /api/v2/workoutlog/?limit=1` → 200, count=4, pagination présente.
+  Item observé (clés/types seulement, aucune valeur): `id` chaîne,
+  `date` chaîne, `exercise` int, `routine` int, `session` chaîne,
+  `slot_entry` int, `repetitions`/`weight` chaînes.
+- `GET /api/v2/workoutsession/?limit=1` → 200, count=1, sans pagination.
+  Item: `id` chaîne, `datetime_start`/`datetime_end` chaînes, `day` int,
+  `routine` int, `impression`/`notes` chaînes.
+- Première tentative `list_workout_logs()` → `SCHEMA_ERROR` (ID entier attendu).
+  Correction `5f68c88`: IDs opaques chaîne, `WorkoutSessionSummary`,
+  `list_workout_sessions()`, probe des quatre ressources, tests types réels.
+- Re-revue indépendante: ACCEPTED_WITH_P2. P2: `WorkoutLogSummary.date` n'est
+  validée que par longueur, pas ISO-8601; à renforcer en L5-02/L6.
+- Diagnostic réel final (SHA intégré a56de74, `.env` 0600):
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":true}
+  {"mode":"api_token","status_http":200,"error_category":null,"element_count":1,"pagination_present":false}
+  → routine, exercise, workoutlog et workoutsession accessibles en lecture;
+    pagination présente sauf workoutsession (count=1).
+- Backend intégré final: 158 passed, 1 skipped.
+
+Limites:
+- Pas de rotation JWT réelle; mode JWT non activé.
+- Aucune écriture wger.
+- Validation ISO de la date workoutlog à renforcer (P2).
+- Redirections HTTP désactivées; URL non affichée.
+- P2 mémoire documenté; panne fsync/replace simulée par monkeypatch.

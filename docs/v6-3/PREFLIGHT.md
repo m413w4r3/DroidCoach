@@ -151,3 +151,115 @@ politique stricte Pydantic (`models_v2.py`), 4 fichiers de tests.
 | Deux enfants dans deux worktrees | **PASS** — `feat/v63-plan-domain` (`17bb723`) et `feat/v63-calendar-read` (`dd9760d`), worktrees distincts, notifications reçues |
 | Revue du parent avant intégration | **PASS** — diffs bornés inspectés, oracles rejoués sur `81e1bd2` puis `f78e3d9`/`5dedcf6` |
 | Sous-délégation | **REFUSÉE** — un enfant a demandé `list_agents`, refus explicite ; aucun enfant n'a créé d'agent |
+
+## 11. Reprise de mission — 26 octobre 2026 (R0)
+
+Cette section **remplace les constats d'environnement** des sections 2, 3, 5, 6 et 10
+pour la campagne de reprise. Les preuves de la première campagne restent
+historiques et ne valent pas preuve pour les nouveaux SHA.
+
+### 11.1 Git et préservation
+
+| Élément | Constat |
+|---|---|
+| `pwd` | `/home/nill/perso/AndroCoach/atlas-preparation` |
+| `main` / `origin/main` | `ab477ef70dcf7749fb8283b0213c4fcdaa824341` (aligné) |
+| Branche de reprise | `feat/atlas-v6-3-reprise`, créée depuis `ab477ef` |
+| Worktrees | 27 worktrees préexistants conservés ; aucun supprimé |
+| État local préservé | 10 suppressions non commitées sous `prompts/` + `prompts/PROMPT_MAITRE.md` non suivi. **Non commités, non modifiés.** |
+| Contradiction `WORKFLOW.md` | Corrigée dans la branche de reprise : 6 enfants max au total, 3 tickets d'implémentation max, **aucune sous-délégation**. `skills/README.md` aligné. |
+| `AGENTS.md` | Inchangé (6 enfants, Luna XHigh, aucune sous-délégation). |
+
+Aucun push, aucune PR, aucun merge distant, aucune action destructive.
+
+### 11.2 Appareils connectés (pré-vol lecture seule)
+
+| Élément | Constat |
+|---|---|
+| Pixel physique | **connecté**, `device`, modèle Pixel 9 Pro XL (`komodo`) |
+| Android | **17 / API 37**, build `CP3A.260905.009`, patch sécurité `2026-09-05` |
+| Identifiant appareil | **non journalisé** (politique ATLAS) |
+| Stockage /data | 109 G, 29 G disponibles (74 % utilisé) |
+| Émulateur | `emulator-5554` également connecté ; le Pixel physique reste prioritaire |
+| ATLAS installé | `dev.atlas.coach` versionName `0.1.0`, versionCode 1, targetSdk 36, `DEBUGGABLE`, dernière MAJ `2026-10-25 00:11` |
+| Signature ATLAS installé | certificat `CN=Android Debug`, SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` — **identique au debug.keystore local** ; une mise à jour APK debug en place est possible sans désinstallation |
+| APK installé (empreinte) | SHA-256 `48c7766e9090010692f0eaafc1d0cbaf4b22e51259847f94b642a2d060b33583` (pull local, non versionné) |
+| Réseau debug Android | `network_security_config.xml` autorise déjà le cleartext pour `127.0.0.1` et `10.0.2.2` ; aucune modification nécessaire pour `adb reverse` |
+| Jeton OpenClaw Gateway | fichier `/home/nill/.config/atlas/openclaw-gateway-token`, mode `600`, non vide ; contenu jamais affiché |
+| Package de test | `dev.atlas.coach.test` présent |
+| Etar | `ws.xsoh.etar` installé |
+| wger | `de.wger.flutter` installé |
+| Rôle HOME | **NexusLauncher** (`com.google.android.apps.nexuslauncher`) ; ATLAS n'est pas le HOME par défaut |
+| Permissions calendrier | non vérifiées dans ce pré-vol ; aucun octroi effectué |
+
+Le pré-vol n'a exécuté que des lectures (`getprop`, `pm list packages`, `df`,
+`resolve-activity`, `dumpsys package`). Aucune permission, installation,
+sauvegarde ou écriture n'a été faite.
+
+### 11.3 Services locaux
+
+| Service | Constat vérifié |
+|---|---|
+| Bridge ChatGPT | **actif** sur `127.0.0.1:8001` ; `/health` = 200, extension connectée (`extension_connected=true`, `busy=false`) ; `/ready` = 200, `accepting_runs=true`, auth HTTP configurée, registre SQLite accessible |
+| Bridge capabilities | **401 sans Bearer** ; avec le Bearer du `.env` (jamais affiché) : **200**, `transport=chatgpt_web_ui`, `extension_connected=true`, `serialization=single_request`, `text=true`, `new_chat=true`, `streaming=final_delta_only`. **Limite majeure** : `web_search="prompt_instructed"`, `controls.web_search_toggle="unavailable"`, `controls.model_selection="unavailable"`, `actual_model_version=false`, `structured_output="prompt_and_client_validation"`. L'état UI mis en cache indique « ni bouton de recherche ni menu d'outils » et est périmé (> 4 jours). **Une recherche récente vérifiée (`ui_tool`) n'est donc pas disponible dans cet environnement** ; seule une recherche `prompt_instructed` non vérifiée est possible. |
+| Bridge métriques | 256 runs démarrés, 238 terminés, 18 échoués, 7 hits de déduplication, 0 conflit de payload, 0 run actif, extension connectée |
+| Bridge source | `/home/nill/perso/work/Bridges/chatgpt-bridge`, Git `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa`, état local conservé |
+| OpenClaw Gateway | actif sur `127.0.0.1:18789` (loopback), authentification token existante |
+| OpenClaw installé | version **2026.10.5** (npm global) ; SDK `openclaw/plugin-sdk/tool-plugin` disponible (`defineToolPlugin`, Node ≥ 24.16) |
+| Agent OpenClaw `atlas` | `tools.deny: ["*"]` — planificateur sans outil, conforme à la séparation des rôles |
+| Référence OpenClaw locale | `references/repos/openclaw` à `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` ; le code **installé** prime pour les capacités |
+| Port 8000 | occupé par un service tiers **« CTI Bulletin API »** (`GET /openapi.json` → 200, `GET /health` → 404). **Ne pas l'utiliser, ne pas l'arrêter.** |
+| Port 8001 | Bridge ChatGPT (voir ci-dessus) |
+| Backend ATLAS | non démarré. Port de développement retenu pour la reprise : **8010** (voir décisions) |
+
+### 11.4 Secrets (noms seulement)
+
+`.env` racine : ignoré par Git (`.gitignore:8`), non suivi, non affiché.
+Variables présentes : `WGER_BASE_URL`, `WGER_API_TOKEN`, `WGER_REFRESH_TOKEN`,
+`ATLAS_BRIDGE_BASE_URL`, `ATLAS_BRIDGE_API_KEY`. Aucune valeur n'a été lue,
+affichée ou transmise à un agent. `WGER_AUTH_MODE` est **absent** : le mode
+retenu par défaut est `api_token`, jamais `jwt_refresh` implicite.
+
+### 11.5 Références Paseo
+
+| Dépôt | SHA vérifié | Licence / état |
+|---|---|---|
+| `references/repos/paseo` | `902b0c7a1637cc7a6c2ee268dca8161965a35def` | clone de référence, non versionné |
+| `references/repos/paseo-relay` | `3fc41c96c8c63f3a7109e832899cc57d473c4531` | clone de référence, non versionné |
+
+Ces répertoires restent des références hors build ; aucun code n'est importé
+sans audit de licence et mention `THIRD_PARTY_NOTICES.md`.
+
+### 11.6 Outillage
+
+JDK 21.0.12.1 LTS ; Gradle wrapper 9.6.0 ; compileSdk 37.2 / build-tools 37.0.0 ;
+Kotlin 2.2.10 ; Python 3.12.3 (`backend/.venv`) ; Node 24.18.0 ; ADB 1.0.41.
+
+### 11.7 Smoke-test Paseo de la reprise
+
+À exécuter avant toute intégration de la campagne : une session Luna XHigh en
+lecture seule, deux worktrees distincts, notification de fin, vérification des
+métadonnées de session et absence d'écriture. Résultat consigné ci-dessous dès
+réception.
+
+| Étape | Résultat |
+|---|---|
+| Enfant Luna XHigh en lecture seule | **PASS (lancement)** — scout `V63-R3-SCOUT-01`, worktree `audit/v63-r3-bridge-plugin` à `f625f0d`, `chmod -R a-w`, écriture refusée (`Permission denied`) |
+| Deux enfants dans deux worktrees | **PASS (lancement)** — `V63-R3-SCOUT-01` et `V63-R5-SCOUT-01`, worktrees distincts, branches distinctes |
+| Notification de fin reçue | en attente |
+| Modèle/effort effectifs vérifiés | **PASS** — `provider=codex`, `model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`, `modeId=auto-review` pour les 5 enfants (`get_agent_status`) |
+| Sous-délégation refusée | **PASS** — interdiction explicite dans chaque prompt ; à re-vérifier sur les traces de fin |
+
+### 11.8 Baselines de la reprise sur `f625f0d`
+
+| Suite | Commande | Résultat |
+|---|---|---|
+| Backend | `cd backend && .venv/bin/python -m pytest -q` | **PASS** — 91 passed, 1 skipped (2,65 s) |
+| Android JVM | `cd android && ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest --max-workers=1` | **PASS** — 62 suites, **426 tests**, 0 failure, 0 error, 0 skipped |
+| Android lint/build | non rejoué dans R0 | **NOT_RUN** |
+| Instrumenté / Pixel | non exécuté | **NOT_RUN** |
+| OpenClaw V2 réel | backend éphémère `ATLAS_AGENT_ADAPTER=openclaw`, port libre, `OPENCLAW_GATEWAY_TOKEN_FILE` mode 600 | **PASS** — `/health` 200, `/v2/agent/status` adapter `openclaw`, chat 200, `agent_status=connected`, 2 propositions (`home.set_directive`, `focus.propose`), aucune action sur l'appareil, backend arrêté proprement |
+| Bridge réel | `/v1/bridge/capabilities` et `/metrics` avec Bearer du `.env` | **PASS lecture** — voir §11.3 ; recherche vérifiée non disponible |
+
+Les compteurs ci-dessus sont liés à `f625f0d` et ne valent pas preuve pour les
+SHA des tickets enfants.

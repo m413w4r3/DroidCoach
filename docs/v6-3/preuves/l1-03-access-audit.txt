@@ -1,0 +1,65 @@
+ATLAS V6.3 — V63-L1-03-ACCESS — audit accessibilité lecture seule
+================================================================
+
+Date: 2026-10-26
+Agent: da6f402a-09dd-4699-bdd1-809c2f927da7
+Profil vérifié: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh,
+mode auto-review
+Worktree: /home/nill/.paseo/worktrees/073527gm/audit-v63-l1-03-access
+Base: 932c8d2af2748f5ef3d27c5ff1ff8b61c861800c
+Worktree RO (chmod a-w), aucun build, aucun test, aucun ADB.
+
+Périmètre: HomeNextAction.kt, AtlasScreens.kt (HomeNextActionCard),
+LauncherHomeScreen.kt, HomeNextActionTest.kt, LauncherPresentationTest.kt,
+docs/v6-3/tickets/V63-L1-03.md et preuves l1-03-home-next.txt.
+
+Constats
+--------
+P3 DEFECT_CONFIRMED — singulier incorrect pour une durée d'une minute:
+  HomeNextAction.kt:62 annonce toujours « minutes ». Une durée de 1 est valide
+  (PlanModels.kt:93), donc TalkBack annonce « 1 minutes ».
+  Correctif minimal: « minute » si durationMinutes == 1, sinon « minutes ».
+  Oracle: test JVM de homeNextActionAccessibilityLabel (1 puis plusieurs).
+
+P2 EVIDENCE_GAP — aucun test Compose/TalkBack de la carte:
+  HomeNextActionTest.kt:203 teste le libellé, pas la sémantique Compose.
+  LauncherPresentationTest.kt:87 teste le launcher, pas la carte.
+  Ajout minimal: tests Compose Selected/NonePlanned/Neutral, puis carte dans
+  un conteneur défilant à fontScale 2.0 et 3.2 avec titre/objectif longs.
+  Oracle: instrumenté API 37 + vérification TalkBack manuelle sur Pixel.
+
+P2 RISK conditionnel — libellés français en dur:
+  AtlasScreens.kt:255 et HomeNextAction.kt:60. Aucun défaut directionnel établi
+  (Column, largeur pleine, padding symétrique). Risque de langue/annonce si
+  d'autres locales, notamment RTL, sont prises en charge.
+  Correctif seulement si ces locales sont au périmètre.
+
+Grille
+------
+1. Sémantique Compose: NO_DEFECT statique. semantics(mergeDescendants=true)
+   avec contentDescription non vide; un seul nœud fusionné attendu.
+2. États Neutral/NonePlanned/Selected: NO_DEFECT de sélection/affichage.
+3. fontScale 2.0/3.2: NO_DEFECT statique; preuve instrumentée manquante.
+4. Ordre de focus TalkBack: NO_DEFECT dans le code; à confirmer sur appareil.
+5. RTL/langues: NO_DEFECT directionnel; RISK conditionnel de localisation.
+6. Contraste/cibles tactiles: NO_DEFECT statique; carte non interactive,
+   aucune cible <48 dp; contrastes calculés 7,24:1 à 15,91:1 selon palette.
+7. Couverture: EVIDENCE_GAP (voir P2).
+8. Régressions à surveiller: mergeDescendants/contentDescription, maxLines ou
+   hauteur fixe, carte rendue cliquable, branches d'état.
+
+Aucun P0/P1 établi.
+
+Recommandation: GO_WITH_LIMITATIONS pour une passe ACCESS (corriger le P3,
+ajouter les tests Compose, traiter la locale selon le périmètre).
+
+Tests parent à exécuter sur Pixel Android 17/API 37:
+- TalkBack: carte atteinte une fois, tous les champs annoncés une seule fois,
+  navigation ensuite possible.
+- Neutral (absente), NonePlanned (annonce explicite), Selected PLANNED puis
+  IN_PROGRESS.
+- fontScale 2.0 et taille maximale; texte long; défilement sans recouvrement.
+- Double-tap TalkBack: aucune action.
+- RTL seulement si cette locale est au périmètre.
+
+Statut: ACCEPTED (audit) — aucune modification de code.

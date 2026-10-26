@@ -1,0 +1,13 @@
+{
+  plugins: {
+    entries: {
+      atlas_chatgpt_research: {
+        enabled: true,
+        config: {
+          bridgeUrl: "http://127.0.0.1:8001",
+          apiKey: "${BRIDGE_API_KEY}",
+        },
+      },
+    },
+  },
+}

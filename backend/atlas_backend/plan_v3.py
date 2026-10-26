@@ -169,7 +169,11 @@ class PlanRevisionParametersV3(StrictV3Model):
         refs = [activity.client_ref for activity in self.activities]
         if len(refs) != len(set(refs)):
             raise ValueError("client_ref must be unique")
-        ids = [activity.activity_id for activity in self.activities if activity.activity_id]
+        ids = [
+            activity.activity_id.lower()
+            for activity in self.activities
+            if activity.activity_id
+        ]
         if len(ids) != len(set(ids)):
             raise ValueError("activity_id must be unique")
         for activity in self.activities:

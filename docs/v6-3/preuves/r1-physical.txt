@@ -1,0 +1,328 @@
+ATLAS V6.3 — R1 — parcours physique Pixel — preuves
+====================================================
+
+Date: 2026-10-26 (reprise orchestrateur)
+Branche: feat/atlas-v6-3-reprise
+HEAD au début de la reprise: 932c8d2af2748f5ef3d27c5ff1ff8b61c861800c
+Appareil: Pixel 9 Pro XL, Android 17 / API 37, serial 45301FDAS001QT
+APK installé: dev.atlas.coach 0.1.0, versionCode 1
+APK SHA-256: 5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f
+Source APK: 1791030 (V63-L3-01c)
+Backend: 127.0.0.1:8010, adapter openclaw, breaker closed, plan_revision=true
+adb reverse: tcp:8010 tcp:8010 actif
+READ_CALENDAR: déclaré, granted=false
+Données app: shared_prefs/atlas_local_state.xml 14 006 octets, files/plans absent
+Sauvegarde app-only: app-data-before-r1.tar (SHA-256 28a74099402c6ca2f2d28d4733f7e1638734a4188e0d42c6aa8cbc7c767bfcdd)
+
+État initial vérifié
+--------------------
+PASS  curl http://127.0.0.1:8010/health -> 200 {"status":"ok","mode":"mock"} (mode statique du code)
+PASS  /v2/agent/status authentifié -> adapter=openclaw, connected=false, breaker=closed,
+      quota 0/30 rpm, 0/100000 tokens
+PASS  OpenClaw Gateway 127.0.0.1:18789 -> {"ok":true,"status":"live"}
+PASS  adb reverse --list -> UsbFfs tcp:8010 tcp:8010
+PASS  appareil 45301FDAS001QT en état device
+PASS  APK installé SHA-256 = 5956bb6f..., versionName 0.1.0, versionCode 1
+
+Parcours R1 — étapes exécutées
+------------------------------
+1. Plus > Diagnostic avancé > Configurer le partage backend (état de départ du handoff).
+   Retour -> Plus (écran « Autres espaces »).
+2. Tap « Plan du jour » (bounds [45,492][319,600], tap 182,546).
+
+RÉSULTAT: FAIL — crash de l'application au premier affichage de PlanScreen.
+L'app est revenue au launcher NexusLauncher ; le processus dev.atlas.coach est mort.
+
+Extrait logcat (expurgé, 2026-10-26 14:03:14.770, PID 24657):
+  FATAL EXCEPTION: main
+  Process: dev.atlas.coach, PID: 24657
+  java.lang.IllegalStateException: Vertically scrollable component was measured with
+  an infinity maximum height constraints, which is disallowed. One of the common
+  reasons is nesting layouts like LazyColumn and Column(Modifier.verticalScroll()).
+  ...
+  at androidx.compose.foundation.CheckScrollableContainerConstraintsKt...
+  at androidx.compose.foundation.ScrollingLayoutNode.measure...
+  ...
+  W/ActivityTaskManager: Force finishing activity dev.atlas.coach/.app.MainActivity
+  I/Process: Sending signal. PID: 24657 SIG: 9
+  I/ActivityManager: Process dev.atlas.coach (pid 24657) has died: fg TOP
+
+Cause établie par lecture du code:
+- AtlasScreenFrame enveloppe déjà chaque écran dans
+  Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(...))
+  (android/app/src/main/java/dev/atlas/coach/app/ui/AtlasDesign.kt:268).
+- PlanScreen ajoute un second verticalScroll racine
+  (android/app/src/main/java/dev/atlas/coach/app/PlanScreen.kt:86-90).
+- CalendarPermissionScreen ajoute aussi un verticalScroll racine
+  (android/app/src/main/java/dev/atlas/coach/app/CalendarPermissionScreen.kt:144),
+  donc Plus > Diagnostic calendrier (P3) présente le même risque.
+
+Conséquence: R1 est BLOCKED_P1. Aucune activité n'a été créée, aucun plan n'existe,
+aucune permission calendrier n'a été demandée, aucune écriture n'a eu lieu.
+
+Vérifications d'intégrité après le crash
+----------------------------------------
+PASS  shared_prefs/atlas_local_state.xml toujours présent (14 006 octets, 2026-10-26 13:55)
+PASS  files/plans absent (aucun plan partiel)
+PASS  READ_CALENDAR toujours granted=false
+PASS  aucune modification de configuration backend constatée
+
+Délégation lancée pendant le blocage (tous codex:gpt-6-luna, effort xhigh, auto-review)
+----------------------------------------------------------------------------------------
+- L8-02-P2 Retry-After: agent f582fe07-0c7e-4b60-b9de-ead09d3928a5,
+  worktree feat/v63-l8-02-p2-retry-after (base c6efa58).
+- L5-02-P2 wger date ISO: agent db7d4f64-84be-4976-81cd-3168502b0a81,
+  worktree feat/v63-l5-02-wger-date (base 932c8d2).
+- L1-03-ACCESS audit RO: agent da6f402a-09dd-4699-bdd1-809c2f927da7,
+  worktree audit/v63-l1-03-access (base 932c8d2, chmod a-w).
+- R1-FIX-SCROLL P1: agent 7ed5801d-5c86-4b75-906d-e5427fa2ac91,
+  worktree fix/v63-r1-plan-scroll-crash (base 932c8d2).
+
+Sonde backend plan-revision (supplémentaire, avant parcours app)
+----------------------------------------------------------------
+Deux POST /v3/agent/plan-revision avec un plan synthétique à deux activités
+(aucune action locale, aucune écriture). Réponses réelles OpenClaw, expurgées.
+
+Sonde 1 — mandat synthétique allowed_actions=[] (request_id 8bc55e27-…):
+  HTTP 200, agent_status=ok, proposal=null.
+  reply: « Il est déjà 14 h 05 : le travail profond prévu à 9 h est passé. […]
+  Je ne peux pas soumettre de révision du plan avec le mandat actuel, qui
+  n'autorise aucune action. »
+
+Sonde 2 — mandat identique à celui de l'app (id agent-local-v2, version 2,
+allowed_actions = les 10 actions de AgentActionType, mode proposals_only;
+request_id dcf5738c-…):
+  HTTP 200, agent_status=ok, proposal=null.
+  reply: « […] Le mandat ne permet pas de proposer une révision du plan. »
+
+Diagnostic: OpenClaw répond correctement (pas de quota, pas de timeout, pas
+d'invalid_output) mais refuse la proposition parce que le mandat ne contient
+aucune action de révision de plan. `plan.revise_day` n'existe ni dans
+AgentActionType (Android) ni dans ActionType (backend, max 10 actions), et le
+prompt système demande au modèle de respecter le mandat. Le consentement
+plan-context et la capability plan_revision ne suffisent donc pas au modèle.
+
+État local complémentaire (lecture seule des préférences):
+  capabilities: agent=true, coach=true, sync=true, planRevision=false
+  agentMandate: id=agent-local-v2, schema_version=2, version=2, revoked=true,
+    suspended=false, mode=proposals_only, shared_data_categories=[]
+  atlas_agent_revocation_barrier.xml: agent_blocked_v1=true,
+    blocked_categories_v1=vide
+  Conséquence: même après le correctif de scroll, « Demander au coach »
+    échouerait sur « Le mandat n'autorise plus la planification agent. »
+  Action prévue: utiliser le bouton explicite « Réactiver le mandat »
+    (Plus > Mandat du Coach) dans le cadre du parcours coach P2, puis traiter
+    le refus OpenClaw par un correctif de prompt backend ciblé et revu.
+  Ces deux points ne sont pas encore approuvés comme correctifs de code; ils
+    sont consignés pour décision.
+
+Étapes R1 restantes: NOT_RUN (bloquées par le correctif de scroll, par le
+mandat révoqué, par le refus OpenClaw et par un nouvel accord d'installation
+d'APK).
+- Créer le programme, deux activités, aperçu, confirmation groupée, persistance.
+- Coach: consentement, demande, diff, confirmation, rejeu sans doublon, hors-ligne.
+- P3: READ_CALENDAR, calendriers + Etar, aucun événement.
+
+Statut global à ce point: BLOCKED_P1 (crash Plan) + BLOCKED_COACH (mandat/prompt)
+
+Corrections livrées et intégrées (non installées sur le Pixel)
+---------------------------------------------------------------
+Branche feat/atlas-v6-3-reprise, HEAD final de cette passe: 696eb9c.
+
+V63-R1-FIX-SCROLL (P1, agent 7ed5801d-…):
+  commit 44991e9, merge 7b36a90.
+  PlanScreen.kt et CalendarPermissionScreen.kt ne portent plus de verticalScroll
+  racine; AtlasScreenFrame fournit le scroll unique. Test instrumenté ajouté.
+  JVM enfant: 474 tests PASS; lint 0 erreur/45 avertissements.
+
+V63-L1-03-ACCESS-P3 (agent 9a12f7fb-…):
+  commit bc5e68a, merge 40c8693.
+  homeNextActionAccessibilityLabel dit « 1 minute » au singulier, « N minutes »
+  sinon; test JVM 1/2/480 min; tests Compose Selected/NonePlanned ajoutés.
+
+V63-R1-PLAN-PROMPT (P1, agent d7c335fd-…):
+  commit 19e08a6, merge 77e1565.
+  Le payload modèle omet allowed_actions, ajoute plan_revision_consent=true et
+  plan_revision_capability=true; le prompt autorise uniquement plan.revise_day
+  comme proposition, jamais comme action Android, et interdit tout outil.
+  Ciblé 31 PASS; suite backend intégrée 169 passed, 1 skipped.
+
+Intégration et corrections de tests (parent):
+  commit 696eb9c: assertIsDisplayed (Compose Test de cette version) et
+  LocalActivityResultRegistryOwner fourni par l'activité hôte pour le test
+  calendrier. Aucun changement de code applicatif.
+
+Sonde backend après correctif de prompt (backend redémarré, mêmes token/DB)
+---------------------------------------------------------------------------
+POST /v3/agent/plan-revision, request_id 1a8ecc5f-…, mandat agent-local-v2
+(10 actions, mode proposals_only), plan synthétique APPROVED v1 à 2 activités.
+  HTTP 200, agent_status=ok.
+  proposition: action_type=plan.revise_day, plan_id conservé, base_version=1,
+    local_date=2026-10-26, timezone=Europe/Paris, 2 activités, overlaps=[].
+  reply: « Je te propose de déplacer le travail profond à 14 h 30 […] puis de
+    garder la séance courte à 18 h. »
+  Conclusion: le refus précédent provenait bien du prompt/mandat, pas d'un
+  quota, d'un timeout ni d'un invalid_output. La proposition réelle est valide.
+  Limite: ce POST direct n'est pas encore le parcours app; le parcours coach
+  Android reste NOT_RUN tant que l'APK corrigé n'est pas installé.
+
+Build et oracles non-Pixel sur HEAD 696eb9c
+-------------------------------------------
+APK debug: SHA-256 66c7d8f669b895fcec00e363b24cc7c771938c078ec8d91210484346fef6472a
+  (12 Mo, 2026-10-26 14:26:31; sources app inchangées depuis 40c8693).
+JVM: 70 suites, 474 tests, 0 failure, 0 error, 0 skipped — PASS.
+Lint: 0 erreur, 54 avertissements — PASS.
+assembleDebug: PASS.
+compileDebugAndroidTestKotlin + assembleDebugAndroidTest: PASS.
+Instrumenté sur émulateur API 37 uniquement (jamais Pixel):
+  PlanCalendarScrollInstrumentationTest: 2/2 PASS.
+  HomeNextActionAccessibilityInstrumentationTest: 2/2 PASS.
+  Total: 4/4 PASS, OK (4 tests), 5,44 s.
+  Limite: l'émulateur ne remplace pas la recette Pixel; aucun test instrumenté
+  n'a été lancé sur le Pixel.
+
+Porte d'installation (P1 étendu)
+--------------------------------
+Le propriétaire a été sollicité pour installer 66c7d8f6 sur le Pixel.
+Décision initiale (~14:30): NE PAS INSTALLER maintenant; accord explicite requis.
+P1bis (~14:32): accord explicite du propriétaire pour le SHA 66c7d8f6 (source
+  696eb9c); le refus précédent est supersédé.
+Installation (~14:33): `adb -s 45301FDAS001QT install -r` -> Success; versionName
+  0.1.0, versionCode 1; données app conservées (mêmes fichiers/tailles);
+  sauvegarde immédiate avant installation
+  app-data-before-install-66c7d8f6.tar, SHA-256
+  c1e5aa5b6d274b43233a4d9f59d854441a4bcef758674eb84997f1760453a7e1.
+Retour arrière: `adb install -r` de
+  /home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-5956bb6f.apk
+  (SHA-256 5956bb6f…).
+Conservés hors dépôt (0600):
+  - APK installé actuel 5956bb6f:
+    /home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-5956bb6f.apk
+  - sauvegarde app-only avant nouvel APK:
+    app-data-before-scroll-fix.tar, SHA-256
+    6077daee5ab1854184ae4d385b6dfd27b8e6a91cffe28fa045188dfad4b414a1
+  - sauvegarde app-only P1 initiale:
+    app-data-before-r1.tar, SHA-256 28a74099…
+  - APK candidat: android/app/build/outputs/apk/debug/app-debug.apk
+    SHA-256 66c7d8f6… (non installé).
+
+Parcours R1 exécuté sur l'APK 66c7d8f6 (Pixel Android 17/API 37)
+--------------------------------------------------------------
+Plan du jour:
+  PASS  ouverture de Plus > Plan du jour sans crash (défaut corrigé).
+  PASS  création du programme du jour: version 1, APPROVED, 0 activité.
+  PASS  activité 1 « Travail profond », FOCUS, 15:00, 90 min, Importante:
+        aperçu « Version 1 → 2 · 2 effets », confirmation groupée,
+        application locale, version 2.
+  PASS  activité 2 « Seance courte », TRAINING, 18:00, 45 min, Importante:
+        aperçu « Version 2 → 3 · 2 effets », confirmation groupée,
+        application locale, version 3, 2 activités.
+  PASS  défilement bas/haut de l'écran: aucun crash, app au premier plan.
+  PASS  persistance: force-stop puis relance, Plus > Plan du jour ->
+        version 3, 2 activités, mêmes horaires.
+
+Mandat:
+  PASS  « Réactiver le mandat » (action UI explicite, Plus > Mandat du Coach).
+        État relu: mandat agent-local-v2 version 3, revoked=false,
+        suspended=false, barrière agent_blocked_v1=false. L'écran affiche
+        ensuite « Suspendre le mandat ».
+        Note mineure: l'écran ne se recompose pas immédiatement après l'action;
+        un retour/retour à l'écran rafraîchit l'état.
+
+Coach:
+  PASS  activation des révisions par le coach: dialogue de divulgation lu,
+        « Activer » confirmé; capability planRevision=true.
+  PASS  « Demander au coach » avec le message par défaut:
+        réponse réelle du modèle, sans proposition:
+        « Ton plan organise déjà bien le reste de la journée : garde le travail
+        profond de 15 h à 16 h 30, puis la séance courte à 18 h. Prévois une
+        pause entre les deux […] »
+        Aucun aperçu, aucun effet appliqué.
+  HIST  demande explicite suivante: `invalid_output` (voir diagnostic plus bas).
+        Réponse app: « Agent status invalid_output: La proposition du
+        planificateur est invalide et a été rejetée. Aucune action n'a été
+        exécutée. » Aucun effet appliqué.
+        Diagnostic Gateway: proposition sinon valide mais
+        "kind":"BREAK" et "priority":null; schéma V3 exige
+        FOCUS/TRAINING/APPOINTMENT/ADMIN/MEAL/REST/BUFFER/OTHER et
+        REQUIRED/IMPORTANT/OPTIONAL non nul. Correctif V63-R1-PLAN-PROMPT-2
+        (a6ee1c7, merge) appliqué; backend redémarré.
+  PASS  après correctif, sonde backend réelle sur le plan exact version 3:
+        agent_status=ok, proposition plan.revise_day, base_version=3,
+        3 activités dont Pause kind=BUFFER priority=OPTIONAL, overlaps=[].
+  PASS  parcours app: aperçu « Version 3 → 4 · 3 effet(s) », diff
+        « Ajouter Pause à 17:30 » + « Déplacer de 15:00 à 14:50 ».
+  PASS  aucun effet avant confirmation: fichier plan encore version 3,
+        2 activités pendant l'aperçu.
+  PASS  confirmation groupée -> version 4, 3 activités persistées:
+        Pause BUFFER OPTIONAL 17:30-17:45, Seance courte 18:00-18:45,
+        Travail profond déplacé à 14:50-16:20; applied_revisions=3,
+        confirmations=3.
+  PASS  idempotence réelle: rejeu du même POST backend (même request_id,
+        même corps) -> HTTP 200, même proposal_id, même idempotency_key,
+        même candidate. Aucun second effet.
+  PASS  hors-ligne: backend arrêté; plan version 4 toujours lisible,
+        actions locales visibles; demande coach -> « Service plan agent
+        indisponible. », aucun effet, aucun crash.
+
+P3 calendrier — historique puis rejeu après correctif
+-----------------------------------------------------
+Premier passage (APK 66c7d8f6):
+  PASS  consentement ATLAS, READ_CALENDAR après action explicite, liste,
+        Etar détectée, aucun événement, révocation.
+  FAIL_PRIVACY (P1)  certains CALENDAR_DISPLAY_NAME étaient des adresses
+        e-mail et s'affichaient malgré « Compte expurgé ». Aucune adresse
+        recopiée. Cause: displayName recopié sans filtre.
+        Correctif V63-R1-CALENDAR-REDACT (db15715, merge), tests JVM.
+
+P1ter — installation approuvée de l'APK correctif:
+  PASS  sauvegarde app-only `8617727e…` et rollbacks 66c7d8f6/5956bb6f
+        vérifiés en 0600 avant installation.
+  PASS  `adb install -r` de 6ab95fac -> Success; versionName 0.1.0,
+        versionCode 1; APK relu sur l'appareil: SHA-256
+        6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886.
+  PASS  données conservées: plan v4/3 activités, mandat v3, consentement
+        calendrier révoqué, READ_CALENDAR granted=false.
+  PASS  vérification UI après installation: Plus > Plan du jour affiche
+        « version 4 », « 3 activité(s) » et les trois créneaux locaux.
+
+Rejeu P3 sur APK 6ab95fac:
+  PASS  consentement ATLAS donné, READ_CALENDAR accordé via le dialogue
+        Android, permission « Accordée ».
+  PASS  liste complète parcourue: 0 occurrence de motif e-mail dans tous
+        les textes/content-descriptions de l'écran.
+  PASS  4 calendriers dont le nom était un identifiant de compte affichent
+        « Calendrier expurgé »; les noms normaux (jours fériés, « Famille »)
+        restent lisibles; le compte reste « Compte expurgé ».
+  PASS  Etar détectée (ws.xsoh.etar / ws.xsoh.etar.debug).
+  PASS  aucun événement affiché: uniquement nom, compte expurgé, accès et
+        visibilité; aucune écriture calendrier.
+  PASS  révocation: consentement ATLAS révoqué via l'écran, puis
+        `pm revoke dev.atlas.coach android.permission.READ_CALENDAR`;
+        permission granted=false; écran « Refusée »; consentement absent;
+        liste masquée; 0 occurrence e-mail après révocation.
+  Statut P3: PASS, avec état final permission refusée et liste masquée.
+
+État final et clôture de la passe
+---------------------------------
+APK installé: 6ab95fac… (0.1.0, versionCode 1), source HEAD 7ca862f.
+Plan persisté: files/plans/day-plan-2026-10-26.json, version 4,
+  3 activités (Pause BUFFER OPTIONAL 17:30, Seance courte 18:00,
+  Travail profond 14:50).
+Mandat: agent-local-v2 version 3, revoked=false, suspended=false,
+  mode proposals_only, barrière agent_blocked_v1=false.
+READ_CALENDAR: déclaré, granted=false; consentement ATLAS révoqué;
+  aucune lecture active, aucune écriture.
+WRITE_CALENDAR: non déclaré, non accordé.
+Backend: arrêté; port 8010 libre.
+adb reverse: `tcp:8010` retiré; `adb reverse --list` vide.
+Aucune désinstallation, pm clear, écriture calendrier ou wger, activation
+OpenClaw, modification ~/.openclaw ou push.
+Aucune nouvelle reconstruction d'APK après 6ab95fac; les seules
+modifications postérieures sont documentaires.
+
+Statut global de cette passe:
+  PLAN PASS ; COACH PASS (proposition réelle, diff, confirmation,
+  idempotence, hors-ligne) ; P3 PASS après correction de confidentialité ;
+  R1 physique clos avec les limites documentées (P4/P5 non approuvés,
+  aucune activation OpenClaw, aucune écriture calendrier/wger).

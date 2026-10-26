@@ -12,7 +12,7 @@ Ce document fixe **la méthode d'exécution agentique**, pas le périmètre prod
 
 **Aucun enfant Luna High/Medium ou d'un autre fournisseur.** Si Paseo n'offre pas ce couple modèle/effort, marquer `BLOCKED` et demander une résolution au propriétaire, sans remplacement silencieux. Le repo ne configure **pas** les profils hôte Paseo : vérifier le provider/modèle/effort réels **dans les métadonnées des sessions**.
 
-**Concurrence :** 6 enfants actifs **maximum au total** , 1 propriétaire par fichier, 1 intégrateur parent, 1 seul propriétaire ADB/Pixel/AVD à la fois. Les agents enfants peuvent créent d'autres agents.
+**Concurrence :** 6 enfants actifs **maximum au total**, dont au plus **3 tickets d'implémentation indépendants** en cours ; 1 propriétaire par fichier, 1 intégrateur parent, 1 seul propriétaire ADB/Pixel/AVD à la fois. **Aucun agent enfant ne crée d'autres agents : aucune sous-délégation, sans exception.**
 
 ## Pré-vol de chaque chantier
 
@@ -20,7 +20,7 @@ Ce document fixe **la méthode d'exécution agentique**, pas le périmètre prod
 2. Vérifier `pwd`, `git status --short`, `git rev-parse HEAD`, worktrees, accès réseau/shell/ADB, outils et CI. Préserver tout état utilisateur existant.
 3. Fixer une base SHA complète, une **nouvelle branche**, les critères de sortie et la matrice des tests. Ne pas travailler directement sur `main` pour les modifications.
 4. Créer **un registre unique de tâches** dans le dossier de preuves de la mission. États : `READY -> RUNNING -> REVIEW_REQUIRED -> ACCEPTED -> INTEGRATED` ou `CORRECTION_REQUIRED / BLOCKED`.
-5. Produire des tâches **verticales et vérifiables**, de préférence une question/correctif par nouvelle session. Maximum 3 tâches indépendantes actives. Un ticket sans oracle ou avec fichiers partagés n'est pas lançable.
+5. Produire des tâches **verticales et vérifiables**, de préférence une question/correctif par nouvelle session. Maximum **3 tickets d'implémentation indépendants** actifs ; les scouts et relecteurs en lecture seule s'ajoutent dans la limite des **6 enfants au total**. Un ticket sans oracle ou avec fichiers partagés n'est pas lançable.
 
 ## Contrat de délégation obligatoire
 

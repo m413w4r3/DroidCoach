@@ -43,11 +43,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
@@ -83,12 +85,67 @@ import dev.atlas.coach.app.ui.AtlasStatus
 import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.app.ui.AtlasTertiaryButton
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlinx.coroutines.delay
 
 @Composable
 internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
+    val applicationContext = LocalContext.current.applicationContext
+    val planController = remember(applicationContext) {
+        (applicationContext as? AtlasApplication)?.planController
+    }
+    val planTimezone = planController?.timezone
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var minuteTick by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner, planController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                planController?.refresh()
+                minuteTick++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(planController, planTimezone) {
+        val plan = planController ?: return@LaunchedEffect
+        while (true) {
+            val zone = ZoneId.of(plan.timezone)
+            val now = ZonedDateTime.now(zone)
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(zone)
+            delay(Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L))
+            plan.refresh()
+            minuteTick++
+        }
+    }
+    LaunchedEffect(planController, planTimezone) {
+        val plan = planController ?: return@LaunchedEffect
+        while (true) {
+            val zone = ZoneId.of(plan.timezone)
+            val now = ZonedDateTime.now(zone)
+            val millisToNextMinute = 60_000L - now.second * 1_000L - now.nano / 1_000_000L
+            delay(millisToNextMinute.coerceAtLeast(1L))
+            minuteTick++
+        }
+    }
+    val homeNow = remember(minuteTick, planTimezone) {
+        val zone = planTimezone?.let(ZoneId::of) ?: ZoneId.systemDefault()
+        ZonedDateTime.now(zone)
+    }
+    val nextAction = planController?.let {
+        selectHomeNextAction(
+            plan = it.plan,
+            today = homeNow.toLocalDate(),
+            currentMinute = homeNow.hour * 60 + homeNow.minute,
+        )
+    } ?: HomeNextActionState.Neutral
+    val nextActionGoalTitle = (nextAction as? HomeNextActionState.Selected)?.activity?.goalId?.let { goalId ->
+        controller.coachGoals.firstOrNull { it.record.id == goalId }?.record?.title ?: "Objectif associé"
+    }
     var showResponses by remember { mutableStateOf(false) }
     val focus = controller.focusSession
     val checkedToday = controller.checkedHabitIds.size
@@ -135,6 +192,8 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
             }
         }
 
+        HomeNextActionCard(nextAction, nextActionGoalTitle)
+
         AtlasSection("Concentration") {
             val focusLabel = when (focus?.status) {
                 FocusStatus.RUNNING -> "Session en cours · ${focus.phase.focusPhaseLabel()}"
@@ -169,6 +228,54 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
             AtlasTertiaryButton("Voir les habitudes", onClick = { controller.navigationState.selectTab(AtlasScreenId.HABITS) })
         }
 
+    }
+}
+
+@Composable
+internal fun HomeNextActionCard(
+    state: HomeNextActionState,
+    goalTitle: String?,
+) {
+    if (state == HomeNextActionState.Neutral) return
+    val accessibilityLabel = when (state) {
+        HomeNextActionState.Neutral -> return
+        HomeNextActionState.NonePlanned -> "Aucune action planifiée."
+        is HomeNextActionState.Selected -> homeNextActionAccessibilityLabel(state.activity, goalTitle)
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .semantics(mergeDescendants = true) { contentDescription = accessibilityLabel }
+            .testTag("home_next_action_card"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Prochaine action", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when (state) {
+                HomeNextActionState.Neutral -> Unit
+                HomeNextActionState.NonePlanned -> Text(
+                    "Aucune action planifiée",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                is HomeNextActionState.Selected -> {
+                    val activity = state.activity
+                    Text(activity.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "${PlanController.timeLabel(activity.scheduledLocal.startMinute)} – " +
+                            "${PlanController.endTimeLabel(activity.scheduledLocal.startMinute, activity.scheduledLocal.durationMinutes)} · " +
+                            "${activity.scheduledLocal.durationMinutes} min",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text("Priorité ${homePriorityLabel(activity.priority)}", style = MaterialTheme.typography.bodySmall)
+                    if (activity.status == dev.atlas.coach.plan.ActivityStatus.IN_PROGRESS) {
+                        Text("En cours", style = MaterialTheme.typography.labelMedium)
+                    }
+                    goalTitle?.let { Text("Objectif · $it", style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        }
     }
 }
 
@@ -585,6 +692,7 @@ internal fun MoreScreen(controller: AtlasController) {
         Text("Autres espaces", style = MaterialTheme.typography.headlineSmall)
         AtlasSection("Programme") {
             AtlasSecondaryButton("Plan du jour", onClick = { controller.navigationState.navigate(AtlasScreenId.PLAN) })
+            AtlasSecondaryButton("Diagnostic calendrier", onClick = { controller.navigationState.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) })
         }
         AtlasSection("Bibliothèque et journal") {
             AtlasSecondaryButton("Bibliothèque", onClick = { controller.navigationState.navigate(AtlasScreenId.LIBRARY) })

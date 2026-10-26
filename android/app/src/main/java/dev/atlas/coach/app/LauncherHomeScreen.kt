@@ -80,6 +80,9 @@ import dev.atlas.coach.launcher.LauncherAppModel
 import dev.atlas.coach.launcher.LauncherAppRules
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.Duration
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
@@ -164,6 +167,22 @@ private fun LauncherHomeContent(
     var showHomeMenu by remember { mutableStateOf(false) }
     var launcherMessage by remember { mutableStateOf<String?>(null) }
     var showDirectiveDetails by remember { mutableStateOf(false) }
+    val planController = remember(context.applicationContext) {
+        (context.applicationContext as? AtlasApplication)?.planController
+    }
+    val planTimezone = planController?.timezone
+    val planZone = planTimezone?.let(ZoneId::of) ?: ZoneId.systemDefault()
+    val planNow = ZonedDateTime.now(planZone)
+    val nextAction = planController?.let {
+        selectHomeNextAction(
+            plan = it.plan,
+            today = planNow.toLocalDate(),
+            currentMinute = planNow.hour * 60 + planNow.minute,
+        )
+    } ?: HomeNextActionState.Neutral
+    val nextActionGoalTitle = (nextAction as? HomeNextActionState.Selected)?.activity?.goalId?.let { goalId ->
+        controller.coachGoals.firstOrNull { it.record.id == goalId }?.record?.title ?: "Objectif associé"
+    }
 
     BackHandler(enabled = true) {
         when {
@@ -175,7 +194,10 @@ private fun LauncherHomeContent(
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refreshToken++
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshToken++
+                planController?.refresh()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -199,6 +221,16 @@ private fun LauncherHomeContent(
             val millisToNextMinute = 60_000L - now.second * 1_000L - now.nano / 1_000_000L
             delay(millisToNextMinute.coerceAtLeast(1L))
             clock = currentClockText()
+        }
+    }
+    LaunchedEffect(planController, planTimezone) {
+        val plan = planController ?: return@LaunchedEffect
+        while (true) {
+            val zone = ZoneId.of(plan.timezone)
+            val now = ZonedDateTime.now(zone)
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(zone)
+            delay(Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L))
+            plan.refresh()
         }
     }
 
@@ -342,6 +374,8 @@ private fun LauncherHomeContent(
                             }
                         }
 
+                        HomeNextActionCard(nextAction, nextActionGoalTitle)
+
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("AUJOURD'HUI", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
@@ -483,6 +517,8 @@ private fun LauncherHomeContent(
                             )
                         }
                     }
+
+                    HomeNextActionCard(nextAction, nextActionGoalTitle)
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("AUJOURD'HUI", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

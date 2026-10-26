@@ -1,0 +1,74 @@
+ATLAS V6.3 — reprise R0 — preuves du 2026-10-26
+===============================================
+
+BASE_SHA: f625f0de21725485c91247e96986fdccd4eee597
+Branche: feat/atlas-v6-3-reprise
+Environnement: Linux 6.8, JDK 21.0.12.1, Gradle 9.6.0, Python 3.12.3,
+Node 24.18.0, ADB 1.0.41, compileSdk 37.2.
+
+1. Backend baseline
+Commande: cd backend && .venv/bin/python -m pytest -q
+Résultat: PASS — 91 passed, 1 skipped, 1 warning (2,65 s)
+SHA: f625f0d
+
+2. Android JVM baseline (test forcé, pas UP-TO-DATE)
+Commande: cd android && ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest --max-workers=1
+Résultat: PASS — BUILD SUCCESSFUL; 62 suites, 426 tests, 0 failure, 0 error, 0 skipped
+SHA: f625f0d
+
+3. OpenClaw V2 réel (backend éphémère, gateway loopback)
+Commande: backend/.venv/bin/python -m uvicorn atlas_backend.main:app (port libre)
+Env: ATLAS_AGENT_ADAPTER=openclaw, OPENCLAW_BASE_URL=http://127.0.0.1:18789,
+     OPENCLAW_AGENT_ID=atlas, OPENCLAW_GATEWAY_TOKEN_FILE=~/.config/atlas/openclaw-gateway-token
+Résultat: PASS — /health 200; /v2/agent/status adapter=openclaw;
+          /v2/agent/chat 200, agent_status=connected, 2 propositions
+          (home.set_directive preauthorized_ok, focus.propose proposal_only);
+          backend arrêté proprement; aucune action appareil.
+Secrets: non affichés, non journalisés.
+
+4. Bridge ChatGPT réel (lecture)
+Commande: GET /v1/bridge/capabilities et /v1/bridge/metrics avec Bearer du .env
+Résultat: HTTP 200
+- transport=chatgpt_web_ui
+- extension_connected=true
+- serialization=single_request
+- streaming=final_delta_only
+- web_search=prompt_instructed
+- controls.web_search_toggle=unavailable
+- controls.model_selection=unavailable
+- actual_model_version=false
+- structured_output=prompt_and_client_validation
+- metrics: runs_started=256, completed=238, failed=18, dedup_hits=7,
+  payload_conflicts=0, active_runs=0, extension_connected=true
+Limite: recherche récente VÉRIFIÉE non disponible; qualifier
+        PROMPT_INSTRUCTED_UNVERIFIED.
+Secrets: non affichés.
+
+5. Pixel Android 17 (pré-vol lecture seule)
+Appareil: Pixel 9 Pro XL (komodo), Android 17 / API 37,
+          build CP3A.260905.009, patch 2026-09-05, 29 G libres.
+ATLAS: dev.atlas.coach 0.1.0 (versionCode 1), DEBUGGABLE, targetSdk 36,
+       certificat CN=Android Debug SHA-256 da301466...00eeee (identique au
+       debug.keystore local).
+Packages: dev.atlas.coach.test, ws.xsoh.etar, de.wger.flutter présents.
+HOME: com.google.android.apps.nexuslauncher.
+adb reverse/forward: aucun.
+Aucune permission, installation, sauvegarde ou écriture effectuée.
+
+6. Smoke-test Paseo
+5 enfants provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh,
+modeId=auto-review. Deux scouts en worktrees `chmod -R a-w`; après fin,
+HEAD=f625f0d et `git status --short` vide pour les deux.
+Notification de fin reçue (scouts R3 et R5).
+Aucune sous-délégation observée.
+
+7. Audits acceptés
+- V63-R3-SCOUT-01: docs/v6-3/AUDIT_BRIDGE_PLUGIN.md
+  Verdict GO_WITH_LIMITATIONS (plugin hors activation);
+  BLOCKED_POLICY pour discussion -> recherche sous tools.deny ["*"].
+- V63-R5-SCOUT-01: docs/v6-3/AUDIT_TRANSPORT_PASEO.md
+  Noise NK vérifié, fallback legacy permissif par défaut -> protected-only;
+  Apache-2.0; BLOCKED_INFRA pour test extérieur.
+
+Limites: aucun test instrumenté ou physique exécuté; lint/build non rejoués
+dans R0; recherche Bridge vérifiée indisponible.
