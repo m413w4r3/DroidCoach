@@ -103,10 +103,13 @@ empreinte et la commande de build sont consignées.
 
 ### Jalon L1/L2-lecture
 
-**`GO_WITH_LIMITATIONS`** sous réserve de la revue indépendante finale : les
-gates JVM/lint/build sont verts sur `5dedcf6`, le programme journalier local et
-la sonde calendrier en lecture seule sont testés, mais aucun appareil n'a été
-utilisé et le calendrier réel n'est pas branché.
+**`GO_WITH_LIMITATIONS`** — revue indépendante finale sur le SHA de code
+`4003095` : les gates JVM/lint/build sont verts, le programme journalier local
+et la sonde calendrier en lecture seule sont testés, mais aucun appareil n'a été
+utilisé et le calendrier réel n'est pas branché. La revue a d'abord rendu
+`NO_GO` (trois P1 puis une collision de hachage) ; chaque défaut a été corrigé
+et re-vérifié. Le P2 documentaire résiduel (traçabilité 66/424 vs 68/426) est
+corrigé dans `REVUE_INDEPENDANTE.md`. Détail : [REVUE_INDEPENDANTE.md](REVUE_INDEPENDANTE.md).
 
 ### V6.3 complète
 

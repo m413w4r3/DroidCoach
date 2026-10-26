@@ -9,7 +9,8 @@
 | Deuxième SHA | `6cef04b11c05f6405199e348ee70cf926dad1aa2` |
 | SHA corrigé final | `40030950f9b21dece8a0af63f6e7249930da6c11` |
 | Tests exécutés par le relecteur | **aucun** (lecture seule technique) |
-| Tests parent sur SHA corrigé | 66 ciblés, 424 JVM, backend 91/1 skip, lint 0 erreur, build et androidTest compile PASS |
+| Tests parent sur `6cef04b` | 66 ciblés, 424 JVM, backend 91/1 skip, lint 0 erreur, build et androidTest compile PASS |
+| Tests parent sur `4003095` (SHA final) | 68 ciblés, 426 JVM, backend 91/1 skip, lint 0 erreur, build et androidTest compile PASS |
 | Pixel / instrumenté | **NOT_RUN** |
 
 ## Premier verdict : `NO_GO` sur `5dedcf6`
@@ -32,10 +33,24 @@
 Les règles de statut, le rechargement au retour au premier plan et les
 chevauchements imbriqués ont été confirmés corrigés par le relecteur.
 
-## Re-revue finale
+## Re-revue finale : `GO_WITH_LIMITATIONS` sur `4003095`
 
-Une troisième vérification ciblée est demandée sur `4003095` et sur les preuves
-mises à jour. **Verdict final à consigner à réception.**
+Le relecteur confirme :
+
+- la collision `null` / `"<null>"` est corrigée par l'encodage length-prefixed et
+  couverte par les tests moteur et dépôt ;
+- les preuves finales de `4003095` sont visibles et cohérentes (68 ciblés, 426
+  JVM, backend 91/1 skip, lint/build, APK SHA-256) ;
+- aucun nouveau P0/P1 n'est introduit par le diff ciblé.
+
+**P2 `EVIDENCE_GAP` résiduel** : la ligne de synthèse de ce document indiquait
+66/424 sans rattacher ce chiffre à `6cef04b`. Il est corrigé ci-dessus : 66/424
+= `6cef04b`, 68/426 = `4003095` (SHA final). Ce P2 est documentaire, sans effet
+sur le code.
+
+**Verdict final : `GO_WITH_LIMITATIONS`.** Limites maintenues : Pixel/Etar/
+instrumenté `NOT_RUN`, calendrier/wger/Bridge/localisation non livrés, carte
+HOME non livrée, accessibilité réelle non testée, V6.3 complète `NO_GO`.
 
 ## Limites maintenues
 
