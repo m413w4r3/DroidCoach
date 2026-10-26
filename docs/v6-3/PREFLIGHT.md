@@ -181,7 +181,11 @@ Aucun push, aucune PR, aucun merge distant, aucune action destructive.
 | Identifiant appareil | **non journalisé** (politique ATLAS) |
 | Stockage /data | 109 G, 29 G disponibles (74 % utilisé) |
 | Émulateur | `emulator-5554` également connecté ; le Pixel physique reste prioritaire |
-| ATLAS installé | `dev.atlas.coach` versionName `0.1.0`, versionCode 1, targetSdk 36, dernière MAJ `2026-10-25 00:11` |
+| ATLAS installé | `dev.atlas.coach` versionName `0.1.0`, versionCode 1, targetSdk 36, `DEBUGGABLE`, dernière MAJ `2026-10-25 00:11` |
+| Signature ATLAS installé | certificat `CN=Android Debug`, SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` — **identique au debug.keystore local** ; une mise à jour APK debug en place est possible sans désinstallation |
+| APK installé (empreinte) | SHA-256 `48c7766e9090010692f0eaafc1d0cbaf4b22e51259847f94b642a2d060b33583` (pull local, non versionné) |
+| Réseau debug Android | `network_security_config.xml` autorise déjà le cleartext pour `127.0.0.1` et `10.0.2.2` ; aucune modification nécessaire pour `adb reverse` |
+| Jeton OpenClaw Gateway | fichier `/home/nill/.config/atlas/openclaw-gateway-token`, mode `600`, non vide ; contenu jamais affiché |
 | Package de test | `dev.atlas.coach.test` présent |
 | Etar | `ws.xsoh.etar` installé |
 | wger | `de.wger.flutter` installé |
@@ -197,13 +201,14 @@ sauvegarde ou écriture n'a été faite.
 | Service | Constat vérifié |
 |---|---|
 | Bridge ChatGPT | **actif** sur `127.0.0.1:8001` ; `/health` = 200, extension connectée (`extension_connected=true`, `busy=false`) ; `/ready` = 200, `accepting_runs=true`, auth HTTP configurée, registre SQLite accessible |
-| Bridge capabilities | `/v1/bridge/capabilities` = **401 sans Bearer** ; la clé n'a pas été affichée et aucune requête authentifiée n'a encore été faite |
+| Bridge capabilities | **401 sans Bearer** ; avec le Bearer du `.env` (jamais affiché) : **200**, `transport=chatgpt_web_ui`, `extension_connected=true`, `serialization=single_request`, `text=true`, `new_chat=true`, `streaming=final_delta_only`. **Limite majeure** : `web_search="prompt_instructed"`, `controls.web_search_toggle="unavailable"`, `controls.model_selection="unavailable"`, `actual_model_version=false`, `structured_output="prompt_and_client_validation"`. L'état UI mis en cache indique « ni bouton de recherche ni menu d'outils » et est périmé (> 4 jours). **Une recherche récente vérifiée (`ui_tool`) n'est donc pas disponible dans cet environnement** ; seule une recherche `prompt_instructed` non vérifiée est possible. |
+| Bridge métriques | 256 runs démarrés, 238 terminés, 18 échoués, 7 hits de déduplication, 0 conflit de payload, 0 run actif, extension connectée |
 | Bridge source | `/home/nill/perso/work/Bridges/chatgpt-bridge`, Git `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa`, état local conservé |
 | OpenClaw Gateway | actif sur `127.0.0.1:18789` (loopback), authentification token existante |
 | OpenClaw installé | version **2026.10.5** (npm global) ; SDK `openclaw/plugin-sdk/tool-plugin` disponible (`defineToolPlugin`, Node ≥ 24.16) |
 | Agent OpenClaw `atlas` | `tools.deny: ["*"]` — planificateur sans outil, conforme à la séparation des rôles |
 | Référence OpenClaw locale | `references/repos/openclaw` à `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` ; le code **installé** prime pour les capacités |
-| Port 8000 | occupé par un service tiers non identifié (`GET /health` → 404). **Ne pas l'utiliser.** |
+| Port 8000 | occupé par un service tiers **« CTI Bulletin API »** (`GET /openapi.json` → 200, `GET /health` → 404). **Ne pas l'utiliser, ne pas l'arrêter.** |
 | Port 8001 | Bridge ChatGPT (voir ci-dessus) |
 | Backend ATLAS | non démarré. Port de développement retenu pour la reprise : **8010** (voir décisions) |
 
@@ -239,8 +244,8 @@ réception.
 
 | Étape | Résultat |
 |---|---|
-| Enfant Luna XHigh en lecture seule | à compléter |
-| Deux enfants dans deux worktrees | à compléter |
-| Notification de fin reçue | à compléter |
-| Modèle/effort effectifs vérifiés | à compléter |
-| Sous-délégation refusée | à compléter |
+| Enfant Luna XHigh en lecture seule | **PASS (lancement)** — scout `V63-R3-SCOUT-01`, worktree `audit/v63-r3-bridge-plugin` à `f625f0d`, `chmod -R a-w`, écriture refusée (`Permission denied`) |
+| Deux enfants dans deux worktrees | **PASS (lancement)** — `V63-R3-SCOUT-01` et `V63-R5-SCOUT-01`, worktrees distincts, branches distinctes |
+| Notification de fin reçue | en attente |
+| Modèle/effort effectifs vérifiés | **PASS** — `provider=codex`, `model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`, `modeId=auto-review` pour les 5 enfants (`get_agent_status`) |
+| Sous-délégation refusée | **PASS** — interdition explicite dans chaque prompt ; à re-vérifier sur les traces de fin |

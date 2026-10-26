@@ -123,13 +123,17 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 
 ### Vague 1 — trois implémentations + deux scouts
 
-| Enfant | Worktree | Périmètre | Statut |
-|---|---|---|---|
-| `V63-R3-SCOUT-01` | worktree dédié, `chmod a-w` | Bridge + SDK OpenClaw | READY |
-| `V63-R5-SCOUT-01` | worktree dédié, `chmod a-w` | transport Paseo | READY |
-| `V63-L3-01a` | worktree dédié | backend plan revision | READY |
-| `V63-L5-01` | worktree dédié | backend integrations wger | READY |
-| `V63-L1-03` | worktree dédié | HOME next action | READY |
+| Enfant | Worktree | Périmètre | Session Paseo | Statut |
+|---|---|---|---|---|
+| `V63-R3-SCOUT-01` | `audit-v63-r3-bridge-plugin` (`chmod a-w`) | Bridge + SDK OpenClaw | `c818a83c-46db-473b-b38c-823be3a108f3` | RUNNING |
+| `V63-R5-SCOUT-01` | `audit-v63-r5-paseo-transport` (`chmod a-w`) | transport Paseo | `5c393291-ad7a-467a-80ee-e90a78595b0b` | RUNNING |
+| `V63-L3-01a` | `feat-v63-l3-01a-plan-backend` | backend plan revision | `6d98e14c-ec23-4b3d-aa28-1b2d7f5c0398` | RUNNING |
+| `V63-L5-01` | `feat-v63-l5-01-wger-read` | backend integrations wger | `998e3ac3-de59-42af-88e5-d184092e9ea6` | RUNNING |
+| `V63-L1-03` | `feat-v63-l1-03-home-next` | HOME next action | `b5722d8a-db34-42eb-8ac8-2086021a99ce` | RUNNING |
+
+Tous les enfants : `provider=codex`, `model=gpt-6-luna`,
+`effectiveThinkingOptionId=xhigh`, `modeId=auto-review`, vérifiés via
+`get_agent_status` après lancement. Base commune `f625f0d`.
 
 Contraintes communes : `provider=codex`, `model=gpt-6-luna`, `effort=xhigh`,
 aucune sous-délégation, aucun push, aucune action ADB/Pixel, aucun secret réel
@@ -139,4 +143,8 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 
 | Date | Ticket | SHA base | SHA résultat | Oracle | Verdict |
 |---|---|---|---|---|---|
-| 2026-10-26 | V63-R0-01 | `ab477ef` | à compléter | pré-vol + alignement | RUNNING |
+| 2026-10-26 | V63-R0-01 | `ab477ef` | `f625f0d` | pré-vol + alignement + baseline backend 91 PASS / 1 skip | **ACCEPTED / INTEGRATED** |
+| 2026-10-26 | Smoke Paseo reprise | `f625f0d` | — | 5 enfants Luna XHigh, 2 worktrees RO, modèle/effort vérifiés | **PASS (lancement)** |
+| 2026-10-26 | V63-R5-SCOUT-01 | `f625f0d` | — | premier rapport | **BLOCKED_CONTEXT** : clones Paseo absents du worktree (`references/repos/` ignoré) ; réengagé sur le checkout principal aux SHA exacts |
+| 2026-10-26 | Diagnostic Bridge réel | `f625f0d` | — | `/capabilities` + `/metrics` authentifiés, secrets non affichés | **PASS lecture** ; recherche vérifiée **NON DISPONIBLE** (`prompt_instructed`) |
+| 2026-10-26 | Pré-vol Pixel | `f625f0d` | — | appareil, packages, signature, HOME, stockage | **PASS lecture seule** ; ATLAS installé signé debug, HOME = NexusLauncher |
