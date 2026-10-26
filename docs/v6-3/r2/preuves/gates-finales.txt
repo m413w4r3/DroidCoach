@@ -3,56 +3,64 @@ ATLAS V6.3 — R2 — Gates finaux
 
 Date: 2026-10-26
 Branche: feat/atlas-v6-3-r2-emulator-ui
-SHA code final: 993951fc13ac9f7ba23548d846fab6cac01418db
-Date de ce gate: après intégration des vagues A et B.
+SHA code final: f76cd1832224dc6896ad8fb5a2b322e49531c2a8
+(code identique à l'arbre des vagues A/B/C ; les commits suivants sont docs-only)
 
 Backend
 -------
 cd backend && .venv/bin/python -m pytest -q
-Résultat: 178 passed, 1 skipped, 1 warning in 6.10s
+Résultat: 178 passed, 1 skipped, 1 warning
 Verdict: PASS
 
 JVM Android
 -----------
 cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1
-Résultat: 77 suites, 546 tests, 0 failure, 0 error, 0 skipped
+Résultat: 78 suites, 563 tests, 0 failure, 0 error, 0 skipped
 Verdict: PASS
-Note: un run antérieur, sous forte charge (émulateur + agents + Gradle), avait
-produit 4 timeouts dans LocationCaptureManagerTest. Rejeu isolé: PASS, puis
-suite complète finale: PASS 546/546. Aucun code de localisation modifié par R2.
+Note: un run antérieur, sous forte charge, avait produit 4 timeouts dans
+LocationCaptureManagerTest. Rejeu isolé PASS, puis suites finales PASS 563/563.
+Aucun code de localisation modifié par R2.
 
 Lint / build
 ------------
 ./gradlew :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1
 Résultat: BUILD SUCCESSFUL; lint 0 erreur, 54 avertissements
-APK debug final: SHA-256 cc88e6493a14a0c7bab97ae4b90cbe24b015fa2c0248e3b0755413f5e5e329cd
+APK debug final: SHA-256 22ce64da102325635f1e3b2f609ff9d8081b30ba63c3b78df1111c296fcce33d
 androidTest APK: assemblage PASS
 Verdict: PASS
 
 Instrumenté Android 17 / API 37
 --------------------------------
 Appareil: emulator-5554, Pixel_9_Pro_XL_2, API 37.2, Android 17
-Commande: adb -s emulator-5554 shell am instrument -w -r -e class
-  PlanScreenInstrumentationTest,HabitsScreenInstrumentationTest,
-  PlanCalendarScrollInstrumentationTest,HomeNextActionAccessibilityInstrumentationTest
-  dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
-Résultat: OK (17 tests), 58.7 s
+17 tests ciblés Plan/Habitudes/scroll/accessibilité: OK (17 tests).
+Détail: preuves/instrumented.txt.
 Verdict: PASS
-APK testé sur émulateur: 87b1240d6bd275cfa5428e266caf03762cb168f7a9832cf998a9724a300bb8b3
-(bâti depuis la même source principale que cc88e649; les SHA debug ne sont pas
-reproductibles à l'octet près).
 
-APK final vérifié après reconstruction
----------------------------------------
-APK cc88e649 installé en mise à jour sur emulator-5554, données pré-R2
-restaurées, ouverture de l'application sans crash et données existantes lisibles.
-SHA relu sur l'appareil: identique à cc88e649.
+Plugin OpenClaw
+---------------
+npm test: 50/50 PASS
+npm run plugin:build: PASS
+openclaw plugins validate: PASS
+Activation: BLOCKED_POLICY ; aucune modification de configuration active.
+Verdict: PASS (code) / BLOCKED (activation)
+
+UsageStats
+----------
+17 tests JVM synthétiques PASS ; aucune qualification Usage Access réelle.
+Verdict: PASS (noyau) / NOT_RUN (matériel)
+
+APK final
+---------
+APK 22ce64da construit depuis le code f76cd18 et installé en mise à jour sur
+emulator-5554 ; SHA relu sur l'appareil identique ; données pré-R2 lisibles ;
+aucun crash.
 Verdict: PASS
 
 Limites
 -------
 - Aucun test sur Pixel physique.
-- Aucune écriture CalendarContract réelle, aucun calendrier local disponible.
+- Aucune écriture CalendarContract réelle (aucun calendrier local).
 - Aucune écriture wger réelle, aucun refresh token consommé.
 - Aucune activation OpenClaw, aucun redémarrage du Gateway.
-- TalkBack matériel non testé; sémantique Compose vérifiée par tests.
+- Aucun test Usage Access réel.
+- TalkBack matériel non testé ; sémantique Compose vérifiée.

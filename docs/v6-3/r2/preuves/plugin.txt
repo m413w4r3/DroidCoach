@@ -1,0 +1,38 @@
+ATLAS V6.3 — R2 — Preuves plugin OpenClaw
+=========================================
+
+Ticket: R2-BRIDGE-QA-01
+Commit auteur: 22a68abe8a793d1c92841460391ff0d9a6d56d2b
+Base: 993951fc13ac9f7ba23548d846fab6cac01418db
+Environnement: Node v24.18.0, npm 11.16.0, OpenClaw 2026.10.5.
+Matrice détaillée: integrations/openclaw/atlas_chatgpt_research/VALIDATION_R2.md.
+
+Commandes parent (arbre intégré)
+--------------------------------
+cd integrations/openclaw/atlas_chatgpt_research
+npm test
+  -> 3 fichiers, 50 tests PASS.
+npm run plugin:build
+  -> PASS (dist + openclaw.plugin.json régénérés).
+openclaw plugins validate --entry ./dist/index.js
+  -> "Plugin atlas_chatgpt_research is valid."
+
+Contrat vérifié
+---------------
+- /health puis /ready avant tout run; états dégradés typés;
+- 401/403 erreur d'authentification; 429 Retry-After conservé;
+- 409 sans retry avec corps différent; même clé+payload = même run;
+- background POST + poll queued/running/completed/failed/needs_review;
+- citations visible_citations non fiables;
+- prompt_instructed -> PROMPT_INSTRUCTED_UNVERIFIED, verified_search=false;
+- un seul outil optionnel atlas_chatgpt_research; aucun outil shell/fichier/
+  session/mutation;
+- aucune clé dans les logs, erreurs ou fixtures.
+
+Sécurité / limites
+------------------
+- npm a signalé 10 vulnérabilités dans l'arbre installé (3 modérées, 5 élevées,
+  2 critiques). Le plugin n'est ni installé ni activé.
+- Aucun Bridge réel, aucun Gateway, aucune configuration OpenClaw touchée.
+- Activation: BLOCKED_POLICY; accord ciblé requis.
+- Aucun test runtime réel de recherche: NOT_RUN.

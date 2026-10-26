@@ -64,8 +64,8 @@ jamais « Pixel ».
 | `R2-HABITS-UI-01` | Refonte Habitudes en 3 espaces, extraction de `AtlasScreens.kt` | R2-UI-01 intégré | `android/.../app/AtlasScreens.kt` puis nouveaux fichiers Habitudes | JVM + captures + 16 cas UI | **ACCEPTED / INTEGRATED** (`b21b2e4`) ; P1 scroll imbriqué corrigé, 17/17 instrumentés |
 | `R2-MEMORY-01` | Noyau `MemoryFact` local : provenance, catégorie, rétention, révocation | préflight | `android/.../memory/**` (main+test), neufs | JVM | **ACCEPTED_WITH_P2 / INTEGRATED** (`5744eee`) ; 15 tests |
 | `R2-SPORT-WIRE-01` | Écran sport simple + séance visible dans le plan, fixture locale | R2-SPORT-01 | nouveaux fichiers UI sport + intégration parent | JVM + captures | **PARTIAL / INTEGRATED** — écran Sport et entrée Plus ; lien `trainingRef` DayPlan non persisté |
-| `R2-USAGE-01` | Agrégation UsageStats, `UsageSummary` minimisé, quotas, consentement révocable | préflight | `android/.../usage/**` (main+test) | JVM synthétique + permission refusée | **RUNNING (vague C)** |
-| `R2-BRIDGE-QA-01` | Revalidation plugin contre faux Bridge, politique de provenance, procédure d'activation | préflight | `integrations/openclaw/**` (documentation/tests neufs) | npm test + build + validate | **RUNNING (vague C)** |
+| `R2-USAGE-01` | Agrégation UsageStats, `UsageSummary` minimisé, quotas, consentement révocable | préflight | `android/.../usage/**` (main+test) | JVM synthétique + permission refusée | **ACCEPTED_WITH_P2 / INTEGRATED** (`69b75af`) ; 17 tests, 563 JVM ; non câblé UI, test Usage Access réel NOT_RUN |
+| `R2-BRIDGE-QA-01` | Revalidation plugin contre faux Bridge, politique de provenance, procédure d'activation | préflight | `integrations/openclaw/**` (documentation/tests neufs) | npm test + build + validate | **ACCEPTED_WITH_P2 / INTEGRATED** (`22a68ab`) ; 50 tests, build/validate PASS ; activation BLOCKED_POLICY ; 10 vulnérabilités npm à revoir |
 | `R2-RECETTE-01` | Recette émulateur : build, installation, navigation, captures, accessibilité, thèmes, rotation, redémarrage, offline | vagues A–C | `docs/v6-3/r2/preuves/**`, captures | matrice R2 | **READY (vague D)** |
 | `R2-REVIEW-01` | Relectures indépendantes lecture seule | tickets livrés | aucun | grille de revue | **READY** |
 
@@ -103,6 +103,9 @@ jamais « Pixel ».
 | 2026-10-26 | Gates finaux | backend `178 passed, 1 skipped` ; JVM `77 suites, 546 tests, 0 échec` ; lint 0/54 ; APK `cc88e649…` ; instrumentés 17/17 |
 | 2026-10-26 | APK final vérifié | `cc88e649…` installé en mise à jour, SHA relu identique, données pré-R2 lisibles ; aucun crash |
 | 2026-10-26 | Wave C lancée | `R2-USAGE-01` (`ca2ff2d2…`) et `R2-BRIDGE-QA-01` (`d79be9a2…`), `gpt-6-luna` / `xhigh` vérifiés |
+| 2026-10-26 | R2-USAGE-01 livré | `69b75af` ; 17 tests usage PASS ; intégré ; 563 JVM ; non câblé UI |
+| 2026-10-26 | R2-BRIDGE-QA-01 livré | `22a68ab` ; 50 tests, build/validate PASS ; 16 recettes ; activation BLOCKED_POLICY |
+| 2026-10-26 | Gates après vague C | backend `178 passed, 1 skipped` ; JVM `78 suites, 563 tests, 0 échec` ; lint 0 erreur/54 avertissements ; APK final reconstruit |
 
 ## 7. Preuves
 

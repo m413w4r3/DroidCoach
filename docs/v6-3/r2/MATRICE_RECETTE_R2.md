@@ -17,7 +17,7 @@ Références : `preuves/gates-finales.txt`, `preuves/instrumented.txt`,
 | T4 | Build debug | `./gradlew :app:assembleDebug` | **PASS** — APK `cc88e649…` |
 | T5 | Compilation androidTest | `./gradlew :app:assembleDebugAndroidTest` | **PASS** |
 | T6 | Tests instrumentés API 37 | `am instrument` (17 tests ciblés) | **PASS** — 17/17 |
-| T7 | Plugin OpenClaw | `npm test`, build, validate | **NOT_RUN** — vague C en cours |
+| T7 | Plugin OpenClaw | `npm test`, build, validate | **PASS** — 50 tests, build/validate PASS |
 | T8 | APK = SHA source annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — `cc88e649…` identique sur l'appareil |
 
 ## 2. Critères UX mesurables (mission §14)
@@ -124,14 +124,15 @@ Références : `preuves/gates-finales.txt`, `preuves/instrumented.txt`,
 | # | Cas | Statut |
 |---|---|---|
 | M1–M3 | Faits/provenance, hypothèse, révocation | **PASS** — 15 tests JVM |
-| U1–U4 | Agrégation, permission refusée, consentement, quotas | **NOT_RUN** — vague C en cours |
+| U1–U4 | Agrégation, permission refusée, consentement, quotas | **PASS (JVM)** — 17 tests synthétiques ; Usage Access réel **NOT_RUN** |
 
 ## 9. Bridge / OpenClaw
 
 | # | Cas | Statut |
 |---|---|---|
-| B1–B3 | Tests plugin, faux Bridge, un seul outil | **NOT_RUN** — vague C en cours |
-| B4 | Activation réelle | **BLOCKED_POLICY** — non autorisée |
+| B1–B3 | Tests plugin, faux Bridge, un seul outil | **PASS** — 50 tests, 16 recettes, build/validate |
+| B4 | Activation réelle | **BLOCKED_POLICY** — non autorisée ; aucun Bridge/Gateway réel |
+| B5 | Vulnérabilités npm | **P2** — 10 signalées (2 critiques) dans l'arbre installé; à revoir avant activation |
 
 ## 10. Accessibilité
 

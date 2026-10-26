@@ -38,14 +38,15 @@
 | R2-HABITS-UI-01 | `feat/r2-habits-ui` | `505ddca3…` | ACCEPTED / INTEGRATED | P1 scroll corrigé, 17/17 instrumentés |
 | R2-MEMORY-01 | `feat/r2-memory-core` | `408a1689…` | ACCEPTED_WITH_P2 / INTEGRATED | 15 tests mémoire |
 | R2-SPORT-WIRE-01 | parent | — | PARTIAL / INTEGRATED | écran Sport + entrée Plus ; lien DayPlan à faire |
-| R2-USAGE-01 | `feat/r2-usage-summary` | `ca2ff2d2…` | RUNNING (vague C) | — |
-| R2-BRIDGE-QA-01 | `feat/r2-bridge-qa` | `d79be9a2…` | RUNNING (vague C) | — |
+| R2-USAGE-01 | `feat/r2-usage-summary` | `ca2ff2d2…` | ACCEPTED_WITH_P2 / INTEGRATED | 17 tests, 563 JVM ; non câblé UI |
+| R2-BRIDGE-QA-01 | `feat/r2-bridge-qa` | `d79be9a2…` | ACCEPTED_WITH_P2 / INTEGRATED | 50 tests, build/validate ; activation BLOCKED_POLICY |
 
 ## 4. Prochaines actions
 
-1. Recevoir et revoir `R2-USAGE-01` et `R2-BRIDGE-QA-01` (vague C) ; rejouer
-   leurs oracles sur le SHA intégré.
-2. Mettre à jour la matrice et le registre avec leurs résultats.
+1. Revoir les 10 vulnérabilités npm du plugin avant toute activation ; le
+   plugin reste non installé et `BLOCKED_POLICY`.
+2. Câbler UsageStats à l'UI/backend et tester Usage Access réel sur l'émulateur
+   ou le Pixel dans un ticket ultérieur.
 3. Traiter le lien `trainingRef` DayPlan (S6) si un nouveau ticket est ouvert.
 4. Recette Pixel physique selon `PIXEL_RUNBOOK_R2.md` — **aucune action
    physique n'a été exécutée en R2**.
