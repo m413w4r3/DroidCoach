@@ -8,6 +8,8 @@ const MAX_RETRY_AFTER_MS = 30_000;
 
 export type BridgeFailureCode =
   | "configuration"
+  | "health_unavailable"
+  | "extension_unavailable"
   | "unauthorized"
   | "conflict"
   | "rate_limited"
@@ -162,7 +164,7 @@ function makeHttpError(response: HttpResult, context: RequestContext, now: numbe
         ? context.ambiguous
         : false,
   };
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     return new BridgeClientError("unauthorized", "Bridge authentication failed.", options);
   }
   if (response.status === 409) {
@@ -197,6 +199,16 @@ export class BridgeClient {
     this.sleepImpl = options.sleep ?? defaultSleep;
     this.deadlineMs = Math.min(Math.max(options.deadlineMs ?? MAX_RUN_DEADLINE_MS, 1), MAX_RUN_DEADLINE_MS);
     this.requestTimeoutMs = Math.min(Math.max(options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS, 1), 60_000);
+  }
+
+  async checkReadiness(signal?: AbortSignal): Promise<void> {
+    const context: RequestContext = {
+      deadlineAt: this.now() + this.deadlineMs,
+      signal,
+      ambiguous: false,
+    };
+    await this.checkProbe("/health", "health_unavailable", context);
+    await this.checkProbe("/ready", "extension_unavailable", context);
   }
 
   async research(
@@ -298,6 +310,48 @@ export class BridgeClient {
     }
 
     throw new BridgeClientError("deadline", "Bridge run did not complete before its deadline.", postContext);
+  }
+
+  private async checkProbe(
+    path: "/health" | "/ready",
+    unavailableCode: "health_unavailable" | "extension_unavailable",
+    context: RequestContext,
+  ): Promise<void> {
+    const url = new URL(path, this.config.bridgeUrl).toString();
+    let response: HttpResult;
+    try {
+      response = await this.requestJson(
+        url,
+        { method: "GET", headers: { Authorization: `Bearer ${this.config.apiKey}` } },
+        context,
+      );
+    } catch (error) {
+      const normalized = this.normalizeRequestError(error, context);
+      if (
+        normalized.code === "aborted" || normalized.code === "deadline" ||
+        normalized.code === "unauthorized" || normalized.code === "rate_limited"
+      ) {
+        throw normalized;
+      }
+      throw new BridgeClientError(
+        unavailableCode,
+        unavailableCode === "health_unavailable" ? "Bridge health check failed." : "Bridge readiness check failed.",
+        { status: normalized.status, retryAfterMs: normalized.retryAfterMs },
+      );
+    }
+
+    if (response.status >= 200 && response.status < 300) return;
+    if (response.status === 401 || response.status === 403 || response.status === 429) {
+      throw makeHttpError(response, context, this.now());
+    }
+    throw new BridgeClientError(
+      unavailableCode,
+      unavailableCode === "health_unavailable" ? "Bridge health check failed." : "Bridge readiness check failed.",
+      {
+        status: response.status,
+        retryAfterMs: parseRetryAfter(response.retryAfter, this.now()),
+      },
+    );
   }
 
   private async recoverByKey(

@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { Value } from "typebox/value";
 import { assertBridgeConfig, BridgeClientError, type BridgeConfig } from "./bridge-client.js";
 import { ResearchParametersSchema, ResearchToolOutputSchema, validateResearchOutput } from "./contracts.js";
 import { executeResearchTool } from "./index.js";
 
-const validConfig: BridgeConfig = { bridgeUrl: "http://127.0.0.1:8001", apiKey: "test-key" };
+const validConfig: BridgeConfig = { bridgeUrl: "http://127.0.0.1:8001", apiKey: randomUUID() };
 
 describe("plugin contracts and configuration", () => {
   it("requires exactly one bounded topic or question", () => {
@@ -21,14 +22,14 @@ describe("plugin contracts and configuration", () => {
       undefined,
       { bridgeUrl: "http://127.0.0.1:8001", apiKey: "" },
       { bridgeUrl: "http://127.0.0.1:8001", apiKey: "${BRIDGE_API_KEY}" },
-      { bridgeUrl: "file:///tmp/bridge", apiKey: "secret-that-must-not-leak" },
+      { bridgeUrl: "file:///tmp/bridge", apiKey: randomUUID() },
     ];
     for (const config of cases) {
       expect(() => assertBridgeConfig(config)).toThrow(BridgeClientError);
       try {
         assertBridgeConfig(config);
       } catch (error) {
-        expect(String(error)).not.toContain("secret-that-must-not-leak");
+        if (config?.apiKey) expect(String(error)).not.toContain(config.apiKey);
         expect(String(error)).not.toContain("${BRIDGE_API_KEY}");
       }
     }
@@ -51,7 +52,7 @@ describe("plugin contracts and configuration", () => {
   });
 
   it("takes citations only from Bridge metadata, never from generated answer fields", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({
       id: "run-citations",
       status: "completed",
       output_text: JSON.stringify({

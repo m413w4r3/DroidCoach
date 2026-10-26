@@ -47,7 +47,7 @@ function baseOutput(requestId, runId, status, summary, metadata = {}) {
     const searchMode = searchModeFromMetadata(metadata);
     const limitations = [];
     if (searchMode === "prompt_instructed") {
-        limitations.push("La recherche a été demandée dans le prompt, sans activation vérifiée du contrôle UI.");
+        limitations.push("PROMPT_INSTRUCTED_UNVERIFIED : la recherche a été demandée dans le prompt, sans activation vérifiée du contrôle UI.");
     }
     else if (searchMode === "ui_tool") {
         limitations.push("Le contrôle UI de recherche a été activé; cela ne garantit ni la fraîcheur ni la fiabilité des sources.");
@@ -81,6 +81,16 @@ function failureOutput(error, requestId) {
         status = "unavailable";
         summary = "Le Bridge n’est pas configuré.";
         limitation = "Configurez bridgeUrl et la référence d’environnement BRIDGE_API_KEY.";
+    }
+    else if (code === "health_unavailable") {
+        status = "unavailable";
+        summary = "Le Bridge est indisponible.";
+        limitation = "Le contrôle /health a échoué; aucun run n’a été soumis.";
+    }
+    else if (code === "extension_unavailable") {
+        status = "unavailable";
+        summary = "L’extension ChatGPT Bridge n’est pas prête.";
+        limitation = "Le contrôle /ready indique un état dégradé; aucun run n’a été soumis.";
     }
     else if (code === "unauthorized") {
         status = uncertain ? "uncertain" : "unavailable";
@@ -174,7 +184,9 @@ export async function executeResearchTool(parameters, config, context, options =
         if (!Value.Check(ResearchParametersSchema, parameters)) {
             throw new BridgeClientError("invalid_contract", "Research parameters are invalid.");
         }
-        const run = await new BridgeClient(config, options).research(parameters, context.toolCallId, context.signal);
+        const client = new BridgeClient(config, options);
+        await client.checkReadiness(context.signal);
+        const run = await client.research(parameters, context.toolCallId, context.signal);
         return successfulOutput(run, context.toolCallId);
     }
     catch (error) {
