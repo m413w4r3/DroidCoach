@@ -12,13 +12,13 @@ Références : `preuves/gates-finales.txt`, `preuves/instrumented.txt`,
 | ID | Gate | Commande | Statut |
 |---|---|---|---|
 | T1 | Backend complet | `cd backend && .venv/bin/python -m pytest -q` | **PASS** — 178 passed, 1 skipped |
-| T2 | JVM Android complet | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 77 suites, 546 tests, 0 échec |
+| T2 | JVM Android complet | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 78 suites, 563 tests, 0 échec |
 | T3 | Lint | `./gradlew :app:lintDebug` | **PASS** — 0 erreur, 54 avertissements |
-| T4 | Build debug | `./gradlew :app:assembleDebug` | **PASS** — APK `cc88e649…` |
+| T4 | Build debug | `./gradlew :app:assembleDebug` | **PASS** — APK `22ce64da…` |
 | T5 | Compilation androidTest | `./gradlew :app:assembleDebugAndroidTest` | **PASS** |
-| T6 | Tests instrumentés API 37 | `am instrument` (17 tests ciblés) | **PASS** — 17/17 |
+| T6 | Tests instrumentés API 37 | `am instrument` (17 tests ciblés) | **PASS** — 17/17, 155.752 s |
 | T7 | Plugin OpenClaw | `npm test`, build, validate | **PASS** — 50 tests, build/validate PASS |
-| T8 | APK = SHA source annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — `cc88e649…` identique sur l'appareil |
+| T8 | APK = SHA source annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — `22ce64da…` identique sur l'appareil |
 
 ## 2. Critères UX mesurables (mission §14)
 

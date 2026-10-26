@@ -1,4 +1,4 @@
-# ATLAS V6.3 — Handoff R2 (en cours)
+# ATLAS V6.3 — Handoff R2 — clôture locale
 
 ## 1. Reprise immédiate
 
@@ -14,9 +14,13 @@
 
 - `emulator-5554` = `Pixel_9_Pro_XL_2`, API 37.2, headless.
 - État final : émulateur **arrêté proprement**, données applicatives pré-R2
-  restaurées (1 habitude, aucun plan), APK final `cc88e649…` installé et vérifié,
+  restaurées (1 habitude, aucun plan), APK final `22ce64da…` installé et vérifié,
   READ_CALENDAR révoquée, consentement calendrier effacé, `adb reverse` retiré,
   police 1.0 et rotation automatique restaurées.
+- Validation finale sur cet APK : JVM 78 suites / 563 tests, lint 0 erreur /
+  54 avertissements, backend 178 PASS + 1 skip, instrumentés 17/17
+  (155.752 s). Détail : `preuves/gates-finales.txt` et
+  `preuves/instrumented.txt`.
 - Sauvegardes hors dépôt :
   - AVD : `~/.local/share/atlas-v63-r2/avd-backup/`
   - Données ATLAS : `~/.local/share/atlas-v63-r2/app-data/`

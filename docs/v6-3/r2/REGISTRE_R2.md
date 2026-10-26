@@ -1,7 +1,9 @@
 # ATLAS V6.3 — Campagne R2 (émulateur Android 17, UI et intégrations)
 
-Statut : **RUNNING**. Ce registre est la source de vérité de R2. Il complète,
-sans le remplacer, `docs/v6-3/REGISTRE_TACHES.md`.
+Statut : **CLOSED_WITH_LIMITATIONS (local, aucun push)**. Ce registre est la
+source de vérité de R2. Il complète, sans le remplacer,
+`docs/v6-3/REGISTRE_TACHES.md`. Les limites sont explicitées dans
+`HANDOFF_R2.md`, `MATRICE_RECETTE_R2.md` et `PIXEL_RUNBOOK_R2.md`.
 
 ## 1. Base et environnement vérifiés au lancement
 
@@ -56,7 +58,7 @@ jamais « Pixel ».
 
 | TASK_ID | Objectif | Dépendances | Scope d'écriture exclusif | Oracle | Statut |
 |---|---|---|---|---|---|
-| `R2-PREFLIGHT-01` | Pré-vol, campagne documentaire, audit UI, fixtures, preuves | — | `docs/v6-3/r2/**` | pré-vol Git/outils/AVD + captures | **RUNNING** |
+| `R2-PREFLIGHT-01` | Pré-vol, campagne documentaire, audit UI, fixtures, preuves | — | `docs/v6-3/r2/**` | pré-vol Git/outils/AVD + captures | **DONE** |
 | `R2-CAL-01` | Moteur d'écriture CalendarContract : opérations, liens durables, idempotence, réconciliation, fake provider | préflight | `android/.../calendar/write/**` (main+test), fichiers neufs uniquement | JVM ciblés + suite ; compile debug | **ACCEPTED_WITH_P2 / INTEGRATED** (`595b224`) ; 18 ciblés, 514 JVM ; P2 rejeu APPLIED à réconcilier |
 | `R2-UI-01` | Palettes d'accent, préférences indépendantes, sémantique, contrastes, primitives | préflight | `android/.../app/ui/**` (main+test), fichiers neufs ou existants listés | JVM contrastes + build | **ACCEPTED / INTEGRATED** (`3b06030` + `f0c136f`, correctifs parent `54b4183`) ; 11 tests UI |
 | `R2-SPORT-01` | Projection sportive wger lecture seule, contrat borné, fixtures, modèles Android | préflight | `backend/.../integrations/wger_plan.py`, `contracts/sport-plan-v1.schema.json`, `android/.../training/**` (neufs), tests neufs | pytest ciblé + suite ; JVM ciblés | **ACCEPTED_WITH_P3 / INTEGRATED** (`005f4a9`) ; 8 backend, 178 backend, 7 JVM |
@@ -66,8 +68,8 @@ jamais « Pixel ».
 | `R2-SPORT-WIRE-01` | Écran sport simple + séance visible dans le plan, fixture locale | R2-SPORT-01 | nouveaux fichiers UI sport + intégration parent | JVM + captures | **PARTIAL / INTEGRATED** — écran Sport et entrée Plus ; lien `trainingRef` DayPlan non persisté |
 | `R2-USAGE-01` | Agrégation UsageStats, `UsageSummary` minimisé, quotas, consentement révocable | préflight | `android/.../usage/**` (main+test) | JVM synthétique + permission refusée | **ACCEPTED_WITH_P2 / INTEGRATED** (`69b75af`) ; 17 tests, 563 JVM ; non câblé UI, test Usage Access réel NOT_RUN |
 | `R2-BRIDGE-QA-01` | Revalidation plugin contre faux Bridge, politique de provenance, procédure d'activation | préflight | `integrations/openclaw/**` (documentation/tests neufs) | npm test + build + validate | **ACCEPTED_WITH_P2 / INTEGRATED** (`22a68ab`) ; 50 tests, build/validate PASS ; activation BLOCKED_POLICY ; 10 vulnérabilités npm à revoir |
-| `R2-RECETTE-01` | Recette émulateur : build, installation, navigation, captures, accessibilité, thèmes, rotation, redémarrage, offline | vagues A–C | `docs/v6-3/r2/preuves/**`, captures | matrice R2 | **READY (vague D)** |
-| `R2-REVIEW-01` | Relectures indépendantes lecture seule | tickets livrés | aucun | grille de revue | **READY** |
+| `R2-RECETTE-01` | Recette émulateur : build, installation, navigation, captures, accessibilité, thèmes, rotation, redémarrage, offline | vagues A–C | `docs/v6-3/r2/preuves/**`, captures | matrice R2 | **DONE_WITH_LIMITATIONS** — matrice T1–T8, H1–H16, P1–P14, C1–C14, K1–K18, S1–S6, M/U, B1–B5, A1–A6 |
+| `R2-REVIEW-01` | Relectures indépendantes lecture seule | tickets livrés | aucun | grille de revue | **DONE** — `REVUE_INTEGRATION_A/B/C.md` |
 
 ## 5. Vagues
 
@@ -100,12 +102,14 @@ jamais « Pixel ».
 | 2026-10-26 | R2-HABITS-UI-01 livré | `b21b2e4` ; P1 scroll imbriqué détecté et retiré, imports et annotation corrigés ; 17/17 instrumentés |
 | 2026-10-26 | R2-PLAN-UI-01 livré | `e7c79f5` ; tests AndroidTest adaptés, couleur « à venir » alignée ; 17/17 instrumentés |
 | 2026-10-26 | Incidents émulateur | crash du processus AVD après ~1 h (aucun wipe) ; redémarrage cold boot, données persistantes ; 4 timeouts de localisation sous charge, rejeu isolé PASS |
-| 2026-10-26 | Gates finaux | backend `178 passed, 1 skipped` ; JVM `77 suites, 546 tests, 0 échec` ; lint 0/54 ; APK `cc88e649…` ; instrumentés 17/17 |
-| 2026-10-26 | APK final vérifié | `cc88e649…` installé en mise à jour, SHA relu identique, données pré-R2 lisibles ; aucun crash |
+| 2026-10-26 | Gates après vague B | backend `178 passed, 1 skipped` ; JVM `77 suites, 546 tests, 0 échec` ; lint 0/54 ; APK `cc88e649…` ; instrumentés 17/17 |
+| 2026-10-26 | APK vague B vérifié | `cc88e649…` installé en mise à jour, SHA relu identique, données pré-R2 lisibles ; aucun crash |
 | 2026-10-26 | Wave C lancée | `R2-USAGE-01` (`ca2ff2d2…`) et `R2-BRIDGE-QA-01` (`d79be9a2…`), `gpt-6-luna` / `xhigh` vérifiés |
 | 2026-10-26 | R2-USAGE-01 livré | `69b75af` ; 17 tests usage PASS ; intégré ; 563 JVM ; non câblé UI |
 | 2026-10-26 | R2-BRIDGE-QA-01 livré | `22a68ab` ; 50 tests, build/validate PASS ; 16 recettes ; activation BLOCKED_POLICY |
-| 2026-10-26 | Gates après vague C | backend `178 passed, 1 skipped` ; JVM `78 suites, 563 tests, 0 échec` ; lint 0 erreur/54 avertissements ; APK final reconstruit |
+| 2026-10-26 | Gates après vague C | backend `178 passed, 1 skipped` ; JVM `78 suites, 563 tests, 0 échec` ; lint 0 erreur/54 avertissements ; APK final `22ce64da…` |
+| 2026-10-26 | Recette finale sur APK final | `22ce64da…` installé en mise à jour sur `emulator-5554`, SHA relu identique ; instrumentés `OK (17 tests)` en 155.752 s ; données pré-R2 lisibles, aucun crash |
+| 2026-10-26 | Restauration et clôture | données pré-R2 restaurées (1 habitude, aucun plan), consentement calendrier effacé, `READ_CALENDAR` révoquée, `adb reverse` retiré, polices/rotation/mode nuit restaurés ; émulateur arrêté proprement ; aucun push |
 
 ## 7. Preuves
 
@@ -120,16 +124,17 @@ Les captures utilisent exclusivement des fixtures synthétiques.
 | `preuves/ui-after.txt` | états et captures après refonte |
 | `preuves/gates-wave-a.txt` | tests de la vague A |
 | `preuves/gates-finales.txt` | backend, JVM, lint, build, APK final |
-| `preuves/instrumented.txt` | 17 tests instrumentés API 37 |
+| `preuves/instrumented.txt` | 17 tests instrumentés API 37 sur l'APK final `22ce64da…` |
 | `preuves/captures/avant/**`, `captures/apres/**` | captures comparatives versionnées |
 | `PREUVES_CONFIDENTIALITE.md` | audit et règles d'expurgation |
-| `REVUE_INTEGRATION_A.md`, `REVUE_INTEGRATION_B.md` | revues parent |
+| `REVUE_INTEGRATION_A.md`, `REVUE_INTEGRATION_B.md`, `REVUE_INTEGRATION_C.md` | revues parent |
 | `PIXEL_RUNBOOK_R2.md` | reste à valider sur Pixel, aucune action exécutée |
 
 ## 8. État final de l'émulateur
 
 - Émulateur `emulator-5554` arrêté proprement après vérification de l'APK final.
-- APK `cc88e649…` installé, SHA relu sur l'appareil identique.
+- APK final `22ce64da…` installé, SHA relu sur l'appareil identique,
+  instrumentés `OK (17 tests)`.
 - Données applicatives pré-R2 restaurées : 1 habitude synthétique, aucun plan.
 - `READ_CALENDAR` révoquée, consentement calendrier effacé.
 - `adb reverse` retiré ; aucun backend ATLAS ou stub ne tourne.

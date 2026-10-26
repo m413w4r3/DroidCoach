@@ -3,8 +3,9 @@ ATLAS V6.3 — R2 — Tests instrumentés Android 17
 
 Appareil: emulator-5554 (Pixel_9_Pro_XL_2), API 37.2, Android 17.
 Date: 2026-10-26.
-APK testé: SHA-256 87b1240d6bd275cfa5428e266caf03762cb168f7a9832cf998a9724a300bb8b3
-(bâti depuis la même source principale que l'APK final cc88e649).
+APK testé: SHA-256 22ce64da102325635f1e3b2f609ff9d8081b30ba63c3b78df1111c296fcce33d
+(APK final, bâti depuis le code f76cd1832224dc6896ad8fb5a2b322e49531c2a8,
+SHA relu sur l'appareil identique après installation en mise à jour).
 Runner: dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner.
 
 Commande
@@ -16,7 +17,9 @@ dev.atlas.coach.app.PlanCalendarScrollInstrumentationTest,\
 dev.atlas.coach.app.HomeNextActionAccessibilityInstrumentationTest \
   dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 
-Résultat: OK (17 tests), Time: 58.707 s.
+Résultat du run final: OK (17 tests), Time: 155.752 s.
+(Un run antérieur sur l'APK 87b1240d…, même source principale, avait aussi
+donné OK (17 tests) en 58.707 s.)
 
 Tests
 -----
