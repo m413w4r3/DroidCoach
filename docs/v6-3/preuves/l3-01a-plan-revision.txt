@@ -1,0 +1,49 @@
+ATLAS V6.3 — V63-L3-01a — endpoint plan.revise_day — preuves
+==============================================================
+
+Enfant: session 6d98e14c-ec23-4b3d-aa28-1b2d7f5c0398
+Profil: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh
+Base: f625f0de21725485c91247e96986fdccd4eee597
+
+Commits enfant:
+- 6240ca123a00ff434ddcb03b788bbe2a0de00b75 feat(backend): add idempotent V3 plan revision endpoint
+- 9dc268531a60d9a89a7ee023c253a62d302c8965 fix(backend): reject unsupported plan activity fields
+
+Intégration: merge e574846f474cc418faf8d63297b7239f35fa6b37
+
+Fichiers (6, +1215):
+- backend/atlas_backend/plan_agent_v3.py (nouveau)
+- backend/atlas_backend/openclaw_adapter.py (prompt + adaptateur plan revision)
+- backend/atlas_backend/main.py (POST /v3/agent/plan-revision)
+- backend/atlas_backend/policy.py (plan_revision=False par défaut)
+- backend/atlas_backend/store.py (claim/complete idempotence SQLite)
+- backend/tests/test_plan_agent_v3.py (nouveau)
+
+Contrat:
+- requête stricte V3, consentement explicite, capability plan_revision désactivée
+  par défaut, pré-validation plan_v3, aucun outil dans le payload OpenClaw.
+- réponse {schema_version, reply, agent_status, proposal|null, overlaps}.
+- idempotence durable request_id + hash canonique ; même corps → même réponse ;
+  corps différent → 409 ; réservation pending après crash → 503 sans second appel.
+- focus/training_ref non nuls rejetés (invalid_output) pour compatibilité Android.
+
+Oracle enfant:
+- `pytest -q tests/test_plan_agent_v3.py` → PASS 23, FAIL 0.
+- Suite complète enfant bloquée par TestClient/AnyIO dans le sandbox (37 tests
+  observés, 1 bloqué, 71 non démarrés) — BLOCKED_ENVIRONMENT, pas un échec.
+
+Oracle parent hors sandbox:
+- `cd backend && .venv/bin/python -m pytest -q` sur 9dc2685 → 114 passed, 1 skipped.
+- Sur le SHA intégré e574846 → 114 passed, 1 skipped.
+
+Relecture indépendante:
+- Session 97538bfb-56a2-4221-8bff-fac62c36aa5d, worktree RO
+  review-v63-l3-01a-plan-backend à 9dc2685, `chmod -R a-w`.
+- Verdict: à compléter.
+
+Limites:
+- Aucun appel réel au gateway OpenClaw pour le nouvel endpoint; les tests
+  utilisent un faux adaptateur.
+- La suite backend enfant n'a pas pu être exécutée dans son sandbox.
+- Le payload `tools` est vérifié absent par test, mais le comportement du
+  gateway réel avec le prompt plan revision reste NOT_RUN.
