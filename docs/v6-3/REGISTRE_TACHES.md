@@ -113,10 +113,11 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 | V63-R5-SCOUT-01 | Audit lecture seule transport Paseo/Relay : composants, licences, vecteurs, plan de réemploi | — | aucun (lecture seule) | rapport avec SHA, fichiers, licences, gaps Android | **ACCEPTED (audit)** — `AUDIT_TRANSPORT_PASEO.md` ; `protected`-only obligatoire |
 | V63-L3-01a | Endpoint backend `POST /v3/agent/plan-revision` : OpenClaw propose `plan.revise_day`, validation stricte, idempotence durable, aucun outil | L0-02 | `backend/atlas_backend/plan_agent_v3.py`, `openclaw_adapter.py`, `main.py`, `store.py`, `backend/tests/test_plan_agent_v3*.py` | pytest ciblé + suite backend ; 2e POST idempotent ; contenu différent même clé → 409 ; proposition invalide rejetée | **READY** |
 | V63-L5-01 | Client wger lecture seule `ApiTokenWgerAuth` + `RotatingJwtWgerAuth` sous interface unique, stockage JWT atomique 0600, diagnostic sans secret | accord lecture | `backend/atlas_backend/integrations/**`, `backend/atlas_backend/config.py`, `backend/tests/test_wger*.py` | pytest mock 200/pagination/401/403/429/5xx/timeout/schéma ; aucun secret dans logs | **READY** |
-| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **READY** |
+| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/HomeNextAction.kt`, `LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **REVIEW_REQUIRED** — livré `6f5941d` ; P1 sélection `PLANNED` en cours de créneau, correction demandée |
 | V63-L3-01b | Android : parse strict V3, diff, confirmation groupée, application locale idempotente | L3-01a (contrat gelé) | `android/.../plan/**` (nouveaux fichiers + tests) | JVM stale/expiry/idempotence/contenu altéré | **READY (vague 2)** |
-| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `openclaw-plugin/**` | `openclaw plugins validate` + tests Node + recette Bridge mock | **READY (vague 2)** |
-| V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers | accord explicite | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **BLOCKED_APPROVAL** |
+| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `integrations/openclaw/atlas_chatgpt_research/**` | `npm test` + build + `openclaw plugins validate` + recette Bridge mock | **READY (vague 2)** — ticket `V63-L8-02.md` prêt ; activation `BLOCKED_POLICY` |
+| V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers | accord explicite | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **BLOCKED_APPROVAL** ; ticket `V63-L2-02.md` prêt |
+| V63-L4-SCOUT-01 | Audit lecture seule du chemin d'écriture calendrier, propriété, réconciliation, plan Pixel | — | aucun (lecture seule) | rapport + proposition de ticket L4 | **RUNNING** |
 | V63-L4-01 | Écritures calendrier réelles, liens stables, réconciliation | L2-03 + L3-01 + accord | `dev/atlas/coach/calendar/write/**` | provider fake + Pixel/Etar | **BLOCKED_APPROVAL** |
 | V63-L7-01 | `MemoryFact` local, rétention, révocation | L1-01 | `dev/atlas/coach/memory/**` | JVM rétention/revoke | **READY (vague 3)** |
 | V63-L9-01 | Mesure de durée UsageStats + `UsageSummary` minimisé | L0-01 | `dev/atlas/coach/usage/**` | JVM + comparaison Pixel | **READY (vague 3)** |
@@ -130,6 +131,7 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 | `V63-L3-01a` | `feat-v63-l3-01a-plan-backend` | backend plan revision | `6d98e14c-ec23-4b3d-aa28-1b2d7f5c0398` | RUNNING |
 | `V63-L5-01` | `feat-v63-l5-01-wger-read` | backend integrations wger | `998e3ac3-de59-42af-88e5-d184092e9ea6` | RUNNING |
 | `V63-L1-03` | `feat-v63-l1-03-home-next` | HOME next action | `b5722d8a-db34-42eb-8ac8-2086021a99ce` | RUNNING |
+| `V63-L4-SCOUT-01` | `audit-v63-l4-calendar-write` (`chmod a-w`) | écriture calendrier, lecture seule | `9b3b505a-9e11-4fe5-8d39-6cce70a91e8d` | RUNNING |
 
 Tous les enfants : `provider=codex`, `model=gpt-6-luna`,
 `effectiveThinkingOptionId=xhigh`, `modeId=auto-review`, vérifiés via
@@ -152,3 +154,5 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 | 2026-10-26 | Smoke OpenClaw V2 réel | `f625f0d` | — | backend éphémère + gateway loopback | **PASS** — adapter `openclaw`, chat 200, 2 propositions, aucune action appareil |
 | 2026-10-26 | V63-R3-SCOUT-01 | `f625f0d` | `f625f0d` | audit statique Bridge + SDK | **ACCEPTED (audit)** ; `GO_WITH_LIMITATIONS` plugin hors activation ; `BLOCKED_POLICY` délégation |
 | 2026-10-26 | V63-R5-SCOUT-01 | `f625f0d` | `f625f0d` | audit statique Paseo/Relay | **ACCEPTED (audit)** ; Noise NK + vecteurs + Apache-2.0 ; legacy permissif à interdire |
+| 2026-10-26 | V63-L4-SCOUT-01 | `4dcb7cc` | — | audit statique calendrier write | **RUNNING** ; worktree RO `audit-v63-l4-calendar-write` |
+| 2026-10-26 | V63-L1-03 | `f625f0d` | `6f5941d` | revue parent | **REVIEW_REQUIRED** — scope 4 fichiers ; P1 `PLANNED` en cours ignorée, correction ciblée demandée ; Gradle enfant `BLOCKED_ENVIRONMENT` |
