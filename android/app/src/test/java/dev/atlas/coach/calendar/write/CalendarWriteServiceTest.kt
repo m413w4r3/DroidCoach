@@ -513,6 +513,33 @@ class CalendarWriteServiceTest {
     }
 
     @Test
+    fun dedicatedAtlasLocalCalendarIsAccepted() {
+        val provider = FakeCalendarWriteProvider().apply {
+            calendars = listOf(calendar(accountType = ATLAS_LOCAL_ACCOUNT_TYPE))
+        }
+
+        val result = CalendarWriteService(provider, InMemoryCalendarWriteJournal(), nowMillis = { NOW })
+            .create(CALENDAR_ID, draft(), "atlas-local-calendar")
+
+        assertNull(result.error)
+        assertTrue(result.successful)
+        assertEquals(1, provider.insertCalls)
+    }
+
+    @Test
+    fun unknownAccountTypeThatMentionsAtlasIsRejected() {
+        val provider = FakeCalendarWriteProvider().apply {
+            calendars = listOf(calendar(accountType = "com.example.dev.atlas.coach.calendar"))
+        }
+
+        val result = CalendarWriteService(provider, InMemoryCalendarWriteJournal(), nowMillis = { NOW })
+            .create(CALENDAR_ID, draft(), "lookalike-local-calendar")
+
+        assertEquals(CalendarWriteError.CALENDAR_NOT_LOCAL, result.error)
+        assertEquals(0, provider.insertCalls)
+    }
+
+    @Test
     fun nonLocalCalendarIsRejected() {
         val remote = FakeCalendarWriteProvider().apply {
             calendars = listOf(calendar(accountType = "com.google"))

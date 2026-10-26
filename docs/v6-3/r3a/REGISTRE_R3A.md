@@ -46,9 +46,9 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | TASK_ID | Objectif | Scope d'écriture exclusif | Oracle | Statut |
 |---|---|---|---|---|
 | `R3-PREFLIGHT-01` | pré-vol, backups, contrats, relais local | `docs/v6-3/r3a/**`, `contracts/atlas-remote-v1.schema.json` | pré-vol + build relais + doc | **RUNNING** |
-| `R3-RELAY-PC-01` | connecteur PC Node sur Paseo e2ee | `integrations/relay/pc/**` | tests Node + interop Noise + relais réel | **RUNNING** — session `b879770c…` |
+| `R3-RELAY-PC-01` | connecteur PC Node sur Paseo e2ee | `integrations/relay/pc/**` | tests Node + interop Noise + relais réel | **ACCEPTED / INTEGRATED** — `fd66b0d`, merge `43c1204`, 23 tests + relais réel + live FastAPI |
 | `R3-RELAY-ANDROID-01` | client Kotlin Noise/WebSocket/protocole | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `android/app/src/test/java/dev/atlas/coach/sync/relay/**` | vecteurs upstream + tests JVM + records malformés | **RUNNING** — session `7697f6dd…` |
-| `R3-CALENDAR-01` | journal durable, liens, reprise, divergence | `android/app/src/main/java/dev/atlas/coach/calendar/write/**`, `android/app/src/test/java/dev/atlas/coach/calendar/write/**` | tests JVM crash/reprise/idempotence | **RUNNING** — session `cfb46cd6…` |
+| `R3-CALENDAR-01` | journal durable, liens, reprise, divergence | `android/app/src/main/java/dev/atlas/coach/calendar/write/**`, `android/app/src/test/java/dev/atlas/coach/calendar/write/**` | tests JVM crash/reprise/idempotence | **ACCEPTED_WITH_P2 / INTEGRATED** — `fb335ee`, merge `b9a527a`, 33 ciblés + 578 JVM ; P2 atomicité inter-fichiers ; correctif parent type de compte local |
 | `R3-CALENDAR-LOCAL-01` | compte local + sync adapter + authentificateur + manifeste | parent : `calendar/local/**`, manifeste, XML | création provider + relecture + visibilité Etar | **ACCEPTED (parent)** — voir `preuves/calendar-local.txt` |
 | `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **PLANNED** |
 | `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | parent : `PlanScreen.kt`, écrans calendrier | 22 scénarios calendrier | **PLANNED** |
@@ -75,6 +75,12 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-26 | Fixture Etar idempotente | **PASS** — événement `ATLAS TEST Etar visibility` visible dans Etar, capture `preuves/captures/etar-month-view.png` |
 | 2026-10-26 | Crash processus AVD sous charge | **INCIDENT** — redémarrage sans wipe, image utilisateur conservée ; reconnexion en cours |
 | 2026-10-26 | Connecteur PC : premier essai | **BLOCKED (outillage)** — lien `references/repos` absent dans le worktree ; corrigé par symlink parent, session relancée |
+| 2026-10-26 | `R3-RELAY-PC-01` livré | `fd66b0d` ; build PASS, 23 tests PASS, test relais réel PASS ; scope conforme |
+| 2026-10-26 | `R3-CALENDAR-01` livré | `fb335ee` ; 33 tests ciblés PASS, 578 JVM PASS ; P2 atomicité inter-fichiers documenté |
+| 2026-10-26 | Intégration PC + calendrier | merges `43c1204` et `b9a527a` sur la branche de mission ; tests rejoués |
+| 2026-10-26 | Correctif intégration calendrier | type `dev.atlas.coach.calendar` accepté avec `LOCAL`, test de type trompeur ajouté |
+| 2026-10-26 | Backend démo V3 déterministe | ajout `MockAgentAdapter.propose_plan_revision`, 34 tests backend PASS |
+| 2026-10-26 | Live PC : Node → relais → connecteur → FastAPI | **PASS** — `backend.health`, révision V3, rejeu idempotent, cache ; voir `preuves/pc-live-fastapi.txt` |
 
 ## 5. Preuves
 

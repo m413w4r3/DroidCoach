@@ -109,6 +109,82 @@ class MockAgentAdapter(AgentAdapter):
             }
         )
 
+    def propose_plan_revision(
+        self,
+        *,
+        conversation_id: str | None,
+        message: str,
+        plan: dict[str, Any],
+        mandate: MandateSummary,
+    ) -> dict[str, Any]:
+        """Return one deterministic, display-only V3 proposal.
+
+        The demo adapter never calls a model and never executes an action. It
+        shifts the first activity by 30 minutes when that stays inside the day,
+        otherwise by -30 minutes, leaving every other field untouched. Android
+        still validates the proposal and remains the only execution authority.
+        """
+        del conversation_id, message, mandate
+        raw_activities = plan.get("activities") or []
+        activities = [item for item in raw_activities if isinstance(item, dict)]
+        shift = 0
+        if activities:
+            first = activities[0]
+            start = first.get("start_minute")
+            duration = first.get("duration_minutes")
+            if isinstance(start, int) and isinstance(duration, int):
+                shift = 30 if start + duration + 30 <= 1440 else -30
+
+        proposed: list[dict[str, Any]] = []
+        for index, activity in enumerate(activities):
+            start = activity.get("start_minute")
+            if not isinstance(start, int):
+                continue
+            shifted = start + (shift if index == 0 else 0)
+            if shifted < 0 or shifted > 1439:
+                shifted = start
+            proposed.append(
+                {
+                    "client_ref": f"slot-{index + 1}",
+                    "activity_id": activity.get("activity_id"),
+                    "kind": activity.get("kind"),
+                    "title": activity.get("title"),
+                    "local_date": plan.get("local_date"),
+                    "start_minute": shifted,
+                    "duration_minutes": activity.get("duration_minutes"),
+                    "timezone": plan.get("timezone"),
+                    "priority": activity.get("priority"),
+                    "goal_id": activity.get("goal_id"),
+                    "sub_goal_id": None,
+                    "focus": None,
+                    "training_ref": None,
+                    "notes": None,
+                }
+            )
+
+        summary = (
+            "Décaler le premier bloc de 30 minutes."
+            if shift == 30
+            else "Avancer le premier bloc de 30 minutes."
+            if shift == -30
+            else "Conserver les blocs proposés."
+        )
+        return {
+            "reply": "Je propose un petit décalage du premier bloc, sans exécuter de changement.",
+            "proposal": {
+                "action_type": "plan.revise_day",
+                "reason": "Le décalage laisse le reste de la journée inchangé.",
+                "parameters": {
+                    "plan_id": plan.get("plan_id"),
+                    "base_version": plan.get("version"),
+                    "local_date": plan.get("local_date"),
+                    "timezone": plan.get("timezone"),
+                    "summary": summary,
+                    "activities": proposed,
+                },
+            },
+        }
+
     def status(self) -> AgentStatus:
         return AgentStatus(
             adapter="mock",

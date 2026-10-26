@@ -13,6 +13,8 @@ ATLAS is a public source repository distributed under GNU GPL version 3; see [LI
 | OpenClaw | https://github.com/openclaw/openclaw/tree/e3fe108378f6eca2d4e2a4333fd08bf81bb87105 | MIT, © 2026 OpenClaw Foundation | V6.2 localization adaptations listed below. |
 | AndyClaw | https://github.com/EthereumPhone/AndyClaw/tree/fd4a9af917f51d7b1c10e09e6496f54a290b253b | GNU GPL v3.0 | V6.2 `ProactiveTriggerGate.kt`, listed below. |
 | AOSP LocationFudger | https://android.googlesource.com/platform/frameworks/base/+/81f52b053da6/services/core/java/com/android/server/location/fudger/LocationFudger.java | Apache License 2.0 | Offset-plus-grid location coarsening approach adapted in `LocationCoarsener.kt`; attribution below. |
+| Paseo | https://github.com/getpaseo/paseo/tree/902b0c7a1637cc7a6c2ee268dca8161965a35def | Apache License 2.0 | No source copied. `integrations/relay/pc` depends on the public `@getpaseo/relay/e2ee` entry point built from this revision; its notice and license apply to that dependency. |
+| Paseo Relay | https://github.com/getpaseo/paseo-relay/tree/3fc41c96c8c63f3a7109e832899cc57d473c4531 | Apache License 2.0 | No source copied. The upstream Elixir relay image is built from this revision and run locally for R3-A tests. |
 
 Lot G refactored the Compose presentation in `android/app/src/main/java/dev/atlas/coach/app/LauncherHomeScreen.kt`. Its historical Olauncher adaptation remains attributed to `app/src/main/java/app/olauncher/ui/HomeFragment.kt` at `f8e8d6497c457734c7a3171d36374157678e1f33` under GPLv3; Lot G adds no new Olauncher source or assets. `docs/AUDIT_CIBLE.md` records the same provenance.
 

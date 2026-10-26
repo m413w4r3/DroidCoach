@@ -14,11 +14,13 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 | T4 | Build debug | `android/gradlew :app:assembleDebug` | NOT_RUN |
 | T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | NOT_RUN |
 | T6 | Tests instrumentés API 37 | `am instrument` ciblé | NOT_RUN |
-| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | NOT_RUN |
-| T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | PASS le 2026-10-26 |
+| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 23 tests, 6 fichiers, sur SHA intégré |
+| T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | **PASS** le 2026-10-26 |
 | T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | NOT_RUN |
 | T10 | Interop Kotlin ↔ Node | relais local + client de test | NOT_RUN |
 | T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | NOT_RUN |
+| T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — handshake protégé, auth, proposition V3, rejeu, cache |
+| T13 | Calendrier local réel + Etar | tests instrumentés + captures | **PASS** — création, relecture, move/edit/delete, visibilité |
 
 ## 2. Transport — cryptographie
 

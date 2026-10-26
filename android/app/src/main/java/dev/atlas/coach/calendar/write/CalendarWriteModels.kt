@@ -203,6 +203,17 @@ fun provenanceUri(planId: String, activityId: String): String =
 
 internal const val ATLAS_WRITE_PACKAGE = "dev.atlas.coach"
 internal const val LOCAL_ACCOUNT_TYPE = "LOCAL"
+
+/**
+ * Account type of the dedicated, offline ATLAS calendar created by the app's
+ * sync adapter. It is as local as [LOCAL_ACCOUNT_TYPE]: no network account,
+ * no sync, no personal identity.
+ */
+internal const val ATLAS_LOCAL_ACCOUNT_TYPE = "dev.atlas.coach.calendar"
+
+/** Only these two account types can own a calendar writable by ATLAS. */
+internal fun isWritableLocalAccountType(accountType: String?): Boolean =
+    accountType == LOCAL_ACCOUNT_TYPE || accountType == ATLAS_LOCAL_ACCOUNT_TYPE
 internal val SHA_256 = Regex("[0-9a-f]{64}")
 private val IDEMPOTENCY_KEY = Regex("[A-Za-z0-9._:-]{1,160}")
 

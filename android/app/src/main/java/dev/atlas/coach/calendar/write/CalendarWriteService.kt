@@ -68,7 +68,7 @@ class CalendarWriteService(
         if (!catalog.providerAvailable) return CalendarSelectionResult(error = CalendarWriteError.PROVIDER_UNAVAILABLE)
         if (explicitCalendarId == null) {
             val hasSelectableLocal = catalog.calendars.any {
-                it.accountType == LOCAL_ACCOUNT_TYPE && it.visible &&
+                isWritableLocalAccountType(it.accountType) && it.visible &&
                     it.accessLevel >= CALENDAR_ACCESS_CONTRIBUTOR
             }
             return CalendarSelectionResult(
@@ -78,7 +78,7 @@ class CalendarWriteService(
         }
         val calendar = catalog.calendars.firstOrNull { it.id == explicitCalendarId }
             ?: return CalendarSelectionResult(error = CalendarWriteError.CALENDAR_NOT_LOCAL)
-        if (calendar.accountType != LOCAL_ACCOUNT_TYPE || !calendar.visible ||
+        if (!isWritableLocalAccountType(calendar.accountType) || !calendar.visible ||
             calendar.accessLevel < CALENDAR_ACCESS_CONTRIBUTOR
         ) {
             return CalendarSelectionResult(error = CalendarWriteError.CALENDAR_NOT_LOCAL)
