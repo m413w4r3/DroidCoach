@@ -62,8 +62,22 @@ Interprétation: /api/v2/routine/ et /api/v2/exercise/ répondent 200 avec
 pagination; le jeton API est valide. Aucun nom, aucune donnée personnelle,
 aucun token affiché.
 
+Qualification réelle complémentaire (2026-10-26):
+- `GET /api/v2/` → 200; endpoints présents: `routine`, `exercise`, `workoutlog`,
+  `workoutsession`, `slot`, `slot-entry`, `day`, etc.
+- `GET /api/v2/workoutlog/?limit=1` → 200, count=4, pagination présente.
+  Item observé (clés/types seulement, aucune valeur): `id` chaîne,
+  `date` chaîne, `exercise` int, `routine` int, `session` chaîne,
+  `slot_entry` int, `repetitions`/`weight` chaînes.
+- `GET /api/v2/workoutsession/?limit=1` → 200, count=1, sans pagination.
+  Item: `id` chaîne, `datetime_start`/`datetime_end` chaînes, `day` int,
+  `routine` int, `impression`/`notes` chaînes.
+- `WgerClient.list_workout_logs()` réel → `SCHEMA_ERROR`, car le parseur
+  attendait un `id` entier. **Défaut réel confirmé**, correction demandée:
+  IDs opaques chaîne, `WorkoutSessionSummary`, `list_workout_sessions()`,
+  tests avec les types réels, diagnostic étendu. Re-test et re-revue à faire.
+
 Limites:
-- Pas de lecture réelle de `workoutlog` ni des séances/performances.
 - Pas de rotation JWT réelle; mode JWT non activé.
 - Aucune écriture wger.
 - Redirections HTTP désactivées; URL non affichée.
