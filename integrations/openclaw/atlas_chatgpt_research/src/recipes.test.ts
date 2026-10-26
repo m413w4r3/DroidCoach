@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import type { BridgeClientOptions, BridgeConfig } from "./bridge-client.js";
 import type { ResearchParameters } from "./contracts.js";
 import { executeResearchTool, plugin } from "./index.js";
 
-const config: BridgeConfig = { bridgeUrl: "http://127.0.0.1:8001", apiKey: "recipe-test-secret" };
+const config: BridgeConfig = { bridgeUrl: "http://127.0.0.1:8001", apiKey: randomUUID() };
 const requestId = "recipe-call-id";
 const params = { topic: "Public accessibility standards", freshness: "month" as const };
 
@@ -31,17 +32,76 @@ async function execute(
   toolParams: ResearchParameters = params,
   options: BridgeClientOptions = {},
 ) {
-  return executeResearchTool(toolParams, config, { toolCallId: requestId }, { fetchImpl, ...options });
+  const readyFetch: typeof fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/health" || path === "/ready") return jsonResponse(200, { status: "ok" });
+    return fetchImpl(input, init);
+  };
+  return executeResearchTool(toolParams, config, { toolCallId: requestId }, { ...options, fetchImpl: readyFetch });
 }
 
 describe("16 Bridge mock recipes", () => {
+  it("health and readiness checks pass before submitting a run", async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      calls.push(url.pathname);
+      if (url.pathname === "/health" || url.pathname === "/ready") return jsonResponse(200, { status: "ok" });
+      return jsonResponse(200, complete());
+    });
+
+    const result = await executeResearchTool(params, config, { toolCallId: requestId }, { fetchImpl });
+
+    expect(result.status).toBe("completed");
+    expect(calls).toEqual(["/health", "/ready", "/v1/bridge/runs"]);
+  });
+
+  it("an absent extension on /ready returns an explicit degraded state without submitting", async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname;
+      calls.push(path);
+      return path === "/health"
+        ? jsonResponse(200, { status: "ok" })
+        : jsonResponse(503, { detail: "extension disconnected" });
+    });
+
+    const result = await executeResearchTool(params, config, { toolCallId: requestId }, { fetchImpl });
+
+    expect(result.status).toBe("unavailable");
+    expect(result.summary).toContain("extension");
+    expect(result.limitations[0]).toContain("/ready");
+    expect(calls).toEqual(["/health", "/ready"]);
+    expect(JSON.stringify(result)).not.toContain(config.apiKey);
+  });
+
+  it("maps 403 to stable authentication failure without leaking a key", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(403, { detail: "denied" }));
+    const result = await execute(fetchImpl);
+
+    expect(result.status).toBe("unavailable");
+    expect(result.summary).toContain("authentification");
+    expect(JSON.stringify(result)).not.toContain(config.apiKey);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns an unavailable /health check into a stable result without crashing", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new TypeError("connection refused"));
+    const result = await executeResearchTool(params, config, { toolCallId: requestId }, { fetchImpl });
+
+    expect(result.status).toBe("unavailable");
+    expect(result.summary).toContain("indisponible");
+    expect(result.limitations[0]).toContain("/health");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("1. service unavailable returns a bounded ambiguous result", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new TypeError("connection refused"));
     const result = await execute(fetchImpl);
 
     expect(result.status).toBe("uncertain");
     expect(result.facts).toEqual([]);
-    expect(JSON.stringify(result)).not.toContain("recipe-test-secret");
+    expect(JSON.stringify(result)).not.toContain(config.apiKey);
   });
 
   it("2. absent and incorrect API keys fail without printing a key", async () => {
@@ -108,23 +168,26 @@ describe("16 Bridge mock recipes", () => {
     expect(results.map((result) => result.search_mode)).toEqual(modes);
     expect(results.map((result) => result.verified_search)).toEqual([true, false, false, false, false]);
     expect(results[0]?.limitations.join(" ")).toContain("ne garantit ni la fraîcheur");
+    expect(results[1]?.limitations.join(" ")).toContain("PROMPT_INSTRUCTED_UNVERIFIED");
   });
 
   it("7. takes citations only from visible_citations metadata", async () => {
-    const result = await execute(vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, complete("cite-run", {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, complete("cite-run", {
       visible_citations: [{
         label: "Standards body",
         url: "https://example.org/article",
         canonical_url: "https://example.org/article",
         position: 1,
       }],
-    }))));
+    })));
+    const result = await execute(fetchImpl);
 
     expect(result.citations).toEqual([{
       label: "Standards body",
       url: "https://example.org/article",
       canonical_url: "https://example.org/article",
     }]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("8. returns an explicit limitation when no visible source is present", async () => {
@@ -134,11 +197,17 @@ describe("16 Bridge mock recipes", () => {
     expect(result.limitations).toContain("Le Bridge n’a fourni aucune citation visible.");
   });
 
-  it("9. refuses malformed answers and needs_review without returning partial fields", async () => {
+  it("9. refuses malformed answers, needs_review, and failed states without partial fields", async () => {
     const result = await execute(vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, complete("bad-answer", {}, "{broken"))));
     const reviewResult = await execute(vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, {
       id: "review-run",
       status: "needs_review",
+      metadata: {},
+    })));
+    const failedResult = await execute(vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, {
+      id: "failed-run",
+      status: "failed",
+      output_text: "partial output must not escape",
       metadata: {},
     })));
 
@@ -149,6 +218,9 @@ describe("16 Bridge mock recipes", () => {
     expect(reviewResult.status).toBe("uncertain");
     expect(reviewResult.facts).toEqual([]);
     expect(reviewResult.citations).toEqual([]);
+    expect(failedResult.status).toBe("failed");
+    expect(failedResult.facts).toEqual([]);
+    expect(failedResult.citations).toEqual([]);
   });
 
   it("10. timeout after submission remains uncertain and uses the same key", async () => {

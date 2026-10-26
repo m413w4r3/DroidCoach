@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { BridgeClient, type BridgeConfig } from "./bridge-client.js";
 import type { ResearchParameters } from "./contracts.js";
 
 const config: BridgeConfig = {
   bridgeUrl: "http://127.0.0.1:8001",
-  apiKey: "test-bridge-key",
+  apiKey: randomUUID(),
 };
 const params: ResearchParameters = {
   topic: "Open source accessibility standards",
@@ -27,6 +28,50 @@ function completed(id = "run-1"): object {
 }
 
 describe("BridgeClient", () => {
+  it("returns a typed error when /health is unavailable", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new TypeError("connection refused"));
+    const client = new BridgeClient(config, { fetchImpl: fetchMock });
+
+    await expect(client.checkReadiness()).rejects.toMatchObject({
+      name: "BridgeClientError",
+      code: "health_unavailable",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://127.0.0.1:8001/health");
+  });
+
+  it("preserves Retry-After and caps 429 retries", async () => {
+    const sleeps: number[] = [];
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "Retry-After": "4" } }))
+      .mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "Retry-After": "12" } }));
+    const client = new BridgeClient(config, {
+      fetchImpl: fetchMock,
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+    });
+
+    await expect(client.research(params, "bounded-429-key")).rejects.toMatchObject({
+      code: "rate_limited",
+      retryAfterMs: 12_000,
+    });
+    expect(sleeps).toEqual([4_000]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["failed", "needs_review"] as const)("returns terminal %s status without partial fields", async (status) => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, {
+      id: `terminal-${status}`,
+      status,
+      metadata: { visible_citations: [{ label: "Must not escape", url: "https://example.org" }] },
+    }));
+    const client = new BridgeClient(config, { fetchImpl: fetchMock });
+
+    const run = await client.research(params, `terminal-key-${status}`);
+
+    expect(run.status).toBe(status);
+    expect(run.output_text).toBeUndefined();
+  });
+
   it("submits a bounded request with the stable idempotency key", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, completed()));
     const client = new BridgeClient(config, { fetchImpl: fetchMock });
@@ -38,7 +83,7 @@ describe("BridgeClient", () => {
     expect(url).toBe("http://127.0.0.1:8001/v1/bridge/runs");
     expect(init?.method).toBe("POST");
     expect(new Headers(init?.headers).get("X-Idempotency-Key")).toBe("tool-call-1");
-    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-bridge-key");
+    expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${config.apiKey}`);
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     expect(body).toMatchObject({ background: true, web_search: true, request_id: "tool-call-1" });
     expect(body.input).toContain("Open source accessibility standards");
@@ -215,6 +260,7 @@ describe("BridgeClient", () => {
 
   it.each([
     [401, "unauthorized"],
+    [403, "unauthorized"],
     [409, "conflict"],
   ] as const)("keeps recovery status %i as a %s error", async (status, code) => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {

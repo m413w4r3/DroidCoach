@@ -1,6 +1,6 @@
 # `atlas_chatgpt_research`
 
-Optional, read-only OpenClaw tool for asking the local ChatGPT Bridge to research an abstract topic. The plugin submits one durable Bridge run, polls that run, validates the response, and returns a structured result with visible citation metadata and explicit limits.
+Optional, read-only OpenClaw tool for asking the local ChatGPT Bridge to research an abstract topic. The plugin checks Bridge `/health` and `/ready`, submits one durable run only when both checks pass, polls that run, validates the response, and returns a structured result with visible citation metadata and explicit limits. An unavailable health check or disconnected extension produces an explicit unavailable result without submitting a run.
 
 ## Requirements
 
@@ -48,10 +48,10 @@ Pass exactly one `topic` or `question` (1–500 characters). Optional fields are
 
 The Bridge receives `web_search: true` when freshness is not `any`; this asks for a search but does not promise that the UI control was enabled. `request_id` and `X-Idempotency-Key` both use OpenClaw's `context.toolCallId`. If a submission response is lost, the client looks up the same run by that key and can repeat only the exact same POST body and key. It never starts a second request with a new key to recover an ambiguous run.
 
-The assistant response must be JSON with `summary` and `facts`; malformed or incomplete output is rejected as a whole. Citations come only from `metadata.visible_citations`. `verified_search` is true only when Bridge metadata says `ui_tool`. This confirms the UI search control was activated for that run; it does not establish source freshness or reliability. `needs_review` and ambiguous failures return no partial answer.
+The assistant response must be JSON with `summary` and `facts`; malformed or incomplete output is rejected as a whole. Citations come only from `metadata.visible_citations` and remain untrusted data. `verified_search` is true only when Bridge metadata says `ui_tool`. This confirms the UI search control was activated for that run; it does not establish source freshness or reliability. `prompt_instructed` is reported as `PROMPT_INSTRUCTED_UNVERIFIED`. `needs_review` and ambiguous failures return no partial answer.
 
 The result contains `summary`, `facts`, `citations`, `search_mode`, `verified_search`, `status`, `limitations`, `run_id`, and `request_id`. It does not expose Bridge error text, credentials, or executable fields.
 
 ## Tests and limits
 
-Vitest uses an injected `fetch` implementation; the suite makes no real HTTP requests. It covers the 16 mock recipes in `docs/v6-3/AUDIT_BRIDGE_PLUGIN.md` §6, configuration failures, request bounds, idempotency, response validation, search modes, citations, cancellation, and absence of mutation tools. A live Bridge, connected browser extension, ChatGPT UI search control, Gateway installation, and actual search remain `NOT_RUN` for this build-only ticket.
+Vitest uses an injected `fetch` implementation; the suite makes no real HTTP requests. It covers the 16 mock recipes in `VALIDATION_R2.md`, configuration failures, health/readiness, request bounds, idempotency, response validation, search modes, citations, cancellation, and absence of mutation tools. A live Bridge, connected browser extension, ChatGPT UI search control, Gateway installation, and actual search remain `NOT_RUN` for this build-only ticket.
