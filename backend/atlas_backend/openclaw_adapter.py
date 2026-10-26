@@ -646,7 +646,14 @@ class OpenClawAgentAdapter(AgentAdapter):
                 raise TypeError("message content is not text")
             parsed = _strict_json_loads(content)
             output = PlanRevisionModelOutputV3.model_validate(parsed)
-        except (ValueError, KeyError, IndexError, TypeError, ValidationError) as exc:
+        except (
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+            ValidationError,
+            RecursionError,
+        ) as exc:
             self._finish_attempt(
                 reservation,
                 tokens_used=reservation,
