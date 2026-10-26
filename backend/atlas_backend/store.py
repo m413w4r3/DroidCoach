@@ -41,6 +41,14 @@ class SQLiteStore:
                     response_json TEXT NOT NULL,
                     expires_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS plan_revision_requests (
+                    request_id TEXT PRIMARY KEY,
+                    body_hash TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK (state IN ('pending', 'complete')),
+                    created_at TEXT NOT NULL,
+                    status_code INTEGER,
+                    response_json TEXT
+                );
                 CREATE TABLE IF NOT EXISTS agent_proposals (
                     proposal_id TEXT PRIMARY KEY,
                     idempotency_key TEXT NOT NULL UNIQUE,
@@ -65,6 +73,60 @@ class SQLiteStore:
                 );
                 """
             )
+
+    def claim_plan_revision_request(
+        self,
+        request_id: str,
+        body_hash: str,
+        created_at: str,
+    ) -> tuple[dict[str, Any], bool]:
+        """Durably reserve a request id before contacting the model adapter."""
+        with self.connect() as connection:
+            inserted = connection.execute(
+                "INSERT OR IGNORE INTO plan_revision_requests"
+                "(request_id,body_hash,state,created_at) VALUES(?,?, 'pending', ?)",
+                (request_id, body_hash, created_at),
+            ).rowcount == 1
+            row = connection.execute(
+                "SELECT request_id,body_hash,state,status_code,response_json "
+                "FROM plan_revision_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        if row["body_hash"] != body_hash:
+            raise PlanRevisionIdempotencyConflict("request_id reused with a different body")
+        return {
+            "request_id": row["request_id"],
+            "body_hash": row["body_hash"],
+            "state": row["state"],
+            "status_code": row["status_code"],
+            "response": json.loads(row["response_json"]) if row["response_json"] else None,
+        }, inserted
+
+    def complete_plan_revision_request(
+        self,
+        request_id: str,
+        body_hash: str,
+        status_code: int,
+        response: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Store the final HTTP status and response as one SQLite transaction."""
+        response_json = json.dumps(response, ensure_ascii=False, sort_keys=True)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE plan_revision_requests SET state='complete',status_code=?,response_json=? "
+                "WHERE request_id=? AND body_hash=? AND state='pending'",
+                (status_code, response_json, request_id, body_hash),
+            )
+            row = connection.execute(
+                "SELECT state,status_code,response_json FROM plan_revision_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        if row is None or row["state"] != "complete" or row["response_json"] is None:
+            raise RuntimeError("plan revision request could not be completed")
+        return {
+            "status_code": int(row["status_code"]),
+            "response": json.loads(row["response_json"]),
+        }
 
     def get_agent_chat(self, cache_key: str, now: str) -> dict[str, Any] | None:
         with self.connect() as connection:
@@ -367,6 +429,10 @@ class SQLiteStore:
 
 class EventIdConflict(ValueError):
     """An idempotency key was reused with a different event body."""
+
+
+class PlanRevisionIdempotencyConflict(ValueError):
+    """A plan revision request id was reused with a different body."""
 
 
 class UnknownProposal(ValueError):

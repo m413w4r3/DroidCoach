@@ -30,6 +30,7 @@ DEFAULT_CAPABILITIES: dict[str, bool] = {
     "home_layout": True,
     "habits": True,
     "app_policy": True,
+    "plan_revision": False,
 }
 
 MANDATE: dict[str, Any] = {
