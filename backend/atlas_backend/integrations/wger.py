@@ -7,6 +7,7 @@ import fcntl
 import json
 import os
 import tempfile
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -357,9 +358,20 @@ class ExerciseSummary:
 
 @dataclass(frozen=True)
 class WorkoutLogSummary:
-    id: int
+    id: str
     date: str
     exercise_id: int | None
+    routine_id: int | None
+    session_id: str | None
+
+
+@dataclass(frozen=True)
+class WorkoutSessionSummary:
+    id: str
+    datetime_start: str
+    datetime_end: str
+    day_id: int | None
+    routine_id: int | None
 
 
 @dataclass(frozen=True)
@@ -374,6 +386,8 @@ class WgerResourceProbe:
 class WgerProbe:
     routines: WgerResourceProbe
     exercises: WgerResourceProbe
+    workout_logs: WgerResourceProbe
+    workout_sessions: WgerResourceProbe
 
 
 @dataclass(frozen=True)
@@ -409,10 +423,15 @@ class WgerClient:
     def list_workout_logs(self) -> list[WorkoutLogSummary]:
         return self._list("workoutlog", _workout_log_summary)
 
+    def list_workout_sessions(self) -> list[WorkoutSessionSummary]:
+        return self._list("workoutsession", _workout_session_summary)
+
     def probe(self) -> WgerProbe:
         return WgerProbe(
             routines=self._probe_resource("routine"),
             exercises=self._probe_resource("exercise"),
+            workout_logs=self._probe_resource("workoutlog"),
+            workout_sessions=self._probe_resource("workoutsession"),
         )
 
     def _list(self, endpoint: str, parse_item):
@@ -464,7 +483,7 @@ class WgerClient:
             )
 
     def _endpoint_url(self, endpoint: str) -> str:
-        if endpoint not in {"routine", "exercise", "workoutlog"}:
+        if endpoint not in {"routine", "exercise", "workoutlog", "workoutsession"}:
             raise WgerError("UNAVAILABLE")
         return f"{self.base_url}{WGER_API_PREFIX}{endpoint}/"
 
@@ -574,15 +593,22 @@ def _exercise_summary(value: dict[str, Any]) -> ExerciseSummary:
 
 
 def _workout_log_summary(value: dict[str, Any]) -> WorkoutLogSummary:
-    exercise = value.get("exercise")
-    if isinstance(exercise, dict):
-        exercise = exercise.get("id")
-    if exercise is not None:
-        exercise = _positive_id(exercise)
     return WorkoutLogSummary(
-        id=_positive_id(value["id"]),
+        id=_opaque_id(value["id"]),
         date=_plain_text(value["date"], 64),
-        exercise_id=exercise,
+        exercise_id=_optional_relation_id(value.get("exercise")),
+        routine_id=_optional_relation_id(value.get("routine")),
+        session_id=_optional_opaque_id(value.get("session")),
+    )
+
+
+def _workout_session_summary(value: dict[str, Any]) -> WorkoutSessionSummary:
+    return WorkoutSessionSummary(
+        id=_opaque_id(value["id"]),
+        datetime_start=_iso_datetime(value["datetime_start"]),
+        datetime_end=_iso_datetime(value["datetime_end"]),
+        day_id=_optional_relation_id(value.get("day")),
+        routine_id=_optional_relation_id(value.get("routine")),
     )
 
 
@@ -590,6 +616,41 @@ def _positive_id(value: Any) -> int:
     if type(value) is not int or value < 1:
         raise ValueError
     return value
+
+
+def _optional_relation_id(value: Any) -> int | None:
+    if isinstance(value, dict):
+        value = value.get("id")
+    return None if value is None else _positive_id(value)
+
+
+def _optional_opaque_id(value: Any) -> str | None:
+    return None if value is None else _opaque_id(value)
+
+
+def _opaque_id(value: Any) -> str:
+    if type(value) is int:
+        if value < 1:
+            raise ValueError
+        value = str(value)
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= 64
+        or any(unicodedata.category(char) == "Cc" for char in value)
+    ):
+        raise ValueError
+    return value
+
+
+def _iso_datetime(value: Any) -> str:
+    text = _plain_text(value, 64)
+    if "T" not in text and "t" not in text:
+        raise ValueError
+    normalized = text.replace("t", "T", 1)
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    datetime.fromisoformat(normalized)
+    return text
 
 
 def _valid_token_text(value: str) -> bool:

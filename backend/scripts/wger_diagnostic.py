@@ -69,8 +69,13 @@ def main(argv: list[str] | None = None) -> int:
         base_url = os.environ.get("WGER_BASE_URL", "https://wger.de")
         with httpx.Client(follow_redirects=False) as http:
             probe = WgerClient(base_url, auth, http, limits).probe()
-        print(_line(mode, probe.routines))
-        print(_line(mode, probe.exercises))
+        for result in (
+            probe.routines,
+            probe.exercises,
+            probe.workout_logs,
+            probe.workout_sessions,
+        ):
+            print(_line(mode, result))
         return 0
     except WgerError as error:
         unavailable = WgerResourceProbe(
@@ -79,8 +84,8 @@ def main(argv: list[str] | None = None) -> int:
             element_count=0,
             pagination_present=False,
         )
-        print(_line(mode, unavailable))
-        print(_line(mode, unavailable))
+        for _ in range(4):
+            print(_line(mode, unavailable))
         return 2
     except (OSError, RuntimeError, ValueError):
         unavailable = WgerResourceProbe(
@@ -89,8 +94,8 @@ def main(argv: list[str] | None = None) -> int:
             element_count=0,
             pagination_present=False,
         )
-        print(_line(mode, unavailable))
-        print(_line(mode, unavailable))
+        for _ in range(4):
+            print(_line(mode, unavailable))
         return 2
 
 
