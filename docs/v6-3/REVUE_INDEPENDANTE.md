@@ -6,7 +6,8 @@
 | Worktree | `v63-final-review`, `chmod -R a-w`, écriture vérifiée refusée |
 | BASE_SHA | `acda7a967b26aa3ccc8325eb194c8daa2f9a58e4` |
 | Premier RESULT_SHA | `5dedcf667dff1479996f8bb99858e19ebdb7b643` |
-| SHA corrigé | `6cef04b11c05f6405199e348ee70cf926dad1aa2` |
+| Deuxième SHA | `6cef04b11c05f6405199e348ee70cf926dad1aa2` |
+| SHA corrigé final | `40030950f9b21dece8a0af63f6e7249930da6c11` |
 | Tests exécutés par le relecteur | **aucun** (lecture seule technique) |
 | Tests parent sur SHA corrigé | 66 ciblés, 424 JVM, backend 91/1 skip, lint 0 erreur, build et androidTest compile PASS |
 | Pixel / instrumenté | **NOT_RUN** |
@@ -21,11 +22,20 @@
 | P2 | DEFECT_CONFIRMED | `backend/atlas_backend/plan_v3.py` | L'algorithme de chevauchement adjacent manquait les intervalles imbriqués | Toutes paires avec arrêt correct ; test A/B/C imbriqué |
 | P1 | EVIDENCE_GAP | `preuves/l1-plan-final.txt`, `RAPPORT_V63.md`, `REGISTRE_TACHES.md` | Preuves non rattachées au SHA final, résultats « à compléter », APK non vérifiable dans le worktree de revue | SHA `6cef04b`, commandes, compteurs et SHA APK consignés ; APK local non versionné |
 
-## Re-revue ciblée
+## Deuxième revue (`6cef04b`) : `NO_GO`
 
-Une re-revue du diff `5dedcf6..6cef04b` a été demandée à la même session, en
-lecture seule, pour vérifier la correction de chaque constat et l'absence de
-régression. **Verdict final à consigner à réception.**
+| Sévérité | Type | Fichier | Constat | Correction |
+|---|---|---|---|---|
+| P1 | DEFECT_CONFIRMED | `PlanRevisionEngine.kt` | `notes = null` et `notes = "<null>"` produisaient le même hash de portée | Encodage length-prefixed (`N` vs `S<longueur>:<valeur>`) ; tests moteur et dépôt ajoutés |
+| P1 | EVIDENCE_GAP | `preuves/l1-plan-final.txt`, `RAPPORT_V63.md` | Le relecteur, sur son worktree à `5dedcf6`, ne voyait pas les preuves actualisées | Preuves et rapport mis à jour avec le SHA `4003095`, commandes, compteurs et APK ; la re-revue doit lire les docs au SHA courant |
+
+Les règles de statut, le rechargement au retour au premier plan et les
+chevauchements imbriqués ont été confirmés corrigés par le relecteur.
+
+## Re-revue finale
+
+Une troisième vérification ciblée est demandée sur `4003095` et sur les preuves
+mises à jour. **Verdict final à consigner à réception.**
 
 ## Limites maintenues
 

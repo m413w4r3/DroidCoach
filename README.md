@@ -6,7 +6,7 @@ ATLAS cherche à transformer les objectifs choisis par son utilisateur en **acti
 
 Le coach est **ferme mais contestable** : chaque pouvoir est défini dans un mandat explicite, borné, vérifiable et révocable. L'IA propose ; ATLAS et les services autorisés exécutent uniquement des actions validées. Le contrôle des fonctions essentielles du téléphone et une pause d'urgence restent disponibles sans Internet.
 
-**État du projet (25 octobre 2026) :** **V6.2 clôturée** (`GO_WITH_LIMITATIONS`) ; **V6.3 en conception**, et non livrée. Plateforme de qualification : **Android 17 / API 37, Pixel physique et AVD**. Dépôt : [DroidCoach](https://github.com/m413w4r3/DroidCoach).
+**État du projet (26 octobre 2026) :** **V6.2 clôturée** (`GO_WITH_LIMITATIONS`). **V6.3 en cours** : un premier jalon local (programme journalier L1 + sonde calendrier en lecture seule L2) est intégré sur la branche locale `feat/atlas-v6-3`, testé JVM/lint/build, **non qualifié sur Pixel** et sans écriture calendrier, wger ni Bridge. Voir le [rapport d'étape V6.3](docs/v6-3/RAPPORT_V63.md). Plateforme de qualification : **Android 17 / API 37, Pixel physique et AVD**. Dépôt : [DroidCoach](https://github.com/m413w4r3/DroidCoach).
 
 ## L'expérience recherchée
 

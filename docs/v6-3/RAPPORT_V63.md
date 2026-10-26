@@ -14,9 +14,9 @@ Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
 |---|---|---|
 | Contrats de domaine V6.3 (plan, calendrier, mémoire, mandat, effets) | **LIVRÉ (document)** | `docs/v6-3/CONTRATS_V63.md` |
 | Contrat backend `plan.revise_day` inactif, validation stricte | **LIVRÉ (module + tests)** | `backend/atlas_backend/plan_v3.py`, 24 tests |
-| Programme journalier local `DayPlan` versionné et persistant | **LIVRÉ (JVM)** | package `dev.atlas.coach.plan`, 42 tests |
+| Programme journalier local `DayPlan` versionné et persistant | **LIVRÉ (JVM)** | package `dev.atlas.coach.plan`, 45 tests |
 | Révisions avec diff, aperçu, confirmation groupée, idempotence | **LIVRÉ (JVM)** | `PlanRevisionEngine`, `DayPlanRepository` |
-| Écran « Plan du jour » + navigation depuis Plus | **LIVRÉ (compile/JVM)** | `PlanScreen.kt`, `PlanController.kt`, 10 tests contrôleur |
+| Écran « Plan du jour » + navigation depuis Plus | **LIVRÉ (compile/JVM)** | `PlanScreen.kt`, `PlanController.kt`, 16 tests contrôleur |
 | Sonde CalendarContract lecture seule + détection Etar | **LIVRÉ (JVM/compile)** | package `dev.atlas.coach.calendar`, 23 tests |
 | Permissions calendrier | **NON DEMANDÉES** | manifeste inchangé |
 | Écriture calendrier / Etar | **NON LIVRÉ** | dépend de l'accord permission + appareil |
@@ -37,16 +37,16 @@ Aucun push, aucune PR, aucune fusion distante, aucune action sur un téléphone.
 | Calendar read ciblé | `--tests dev.atlas.coach.calendar.*` | **PASS** 23 | `81e1bd2` |
 | JVM après calendar | `testDebugUnitTest` | **PASS** 362 | `81e1bd2` |
 | Plan domain ciblé | `testDebugUnitTest --tests dev.atlas.coach.plan.*` | **PASS** 42 | `17bb723` |
-| Plan/contrôleur/navigation ciblé | 3 filtres de classes | **PASS** 66 | `6cef04b` |
-| JVM final | `testDebugUnitTest` | **PASS** 424, 0 échec, 0 ignoré, 62 suites | `6cef04b` |
-| Lint | `lintDebug` | **PASS** 0 erreur, 52 avertissements | `6cef04b` |
-| Build APK debug | `assembleDebug` | **PASS** | `6cef04b` |
-| Compilation androidTest | `compileDebugAndroidTestKotlin` | **PASS** | `6cef04b` |
-| Backend final | `pytest -q` | **PASS** 91 passed, 1 skipped | `6cef04b` |
+| Plan/contrôleur/navigation ciblé | 3 filtres de classes | **PASS** 68 | `4003095` |
+| JVM final | `testDebugUnitTest` | **PASS** 426, 0 échec, 0 ignoré, 62 suites | `4003095` |
+| Lint | `lintDebug` | **PASS** 0 erreur, 52 avertissements | `4003095` |
+| Build APK debug | `assembleDebug` | **PASS** | `4003095` |
+| Compilation androidTest | `compileDebugAndroidTestKotlin` | **PASS** | `4003095` |
+| Backend final | `pytest -q` | **PASS** 91 passed, 1 skipped | `4003095` |
 | Instrumenté AVD/Pixel | non exécuté | **NOT_RUN** | — |
 
-APK debug : SHA-256 `7d80cbe6b260864ac2eb5a309c4ce380da175293e54d84ce7c182bf4d3164ec4`
-(source `6cef04b`). L'APK est un artefact de build local non versionné ; son
+APK debug : SHA-256 `e58993f94e99607c4fe0cd7a972bba08495b141652ba8a02d856909eca9c7691`
+(source `4003095`). L'APK est un artefact de build local non versionné ; son
 empreinte et la commande de build sont consignées.
 
 ## 3. État du Pixel et permissions

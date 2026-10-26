@@ -22,7 +22,7 @@ diff, exécute l'oracle sur le SHA intégré et met à jour ce registre.
 |---|---|---|---|---|---|
 | V63-L0-01 | Pré-vol, contrats de domaine, registre | — | `docs/v6-3/PREFLIGHT.md`, `CONTRATS_V63.md`, `REGISTRE_TACHES.md` | revue parent + JSON/schémas valides | **INTEGRATED** |
 | V63-L1-01 | Domaine `DayPlan`/`PlanRevision` + stockage atomique + idempotence + DST, JVM | L0-01 | `android/.../plan/**` (main+test), aucune autre modification | `:app:testDebugUnitTest --tests dev.atlas.coach.plan.*` + suite complète | **INTEGRATED** (`17bb723` → `f78e3d9`) |
-| V63-L1-02 | Écran Plan + navigation + actions locales, intégré par le parent | L1-01 | `android/.../app/PlanScreen.kt`, `PlanController.kt`, `AtlasApp.kt`, `AtlasApplication.kt`, `AtlasScreenId.kt`, `AtlasScreens.kt`, `MainActivity.kt` | 66 tests ciblés + JVM 424 + lint/build | **INTEGRATED** (`6cef04b`), re-revue en cours |
+| V63-L1-02 | Écran Plan + navigation + actions locales, intégré par le parent | L1-01 | `android/.../app/PlanScreen.kt`, `PlanController.kt`, `AtlasApp.kt`, `AtlasApplication.kt`, `AtlasScreenId.kt`, `AtlasScreens.kt`, `MainActivity.kt` | 68 tests ciblés + JVM 426 + lint/build | **INTEGRATED** (`4003095`), re-revue finale en cours |
 | V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `LauncherHomeScreen.kt`/`AtlasScreens.kt` (parent) | JVM + UI test | **READY — non livré** |
 | V63-L2-01 | Sonde CalendarContract lecture seule + abstraction testable, sans permission manifeste | L0-01 | `android/.../calendar/**` (main+test) | JVM fake provider + compile Android | **INTEGRATED** (`81e1bd2`) |
 | V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers, **accord propriétaire requis** | L2-01 + accord | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **BLOCKED_APPROVAL** |
@@ -87,4 +87,5 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
 | 2026-10-26 | V63-L2-01 (calendar read) | `51d126e` | `dd9760d` (enfant) → `81e1bd2` (intégration) | ciblé 23 PASS ; JVM complet 362 PASS, 0 échec ; manifeste/Gradle inchangés | ACCEPTED / INTEGRATED |
 | 2026-10-26 | V63-L1-01 (plan domain) | `51d126e` | `17bb723` (enfant) → `f78e3d9` (intégration) | ciblé 42 PASS ; JVM enfant 381 PASS | ACCEPTED / INTEGRATED |
 | 2026-10-26 | V63-L1-02 (plan UI) | `f78e3d9` | `5dedcf6` | ciblé 57 PASS ; JVM 415 PASS (re-run sur `5dedcf6`), lint 0 erreur/52 avertissements, APK et androidTest compile PASS | REVIEW_REQUIRED → 3 P1 |
-| 2026-10-26 | V63-L1-02 correction P1/P2 | `5dedcf6` | `6cef04b` | ciblé 66 PASS ; JVM 424 PASS ; backend 91 passed/1 skipped ; lint 0 erreur ; build/androidTest PASS | ACCEPTED sous réserve de re-revue |
+| 2026-10-26 | V63-L1-02 correction P1/P2 | `5dedcf6` | `6cef04b` | ciblé 66 PASS ; JVM 424 PASS ; backend 91 passed/1 skipped ; lint 0 erreur ; build/androidTest PASS | re-revue : 1 P1 collision + 1 evidence gap |
+| 2026-10-26 | V63-L1-02 collision de hachage | `6cef04b` | `4003095` | ciblé 68 PASS ; JVM 426 PASS ; backend 91 passed/1 skipped ; lint 0 erreur ; build/androidTest PASS | ACCEPTED sous réserve de re-revue finale |

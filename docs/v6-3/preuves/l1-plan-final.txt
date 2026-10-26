@@ -47,3 +47,16 @@ Correctifs de revue indépendante (SHA de code 6cef04b11c05f6405199e348ee70cf926
   -> APK SHA-256 7d80cbe6b260864ac2eb5a309c4ce380da175293e54d84ce7c182bf4d3164ec4
   backend pytest -q -> 91 passed, 1 skipped
   Pixel / Etar / instrumenté -> NOT_RUN
+
+Re-revue indépendante — correctif de collision de hachage (SHA de code 40030950f9b21dece8a0af63f6e7249930da6c11) :
+  ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.plan.*' \
+      --tests 'dev.atlas.coach.app.PlanControllerTest' \
+      --tests 'dev.atlas.coach.app.AtlasNavigationStateTest'
+  -> 68 tests : plan 47 (21+14+12), PlanController 16, Navigation 5 ; 0 échec
+  ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug \
+      :app:compileDebugAndroidTestKotlin
+  -> 62 suites, 426 tests, 0 failure, 0 error, 0 skipped
+  -> lint 0 error, 52 warnings ; build et androidTest compile PASS
+  -> APK SHA-256 e58993f94e99607c4fe0cd7a972bba08495b141652ba8a02d856909eca9c7691
+  backend pytest -q -> 91 passed, 1 skipped
+  Pixel / Etar / instrumenté -> NOT_RUN

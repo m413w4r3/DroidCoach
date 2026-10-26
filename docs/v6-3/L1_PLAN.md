@@ -61,18 +61,18 @@ Ce document décrit exactement ce qui est livré et ce qui ne l'est pas.
 ## Preuves
 
 Base d'intégration des deux enfants : `f78e3d93d3c96db9308336141f51ef83409f3576`.
-SHA de code intégré testé après correctifs de revue : `6cef04b11c05f6405199e348ee70cf926dad1aa2`
-(revue initiale sur `5dedcf6`, trois P1 corrigés).
+SHA de code intégré testé après correctifs de revue : `40030950f9b21dece8a0af63f6e7249930da6c11`
+(revue initiale sur `5dedcf6`, trois P1 puis un P1 de collision de hachage corrigés).
 
 | Gate | Résultat |
 |---|---|
-| Ciblé plan + contrôleur + navigation | **66 PASS** (45 plan, 16 contrôleur, 5 navigation), 0 échec |
-| Suite JVM complète | **424 PASS**, 0 échec, 0 ignoré, 62 suites |
+| Ciblé plan + contrôleur + navigation | **68 PASS** (47 plan, 16 contrôleur, 5 navigation), 0 échec |
+| Suite JVM complète | **426 PASS**, 0 échec, 0 ignoré, 62 suites |
 | Backend | **91 passed, 1 skipped** |
 | Lint | **0 erreur, 52 avertissements**, aucun avertissement ciblé Plan/Calendar |
 | `assembleDebug` | **PASS** |
 | `compileDebugAndroidTestKotlin` | **PASS** |
-| APK debug | SHA-256 `7d80cbe6b260864ac2eb5a309c4ce380da175293e54d84ce7c182bf4d3164ec4` |
+| APK debug | SHA-256 `e58993f94e99607c4fe0cd7a972bba08495b141652ba8a02d856909eca9c7691` |
 | Appareil / Pixel / Etar | **NOT_RUN** — aucun appareil connecté |
 
 Le détail est consigné dans `docs/v6-3/preuves/l1-plan-final.txt`.
