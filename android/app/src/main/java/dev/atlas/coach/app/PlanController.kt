@@ -21,6 +21,7 @@ import dev.atlas.coach.plan.PlanRejectionReason
 import dev.atlas.coach.plan.PlanRevision
 import dev.atlas.coach.plan.PlanRevisionEngine
 import dev.atlas.coach.plan.PlanState
+import dev.atlas.coach.plan.PlanStatusPolicy
 import dev.atlas.coach.plan.PlanWriteResult
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.plan.RevisionOrigin
@@ -226,16 +227,29 @@ class PlanController(
         val current = plan ?: return fail("Aucun plan chargé.")
         val target = current.activities.firstOrNull { it.activityId == activityId }
             ?: return fail("Activité introuvable.")
-        if (target.status == status) {
-            message = "L'activité a déjà ce statut."
-            return false
-        }
+        val rejection = PlanStatusPolicy.rejection(
+            from = target.status,
+            to = status,
+            nowUtcMillis = clock.nowUtcMillis(),
+            schedule = target.scheduledLocal,
+            engine = engine,
+        )
+        if (rejection != null) return fail(statusRejectionLabel(rejection))
         val changed = target.copy(status = status)
         return propose(
             current.activities.map { if (it.activityId == activityId) changed else it },
             "Statut : ${target.title} → ${statusLabel(status)}",
         )
     }
+
+    /** Statuses that the local rules currently allow for this activity. */
+    fun allowedStatuses(activity: PlanActivity): List<ActivityStatus> =
+        PlanStatusPolicy.allowedTargets(
+            from = activity.status,
+            nowUtcMillis = clock.nowUtcMillis(),
+            schedule = activity.scheduledLocal,
+            engine = engine,
+        )
 
     fun removeActivity(activityId: String): Boolean {
         val current = plan ?: return fail("Aucun plan chargé.")
@@ -389,6 +403,18 @@ class PlanController(
             Priority.REQUIRED -> "Requise"
             Priority.IMPORTANT -> "Importante"
             Priority.OPTIONAL -> "Optionnelle"
+        }
+
+        fun statusRejectionLabel(rejection: dev.atlas.coach.plan.StatusTransitionRejection): String = when (rejection) {
+            dev.atlas.coach.plan.StatusTransitionRejection.SAME_STATUS -> "L'activité a déjà ce statut."
+            dev.atlas.coach.plan.StatusTransitionRejection.TERMINAL_STATUS ->
+                "Ce statut est terminal ; aucune transition locale n'est proposée."
+            dev.atlas.coach.plan.StatusTransitionRejection.POSTPONED_UNSUPPORTED ->
+                "Le report sera disponible quand une replanification réelle pourra être confirmée."
+            dev.atlas.coach.plan.StatusTransitionRejection.MISSED_BEFORE_END ->
+                "Une activité ne peut être marquée manquée qu'après la fin de son créneau."
+            dev.atlas.coach.plan.StatusTransitionRejection.INVALID_TRANSITION ->
+                "Transition de statut non autorisée."
         }
 
         fun revisionChangeLabel(change: dev.atlas.coach.plan.PlanChange): String = when (change) {

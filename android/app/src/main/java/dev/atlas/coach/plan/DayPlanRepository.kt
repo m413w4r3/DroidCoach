@@ -208,7 +208,7 @@ class DayPlanRepository(
                 after = after,
                 revision = revision,
                 effectIds = effects,
-                scopeHash = engine.scopeHash(effects),
+                scopeHash = engine.scopeHash(effects, revision.changes),
                 overlapWarnings = engine.overlapWarnings(activities),
             ),
         )

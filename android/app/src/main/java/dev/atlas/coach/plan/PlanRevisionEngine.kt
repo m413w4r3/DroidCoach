@@ -93,25 +93,76 @@ class PlanRevisionEngine {
         val effects = sortedSetOf<String>()
         changes.forEach { change ->
             when (change) {
-                is PlanChange.SlotAdded -> effects += "CALENDAR_CREATE:${change.activity.activityId}"
-                is PlanChange.SlotRemoved -> effects += "CALENDAR_DELETE:${change.activityId}"
+                is PlanChange.SlotAdded -> effects += "PLAN_ACTIVITY_CREATE:${change.activity.activityId}"
+                is PlanChange.SlotRemoved -> effects += "PLAN_ACTIVITY_DELETE:${change.activityId}"
                 is PlanChange.SlotMoved,
                 is PlanChange.SlotEdited,
                 is PlanChange.StatusChanged,
-                -> effects += "CALENDAR_UPDATE:${changeActivityId(change)}"
+                -> effects += "PLAN_ACTIVITY_UPDATE:${changeActivityId(change)}"
             }
         }
         effects += "PLAN_APPLY:$revisionId"
         return effects.toList()
     }
 
-    fun scopeHash(effectIds: List<String>): String {
+    /**
+     * Binds a confirmation to the exact reviewed diff, not only to generic effect
+     * identifiers. Altering the before/after content while keeping the same
+     * revision id and effect ids therefore changes the hash and is rejected.
+     */
+    fun scopeHash(effectIds: List<String>, changes: List<PlanChange> = emptyList()): String {
         require(effectIds.isNotEmpty()) { "effectIds must not be empty" }
         require(effectIds.toSet().size == effectIds.size) { "effectIds must be unique" }
-        val canonical = effectIds.sorted().joinToString(separator = "\n")
+        val canonical = buildString {
+            append(effectIds.sorted().joinToString(separator = "\n"))
+            if (changes.isNotEmpty()) {
+                append("\n--CHANGES--\n")
+                append(changes.map(::canonicalChange).sorted().joinToString(separator = "\n"))
+            }
+        }
         return MessageDigest.getInstance("SHA-256")
             .digest(canonical.toByteArray(StandardCharsets.UTF_8))
             .joinToString(separator = "") { byte -> "%02x".format(byte) }
+    }
+
+    private fun canonicalChange(change: PlanChange): String = when (change) {
+        is PlanChange.SlotAdded -> "ADD|${canonicalActivity(change.activity)}"
+        is PlanChange.SlotRemoved -> "REMOVE|${canonicalActivity(change.before)}"
+        is PlanChange.SlotMoved -> "MOVE|${change.activityId}|${canonicalSchedule(change.from)}|${canonicalSchedule(change.to)}"
+        is PlanChange.SlotEdited -> "EDIT|${canonicalActivity(change.before)}|${canonicalActivity(change.after)}"
+        is PlanChange.StatusChanged -> "STATUS|${change.activityId}|${change.from.name}|${change.to.name}"
+    }
+
+    private fun canonicalActivity(activity: PlanActivity): String = listOf(
+        activity.activityId,
+        activity.planId,
+        activity.kind.name,
+        activity.title,
+        activity.status.name,
+        canonicalSchedule(activity.scheduledLocal),
+        activity.priority.name,
+        activity.goalId,
+        activity.subGoalId,
+        activity.estimateMinutes?.toString(),
+        activity.actualMinutes?.toString(),
+        activity.createdRevisionId,
+        activity.lastRevisionId,
+        activity.notes,
+    ).joinToString(separator = "|") { escapeField(it) }
+
+    private fun canonicalSchedule(schedule: LocalSchedule): String = listOf(
+        schedule.localDate,
+        schedule.startMinute.toString(),
+        schedule.durationMinutes.toString(),
+        schedule.timezone,
+    ).joinToString(separator = "|") { escapeField(it) }
+
+    private fun escapeField(value: String?): String = when (value) {
+        null -> "<null>"
+        else -> value
+            .replace("\\", "\\\\")
+            .replace("|", "\\|")
+            .replace("\n", "\\n")
     }
 
     /** Applies a reviewed diff only when every before-value still matches the current plan. */
@@ -178,7 +229,13 @@ class PlanRevisionEngine {
             ) {
                 return ChangeApplicationResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
             }
-            if (status != null && (status.activityId != activityId || status.from != existing.status || status.to == status.from)) {
+            if (status != null && (
+                    status.activityId != activityId ||
+                        status.from != existing.status ||
+                        status.to == status.from ||
+                        PlanStatusPolicy.structuralRejection(status.from, status.to) != null
+                    )
+            ) {
                 return ChangeApplicationResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
             }
             val targetSchedule = move?.to ?: existing.scheduledLocal

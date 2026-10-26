@@ -182,11 +182,17 @@ class PlanRevisionParametersV3(StrictV3Model):
         return self
 
     def overlaps(self) -> list[tuple[str, str]]:
-        ordered = sorted(self.activities, key=lambda activity: activity.start_minute)
+        """Return every overlapping pair, including intervals nested in a longer one."""
+        ordered = sorted(
+            self.activities,
+            key=lambda activity: (activity.start_minute, activity.end_minute),
+        )
         result: list[tuple[str, str]] = []
-        for previous, current in zip(ordered, ordered[1:]):
-            if current.start_minute < previous.end_minute:
-                result.append((previous.client_ref, current.client_ref))
+        for index, left in enumerate(ordered):
+            for right in ordered[index + 1:]:
+                if right.start_minute >= left.end_minute:
+                    break
+                result.append((left.client_ref, right.client_ref))
         return result
 
 

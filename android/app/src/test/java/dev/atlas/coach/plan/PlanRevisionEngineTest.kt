@@ -48,9 +48,9 @@ class PlanRevisionEngineTest {
 
         assertEquals(
             listOf(
-                "CALENDAR_CREATE:$SECOND_ACTIVITY_ID",
-                "CALENDAR_DELETE:$THIRD_ACTIVITY_ID",
-                "CALENDAR_UPDATE:$ACTIVITY_ID",
+                "PLAN_ACTIVITY_CREATE:$SECOND_ACTIVITY_ID",
+                "PLAN_ACTIVITY_DELETE:$THIRD_ACTIVITY_ID",
+                "PLAN_ACTIVITY_UPDATE:$ACTIVITY_ID",
                 "PLAN_APPLY:$revisionId",
             ).sorted(),
             engine.effectIds(changes, revisionId),
@@ -59,7 +59,7 @@ class PlanRevisionEngineTest {
 
     @Test
     fun scopeHashIgnoresInputOrderAndUsesSha256Hex() {
-        val ids = listOf("CALENDAR_UPDATE:$ACTIVITY_ID", "PLAN_APPLY:$REVISION_ID")
+        val ids = listOf("PLAN_ACTIVITY_UPDATE:$ACTIVITY_ID", "PLAN_APPLY:$REVISION_ID")
 
         assertEquals(engine.scopeHash(ids), engine.scopeHash(ids.reversed()))
         assertEquals(64, engine.scopeHash(ids).length)
@@ -125,5 +125,27 @@ class PlanRevisionEngineTest {
         val cancelled = activity(id = THIRD_ACTIVITY_ID, status = ActivityStatus.CANCELLED)
 
         assertTrue(engine.overlapWarnings(listOf(planned, done, cancelled)).isEmpty())
+    }
+
+    @Test
+    fun cancelledStatusIsTerminalInTheEngine() {
+        val current = dayPlan(listOf(activity(status = ActivityStatus.CANCELLED)))
+        val revision = revisionFor(current, listOf(activity(status = ActivityStatus.PLANNED)))
+
+        assertEquals(
+            ChangeApplicationResult.Rejected(PlanRejectionReason.INVALID_CHANGES),
+            engine.applyChanges(current, revision),
+        )
+    }
+
+    @Test
+    fun postponedStatusIsRejectedUntilARealRescheduleExists() {
+        val current = dayPlan()
+        val revision = revisionFor(current, listOf(activity(status = ActivityStatus.POSTPONED)))
+
+        assertEquals(
+            ChangeApplicationResult.Rejected(PlanRejectionReason.INVALID_CHANGES),
+            engine.applyChanges(current, revision),
+        )
     }
 }

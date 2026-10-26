@@ -20,7 +20,7 @@ class PlanControllerTest {
     val temporaryFolder = TemporaryFolder()
 
     private val zone = ZoneId.of("Europe/Paris")
-    private val dayOne = LocalDate.of(2026, 10, 26)
+    private val dayOne = LocalDate.of(2027, 1, 15) // 09:00 Europe/Paris at fixedNow
     private val fixedNow = 1_800_000_000_000L
 
     private fun controller(
@@ -118,6 +118,79 @@ class PlanControllerTest {
         assertEquals(ActivityStatus.DONE, controller.plan!!.activities.single().status)
         assertFalse(controller.removeActivity(activityId))
         assertTrue(controller.plan!!.activities.any { it.activityId == activityId })
+    }
+
+    @Test
+    fun futureActivityCannotBeMarkedMissed() {
+        val controller = controller()
+        val activityId = addSample(controller)
+        assertFalse(controller.setStatus(activityId, ActivityStatus.MISSED))
+        assertTrue(controller.allowedStatuses(controller.plan!!.activities.single()).none { it == ActivityStatus.MISSED })
+    }
+
+    @Test
+    fun missedIsAllowedOnlyAfterTheSlotEnds() {
+        val controller = controller(now = fixedNow + 60L * 60L * 1_000L)
+        val activityId = addSample(controller)
+        assertTrue(controller.allowedStatuses(controller.plan!!.activities.single()).contains(ActivityStatus.MISSED))
+        assertTrue(controller.setStatus(activityId, ActivityStatus.MISSED))
+        assertTrue(controller.confirmPreview())
+        assertEquals(ActivityStatus.MISSED, controller.plan!!.activities.single().status)
+    }
+
+    @Test
+    fun cancelledAndPostponedRulesAreEnforced() {
+        val controller = controller()
+        val activityId = addSample(controller)
+        assertFalse(controller.setStatus(activityId, ActivityStatus.POSTPONED))
+        assertTrue(controller.setStatus(activityId, ActivityStatus.CANCELLED))
+        assertTrue(controller.confirmPreview())
+        assertFalse(controller.setStatus(activityId, ActivityStatus.PLANNED))
+        assertTrue(controller.allowedStatuses(controller.plan!!.activities.single()).isEmpty())
+    }
+
+    @Test
+    fun editingAnActivityRequiresPreviewAndApplies() {
+        val controller = controller()
+        val activityId = addSample(controller)
+        assertTrue(controller.editActivity(activityId, "Titre modifié", ActivityKind.ADMIN, Priority.REQUIRED, "note"))
+        assertEquals("Préparer la journée", controller.plan!!.activities.single().title)
+        assertTrue(controller.confirmPreview())
+        assertEquals("Titre modifié", controller.plan!!.activities.single().title)
+        assertEquals(ActivityKind.ADMIN, controller.plan!!.activities.single().kind)
+        assertEquals("note", controller.plan!!.activities.single().notes)
+    }
+
+    @Test
+    fun removingAPlannedActivityRequiresPreviewAndApplies() {
+        val controller = controller()
+        val activityId = addSample(controller)
+        assertTrue(controller.removeActivity(activityId))
+        assertEquals(1, controller.plan!!.activities.size)
+        assertTrue(controller.confirmPreview())
+        assertTrue(controller.plan!!.activities.isEmpty())
+    }
+
+    @Test
+    fun sameControllerReloadsTheNextDateWithoutLosingThePreviousDocument() {
+        var date = dayOne
+        val controller = PlanController(
+            directory = temporaryFolder.root,
+            clock = PlanClock { fixedNow },
+            zoneIdProvider = { zone },
+            todayProvider = { date },
+        )
+        addSample(controller)
+        assertEquals(dayOne.toString(), controller.today)
+        date = dayOne.plusDays(1)
+        controller.refresh()
+        assertNull(controller.plan)
+        assertTrue(controller.createTodayPlan())
+        assertEquals(dayOne.plusDays(1).toString(), controller.plan!!.localDate)
+        date = dayOne
+        controller.refresh()
+        assertEquals(2, controller.plan!!.version)
+        assertEquals(dayOne.toString(), controller.plan!!.localDate)
     }
 
     @Test

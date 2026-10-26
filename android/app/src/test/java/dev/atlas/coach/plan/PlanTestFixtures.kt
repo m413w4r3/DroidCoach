@@ -87,7 +87,7 @@ internal fun confirmationFor(
     revision: PlanRevision,
     engine: PlanRevisionEngine = PlanRevisionEngine(),
     effects: List<String> = engine.effectIds(revision.changes, revision.revisionId),
-    scopeHash: String = engine.scopeHash(effects),
+    scopeHash: String = engine.scopeHash(effects, revision.changes),
     approvedAt: Long = NOW,
     expiresAt: Long = NOW + 60_000L,
 ) = PlanConfirmation(

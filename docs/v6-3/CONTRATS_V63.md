@@ -78,9 +78,13 @@ Activity {
 
 Sémantique **distincte et non interchangeable** :
 `DONE` exige une confirmation explicite ou une mesure locale autorisée ;
-`MISSED` est un constat après la fenêtre, jamais une déduction automatique d'échec ;
-`CANCELLED` est volontaire et terminal ; `POSTPONED` référence la révision qui
-replanifie. **L'heure passée ne prouve jamais `DONE`.**
+`MISSED` n'est autorisé qu'**après la fin du créneau**, jamais avant et jamais par
+simple déduction du temps qui passe ; `CANCELLED` est volontaire et terminal ;
+`POSTPONED` n'est pas disponible tant qu'une replanification réelle ne peut pas
+être confirmée. Dans ce jalon, `CANCELLED`, `DONE`, `MISSED` et `POSTPONED` sont
+terminaux. Transitions locales autorisées : `PLANNED → IN_PROGRESS|DONE|MISSED
+(après fin)|CANCELLED`, `IN_PROGRESS → DONE|MISSED (après fin)|CANCELLED`.
+**L'heure passée ne prouve jamais `DONE`.**
 
 ### 3.3 `DayPlan` / `PlanRevision`
 
@@ -117,8 +121,15 @@ Règles :
    que si `base_version == version` courante, sinon `STALE_REVISION`.
 2. Une révision déjà appliquée (`revision_id` connu) est un **no-op idempotent**.
 3. Une révision approuvée produit un `PlanConfirmation` qui énumère exactement les
-   `effect_id` autorisés et un `scope_hash`. Tout effet hors de cet ensemble exige
-   une nouvelle autorisation.
+   `effect_id` autorisés et un `scope_hash`. Le `scope_hash` couvre **à la fois**
+   ces identifiants et une sérialisation canonique des changements avant/après :
+   modifier le contenu du diff tout en conservant les mêmes identifiants change le
+   hash et est refusé. Tout effet hors de cet ensemble exige une nouvelle
+   autorisation. Les effets locaux de ce jalon sont
+   `PLAN_ACTIVITY_CREATE:<activity_id>`, `PLAN_ACTIVITY_UPDATE:<activity_id>`,
+   `PLAN_ACTIVITY_DELETE:<activity_id>` et `PLAN_APPLY:<revision_id>`. Les
+   identifiants `CALENDAR_*` sont réservés à L4 et ne sont émis que lorsqu'un
+   adaptateur calendrier réel est actif.
 4. Les changements sont calculés et affichés (avant/après) ; une révision sans
    diff compréhensible est refusée.
 5. Une révision expirée (`expires_at`, défaut 24 h) ne s'applique pas.
@@ -333,11 +344,21 @@ réconciliation après résultat inconnu + trace d'audit expurgée.
 
 ## 5. Compatibilité et flags
 
-Nouvelles capabilities, toutes **désactivées par défaut** :
+Capabilities V6.3 :
 `CAP_DAY_PLAN`, `CAP_CALENDAR_READ`, `CAP_CALENDAR_WRITE`, `CAP_WGER_READ`,
 `CAP_WGER_WRITE`, `CAP_BRIDGE_RESEARCH`, `CAP_MEMORY_FACTS`.
-Une capability absente ou fausse conserve le comportement V6.2. Les nouvelles
-actions agent sont refusées si la capability correspondante n'est pas active.
+
+`CAP_DAY_PLAN` est une capacité **locale de base**, active par défaut : elle ne
+produit aucun effet externe, ne demande aucune permission et reste entièrement
+sous contrôle de l'utilisateur (création, aperçu, confirmation, suppression).
+Un interrupteur utilisateur dédié dans les réglages est un ticket UX ultérieur ;
+en attendant, l'écran est accessible depuis Plus.
+
+Toutes les capabilities à effet externe ou à collecte supplémentaire
+(`CALENDAR_*`, `WGER_*`, `BRIDGE_RESEARCH`, `MEMORY_FACTS`) sont **désactivées
+par défaut**. Une capability absente ou fausse conserve le comportement V6.2.
+Les nouvelles actions agent sont refusées si la capability correspondante n'est
+pas active. Aucune de ces capabilities externes n'est exposée par ce jalon.
 
 ## 6. Ce que ce contrat n'autorise pas
 

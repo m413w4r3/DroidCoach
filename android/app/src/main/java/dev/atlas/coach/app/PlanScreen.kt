@@ -16,6 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +27,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.atlas.coach.app.ui.AtlasPrimaryButton
 import dev.atlas.coach.app.ui.AtlasSecondaryButton
 import dev.atlas.coach.app.ui.AtlasSection
@@ -37,6 +42,10 @@ import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanPreview
 import dev.atlas.coach.plan.Priority
+import java.time.Duration
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import kotlinx.coroutines.delay
 
 /**
  * Local day-plan surface. Every mutation is previewed before it is applied; no
@@ -50,6 +59,26 @@ internal fun PlanScreen(controller: PlanController) {
     var moving by remember { mutableStateOf<PlanActivity?>(null) }
     var changingStatus by remember { mutableStateOf<PlanActivity?>(null) }
     var removing by remember { mutableStateOf<PlanActivity?>(null) }
+
+    // Reload on foreground return and at the next local midnight so a long-lived
+    // process never shows yesterday's plan under today's date.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) controller.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val zone = ZoneId.of(controller.timezone)
+            val now = ZonedDateTime.now(zone)
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(zone)
+            delay(Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L))
+            controller.refresh()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -187,6 +216,7 @@ internal fun PlanScreen(controller: PlanController) {
     changingStatus?.let { activity ->
         StatusDialog(
             activity = activity,
+            allowed = controller.allowedStatuses(activity),
             onDismiss = { changingStatus = null },
             onSelect = { status ->
                 if (controller.setStatus(activity.activityId, status)) changingStatus = null
@@ -471,6 +501,7 @@ private fun MoveActivityDialog(
 @Composable
 private fun StatusDialog(
     activity: PlanActivity,
+    allowed: List<ActivityStatus>,
     onDismiss: () -> Unit,
     onSelect: (ActivityStatus) -> Unit,
 ) {
@@ -484,9 +515,16 @@ private fun StatusDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                ActivityStatus.entries.forEach { status ->
-                    TextButton(onClick = { onSelect(status) }) {
-                        Text("${PlanController.statusLabel(status)} (${status.name})")
+                if (allowed.isEmpty()) {
+                    Text(
+                        "Ce statut est terminal. Créez une nouvelle activité si une replanification est nécessaire.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    allowed.forEach { status ->
+                        TextButton(onClick = { onSelect(status) }) {
+                            Text("${PlanController.statusLabel(status)} (${status.name})")
+                        }
                     }
                 }
             }

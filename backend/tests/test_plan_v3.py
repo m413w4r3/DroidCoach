@@ -251,6 +251,19 @@ def test_overlaps_are_reported_not_hidden():
     assert params.overlaps() == [("a", "b")]
 
 
+def test_nested_intervals_report_every_overlapping_pair():
+    params = PlanRevisionParametersV3.model_validate(
+        parameters(
+            activities=[
+                activity(client_ref="a", start_minute=540, duration_minutes=180),
+                activity(client_ref="b", start_minute=600, duration_minutes=15),
+                activity(client_ref="c", start_minute=660, duration_minutes=15),
+            ]
+        )
+    )
+    assert params.overlaps() == [("a", "b"), ("a", "c")]
+
+
 def test_control_characters_in_title_are_rejected():
     with pytest.raises(ValidationError):
         PlanActivityV3.model_validate(activity(title="ligne\nsuivante"))

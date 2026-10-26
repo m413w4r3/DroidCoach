@@ -139,7 +139,7 @@ class DayPlanRepositoryTest {
     fun extraConfirmationEffectIsRejected() {
         val (repository, revision) = configuredMove()
         val effects = PlanRevisionEngine().effectIds(revision.changes, revision.revisionId) +
-            "CALENDAR_DELETE:20000000-0000-4000-8000-000000000099"
+            "PLAN_ACTIVITY_DELETE:20000000-0000-4000-8000-000000000099"
         val widened = confirmationFor(revision, effects = effects)
 
         assertEquals(
@@ -207,8 +207,8 @@ class DayPlanRepositoryTest {
 
         assertEquals(
             listOf(
-                "CALENDAR_CREATE:$SECOND_ACTIVITY_ID",
-                "CALENDAR_UPDATE:$ACTIVITY_ID",
+                "PLAN_ACTIVITY_CREATE:$SECOND_ACTIVITY_ID",
+                "PLAN_ACTIVITY_UPDATE:$ACTIVITY_ID",
                 "PLAN_APPLY:$REVISION_ID",
             ),
             result.preview.effectIds,
@@ -285,6 +285,32 @@ class DayPlanRepositoryTest {
 
         assertEquals(PlanApplyResult.Rejected(PlanRejectionReason.STORAGE_FAILURE), result)
         assertEquals(current, (baseRepository.load() as PlanLoadResult.Loaded).plan)
+    }
+
+    @Test
+    fun alteredRevisionContentWithSameEffectIdsIsRejected() {
+        val backend = MemoryPlanBackend()
+        val repository = repository(backend)
+        val current = dayPlan()
+        repository.create(current)
+        val original = revisionFor(current, listOf(activity(scheduled = schedule(10 * 60))))
+        val preview = repository.preview(original) as PlanPreviewResult.Ready
+        val confirmation = confirmationFor(
+            original,
+            effects = preview.preview.effectIds,
+            scopeHash = preview.preview.scopeHash,
+        )
+        val altered = revisionFor(current, listOf(activity(scheduled = schedule(11 * 60))))
+
+        assertEquals(original.revisionId, altered.revisionId)
+        assertEquals(
+            PlanRevisionEngine().effectIds(original.changes, original.revisionId),
+            PlanRevisionEngine().effectIds(altered.changes, altered.revisionId),
+        )
+        assertEquals(
+            PlanApplyResult.Rejected(PlanRejectionReason.EFFECT_SCOPE_MISMATCH),
+            repository.apply(altered, confirmation),
+        )
     }
 
     @Test
