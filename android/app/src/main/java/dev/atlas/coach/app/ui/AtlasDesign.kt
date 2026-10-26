@@ -96,7 +96,12 @@ fun AtlasStatus(label: String, kind: AtlasStatusKind, modifier: Modifier = Modif
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(width = 2.dp, height = 16.dp).background(foreground))
-        Text(kind.glyph(), style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = foreground)
+        Text(
+            kind.glyph(),
+            modifier = Modifier.semantics { invisibleToUser() },
+            style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+            color = foreground,
+        )
         Text(label, style = androidx.compose.material3.MaterialTheme.typography.labelMedium, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

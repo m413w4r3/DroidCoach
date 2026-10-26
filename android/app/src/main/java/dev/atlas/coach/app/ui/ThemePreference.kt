@@ -164,9 +164,15 @@ fun ThemePreferenceSection() {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Couleurs dynamiques Android", style = MaterialTheme.typography.bodyLarge)
-                    if (dynamicColorEnabled) {
+                    val dynamicColorHint = when {
+                        selected == AtlasThemePreference.AMOLED ->
+                            "Couleur dynamique non appliquée au mode AMOLED."
+                        dynamicColorEnabled -> "L’accent ATLAS est remplacé."
+                        else -> null
+                    }
+                    if (dynamicColorHint != null) {
                         Text(
-                            "L’accent ATLAS est remplacé.",
+                            dynamicColorHint,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

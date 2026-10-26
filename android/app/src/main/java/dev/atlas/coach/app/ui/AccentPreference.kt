@@ -31,8 +31,11 @@ internal object AtlasAccentPreferenceCodec {
 }
 
 /** Returns true only when the user enabled dynamic color and the OS supports it. */
-internal fun shouldUseDynamicColor(apiLevel: Int, enabled: Boolean): Boolean =
-    enabled && apiLevel >= 31
+internal fun shouldUseDynamicColor(
+    apiLevel: Int,
+    enabled: Boolean,
+    themePreference: AtlasThemePreference = AtlasThemePreference.DEFAULT,
+): Boolean = enabled && apiLevel >= 31 && themePreference != AtlasThemePreference.AMOLED
 
 /** Accent and dynamic-color settings live apart from the independent theme-mode store. */
 class AccentPreferenceStore private constructor(context: Context) {

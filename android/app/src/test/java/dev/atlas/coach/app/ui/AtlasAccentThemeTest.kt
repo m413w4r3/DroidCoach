@@ -144,4 +144,29 @@ class AtlasAccentThemeTest {
         assertTrue(shouldUseDynamicColor(apiLevel = 31, enabled = true))
         assertFalse(shouldUseDynamicColor(apiLevel = 35, enabled = false))
     }
+
+    @Test
+    fun amoledAlwaysKeepsBlackEvenWhenDynamicColorRequested() {
+        assertFalse(
+            shouldUseDynamicColor(
+                apiLevel = 31,
+                enabled = true,
+                themePreference = AtlasThemePreference.AMOLED,
+            ),
+        )
+        assertFalse(
+            shouldUseDynamicColor(
+                apiLevel = 35,
+                enabled = true,
+                themePreference = AtlasThemePreference.AMOLED,
+            ),
+        )
+        assertTrue(
+            shouldUseDynamicColor(
+                apiLevel = 31,
+                enabled = true,
+                themePreference = AtlasThemePreference.DARK,
+            ),
+        )
+    }
 }
