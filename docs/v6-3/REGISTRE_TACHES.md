@@ -112,7 +112,7 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
   `adb install -r`, parcours Plan/coach, réactivation explicite du mandat
   (`revoked=true`), P3 calendrier. Détail : `preuves/r1-physical.txt`.
 
-## R1 — état au 2026-10-26 ~15:05 (parcours physique exécuté)
+## R1 — état final au 2026-10-26 ~15:15 (clos)
 
 - **P1bis** : installation de `66c7d8f6` approuvée et réussie en place
   (`adb install -r`), données conservées ; rollback `5956bb6f` conservé.
@@ -128,19 +128,21 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
   (« Service plan agent indisponible. »).
 - **Diagnostic `invalid_output`** : le modèle avait produit `kind=BREAK` et
   `priority=null`; prompt corrigé (`a6ee1c7`) et backend redémarré.
-- **P3 calendrier** : consentement/permission/liste/Etar/aucun événement/
-  révocation PASS ; **défaut P1 de confidentialité** : des noms de
-  calendriers étaient des adresses e-mail affichées malgré « Compte expurgé ».
-  Correctif `db15715` intégré (masquage email/compte), tests JVM, lint 0/54,
-  4/4 instrumentés API 37. APK `6ab95fac` construit et conservé, **non
-  installé** (décision propriétaire « ne pas installer maintenant »).
-- **États finaux** : Pixel sur `66c7d8f6` ; plan v4/3 activités ; mandat v3 ;
-  `READ_CALENDAR granted=false` et consentement ATLAS révoqué ; backend
-  arrêté ; `adb reverse` encore actif ; aucune écriture calendrier/wger.
-- **Statut** : PLAN PASS ; COACH PASS ; P3 `BLOCKED_APPROVAL_PRIVACY` ;
-  R1 non clos. Reprise : accord explicite sur
-  `6ab95fac…` (source `7ca862f`), installation, vérification qu'aucun email
-  n'apparaît, révocation, puis clôture. Détail : `preuves/r1-physical.txt`.
+- **P1ter** : installation approuvée de `6ab95fac…` (source `7ca862f`,
+  correctif `db15715`) -> Success ; SHA relu sur l'appareil identique ;
+  plan v4/3 activités et données conservés.
+- **P3 calendrier PASS après correctif** : consentement/permission/liste,
+  **0 occurrence de motif e-mail** sur toute la liste, 4 calendriers
+  « Calendrier expurgé », noms normaux et « Famille » conservés, Etar
+  détectée, aucun événement ; révocation du consentement + `pm revoke` ->
+  permission refusée, liste masquée, aucune lecture.
+- **États finaux** : Pixel sur `6ab95fac` ; plan v4/3 activités ; mandat v3 ;
+  `READ_CALENDAR granted=false` et consentement ATLAS révoqué ;
+  `WRITE_CALENDAR` non déclaré ; backend arrêté, port 8010 libre ;
+  `adb reverse` retiré ; aucune écriture calendrier/wger.
+- **Statut R1 : PASS** (plan, coach, P3) avec limites documentées :
+  P4/P5 non approuvés, aucune activation OpenClaw, aucune écriture
+  calendrier/wger, aucun push. Détail : `preuves/r1-physical.txt`.
 
 ## Portes nécessitant le propriétaire
 
@@ -258,6 +260,7 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 | 2026-10-26 | Build intégré R1 | `696eb9c` | APK `66c7d8f6` | JVM 474, lint 0/54, assembleDebug, compile/assemble AndroidTest, 4/4 instrumentés API 37 | **PASS (non-Pixel)** — APK candidat construit et vérifié ; installation Pixel **BLOCKED_APPROVAL** |
 | 2026-10-26 | R1 installation APK `66c7d8f6` | `696eb9c` | — | accord propriétaire par SHA | **APPROVED / INSTALLED (P1bis)** — `adb install -r` Success, données conservées ; Plan corrigé, plan v4 et coach validés ; rollback `5956bb6f` conservé |
 | 2026-10-26 | V63-R1-PLAN-PROMPT-2 | `13f668a` | `a6ee1c7` → merge | pytest ciblé 32 PASS + suite 170/1 skip | **ACCEPTED / INTEGRATED** — énumération `kind` et priorité non nulle ; sonde réelle ok (`BUFFER`/`OPTIONAL`, base_version=3, overlaps=[]) ; coach app PASS, idempotence et hors-ligne PASS |
-| 2026-10-26 | V63-R1-CALENDAR-REDACT | `13f668a` | `db15715` → merge | JVM ciblé + suite 478 PASS + lint 0/54 + 4/4 instrumentés API 37 | **ACCEPTED / INTEGRATED (code)** — noms de calendriers email/compte masqués ; APK `6ab95fac` construit, **non installé** (accord propriétaire requis) |
-| 2026-10-26 | R1 P3 calendrier | APK `66c7d8f6` | — | Pixel API 37, lecture seule | **BLOCKED_APPROVAL_PRIVACY** — consentement/permission/liste/Etar/aucun événement/révocation PASS ; défaut P1: noms de calendriers = emails affichés ; correctif `db15715` prêt, APK `6ab95fac` non installé ; aucune écriture |
+| 2026-10-26 | V63-R1-CALENDAR-REDACT | `13f668a` | `db15715` → merge | JVM ciblé + suite 478 PASS + lint 0/54 + 4/4 instrumentés API 37 | **ACCEPTED / INTEGRATED / INSTALLED (P1ter)** — noms de calendriers email/compte masqués ; APK `6ab95fac` installé après accord explicite ; P3 rejoué PASS |
+| 2026-10-26 | R1 P3 calendrier | APK `66c7d8f6` puis `6ab95fac` | — | Pixel API 37, lecture seule | **PASS après correctif** — consentement/permission/liste/Etar/aucun événement/révocation PASS ; 0 occurrence de motif e-mail sur toute la liste ; 4 calendriers « Calendrier expurgé » ; noms normaux conservés ; état final refusé/liste masquée ; aucune écriture |
+| 2026-10-26 | R1 installation APK `6ab95fac` | `7ca862f` | — | accord propriétaire P1ter | **APPROVED / INSTALLED** — `adb install -r` Success ; SHA relu sur l'appareil identique ; plan v4/3 activités et données conservés ; sauvegarde `8617727e…` et rollbacks vérifiés |
 | 2026-10-26 | R1 coach app | APK `66c7d8f6` | — | Pixel + backend réel | **PASS** — proposition valide après correction prompt, diff 3→4, confirmation groupée, version 4 persistée, rejeu idempotent, hors-ligne propre |

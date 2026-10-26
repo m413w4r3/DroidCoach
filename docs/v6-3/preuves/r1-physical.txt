@@ -265,63 +265,62 @@ Coach:
         actions locales visibles; demande coach -> « Service plan agent
         indisponible. », aucun effet, aucun crash.
 
-P3 calendrier (lecture seule, après le plan)
---------------------------------------------
-  PASS  consentement ATLAS donné via l'écran; READ_CALENDAR demandé
-        uniquement après action explicite; permission Android accordée.
-  PASS  liste de calendriers affichée (plusieurs calendriers, dont jours
-        fériés et calendriers locaux); Etar détectée
-        (ws.xsoh.etar / ws.xsoh.etar.debug).
-  PASS  aucun événement affiché: uniquement nom de calendrier, compte
-        expurgé, accès et visibilité; aucune écriture calendrier.
-  FAIL_PRIVACY (P1)  certains CALENDAR_DISPLAY_NAME sont des adresses e-mail
-        et s'affichaient tels quels malgré le libellé « Compte expurgé ».
-        Aucune adresse n'est recopiée dans ce fichier.
-        Cause: CalendarDescriptor.toDiagnosticRow() recopiait displayName sans
-        filtre; accountLabel était déjà expurgé, pas displayName.
-        Correctif V63-R1-CALENDAR-REDACT: commit db15715, merge; masque tout
-        nom contenant un email ou égal à accountName/ownerAccount (trim,
-        ignoreCase), conserve les noms normaux. Tests JVM ajoutés.
-  PASS  révocation: consentement ATLAS révoqué, puis
-        `pm revoke dev.atlas.coach android.permission.READ_CALENDAR`;
-        permission granted=false; écran « Refusée »; liste masquée;
-        aucune lecture après révocation. Le processus app est tué par la
-        révocation Android, puis relancé sans données perdues.
-  Statut P3: BLOCKED_APPROVAL_PRIVACY — correctif construit, installation
-        non approuvée maintenant; P3 n'est pas marqué définitivement bloqué.
-
-Nouvel APK avec correctif confidentiel (non installé)
+P3 calendrier — historique puis rejeu après correctif
 -----------------------------------------------------
-APK candidat: SHA-256
-  6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886
-  source HEAD 7ca862f89edaedd19e98d2391db20fa2f939cdb9.
-Oracles: JVM 70 suites/478 tests PASS; lint 0 erreur/54 avertissements;
-  assembleDebug PASS; compile/assemble AndroidTest PASS; 4/4 tests
-  instrumentés PASS sur émulateur API 37 uniquement.
-Conservés en 0600:
-  - /home/nill/.local/share/atlas-qa/r1/atlas-candidate-0.1.0-6ab95fac.apk
-  - rollback 66c7d8f6: atlas-installed-0.1.0-66c7d8f6.apk
-  - rollback initial 5956bb6f: atlas-installed-0.1.0-5956bb6f.apk
-  - sauvegarde app-only avant installation 6ab95fac:
-    app-data-before-install-6ab95fac.tar, SHA-256
-    8617727eb73f3b59a562026cfd684af62f84595adf7dad2b2916a10055aef2f5
-Installation: NON effectuée; décision propriétaire « ne pas installer
-  maintenant ». Un accord explicite par SHA est requis.
+Premier passage (APK 66c7d8f6):
+  PASS  consentement ATLAS, READ_CALENDAR après action explicite, liste,
+        Etar détectée, aucun événement, révocation.
+  FAIL_PRIVACY (P1)  certains CALENDAR_DISPLAY_NAME étaient des adresses
+        e-mail et s'affichaient malgré « Compte expurgé ». Aucune adresse
+        recopiée. Cause: displayName recopié sans filtre.
+        Correctif V63-R1-CALENDAR-REDACT (db15715, merge), tests JVM.
 
-État final du Pixel à cette passe
+P1ter — installation approuvée de l'APK correctif:
+  PASS  sauvegarde app-only `8617727e…` et rollbacks 66c7d8f6/5956bb6f
+        vérifiés en 0600 avant installation.
+  PASS  `adb install -r` de 6ab95fac -> Success; versionName 0.1.0,
+        versionCode 1; APK relu sur l'appareil: SHA-256
+        6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886.
+  PASS  données conservées: plan v4/3 activités, mandat v3, consentement
+        calendrier révoqué, READ_CALENDAR granted=false.
+
+Rejeu P3 sur APK 6ab95fac:
+  PASS  consentement ATLAS donné, READ_CALENDAR accordé via le dialogue
+        Android, permission « Accordée ».
+  PASS  liste complète parcourue: 0 occurrence de motif e-mail dans tous
+        les textes/content-descriptions de l'écran.
+  PASS  4 calendriers dont le nom était un identifiant de compte affichent
+        « Calendrier expurgé »; les noms normaux (jours fériés, « Famille »)
+        restent lisibles; le compte reste « Compte expurgé ».
+  PASS  Etar détectée (ws.xsoh.etar / ws.xsoh.etar.debug).
+  PASS  aucun événement affiché: uniquement nom, compte expurgé, accès et
+        visibilité; aucune écriture calendrier.
+  PASS  révocation: consentement ATLAS révoqué via l'écran, puis
+        `pm revoke dev.atlas.coach android.permission.READ_CALENDAR`;
+        permission granted=false; écran « Refusée »; consentement absent;
+        liste masquée; 0 occurrence e-mail après révocation.
+  Statut P3: PASS, avec état final permission refusée et liste masquée.
+
+État final et clôture de la passe
 ---------------------------------
-APK installé: 66c7d8f6… (0.1.0, versionCode 1).
-Plan persisté: files/plans/day-plan-2026-10-26.json, version 4, 3 activités.
+APK installé: 6ab95fac… (0.1.0, versionCode 1), source HEAD 7ca862f.
+Plan persisté: files/plans/day-plan-2026-10-26.json, version 4,
+  3 activités (Pause BUFFER OPTIONAL 17:30, Seance courte 18:00,
+  Travail profond 14:50).
 Mandat: agent-local-v2 version 3, revoked=false, suspended=false,
   mode proposals_only, barrière agent_blocked_v1=false.
 READ_CALENDAR: déclaré, granted=false; consentement ATLAS révoqué;
   aucune lecture active, aucune écriture.
-Backend: arrêté après le test hors-ligne; port 8010 libre.
-adb reverse: tcp:8010 tcp:8010 encore actif (à retirer à la clôture).
+WRITE_CALENDAR: non déclaré, non accordé.
+Backend: arrêté; port 8010 libre.
+adb reverse: `tcp:8010` retiré; `adb reverse --list` vide.
 Aucune désinstallation, pm clear, écriture calendrier ou wger, activation
 OpenClaw, modification ~/.openclaw ou push.
+Aucune nouvelle reconstruction d'APK après 6ab95fac; les seules
+modifications postérieures sont documentaires.
 
 Statut global de cette passe:
-  PLAN PASS ; COACH PASS (incluant idempotence et hors-ligne) ;
-  P3 BLOCKED_APPROVAL_PRIVACY (correctif 6ab95fac prêt, non installé) ;
-  R1 non clos.
+  PLAN PASS ; COACH PASS (proposition réelle, diff, confirmation,
+  idempotence, hors-ligne) ; P3 PASS après correction de confidentialité ;
+  R1 physique clos avec les limites documentées (P4/P5 non approuvés,
+  aucune activation OpenClaw, aucune écriture calendrier/wger).
