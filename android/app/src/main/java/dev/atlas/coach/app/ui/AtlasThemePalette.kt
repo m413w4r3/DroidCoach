@@ -34,6 +34,9 @@ internal data class AtlasThemePalette(
         ThemeTextContrastPair("primaryContainer/onPrimaryContainer", onPrimaryContainer, primaryContainer),
         ThemeTextContrastPair("secondary/onSecondary", onSecondary, secondary),
         ThemeTextContrastPair("secondaryContainer/onSecondaryContainer", onSecondaryContainer, secondaryContainer),
+        ThemeTextContrastPair("background/secondary", secondary, background),
+        ThemeTextContrastPair("surface/secondary", secondary, surface),
+        ThemeTextContrastPair("surfaceContainerLow/secondary", secondary, surfaceContainerLow),
         ThemeTextContrastPair("background/onBackground", onBackground, background),
         ThemeTextContrastPair("surface/onSurface", onSurface, surface),
         ThemeTextContrastPair("surfaceContainerLowest/onSurface", onSurface, surfaceContainerLowest),
@@ -107,11 +110,81 @@ internal object AtlasThemePalettes {
         errorContainer = 0xFFF3DFD9.toInt(), onErrorContainer = 0xFF3D1D18.toInt(),
     )
 
-    fun forPreference(preference: AtlasThemePreference): AtlasThemePalette = when (preference) {
-        AtlasThemePreference.DARK -> dark
-        AtlasThemePreference.AMOLED -> amoled
-        AtlasThemePreference.FOLLOW_SYSTEM, AtlasThemePreference.LIGHT -> light
+    fun forPreference(
+        preference: AtlasThemePreference,
+        systemIsDark: Boolean = false,
+        accent: AtlasAccentPreference = AtlasAccentPreference.CLASSIC,
+    ): AtlasThemePalette {
+        val isDark = preference.resolvesToDark(systemIsDark)
+        val base = when (preference) {
+            AtlasThemePreference.DARK -> dark
+            AtlasThemePreference.AMOLED -> amoled
+            AtlasThemePreference.FOLLOW_SYSTEM -> if (systemIsDark) dark else light
+            AtlasThemePreference.LIGHT -> light
+        }
+        return accent.applyTo(base, isDark)
     }
+}
+
+private data class AtlasAccentTokens(
+    val primary: Int,
+    val onPrimary: Int,
+    val primaryContainer: Int,
+    val onPrimaryContainer: Int,
+    val secondary: Int,
+    val onSecondary: Int,
+    val secondaryContainer: Int,
+    val onSecondaryContainer: Int,
+)
+
+private fun AtlasAccentPreference.applyTo(base: AtlasThemePalette, isDark: Boolean): AtlasThemePalette {
+    if (this == AtlasAccentPreference.CLASSIC) return base
+    val tokens = when (this) {
+        AtlasAccentPreference.CLASSIC -> return base
+        AtlasAccentPreference.FOREST -> if (isDark) AtlasAccentTokens(
+            primary = 0xFFA1C591.toInt(), onPrimary = 0xFF182317.toInt(),
+            primaryContainer = 0xFF293B27.toInt(), onPrimaryContainer = 0xFFE0F0D9.toInt(),
+            secondary = 0xFFB3C9AC.toInt(), onSecondary = 0xFF20271D.toInt(),
+            secondaryContainer = 0xFF30392D.toInt(), onSecondaryContainer = 0xFFE1EBDD.toInt(),
+        ) else AtlasAccentTokens(
+            primary = 0xFF3C683F.toInt(), onPrimary = 0xFFFFFFFF.toInt(),
+            primaryContainer = 0xFFDAEAD7.toInt(), onPrimaryContainer = 0xFF1B321D.toInt(),
+            secondary = 0xFF4E6950.toInt(), onSecondary = 0xFFFFFFFF.toInt(),
+            secondaryContainer = 0xFFE0E8DC.toInt(), onSecondaryContainer = 0xFF202C21.toInt(),
+        )
+        AtlasAccentPreference.OCEAN -> if (isDark) AtlasAccentTokens(
+            primary = 0xFF8CBED3.toInt(), onPrimary = 0xFF142732.toInt(),
+            primaryContainer = 0xFF1B3A47.toInt(), onPrimaryContainer = 0xFFD9EDF5.toInt(),
+            secondary = 0xFFB3CED9.toInt(), onSecondary = 0xFF1B2C34.toInt(),
+            secondaryContainer = 0xFF2B3D46.toInt(), onSecondaryContainer = 0xFFE0EDF2.toInt(),
+        ) else AtlasAccentTokens(
+            primary = 0xFF32627A.toInt(), onPrimary = 0xFFFFFFFF.toInt(),
+            primaryContainer = 0xFFD5E8F1.toInt(), onPrimaryContainer = 0xFF152F3C.toInt(),
+            secondary = 0xFF4B6978.toInt(), onSecondary = 0xFFFFFFFF.toInt(),
+            secondaryContainer = 0xFFE0E9ED.toInt(), onSecondaryContainer = 0xFF1C2B32.toInt(),
+        )
+        AtlasAccentPreference.SLATE -> if (isDark) AtlasAccentTokens(
+            primary = 0xFFA8B8CD.toInt(), onPrimary = 0xFF1D2836.toInt(),
+            primaryContainer = 0xFF2B394A.toInt(), onPrimaryContainer = 0xFFE1E9F3.toInt(),
+            secondary = 0xFFB9C4D2.toInt(), onSecondary = 0xFF222A34.toInt(),
+            secondaryContainer = 0xFF343D48.toInt(), onSecondaryContainer = 0xFFE4E9EF.toInt(),
+        ) else AtlasAccentTokens(
+            primary = 0xFF50657F.toInt(), onPrimary = 0xFFFFFFFF.toInt(),
+            primaryContainer = 0xFFDDE6F0.toInt(), onPrimaryContainer = 0xFF1E2C3A.toInt(),
+            secondary = 0xFF5B6979.toInt(), onSecondary = 0xFFFFFFFF.toInt(),
+            secondaryContainer = 0xFFE4E8ED.toInt(), onSecondaryContainer = 0xFF202832.toInt(),
+        )
+    }
+    return base.copy(
+        primary = tokens.primary,
+        onPrimary = tokens.onPrimary,
+        primaryContainer = tokens.primaryContainer,
+        onPrimaryContainer = tokens.onPrimaryContainer,
+        secondary = tokens.secondary,
+        onSecondary = tokens.onSecondary,
+        secondaryContainer = tokens.secondaryContainer,
+        onSecondaryContainer = tokens.onSecondaryContainer,
+    )
 }
 
 /** WCAG 2.x relative-luminance contrast ratio. */

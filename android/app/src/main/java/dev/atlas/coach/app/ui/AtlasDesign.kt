@@ -74,13 +74,21 @@ object AtlasSpacing {
 
 enum class AtlasStatusKind { ACTIVE, SIMULATED, AUTHORIZED, UNAVAILABLE }
 
+internal fun AtlasStatusKind.glyph(): String = when (this) {
+    AtlasStatusKind.ACTIVE -> "●"
+    AtlasStatusKind.SIMULATED -> "◉"
+    AtlasStatusKind.AUTHORIZED -> "✓"
+    AtlasStatusKind.UNAVAILABLE -> "!"
+}
+
 @Composable
 fun AtlasStatus(label: String, kind: AtlasStatusKind, modifier: Modifier = Modifier) {
-    val colors = androidx.compose.material3.MaterialTheme.colorScheme
+    val semanticColors = LocalAtlasSemanticColors.current
     val foreground = when (kind) {
-        AtlasStatusKind.ACTIVE, AtlasStatusKind.AUTHORIZED -> colors.primary
-        AtlasStatusKind.SIMULATED -> colors.onSurfaceVariant
-        AtlasStatusKind.UNAVAILABLE -> colors.error
+        AtlasStatusKind.ACTIVE -> semanticColors.accent.foreground
+        AtlasStatusKind.SIMULATED -> semanticColors.neutral.foreground
+        AtlasStatusKind.AUTHORIZED -> semanticColors.success.foreground
+        AtlasStatusKind.UNAVAILABLE -> semanticColors.error.foreground
     }
     Row(
         modifier = modifier.semantics { contentDescription = "État : $label" },
@@ -88,6 +96,7 @@ fun AtlasStatus(label: String, kind: AtlasStatusKind, modifier: Modifier = Modif
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(width = 2.dp, height = 16.dp).background(foreground))
+        Text(kind.glyph(), style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = foreground)
         Text(label, style = androidx.compose.material3.MaterialTheme.typography.labelMedium, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

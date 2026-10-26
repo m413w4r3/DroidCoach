@@ -1,6 +1,7 @@
 package dev.atlas.coach.app.ui
 
 import android.content.res.Configuration
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.LocalIndication
@@ -10,7 +11,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -24,6 +28,7 @@ import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.TextStyle
@@ -63,12 +68,12 @@ fun AtlasTheme(
 ) {
     val systemIsDark = isSystemInDarkTheme()
     val dark = preference.resolvesToDark(systemIsDark)
-    val palette = when (preference) {
-        AtlasThemePreference.AMOLED -> AtlasThemePalettes.amoled
-        AtlasThemePreference.LIGHT -> AtlasThemePalettes.light
-        AtlasThemePreference.FOLLOW_SYSTEM -> if (systemIsDark) AtlasThemePalettes.dark else AtlasThemePalettes.light
-        AtlasThemePreference.DARK -> AtlasThemePalettes.dark
-    }
+    val context = LocalContext.current
+    val accentStore = AccentPreferenceStore.get(context)
+    val accent = accentStore.currentAccent
+    val dynamicColorEnabled = accentStore.dynamicColorEnabled
+    val useDynamicColor = shouldUseDynamicColor(Build.VERSION.SDK_INT, dynamicColorEnabled)
+    val palette = AtlasThemePalettes.forPreference(preference, systemIsDark, accent)
     val configuration = LocalConfiguration.current
     val themedConfiguration = remember(configuration, dark) {
         Configuration(configuration).apply {
@@ -80,41 +85,49 @@ fun AtlasTheme(
     val indication = if (preference == AtlasThemePreference.AMOLED) {
         StaticPressIndication(Color(palette.onSurface).copy(alpha = 0.14f))
     } else LocalIndication.current
-    val scheme = if (dark) darkColorScheme(
-        primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
-        primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
-        secondary = Color(palette.secondary), onSecondary = Color(palette.onSecondary),
-        secondaryContainer = Color(palette.secondaryContainer), onSecondaryContainer = Color(palette.onSecondaryContainer),
-        background = Color(palette.background), onBackground = Color(palette.onBackground),
-        surface = Color(palette.surface), onSurface = Color(palette.onSurface),
-        surfaceDim = Color(palette.surfaceDim), surfaceBright = Color(palette.surfaceBright),
-        surfaceContainerLowest = Color(palette.surfaceContainerLowest), surfaceContainerLow = Color(palette.surfaceContainerLow),
-        surfaceContainer = Color(palette.surfaceContainer), surfaceContainerHigh = Color(palette.surfaceContainerHigh),
-        surfaceContainerHighest = Color(palette.surfaceContainerHighest),
-        surfaceVariant = Color(palette.surfaceVariant), onSurfaceVariant = Color(palette.onSurfaceVariant),
-        surfaceTint = Color(palette.primary), outline = Color(palette.outline),
-        error = Color(palette.error), onError = Color(palette.onError),
-        errorContainer = Color(palette.errorContainer), onErrorContainer = Color(palette.onErrorContainer),
-    ) else lightColorScheme(
-        primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
-        primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
-        secondary = Color(palette.secondary), onSecondary = Color(palette.onSecondary),
-        secondaryContainer = Color(palette.secondaryContainer), onSecondaryContainer = Color(palette.onSecondaryContainer),
-        background = Color(palette.background), onBackground = Color(palette.onBackground),
-        surface = Color(palette.surface), onSurface = Color(palette.onSurface),
-        surfaceDim = Color(palette.surfaceDim), surfaceBright = Color(palette.surfaceBright),
-        surfaceContainerLowest = Color(palette.surfaceContainerLowest), surfaceContainerLow = Color(palette.surfaceContainerLow),
-        surfaceContainer = Color(palette.surfaceContainer), surfaceContainerHigh = Color(palette.surfaceContainerHigh),
-        surfaceContainerHighest = Color(palette.surfaceContainerHighest),
-        surfaceVariant = Color(palette.surfaceVariant), onSurfaceVariant = Color(palette.onSurfaceVariant),
-        surfaceTint = Color(palette.primary), outline = Color(palette.outline),
-        error = Color(palette.error), onError = Color(palette.onError),
-        errorContainer = Color(palette.errorContainer), onErrorContainer = Color(palette.onErrorContainer),
-    )
+    val scheme = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColorEnabled && dark -> dynamicDarkColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColorEnabled -> dynamicLightColorScheme(context)
+        dark -> darkColorScheme(
+            primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
+            primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
+            secondary = Color(palette.secondary), onSecondary = Color(palette.onSecondary),
+            secondaryContainer = Color(palette.secondaryContainer), onSecondaryContainer = Color(palette.onSecondaryContainer),
+            background = Color(palette.background), onBackground = Color(palette.onBackground),
+            surface = Color(palette.surface), onSurface = Color(palette.onSurface),
+            surfaceDim = Color(palette.surfaceDim), surfaceBright = Color(palette.surfaceBright),
+            surfaceContainerLowest = Color(palette.surfaceContainerLowest), surfaceContainerLow = Color(palette.surfaceContainerLow),
+            surfaceContainer = Color(palette.surfaceContainer), surfaceContainerHigh = Color(palette.surfaceContainerHigh),
+            surfaceContainerHighest = Color(palette.surfaceContainerHighest),
+            surfaceVariant = Color(palette.surfaceVariant), onSurfaceVariant = Color(palette.onSurfaceVariant),
+            surfaceTint = Color(palette.primary), outline = Color(palette.outline),
+            error = Color(palette.error), onError = Color(palette.onError),
+            errorContainer = Color(palette.errorContainer), onErrorContainer = Color(palette.onErrorContainer),
+        )
+        else -> lightColorScheme(
+            primary = Color(palette.primary), onPrimary = Color(palette.onPrimary),
+            primaryContainer = Color(palette.primaryContainer), onPrimaryContainer = Color(palette.onPrimaryContainer),
+            secondary = Color(palette.secondary), onSecondary = Color(palette.onSecondary),
+            secondaryContainer = Color(palette.secondaryContainer), onSecondaryContainer = Color(palette.onSecondaryContainer),
+            background = Color(palette.background), onBackground = Color(palette.onBackground),
+            surface = Color(palette.surface), onSurface = Color(palette.onSurface),
+            surfaceDim = Color(palette.surfaceDim), surfaceBright = Color(palette.surfaceBright),
+            surfaceContainerLowest = Color(palette.surfaceContainerLowest), surfaceContainerLow = Color(palette.surfaceContainerLow),
+            surfaceContainer = Color(palette.surfaceContainer), surfaceContainerHigh = Color(palette.surfaceContainerHigh),
+            surfaceContainerHighest = Color(palette.surfaceContainerHighest),
+            surfaceVariant = Color(palette.surfaceVariant), onSurfaceVariant = Color(palette.onSurfaceVariant),
+            surfaceTint = Color(palette.primary), outline = Color(palette.outline),
+            error = Color(palette.error), onError = Color(palette.onError),
+            errorContainer = Color(palette.errorContainer), onErrorContainer = Color(palette.onErrorContainer),
+        )
+    }
+    val semanticAccentOverride = if (useDynamicColor) scheme.toAccentRoleColors() else null
+    val semanticColors = AtlasSemanticPalettes.forPalette(palette, dark).toColors(semanticAccentOverride)
 
     CompositionLocalProvider(
         LocalConfiguration provides themedConfiguration,
         LocalIndication provides indication,
+        LocalAtlasSemanticColors provides semanticColors,
     ) {
         SideEffect {
             view.context.findActivity()?.window?.let { window ->
@@ -134,6 +147,13 @@ fun AtlasTheme(
         }
     }
 }
+
+private fun ColorScheme.toAccentRoleColors() = AtlasSemanticRoleColors(
+    foreground = primary,
+    onForeground = onPrimary,
+    container = primaryContainer,
+    onContainer = onPrimaryContainer,
+)
 
 /** Static pressed overlay for AMOLED: tactile feedback without a ripple animation. */
 internal class StaticPressIndication(private val pressedColor: Color) : IndicationNodeFactory {
