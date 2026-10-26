@@ -40,11 +40,13 @@ from .models_v2 import (
     ProposalV2,
 )
 from .openclaw_adapter import OpenClawAgentAdapter, stable_conversation_id
+from .plan_agent_v3 import PlanRevisionRequestV3, propose_plan_revision
 from .policy import MANDATE, PolicyEngine, configured_capabilities
 from .store import (
     EventIdConflict,
     InvalidProposalTransition,
     SQLiteStore,
+    PlanRevisionIdempotencyConflict,
     UnknownProposal,
     UnknownProposalCursor,
 )
@@ -567,6 +569,42 @@ def create_app(
     @app.post("/v2/agent/plan", dependencies=auth, tags=["agent-v2"])
     def agent_plan(body: AgentChatRequest) -> dict:
         return _run_v2_agent("plan", body)
+
+    @app.post("/v3/agent/plan-revision", dependencies=auth, tags=["agent-v3"])
+    def agent_plan_revision(body: PlanRevisionRequestV3) -> JSONResponse:
+        if not body.plan_context_consented:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": "CONSENT_REQUIRED",
+                    "error": {
+                        "code": "CONSENT_REQUIRED",
+                        "message": "Le contexte du plan n'a pas été consenti.",
+                    },
+                },
+            )
+        if not policy.capabilities.get("plan_revision", False):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": "CAPABILITY_DISABLED",
+                    "error": {
+                        "code": "CAPABILITY_DISABLED",
+                        "message": "La capacité plan_revision est désactivée.",
+                    },
+                },
+            )
+        try:
+            result = propose_plan_revision(
+                body,
+                adapter=active_agent,
+                store=store,
+                ttl=_proposal_ttl(),
+                now=_utc_now(),
+            )
+        except PlanRevisionIdempotencyConflict as error:
+            raise HTTPException(status_code=409, detail="request_id reused with a different body") from error
+        return JSONResponse(status_code=result.status_code, content=result.response)
 
     @app.get("/v2/agent/inbox", dependencies=auth, tags=["agent-v2"])
     def agent_inbox(after: Annotated[str | None, Query(max_length=80)] = None) -> dict:
