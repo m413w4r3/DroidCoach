@@ -24,6 +24,31 @@ class PlanModelsCodecTest {
     }
 
     @Test
+    fun trainingReferenceRoundTripsAsAnOptionalActivityField() {
+        val reference = trainingReference()
+        val original = dayPlan(activities = listOf(activity().copy(kind = ActivityKind.TRAINING, trainingRef = reference)))
+
+        val restored = PlanJsonCodec.decodeDayPlan(PlanJsonCodec.encodeDayPlan(original))
+
+        assertEquals(original, restored)
+        assertEquals(reference, restored.activities.single().trainingRef)
+    }
+
+    @Test
+    fun legacyActivityWithoutTrainingReferenceStillLoads() {
+        val root = JSONObject(PlanJsonCodec.encodeDayPlan(dayPlan()))
+        val activityJson = root.getJSONArray("activities").getJSONObject(0)
+        activityJson.remove("training_ref")
+
+        val restored = PlanJsonCodec.decodeDayPlan(root.toString())
+        activityJson.put("training_ref", JSONObject.NULL)
+        val explicitNull = PlanJsonCodec.decodeDayPlan(root.toString())
+
+        assertEquals(null, restored.activities.single().trainingRef)
+        assertEquals(null, explicitNull.activities.single().trainingRef)
+    }
+
+    @Test
     fun allActivityStatusesRemainDistinctThroughRoundTrip() {
         val activities = ActivityStatus.entries.mapIndexed { index, status ->
             activity(

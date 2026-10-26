@@ -6,13 +6,14 @@ import hashlib
 import hmac
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from datetime import time as datetime_time
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi import Path as ApiPath
@@ -33,6 +34,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .agent import AgentAdapter, MockAgentAdapter, ProposedAction
 from .content import DEMO_CONTENT
+from .config import resolve_wger_auth_mode
+from .integrations.wger import ApiTokenWgerAuth, WgerClient, WgerError, WgerLimits
+from .integrations.wger_plan import empty_sport_plan, read_sport_plan, wger_error_to_sync_state
 from .models_v2 import (
     AckRequest,
     AgentChatRequest,
@@ -410,6 +414,48 @@ def create_app(
             ],
             "source": "mock",
         }
+
+    @app.get("/v1/sport/plan", dependencies=auth, tags=["sport"])
+    def sport_plan(
+        local_date: Annotated[date, Query()],
+        timezone_name: Annotated[str, Query(alias="timezone", min_length=1, max_length=100)],
+    ) -> dict:
+        try:
+            ZoneInfo(timezone_name)
+        except (ValueError, ZoneInfoNotFoundError):
+            raise HTTPException(status_code=422, detail="fuseau horaire invalide") from None
+
+        generated_at = datetime.now(timezone.utc).replace(microsecond=0)
+        def empty_response(state: str) -> dict:
+            return empty_sport_plan(
+                local_date=local_date,
+                timezone=timezone_name,
+                source="WGER_READ",
+                sync_state=state,
+            )
+
+        try:
+            auth_mode = resolve_wger_auth_mode()
+            # The rotating JWT flow is intentionally unsupported here. This
+            # route never constructs a refresh auth object or reads its token store.
+            if auth_mode != "api_token":
+                return empty_response("UNAVAILABLE")
+            base_url = os.getenv("WGER_BASE_URL", "https://wger.de")
+            with httpx.Client(follow_redirects=False) as http:
+                client = WgerClient(
+                    base_url,
+                    ApiTokenWgerAuth(os.environ["WGER_API_TOKEN"]),
+                    http,
+                    WgerLimits(page_size=50, max_pages=1, max_items=50, timeout_seconds=3.0),
+                )
+                return read_sport_plan(
+                    client,
+                    local_date=local_date,
+                    timezone=timezone_name,
+                    generated_at=generated_at,
+                )
+        except WgerError as error:
+            return empty_response(wger_error_to_sync_state(error.code))
 
     @app.get("/v1/policy/effective", dependencies=auth, tags=["policy"])
     def effective_policy() -> dict:

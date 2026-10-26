@@ -26,6 +26,8 @@ import dev.atlas.coach.training.PlannedExercise
 import dev.atlas.coach.training.SportPlan
 import dev.atlas.coach.training.SportPlanFixture
 import dev.atlas.coach.training.SportPlanJson
+import dev.atlas.coach.training.SportPlanSource
+import dev.atlas.coach.training.SportPlanUiState
 import dev.atlas.coach.training.SyncState
 
 /**
@@ -34,8 +36,14 @@ import dev.atlas.coach.training.SyncState
  */
 @Composable
 internal fun SportScreen(
-    plan: SportPlan? = (SportPlanJson.parse(SportPlanFixture.json) as? dev.atlas.coach.training.SportPlanParseResult.Valid)?.plan,
+    state: SportPlanUiState? = null,
+    demoMode: Boolean = false,
 ) {
+    val screenState = when {
+        demoMode -> demoSportPlanState()
+        state != null -> state
+        else -> SportPlanUiState(plan = null, syncState = SyncState.UNAVAILABLE)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(AtlasSpacing.medium)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Sport", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -46,17 +54,20 @@ internal fun SportScreen(
             )
         }
 
+        SportSourceAndSync(screenState)
+        SportSyncBanner(screenState.syncState)
+
+        val plan = screenState.plan
         if (plan == null) {
-            SportErrorCard("La séance sportive est indisponible. Réessayez plus tard.")
+            SportErrorCard(availabilityMessage(screenState.syncState))
             return@Column
         }
 
-        SportSyncBanner(plan)
         SportPlannedSection(plan)
         SportPerformedSection(plan)
 
         Text(
-            "Source : ${sourceLabel(plan)} · ${syncLabel(plan.syncState)}. " +
+            "Source : ${sourceLabel(screenState.source)} · ${syncLabel(screenState.syncState)}. " +
                 "Une séance planifiée n'est marquée effectuée qu'avec un résultat déclaré.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -65,8 +76,24 @@ internal fun SportScreen(
 }
 
 @Composable
-private fun SportSyncBanner(plan: SportPlan) {
-    if (plan.syncState == SyncState.FRESH) return
+private fun SportSourceAndSync(state: SportPlanUiState) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            "Source : ${sourceLabel(state.source)} · synchronisation ${syncLabel(state.syncState)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "Dernière synchronisation : ${state.lastSyncAt ?: "inconnue"}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SportSyncBanner(syncState: SyncState) {
+    if (syncState == SyncState.FRESH) return
     val semantic = LocalAtlasSemanticColors.current
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -77,7 +104,7 @@ private fun SportSyncBanner(plan: SportPlan) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                "Synchronisation sportive : ${syncLabel(plan.syncState)}",
+                "Synchronisation sportive : ${syncLabel(syncState)}",
                 style = MaterialTheme.typography.titleSmall,
                 color = semantic.warning.onContainer,
             )
@@ -216,7 +243,27 @@ internal fun syncLabel(state: SyncState): String = when (state) {
     SyncState.MISMATCH -> "incohérente"
 }
 
-internal fun sourceLabel(plan: SportPlan): String = when (plan.source) {
-    dev.atlas.coach.training.SportPlanSource.WGER_READ -> "wger en lecture"
-    dev.atlas.coach.training.SportPlanSource.FIXTURE -> "fixture de démonstration"
+internal fun sourceLabel(source: SportPlanSource): String = when (source) {
+    SportPlanSource.WGER_READ -> "wger en lecture"
+    SportPlanSource.FIXTURE -> "fixture de démonstration"
+}
+
+internal fun sourceLabel(plan: SportPlan): String = sourceLabel(plan.source)
+
+private fun availabilityMessage(state: SyncState): String = when (state) {
+    SyncState.FRESH -> "Aucune séance prévue pour cette date."
+    SyncState.STALE -> "Les données sportives sont périmées. Réessayez plus tard."
+    SyncState.UNAVAILABLE -> "Les données sportives sont indisponibles. Réessayez plus tard."
+    SyncState.MISMATCH -> "La réponse sportive ne correspond pas au contrat attendu."
+}
+
+private fun demoSportPlanState(): SportPlanUiState = when (val result = SportPlanJson.parse(SportPlanFixture.json)) {
+    is dev.atlas.coach.training.SportPlanParseResult.Valid -> SportPlanUiState(
+        plan = result.plan,
+        syncState = result.plan.syncState,
+        lastSyncAt = result.plan.generatedAt,
+        source = result.plan.source,
+    )
+    is dev.atlas.coach.training.SportPlanParseResult.Invalid ->
+        SportPlanUiState(plan = null, syncState = SyncState.MISMATCH, source = SportPlanSource.FIXTURE)
 }
