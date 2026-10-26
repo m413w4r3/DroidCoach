@@ -25,7 +25,7 @@ diff, exécute l'oracle sur le SHA intégré et met à jour ce registre.
 | V63-L1-02 | Écran Plan + navigation + actions locales, intégré par le parent | L1-01 | `android/.../app/PlanScreen.kt`, `PlanController.kt`, `AtlasApp.kt`, `AtlasApplication.kt`, `AtlasScreenId.kt`, `AtlasScreens.kt`, `MainActivity.kt` | 68 tests ciblés + JVM 426 + lint/build | **ACCEPTED / INTEGRATED** (`4003095`), revue finale `GO_WITH_LIMITATIONS` |
 | V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `LauncherHomeScreen.kt`/`AtlasScreens.kt` (parent) | JVM + UI test | **READY — non livré** |
 | V63-L2-01 | Sonde CalendarContract lecture seule + abstraction testable, sans permission manifeste | L0-01 | `android/.../calendar/**` (main+test) | JVM fake provider + compile Android | **INTEGRATED** (`81e1bd2`) |
-| V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers, **accord propriétaire requis** | L2-01 + accord | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **INTEGRATED (préparation)** (`1c34c56` → `bb15548` → `c990a75`) ; 31 ciblés, lint 0 erreur/54 avert., APK PASS ; JVM intégré 447 tests ; **installation/octroi `BLOCKED_APPROVAL`** |
+| V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers, **accord propriétaire requis** | L2-01 + accord | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **INTEGRATED + APK installé** (`c990a75`, APK `5956bb6f`) ; `READ_CALENDAR` déclaré, **granted=false** ; P3 approuvé après le plan ; écran câblé |
 | V63-L2-03 | Lecture événements/conflits réels sur Pixel + Etar installé | L2-02 + appareil | preuves `docs/v6-3/preuves/**` | Pixel + Etar, `PASS/FAIL` | **BLOCKED_DEVICE** |
 | V63-L3-01 | Proposition de révision par OpenClaw, diff et confirmation groupée | L1-01, backend v3 | backend `plan_agent_v3.py`/`main.py` + Kotlin `plan` | pytest + JVM stale/expiry | **READY — scindé L3-01a (backend) / L3-01b (Android)** |
 | V63-L4-01 | Écritures calendrier réelles, liens stables, réconciliation | L2-03 + L3-01 + accord | `dev/atlas/coach/calendar/write/**` | provider fake + Pixel/Etar | **BLOCKED_APPROVAL** |
@@ -66,6 +66,23 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
 - OpenClaw Gateway : loopback `127.0.0.1:18789` actif ; aucune requête réelle
   effectuée dans ce lot.
 - Bridge et wger : non configurés, non qualifiés.
+
+## R1 — état physique au 2026-10-26 13:55
+
+- **Accords** : P1+P2 approuvés, parent conduit ; P3 `READ_CALENDAR` approuvé
+  **après** le parcours Plan ; P4/P5 non approuvés.
+- **APK** `5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f`
+  installé en place sur le Pixel ; données préservées ; backup app-only
+  `28a74099...`.
+- **Backend** `127.0.0.1:8010` : `/health` 200, adapter `openclaw`,
+  `plan_revision=true`, DB `atlas-r1.sqlite3`.
+- **adb reverse** `tcp:8010 tcp:8010` actif.
+- **App** : Sync activée, URL `http://127.0.0.1:8010` et jeton Keystore
+  enregistrés ; aucune catégorie de partage sélectionnée.
+- **Calendrier** : `READ_CALENDAR` déclaré, `granted=false`, aucune lecture.
+- **Prochaine étape** : Plan du jour, activités, coach, diff, confirmation,
+  persistance, hors ligne, puis diagnostic calendrier (P3).
+- Détail et reprise : `docs/v6-3/HANDOFF_R1.md`.
 
 ## Portes nécessitant le propriétaire
 
@@ -116,7 +133,7 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 | V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/HomeNextAction.kt`, `LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **ACCEPTED / INTEGRATED** (`6f5941d` → `b6d4a7b` → `38c70d7`) ; P1 corrigé ; intégré 439 tests, lint 0 erreur/52 avert., APK PASS ; `preuves/l1-03-home-next.txt` |
 | V63-L3-01b | Android : parse strict V3, diff, confirmation groupée, application locale idempotente | L3-01a (contrat gelé) | `android/.../plan/**` (nouveaux fichiers + tests) | JVM stale/expiry/idempotence/contenu altéré | **ACCEPTED / INTEGRATED** (`039ce02` → `6d78fa0` → `4df7e68`) ; 87 ciblés, 471 JVM intégrés, lint 0/54, APK PASS |
 | V63-L3-01c | Câblage UI « Demander au coach », consentement, URL loopback debug, diagnostic calendrier | L3-01b | `PlanScreen.kt`, `AtlasController.kt`, `AtlasApp.kt`, `AtlasScreens.kt`, `AtlasScreenId.kt`, `SyncSettingsScreen.kt`, `BackendUrlPolicy.kt` | JVM + lint + build ; visibilité/consentement vérifiés statiquement | **ACCEPTED / INTEGRATED** (`c2f6fea` → `1791030`) ; 474 JVM, lint 0/54, APK PASS |
-| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `integrations/openclaw/atlas_chatgpt_research/**` | `npm test` + build + `openclaw plugins validate` + recette Bridge mock | **REVIEW_REQUIRED** — `3c5738a`, 13 fichiers ; npm install parent PASS ; 33/34 tests, 1 échec retry ; build `dist/src` à corriger ; activation `BLOCKED_POLICY` |
+| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `integrations/openclaw/atlas_chatgpt_research/**` | `npm test` + build + `openclaw plugins validate` + recette Bridge mock | **ACCEPTED_WITH_P2 (code, non fusionné)** — `c6efa58` ; `npm ci`, 34 tests, build, validate PASS ; P2 Retry-After de reprise à corriger avant activation ; non installé/activé |
 | V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers | accord explicite | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **INTEGRATED (préparation)** (`1c34c56` → `bb15548` → `c990a75`) ; 31 ciblés, lint 0/54, APK PASS ; install/octroi `BLOCKED_APPROVAL` |
 | V63-L4-SCOUT-01 | Audit lecture seule du chemin d'écriture calendrier, propriété, réconciliation, plan Pixel | — | aucun (lecture seule) | rapport + proposition de ticket L4 | **ACCEPTED (audit)** — `AUDIT_CALENDAR_WRITE.md` ; écriture réelle `BLOCKED_APPROVAL`/`BLOCKED_ENVIRONMENT` |
 | V63-L4-01 | Écritures calendrier réelles, liens stables, réconciliation | L2-03 + L3-01 + accord | `dev/atlas/coach/calendar/write/**` | provider fake + Pixel/Etar | **BLOCKED_APPROVAL** |
@@ -135,7 +152,8 @@ Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
 | `V63-L3-01a-REVIEW` | `review-v63-l3-01a-plan-backend` (`chmod a-w`) | relecture indépendante | `97538bfb-56a2-4221-8bff-fac62c36aa5d` | **ACCEPTED_WITH_P2** ; P1/P2 traités ou documentés |
 | `V63-L3-01b` | `feat-v63-l3-01b-plan-revision-android` | parse/mapping/confirmation V3 | `65d84b7e-c1a2-4279-a03b-0272ebe30af8` | **ACCEPTED / INTEGRATED** `4df7e68` ; 471 JVM intégrés |
 | `V63-L3-01c` | `feat-v63-l3-01c-wiring` (parent) | câblage Plan/coach/calendrier | parent | **ACCEPTED / INTEGRATED** `1791030` ; 474 JVM, lint 0/54, APK |
-| `V63-L8-02` | `feat-v63-l8-02-openclaw-research` | plugin recherche OpenClaw | `21d2cdbe-ebd3-4542-be97-a848091b76c5` | **REVIEW_REQUIRED** `3c5738a` ; correction build/test en cours |
+| `V63-L8-02` | `feat-v63-l8-02-openclaw-research` | plugin recherche OpenClaw | `21d2cdbe-ebd3-4542-be97-a848091b76c5` | **ACCEPTED_WITH_P2** `c6efa58` ; relecteur `f87c50b3` ; code non fusionné, non activé |
+| `V63-L8-02-REVIEW` | `review-v63-l8-02-openclaw` (`chmod a-w`) | relecture indépendante | `f87c50b3-d139-4c66-bf9a-b1cd4111b783` | **ACCEPTED_WITH_P2** ; Retry-After de reprise à corriger |
 | `V63-L1-03` | `feat-v63-l1-03-home-next` | HOME next action | `b5722d8a-db34-42eb-8ac8-2086021a99ce` | RUNNING |
 | `V63-L4-SCOUT-01` | `audit-v63-l4-calendar-write` (`chmod a-w`) | écriture calendrier, lecture seule | `9b3b505a-9e11-4fe5-8d39-6cce70a91e8d` | RUNNING |
 | `V63-L2-02` | `feat-v63-l2-02-calendar-read` | préparation READ_CALENDAR + écran diagnostic | `d434f447-e4e5-4de3-ac26-88fb637c2891` | **ACCEPTED / INTEGRATED (préparation)** `c990a75` ; installation/octroi non faits |
@@ -169,5 +187,6 @@ dans le prompt ou les fixtures, commit local dans le worktree.
 | 2026-10-26 | V63-L5-01 qualification réelle | `e4b480c` | `5f68c88` → `a56de74` | `/api/v2/` + 4 ressources | **ACCEPTED / INTEGRATED** — IDs chaîne corrigés, sessions ajoutées, diagnostic réel 200/200/200/200 ; P2 date ISO à renforcer en L5-02 |
 | 2026-10-26 | V63-L3-01b | `9d51021` | `039ce02` → `6d78fa0` → `4df7e68` | 87 ciblés + intégré | **ACCEPTED / INTEGRATED** — 471 JVM, 0 échec, lint 0/54, APK PASS ; parseur V3 borné, UUID déterministes, focus/training_ref rejetés |
 | 2026-10-26 | V63-L3-01c | `4df7e68` | `c2f6fea` → `1791030` | 474 JVM + lint + build | **ACCEPTED / INTEGRATED** — UI coach consentie, `BackendUrlPolicy` loopback debug, diagnostic calendrier câblé |
-| 2026-10-26 | V63-L8-02 | `9d51021` | `3c5738a` | npm parent | **REVIEW_REQUIRED** — 33/34 tests, 1 échec retry ; `dist/src` au lieu de `dist` ; correction demandée |
+| 2026-10-26 | V63-L8-02 | `9d51021` | `3c5738a` → `c6efa58` | npm ci/test/build/validate | **ACCEPTED_WITH_P2 (code)** — 34 tests, build, manifeste, validate PASS ; P2 Retry-After ; non fusionné, non activé |
+| 2026-10-26 | R1 démarrage physique | `1791030` / APK `5956bb6f` | — | Pixel + backend 8010 + adb reverse | **EN COURS** — app installée, URL/jeton configurés ; prochaine étape Plan/coach |
 | 2026-10-26 | V63-L3-01a-REVIEW | `9dc2685` → `6b64ddc` | — | relecture indépendante | **ACCEPTED_WITH_P2** — session `97538bfb-56a2-4221-8bff-fac62c36aa5d` ; P1 scope résolu par ticket, P2 traités/documentés |
