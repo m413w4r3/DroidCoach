@@ -603,7 +603,25 @@ def test_openclaw_plan_revision_payload_has_no_tools_field():
     assert "tools" not in payload
     assert payload["messages"][0]["content"] != ""
     assert "plan.revise_day" in payload["messages"][0]["content"]
-    assert jsonlib.loads(payload["messages"][1]["content"])["plan"]["plan_id"] == PLAN_ID
+    user_payload = jsonlib.loads(payload["messages"][1]["content"])
+    assert user_payload["plan"]["plan_id"] == PLAN_ID
+    assert user_payload["plan_revision_consent"] is True
+    assert user_payload["plan_revision_capability"] is True
+    assert "allowed_actions" not in user_payload["mandate_summary"]
+    assert user_payload["mandate_summary"] == {
+        "id": body["mandate_summary"]["id"],
+        "version": body["mandate_summary"]["version"],
+        "mode": "proposals_only",
+    }
+
+
+def test_plan_revision_prompt_explains_proposal_authorization_boundary():
+    assert "plan_revision_consent" in PLAN_REVISION_SYSTEM_PROMPT
+    assert "plan_revision_capability" in PLAN_REVISION_SYSTEM_PROMPT
+    assert "absente de allowed_actions" in PLAN_REVISION_SYSTEM_PROMPT
+    assert "pas une action Android" in PLAN_REVISION_SYSTEM_PROMPT
+    assert "ne propose aucune autre action" in PLAN_REVISION_SYSTEM_PROMPT.lower()
+    assert "aucune capacité d'exécution" in PLAN_REVISION_SYSTEM_PROMPT
 
 
 def test_plan_revision_prompt_disallows_focus_and_training_refs():
