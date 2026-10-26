@@ -78,15 +78,15 @@ Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`; tous sont
 
 | ID | Gate | Statut |
 |---|---|---|
-| K1 | `READ_CALENDAR` refusé | NOT_RUN |
-| K2 | `READ_CALENDAR` accordé | NOT_RUN |
-| K3 | `WRITE_CALENDAR` refusé | NOT_RUN |
-| K4 | `WRITE_CALENDAR` accordé | NOT_RUN |
-| K5 | Calendrier local sélectionné | NOT_RUN |
-| K6 | Calendrier étranger rejeté | NOT_RUN |
-| K7 | Insertion réelle | NOT_RUN |
-| K8 | Relecture réelle | NOT_RUN |
-| K9 | Visibilité Etar | NOT_RUN |
+| K1 | `READ_CALENDAR` refusé | PARTIAL — refus fail-closed couvert côté moteur JVM R2 ; parcours UI à rejouer |
+| K2 | `READ_CALENDAR` accordé | **PASS** — accordé par UiAutomation pour la qualification locale |
+| K3 | `WRITE_CALENDAR` refusé | PARTIAL — couvert par le moteur ; parcours UI à rejouer |
+| K4 | `WRITE_CALENDAR` accordé | **PASS** — accordé par UiAutomation ; écriture réelle effectuée |
+| K5 | Calendrier local sélectionné | PARTIAL — calendrier ATLAS créé et utilisé ; sélection UI explicite à câbler |
+| K6 | Calendrier étranger rejeté | NOT_RUN (émulateur) — couvert JVM |
+| K7 | Insertion réelle | **PASS** — `event_id=2` via provider réel |
+| K8 | Relecture réelle | **PASS** — marqueurs et fenêtre relus |
+| K9 | Visibilité Etar | **PASS** — capture `preuves/captures/etar-month-view.png` |
 | K10 | Modification | NOT_RUN |
 | K11 | Déplacement | NOT_RUN |
 | K12 | Suppression | NOT_RUN |

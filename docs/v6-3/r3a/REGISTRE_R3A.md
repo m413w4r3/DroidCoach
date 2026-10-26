@@ -9,6 +9,7 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | Date de lancement | 2026-10-26 |
 | Branche de campagne | `feat/atlas-v6-3-r3a-relay-calendar` |
 | Base `main` vérifiée | `6a22c12bc5a2c63c3d3ab56253679c897fadb75d` |
+| SHA des contrats R3-A | `4f7b9263c76986c0a410f87a22268993568b3646` |
 | `main` distant | identique au lancement |
 | Arbre de travail | propre avant création de branche |
 | JDK | OpenJDK 21.0.12.1 |
@@ -45,10 +46,10 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | TASK_ID | Objectif | Scope d'écriture exclusif | Oracle | Statut |
 |---|---|---|---|---|
 | `R3-PREFLIGHT-01` | pré-vol, backups, contrats, relais local | `docs/v6-3/r3a/**`, `contracts/atlas-remote-v1.schema.json` | pré-vol + build relais + doc | **RUNNING** |
-| `R3-RELAY-PC-01` | connecteur PC Node sur Paseo e2ee | `integrations/relay/pc/**` | tests Node + interop Noise + relais réel | **READY** |
-| `R3-RELAY-ANDROID-01` | client Kotlin Noise/WebSocket/protocole | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `android/app/src/test/java/dev/atlas/coach/sync/relay/**` | vecteurs upstream + tests JVM + records malformés | **READY** |
-| `R3-CALENDAR-01` | journal durable, liens, reprise, divergence | `android/app/src/main/java/dev/atlas/coach/calendar/write/**`, `android/app/src/test/java/dev/atlas/coach/calendar/write/**` | tests JVM crash/reprise/idempotence | **READY** |
-| `R3-CALENDAR-LOCAL-01` | compte local + sync adapter + manifeste | parent : `calendar/local/**`, manifeste, XML | création provider + relecture | **READY (parent)** |
+| `R3-RELAY-PC-01` | connecteur PC Node sur Paseo e2ee | `integrations/relay/pc/**` | tests Node + interop Noise + relais réel | **RUNNING** — session `b879770c…` |
+| `R3-RELAY-ANDROID-01` | client Kotlin Noise/WebSocket/protocole | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `android/app/src/test/java/dev/atlas/coach/sync/relay/**` | vecteurs upstream + tests JVM + records malformés | **RUNNING** — session `7697f6dd…` |
+| `R3-CALENDAR-01` | journal durable, liens, reprise, divergence | `android/app/src/main/java/dev/atlas/coach/calendar/write/**`, `android/app/src/test/java/dev/atlas/coach/calendar/write/**` | tests JVM crash/reprise/idempotence | **RUNNING** — session `cfb46cd6…` |
+| `R3-CALENDAR-LOCAL-01` | compte local + sync adapter + authentificateur + manifeste | parent : `calendar/local/**`, manifeste, XML | création provider + relecture + visibilité Etar | **ACCEPTED (parent)** — voir `preuves/calendar-local.txt` |
 | `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **PLANNED** |
 | `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | parent : `PlanScreen.kt`, écrans calendrier | 22 scénarios calendrier | **PLANNED** |
 | `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | selon ticket | backend + JVM + UI | **PLANNED** |
@@ -67,8 +68,13 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-26 | Clones Paseo / Paseo Relay | **PASS** — `902b0c7` / `3fc41c96` ; SHA mission `65ce4b5` absent |
 | 2026-10-26 | Contrat `atlas.remote.v1` figé | **PASS (doc)** |
 | 2026-10-26 | Build `@getpaseo/relay` | **PASS** |
-| 2026-10-26 | Build image relais Elixir | **PASS** |
-| 2026-10-26 | Vague A lancée | à compléter |
+| 2026-10-26 | Build image relais Elixir | **PASS** — `atlas-paseo-relay:r3a`, `/health` OK sur `127.0.0.1:4400` |
+| 2026-10-26 | Vague A lancée | 3 sessions vérifiées `codex` / `gpt-6-luna` / `xhigh` : `b879770c…`, `7697f6dd…`, `cfb46cd6…` |
+| 2026-10-26 | Compte local + calendrier ATLAS | **PASS** — auth + sync adapter enregistrés ; calendrier `_id=1`, `ATLAS R3A TEST`, type `dev.atlas.coach.calendar`, accès 700 |
+| 2026-10-26 | Écriture/lecture provider réelle | **PASS** — événement `_id=2`, marqueurs `dev.atlas.coach` + URI Atlas, supprimé après le test de création |
+| 2026-10-26 | Fixture Etar idempotente | **PASS** — événement `ATLAS TEST Etar visibility` visible dans Etar, capture `preuves/captures/etar-month-view.png` |
+| 2026-10-26 | Crash processus AVD sous charge | **INCIDENT** — redémarrage sans wipe, image utilisateur conservée ; reconnexion en cours |
+| 2026-10-26 | Connecteur PC : premier essai | **BLOCKED (outillage)** — lien `references/repos` absent dans le worktree ; corrigé par symlink parent, session relancée |
 
 ## 5. Preuves
 

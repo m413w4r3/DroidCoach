@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<account-authenticator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accountType="dev.atlas.coach.calendar"
+    android:icon="@drawable/ic_atlas"
+    android:label="ATLAS local calendar"
+    android:smallIcon="@drawable/ic_atlas" />

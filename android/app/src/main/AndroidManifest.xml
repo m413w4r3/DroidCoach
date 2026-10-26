@@ -4,6 +4,13 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Local ATLAS calendar only. WRITE_CALENDAR is requested explicitly by the user,
+         never granted by the app itself. AUTHENTICATE_ACCOUNTS and the sync settings
+         permissions are required to register the dedicated offline sync adapter. -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.AUTHENTICATE_ACCOUNTS" />
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -100,5 +107,35 @@
             android:name=".location.MobilitySessionService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- AccountManager requires a registered authenticator before it accepts
+             an explicit local account. This authenticator offers no sign-in and
+             no token. -->
+        <service
+            android:name=".calendar.local.AtlasAccountAuthenticatorService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accounts.AccountAuthenticator" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accounts.AccountAuthenticator"
+                android:resource="@xml/atlas_account_authenticator" />
+        </service>
+
+        <!-- Offline sync adapter whose only role is to let CalendarProvider create
+             the dedicated local ATLAS calendar. It performs no network sync. -->
+        <service
+            android:name=".calendar.local.AtlasCalendarSyncService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_SYNC_ADAPTER">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/atlas_calendar_sync_adapter" />
+        </service>
     </application>
 </manifest>

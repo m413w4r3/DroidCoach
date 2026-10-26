@@ -73,12 +73,12 @@ content insert`, aucune donnée système fabriquée ne sert de preuve.
 
 | # | Scénario | Preuve attendue | Statut |
 |---|---|---|---|
-| C1 | Calendrier local sélectionné | catalogue + sélection explicite | NOT_RUN |
+| C1 | Calendrier local sélectionné | catalogue + sélection explicite | **PARTIAL** — calendrier ATLAS créé et sélectionné par compte ; sélection UI explicite à câbler |
 | C2 | Création d'activité | `DayPlan` versionné | NOT_RUN |
 | C3 | Validation de la révision | confirmation groupée | NOT_RUN |
-| C4 | Création événement CalendarContract | `event_id` relu | NOT_RUN |
-| C5 | Relecture provider | hash et marqueurs conformes | NOT_RUN |
-| C6 | Affichage réel dans Etar | capture + requête provider | NOT_RUN |
+| C4 | Création événement CalendarContract | `event_id` relu | **PASS** — `event_id=2` via `AndroidCalendarContractWriteProvider` |
+| C5 | Relecture provider | hash et marqueurs conformes | **PASS** — titre, fenêtre, `customAppPackage`, `customAppUri` relus |
+| C6 | Affichage réel dans Etar | capture + requête provider | **PASS** — `ATLAS TEST Etar visibility` visible, capture `preuves/captures/etar-month-view.png` |
 | C7 | Déplacement | `dtstart`/`dtend` relus | NOT_RUN |
 | C8 | Modification titre/durée | relecture | NOT_RUN |
 | C9 | Suppression autorisée | événement absent | NOT_RUN |
