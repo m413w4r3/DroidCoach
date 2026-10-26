@@ -13,13 +13,19 @@
 ## 2. Émulateur
 
 - `emulator-5554` = `Pixel_9_Pro_XL_2`, API 37.2, headless.
+- État final : émulateur **arrêté proprement**, données applicatives pré-R2
+  restaurées (1 habitude, aucun plan), APK final `cc88e649…` installé et vérifié,
+  READ_CALENDAR révoquée, consentement calendrier effacé, `adb reverse` retiré,
+  police 1.0 et rotation automatique restaurées.
 - Sauvegardes hors dépôt :
   - AVD : `~/.local/share/atlas-v63-r2/avd-backup/`
   - Données ATLAS : `~/.local/share/atlas-v63-r2/app-data/`
 - ATLAS est le HOME préexistant ; ne pas changer ce rôle sans restauration.
 - Projection AVANT : `~/.local/share/atlas-v63-r2/screenshots/pre/`.
-- Fixtures : plan v4 3 activités, 5 habitudes synthétiques, 1 habitude
-  archivée, historique 7/30 jours.
+- Projection APRÈS : `~/.local/share/atlas-v63-r2/screenshots/post/`.
+- Fixtures R2 : plan v4 3 activités, 5 habitudes synthétiques, 1 habitude
+  archivée, historique 7/30 jours (sauvegarde
+  `atlas-app-data-wave-b-fixtures.tar`, SHA `19fdacc8…`).
 
 ## 3. Tickets et état
 
@@ -28,17 +34,22 @@
 | R2-CAL-01 | `feat/r2-calendar-write` | `ed02e2cd…` | ACCEPTED_WITH_P2 / INTEGRATED | 18 ciblés, 514 JVM ; `preuves/gates-wave-a.txt` |
 | R2-UI-01 | `feat/r2-ui-accent` | `2bb09cbf…` | ACCEPTED / INTEGRATED | 11 tests UI ; correctifs parent `54b4183` |
 | R2-SPORT-01 | `feat/r2-sport-projection` | `ca7f5e7a…` | ACCEPTED_WITH_P3 / INTEGRATED | 8 backend + 7 JVM ; 178 backend |
-| R2-PLAN-UI-01 | `feat/r2-plan-ui` | à lancer | READY (vague B) | — |
-| R2-HABITS-UI-01 | `feat/r2-habits-ui` | à lancer | READY (vague B) | — |
-| R2-MEMORY-01 | `feat/r2-memory-core` | à lancer | READY (vague B) | — |
+| R2-PLAN-UI-01 | `feat/r2-plan-ui` | `1d108d56…` | ACCEPTED / INTEGRATED | 546 JVM, 17/17 instrumentés |
+| R2-HABITS-UI-01 | `feat/r2-habits-ui` | `505ddca3…` | ACCEPTED / INTEGRATED | P1 scroll corrigé, 17/17 instrumentés |
+| R2-MEMORY-01 | `feat/r2-memory-core` | `408a1689…` | ACCEPTED_WITH_P2 / INTEGRATED | 15 tests mémoire |
+| R2-SPORT-WIRE-01 | parent | — | PARTIAL / INTEGRATED | écran Sport + entrée Plus ; lien DayPlan à faire |
+| R2-USAGE-01 | `feat/r2-usage-summary` | `ca2ff2d2…` | RUNNING (vague C) | — |
+| R2-BRIDGE-QA-01 | `feat/r2-bridge-qa` | `d79be9a2…` | RUNNING (vague C) | — |
 
 ## 4. Prochaines actions
 
-1. Vague B : lancer `R2-PLAN-UI-01`, `R2-HABITS-UI-01` et `R2-MEMORY-01` sur
-   worktrees séparés, avec base `d59437650342c58d66b8c845aac313245f369372`.
-2. Intégrer chaque ticket après revue du diff et oracle rejoué.
-3. Vague C : `R2-USAGE-01`, `R2-BRIDGE-QA-01`, raccordement sport/calendrier.
-4. Vague D : recette émulateur, captures après, accessibilité, handoff Pixel.
+1. Recevoir et revoir `R2-USAGE-01` et `R2-BRIDGE-QA-01` (vague C) ; rejouer
+   leurs oracles sur le SHA intégré.
+2. Mettre à jour la matrice et le registre avec leurs résultats.
+3. Traiter le lien `trainingRef` DayPlan (S6) si un nouveau ticket est ouvert.
+4. Recette Pixel physique selon `PIXEL_RUNBOOK_R2.md` — **aucune action
+   physique n'a été exécutée en R2**.
+5. Aucun push, PR ou fusion distante sans accord explicite.
 
 ## 5. Limites connues
 

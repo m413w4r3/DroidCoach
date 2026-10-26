@@ -1,0 +1,86 @@
+ATLAS V6.3 — R2 — Preuves UI après refonte
+===========================================
+
+Environnement: emulator-5554, API 37.2, Android 17, 1344x2992 @480 dpi.
+Date: 2026-10-26. Fixtures synthétiques: plan v4 (3 activités), 5 habitudes
+actives + 1 archivée, historique 7/30 jours, rappel 21:30.
+
+Captures (hors dépôt, $HOME/.local/share/atlas-v63-r2/screenshots/post/)
+- 01-theme-accents.png
+- 02-accent-forest.png
+- 03-accent-ocean.png
+- 04-accent-slate.png
+- 05-amoled-slate.png
+- 06-light-forest.png
+- 07-theme-persisted-restart.png
+- 08-theme-landscape.png
+- 09-theme-font-2x.png
+- 10-follow-system-dark.png
+- 11-follow-system-light.png
+- 12-plan-after-top.png
+- 13-habits-after-list.png
+- 14-habit-detail-after.png
+- 15-habit-detail-30d-after.png
+- 16-habit-editor-after.png
+- 17-sport-after.png
+- 18-calendar-write-disabled-after.png
+- 19-calendar-write-no-local-after.png
+- 20-plan-final.png
+- 21-coach-preview-after.png
+- 22-habit-detail-final.png
+- 23-habits-landscape-final.png
+- 24-plan-landscape-final.png
+
+Plan du jour
+------------
+- En-tête: « Aujourd'hui », date lisible, progression « 0 sur 3 terminées »,
+  bouton Détails.
+- Action principale unique: « Demander au coach » (configuration prête).
+- Liste chronologique compacte; passé ✓, prochaine ○ + « Prochaine ».
+- Un menu « Plus » par ligne au lieu de 4 boutons.
+- Aperçu coach: version 4 → 5, 3 effets, ajout Pause 17:35, déplacement
+  18:30 → 19:00, confirmation groupée.
+- Rotation: en-tête et action principale visibles, contenu défilable.
+- Police 2×: test instrumenté primaryActionRemainsVisibleAtDoubleFontScale
+  PASS.
+
+Habitudes
+---------
+- Liste: « 4 sur 4 validées aujourd'hui », ajout/export, lignes compactes,
+  grille 7 jours, régularité, Détail.
+- Détail: progression réelle 6/7 · 85 %, séries, régularité, rappel,
+  historique 7/30 jours, légende, Modifier et Archiver.
+- Archivage: bouton outlined rouge + confirmation + historique conservé.
+- Éditeur: nom, fréquence, rappel facultatif, Annuler/Enregistrer; un quotidien
+  simple ne demande que le nom.
+- Police 2×: test checkInAndAddStayReachableAtFontScaleTwo PASS.
+- Rotation: liste et actions visibles, contenu défilable.
+
+Thèmes et accents
+-----------------
+- 4 modes existants conservés ; 4 accents ATLAS/Forêt/Océan/Ardoise.
+- AMOLED conserve un fond noir pur avec un accent.
+- Persistance après redémarrage vérifiée.
+- Rotation et police 2× vérifiées sur l'écran Apparence.
+- Suivi du système vérifié en mode nuit clair/sombre.
+- Couleur dynamique ignorée en AMOLED, avec indication explicite.
+
+Sport
+-----
+- Séance prévue, exercice Squat 3×8 · 40 kg · repos 90 s.
+- Aucun résultat déclaré: « Une séance prévue n'est pas une séance effectuée. »
+- Source « fixture de démonstration · à jour ».
+
+Calendrier
+----------
+- Écriture désactivée par défaut, moteur compilé.
+- WRITE_CALENDAR non accordée; aucun calendrier local inscriptible détecté.
+- Aucune action d'écriture proposée.
+- READ_CALENDAR révoquée et consentement effacé après le test.
+
+Limites
+-------
+- Aucune écriture CalendarContract réelle, aucun calendrier local.
+- Aucune écriture wger.
+- Aucun test TalkBack matériel.
+- Aucun test Pixel physique.

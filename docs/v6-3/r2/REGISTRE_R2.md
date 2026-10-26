@@ -60,12 +60,12 @@ jamais « Pixel ».
 | `R2-CAL-01` | Moteur d'écriture CalendarContract : opérations, liens durables, idempotence, réconciliation, fake provider | préflight | `android/.../calendar/write/**` (main+test), fichiers neufs uniquement | JVM ciblés + suite ; compile debug | **ACCEPTED_WITH_P2 / INTEGRATED** (`595b224`) ; 18 ciblés, 514 JVM ; P2 rejeu APPLIED à réconcilier |
 | `R2-UI-01` | Palettes d'accent, préférences indépendantes, sémantique, contrastes, primitives | préflight | `android/.../app/ui/**` (main+test), fichiers neufs ou existants listés | JVM contrastes + build | **ACCEPTED / INTEGRATED** (`3b06030` + `f0c136f`, correctifs parent `54b4183`) ; 11 tests UI |
 | `R2-SPORT-01` | Projection sportive wger lecture seule, contrat borné, fixtures, modèles Android | préflight | `backend/.../integrations/wger_plan.py`, `contracts/sport-plan-v1.schema.json`, `android/.../training/**` (neufs), tests neufs | pytest ciblé + suite ; JVM ciblés | **ACCEPTED_WITH_P3 / INTEGRATED** (`005f4a9`) ; 8 backend, 178 backend, 7 JVM |
-| `R2-PLAN-UI-01` | Refonte Plan du jour (hiérarchie, prochaine activité, menu secondaire, diff exact) | R2-UI-01 intégré | `android/.../app/PlanScreen.kt` + composants neufs `app/Plan*` | JVM + captures émulateur + sémantique | **READY (vague B)** |
-| `R2-HABITS-UI-01` | Refonte Habitudes en 3 espaces, extraction de `AtlasScreens.kt` | R2-UI-01 intégré | `android/.../app/AtlasScreens.kt` puis nouveaux fichiers Habitudes | JVM + captures + 16 cas UI | **READY (vague B)** |
-| `R2-MEMORY-01` | Noyau `MemoryFact` local : provenance, catégorie, rétention, révocation | préflight | `android/.../memory/**` (main+test), neufs | JVM | **READY (vague B)** |
-| `R2-SPORT-WIRE-01` | Écran sport simple + séance visible dans le plan, fixture locale | R2-SPORT-01 | nouveaux fichiers UI sport + intégration parent | JVM + captures | **READY (vague C)** |
-| `R2-USAGE-01` | Agrégation UsageStats, `UsageSummary` minimisé, quotas, consentement révocable | préflight | `android/.../usage/**` (main+test) | JVM synthétique + permission refusée | **READY (vague C)** |
-| `R2-BRIDGE-QA-01` | Revalidation plugin contre faux Bridge, politique de provenance, procédure d'activation | préflight | `integrations/openclaw/**` (documentation/tests neufs) | npm test + build + validate | **READY (vague C)** |
+| `R2-PLAN-UI-01` | Refonte Plan du jour (hiérarchie, prochaine activité, menu secondaire, diff exact) | R2-UI-01 intégré | `android/.../app/PlanScreen.kt` + composants neufs `app/Plan*` | JVM + captures émulateur + sémantique | **ACCEPTED / INTEGRATED** (`e7c79f5`) ; 546 JVM, 17/17 instrumentés |
+| `R2-HABITS-UI-01` | Refonte Habitudes en 3 espaces, extraction de `AtlasScreens.kt` | R2-UI-01 intégré | `android/.../app/AtlasScreens.kt` puis nouveaux fichiers Habitudes | JVM + captures + 16 cas UI | **ACCEPTED / INTEGRATED** (`b21b2e4`) ; P1 scroll imbriqué corrigé, 17/17 instrumentés |
+| `R2-MEMORY-01` | Noyau `MemoryFact` local : provenance, catégorie, rétention, révocation | préflight | `android/.../memory/**` (main+test), neufs | JVM | **ACCEPTED_WITH_P2 / INTEGRATED** (`5744eee`) ; 15 tests |
+| `R2-SPORT-WIRE-01` | Écran sport simple + séance visible dans le plan, fixture locale | R2-SPORT-01 | nouveaux fichiers UI sport + intégration parent | JVM + captures | **PARTIAL / INTEGRATED** — écran Sport et entrée Plus ; lien `trainingRef` DayPlan non persisté |
+| `R2-USAGE-01` | Agrégation UsageStats, `UsageSummary` minimisé, quotas, consentement révocable | préflight | `android/.../usage/**` (main+test) | JVM synthétique + permission refusée | **RUNNING (vague C)** |
+| `R2-BRIDGE-QA-01` | Revalidation plugin contre faux Bridge, politique de provenance, procédure d'activation | préflight | `integrations/openclaw/**` (documentation/tests neufs) | npm test + build + validate | **RUNNING (vague C)** |
 | `R2-RECETTE-01` | Recette émulateur : build, installation, navigation, captures, accessibilité, thèmes, rotation, redémarrage, offline | vagues A–C | `docs/v6-3/r2/preuves/**`, captures | matrice R2 | **READY (vague D)** |
 | `R2-REVIEW-01` | Relectures indépendantes lecture seule | tickets livrés | aucun | grille de revue | **READY** |
 
@@ -94,10 +94,43 @@ jamais « Pixel ».
 | 2026-10-26 | R2-UI-01 livré | `3b06030` + correctif `f0c136f` ; intégré ; 2 correctifs de compilation parent `54b4183` ; tests UI ciblés PASS |
 | 2026-10-26 | R2-CAL-01 livré | `595b224` ; 18 tests ciblés PASS, 496 JVM dans le worktree ; intégré ; P2 rejeu APPLIED documenté |
 | 2026-10-26 | R2-SPORT-01 livré | `005f4a9` ; 8 tests backend, 178 backend + 1 skip, 7 JVM ; intégré ; P3 validateur de schéma local |
-| 2026-10-26 | Gates vague A sur SHA intégré | backend `178 passed, 1 skipped` ; JVM `73 suites, 514 tests, 0 échec` ; lint/build/androidTest en cours |
+| 2026-10-26 | Gates vague A sur SHA intégré | backend `178 passed, 1 skipped` ; JVM `73 suites, 514 tests, 0 échec` ; lint 0/54, build et androidTest PASS |
+| 2026-10-26 | Wave B lancée | 3 enfants `codex:gpt-6-luna` / `xhigh` vérifiés : `1d108d56…` (PLAN), `505ddca3…` (HABITS), `408a1689…` (MEMORY) |
+| 2026-10-26 | R2-MEMORY-01 livré | `5744eee` ; 15 tests mémoire PASS ; intégré ; P2 backend corrompu documenté |
+| 2026-10-26 | R2-HABITS-UI-01 livré | `b21b2e4` ; P1 scroll imbriqué détecté et retiré, imports et annotation corrigés ; 17/17 instrumentés |
+| 2026-10-26 | R2-PLAN-UI-01 livré | `e7c79f5` ; tests AndroidTest adaptés, couleur « à venir » alignée ; 17/17 instrumentés |
+| 2026-10-26 | Incidents émulateur | crash du processus AVD après ~1 h (aucun wipe) ; redémarrage cold boot, données persistantes ; 4 timeouts de localisation sous charge, rejeu isolé PASS |
+| 2026-10-26 | Gates finaux | backend `178 passed, 1 skipped` ; JVM `77 suites, 546 tests, 0 échec` ; lint 0/54 ; APK `cc88e649…` ; instrumentés 17/17 |
+| 2026-10-26 | APK final vérifié | `cc88e649…` installé en mise à jour, SHA relu identique, données pré-R2 lisibles ; aucun crash |
+| 2026-10-26 | Wave C lancée | `R2-USAGE-01` (`ca2ff2d2…`) et `R2-BRIDGE-QA-01` (`d79be9a2…`), `gpt-6-luna` / `xhigh` vérifiés |
 
 ## 7. Preuves
 
 Les preuves versionnées vivent dans `docs/v6-3/r2/preuves/`. Elles ne contiennent
 aucun identifiant matériel, compte, chemin privé, jeton ni donnée personnelle.
 Les captures utilisent exclusivement des fixtures synthétiques.
+
+| Fichier | Contenu |
+|---|---|
+| `preuves/preflight.txt` | pré-vol Git/outils/AVD, sauvegardes, baseline |
+| `preuves/ui-before.txt` | états et captures avant refonte |
+| `preuves/ui-after.txt` | états et captures après refonte |
+| `preuves/gates-wave-a.txt` | tests de la vague A |
+| `preuves/gates-finales.txt` | backend, JVM, lint, build, APK final |
+| `preuves/instrumented.txt` | 17 tests instrumentés API 37 |
+| `preuves/captures/avant/**`, `captures/apres/**` | captures comparatives versionnées |
+| `PREUVES_CONFIDENTIALITE.md` | audit et règles d'expurgation |
+| `REVUE_INTEGRATION_A.md`, `REVUE_INTEGRATION_B.md` | revues parent |
+| `PIXEL_RUNBOOK_R2.md` | reste à valider sur Pixel, aucune action exécutée |
+
+## 8. État final de l'émulateur
+
+- Émulateur `emulator-5554` arrêté proprement après vérification de l'APK final.
+- APK `cc88e649…` installé, SHA relu sur l'appareil identique.
+- Données applicatives pré-R2 restaurées : 1 habitude synthétique, aucun plan.
+- `READ_CALENDAR` révoquée, consentement calendrier effacé.
+- `adb reverse` retiré ; aucun backend ATLAS ou stub ne tourne.
+- Police 1.0, rotation automatique, mode nuit système restaurés.
+- ATLAS reste l'application HOME préexistante.
+- Sauvegardes AVD et app-only conservées hors dépôt.
+- Aucun appareil physique consulté ou modifié.

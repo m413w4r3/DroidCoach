@@ -1,0 +1,62 @@
+ATLAS V6.3 — R2 — Tests instrumentés Android 17
+================================================
+
+Appareil: emulator-5554 (Pixel_9_Pro_XL_2), API 37.2, Android 17.
+Date: 2026-10-26.
+APK testé: SHA-256 87b1240d6bd275cfa5428e266caf03762cb168f7a9832cf998a9724a300bb8b3
+(bâti depuis la même source principale que l'APK final cc88e649).
+Runner: dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner.
+
+Commande
+--------
+adb -s emulator-5554 shell am instrument -w -r \
+  -e class dev.atlas.coach.app.PlanScreenInstrumentationTest,\
+dev.atlas.coach.app.HabitsScreenInstrumentationTest,\
+dev.atlas.coach.app.PlanCalendarScrollInstrumentationTest,\
+dev.atlas.coach.app.HomeNextActionAccessibilityInstrumentationTest \
+  dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+Résultat: OK (17 tests), Time: 58.707 s.
+
+Tests
+-----
+PlanScreenInstrumentationTest
+- missingPlanShowsItsSinglePrimaryAction
+- threeActivitiesRenderChronologicallyAndHighlightTheNextOne
+- overflowListsManagementActionsAndRequiresExplicitDeleteConfirmation
+- coachPreviewListsEveryChangeVersionEffectsSummaryAndWarnings
+- primaryActionRemainsVisibleAtDoubleFontScale
+- planScreenComposesInsideAtlasScrollableFrame
+
+HabitsScreenInstrumentationTest
+- emptyListShowsAddAction
+- fiveHabitsShowListAndDailyProgress
+- checkInCanBeToggledAndUndone
+- detailStartsWithSevenDaysAndCanShowThirty
+- missedAndNotPlannedDaysHaveDifferentAccessibleLabels
+- dailyEditorNeedsOnlyNameAndSave
+- archiveRequiresConfirmationAndRemovesHabitFromActiveList
+- checkInAndAddStayReachableAtFontScaleTwo
+
+PlanCalendarScrollInstrumentationTest
+- planScreenComposesInsideAtlasScrollableFrame
+- calendarPermissionScreenComposesInsideAtlasScrollableFrame
+
+HomeNextActionAccessibilityInstrumentationTest
+- selectedCardExposesOneCompleteAccessibilityDescription
+- nonePlannedCardExposesOneCompleteAccessibilityDescription
+
+Corrections avant PASS
+----------------------
+- Remplacement d'assertDoesNotExist (absent de cette version Compose Test).
+- Assertions du dialogue coach: préfixe « • » et contenu scrollable.
+- En-tête Plan renommé « Aujourd'hui ».
+- Test de grille d'habitudes réécrit avec un historique synthétique: une
+  habitude créée le jour même ne doit pas produire de jours manqués.
+- Le scroll racine accidentel de HabitsScreen a été retiré avant le PASS.
+
+Limites
+-------
+- Ces tests ne remplacent pas une recette Pixel physique.
+- TalkBack matériel non exécuté; les contentDescriptions sont vérifiées.
+- Aucune permission calendrier réelle, aucune écriture wger.
