@@ -58,9 +58,11 @@ internal fun homeNextActionAccessibilityLabel(
     val startMinute = activity.scheduledLocal.startMinute
     val timeRange = "${PlanController.timeLabel(startMinute)} – ${PlanController.endTimeLabel(startMinute, activity.scheduledLocal.durationMinutes)}"
     val status = if (activity.status == ActivityStatus.IN_PROGRESS) "En cours" else "Prévue"
+    val durationMinutes = activity.scheduledLocal.durationMinutes
+    val durationUnit = if (durationMinutes == 1) "minute" else "minutes"
     val goal = goalTitle?.takeIf(String::isNotBlank)?.let { ", objectif $it" }.orEmpty()
     return "Prochaine action : ${activity.title}. $status, $timeRange, " +
-        "${activity.scheduledLocal.durationMinutes} minutes, priorité ${homePriorityLabel(activity.priority)}$goal."
+        "$durationMinutes $durationUnit, priorité ${homePriorityLabel(activity.priority)}$goal."
 }
 
 internal fun homePriorityLabel(priority: Priority): String = when (priority) {
