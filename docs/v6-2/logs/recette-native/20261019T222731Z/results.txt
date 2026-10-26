@@ -3,11 +3,11 @@ PASS native-ui-320dp
 PASS native-landscape
 PASS native-focus-screen
 PASS location-prepare-sharing-consent
-FAIL location-injected-coarse (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T222731Z/location-injected-coarse.log)
+FAIL location-injected-coarse (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T222731Z/location-injected-coarse.log)
 PASS location-permission-refused
 PASS location-api26-timeout-unavailable
 PASS location-revoke-during-capture
 PASS mobility-prepare-sharing-consent
 PASS mobility-visible-service
 NOTE: proceeding to independent Focus/Goals Gateway E2E; location/service failures remain recorded above.
-FAIL gateway-real-context-accelerated-focus (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T222731Z/gateway-real-context-accelerated-focus.log)
+FAIL gateway-real-context-accelerated-focus (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T222731Z/gateway-real-context-accelerated-focus.log)

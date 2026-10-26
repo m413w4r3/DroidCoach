@@ -1,4 +1,4 @@
-COMMAND: ANDROID_SERIAL=emulator-5554 ATLAS_E2E_OUTPUT_DIR=/home/nill/perso/AndroCoach/atlas-preparation/docs/v6-1/logs/recette-20261019/v4-backend-e2e-complete ./scripts/v4-backend-e2e.sh
+COMMAND: ANDROID_SERIAL=emulator-5554 ATLAS_E2E_OUTPUT_DIR=$HOME/perso/AndroCoach/atlas-preparation/docs/v6-1/logs/recette-20261019/v4-backend-e2e-complete ./scripts/v4-backend-e2e.sh
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
 > Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
@@ -95,4 +95,4 @@ PASS: Android backend scenario offline.
 PASS: capture offline saved.
 PASS: Android backend scenario resume.
 PASS: SQLite events=3, unique_event_ids=3.
-PASS: E2E artifacts saved in /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-1/logs/recette-20261019/v4-backend-e2e-complete.
+PASS: E2E artifacts saved in $HOME/perso/AndroCoach/atlas-preparation/docs/v6-1/logs/recette-20261019/v4-backend-e2e-complete.

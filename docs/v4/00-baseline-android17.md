@@ -7,7 +7,7 @@
 ## Environnement relevé
 | Élément | Valeur |
 |---|---|
-| SDK | `/home/nill/Android/Sdk` ; plateformes 23,24,26,31,33,34,35,**37.0,37.1** (pas de `platforms/android-37.2` : seule l'image système 37.2 est installée) |
+| SDK | `$HOME/Android/Sdk` ; plateformes 23,24,26,31,33,34,35,**37.0,37.1** (pas de `platforms/android-37.2` : seule l'image système 37.2 est installée) |
 | JDK | OpenJDK 21.0.12 |
 | Gradle / AGP / Kotlin | 8.9 / 8.7.3 / 2.0.21 (inchangés) |
 | `compileSdk` / `targetSdk` / `minSdk` | 35 / 35 / 26 (inchangés à ce stade) |

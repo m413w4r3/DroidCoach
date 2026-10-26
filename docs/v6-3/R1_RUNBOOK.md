@@ -1,5 +1,8 @@
 # R1 — Runbook d'exécution sur le Pixel
 
+> Le serial de l'appareil est masqué. Définir avant exécution :
+> `export PIXEL_SERIAL="$(adb devices | awk 'NR==2 {print $1}')"`.
+
 Préparation uniquement. Chaque porte de `AUTORISATIONS_R1.md` doit être
 approuvée avant l'action correspondante. Le parent reste le seul opérateur ADB.
 
@@ -7,7 +10,7 @@ approuvée avant l'action correspondante. Le parent reste le seul opérateur ADB
 
 - Pixel 9 Pro XL Android 17/API 37 connecté (`device`).
 - APK 0.1.0 installé, sauvegardé :
-  `/home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-48c7766e.apk`.
+  `$HOME/.local/share/atlas-qa/r1/atlas-installed-0.1.0-48c7766e.apk`.
 - Aucune permission calendrier accordée.
 - Backend ATLAS arrêté ; port 8010 libre ; `adb reverse` vide.
 - OpenClaw gateway `127.0.0.1:18789` actif, agent `atlas` sans outil.
@@ -19,24 +22,24 @@ Générer un token de session sans l'afficher :
 
 ```bash
 umask 077
-mkdir -p /home/nill/.local/share/atlas-qa/r1
+mkdir -p $HOME/.local/share/atlas-qa/r1
 python3 -c 'import secrets; print(secrets.token_urlsafe(32))' \
-  > /home/nill/.local/share/atlas-qa/r1/backend-token.txt
-chmod 600 /home/nill/.local/share/atlas-qa/r1/backend-token.txt
+  > $HOME/.local/share/atlas-qa/r1/backend-token.txt
+chmod 600 $HOME/.local/share/atlas-qa/r1/backend-token.txt
 ```
 
 Lancer le backend (adapter OpenClaw, capability `plan_revision` explicitement
 activée pour ce test de développement) :
 
 ```bash
-cd /home/nill/perso/AndroCoach/atlas-preparation
+cd $HOME/perso/AndroCoach/atlas-preparation
 ATLAS_AGENT_ADAPTER=openclaw \
-ATLAS_TOKEN="$(cat /home/nill/.local/share/atlas-qa/r1/backend-token.txt)" \
-ATLAS_DB_PATH=/home/nill/.local/share/atlas-qa/r1/atlas-r1.sqlite3 \
+ATLAS_TOKEN="$(cat $HOME/.local/share/atlas-qa/r1/backend-token.txt)" \
+ATLAS_DB_PATH=$HOME/.local/share/atlas-qa/r1/atlas-r1.sqlite3 \
 ATLAS_CAPABILITIES_JSON='{"plan_revision":true}' \
 OPENCLAW_BASE_URL=http://127.0.0.1:18789 \
 OPENCLAW_AGENT_ID=atlas \
-OPENCLAW_GATEWAY_TOKEN_FILE=/home/nill/.config/atlas/openclaw-gateway-token \
+OPENCLAW_GATEWAY_TOKEN_FILE=$HOME/.config/atlas/openclaw-gateway-token \
 ATLAS_AGENT_RPM=30 \
 PYTHONPATH=backend \
   backend/.venv/bin/python -m uvicorn atlas_backend.main:app \
@@ -47,7 +50,7 @@ Vérifier sans secret :
 
 ```bash
 curl -sS http://127.0.0.1:8010/health
-curl -sS -H "Authorization: Bearer $(cat /home/nill/.local/share/atlas-qa/r1/backend-token.txt)" \
+curl -sS -H "Authorization: Bearer $(cat $HOME/.local/share/atlas-qa/r1/backend-token.txt)" \
   http://127.0.0.1:8010/v2/agent/status
 ```
 
@@ -56,8 +59,8 @@ Attendu : `/health` 200 ; adapter `openclaw`, breaker fermé.
 ## 2. ADB reverse
 
 ```bash
-adb -s 45301FDAS001QT reverse tcp:8010 tcp:8010
-adb -s 45301FDAS001QT reverse --list
+adb -s $PIXEL_SERIAL reverse tcp:8010 tcp:8010
+adb -s $PIXEL_SERIAL reverse --list
 ```
 
 Attendu : `tcp:8010 tcp:8010`. Aucun autre reverse/forward actif.
@@ -68,17 +71,17 @@ Après accord P1 :
 
 ```bash
 # Sauvegarde app-only avant mise à jour
-adb -s 45301FDAS001QT shell run-as dev.atlas.coach tar -cf - shared_prefs files \
-  > /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
-chmod 600 /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
-sha256sum /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
-tar -tf /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar | head
+adb -s $PIXEL_SERIAL shell run-as dev.atlas.coach tar -cf - shared_prefs files \
+  > $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar
+chmod 600 $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar
+sha256sum $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar
+tar -tf $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar | head
 
 # APK final du build intégré (code 1791030, branche 668ed4b)
 # SHA-256 : 5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f
-APK=/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
+APK=$HOME/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
 sha256sum "$APK"
-adb -s 45301FDAS001QT install -r "$APK"
+adb -s $PIXEL_SERIAL install -r "$APK"
 ```
 
 Attendu : `Success`. Ne pas utiliser `uninstall`, `pm clear`, `-d` sans
@@ -87,8 +90,8 @@ justification ni `run-as` pour modifier les données.
 Vérifier après installation :
 
 ```bash
-adb -s 45301FDAS001QT shell dumpsys package dev.atlas.coach | grep -E 'versionName|versionCode|firstInstallTime|lastUpdateTime'
-adb -s 45301FDAS001QT shell pm list permissions -g -d | grep -E 'READ_CALENDAR|WRITE_CALENDAR' || true
+adb -s $PIXEL_SERIAL shell dumpsys package dev.atlas.coach | grep -E 'versionName|versionCode|firstInstallTime|lastUpdateTime'
+adb -s $PIXEL_SERIAL shell pm list permissions -g -d | grep -E 'READ_CALENDAR|WRITE_CALENDAR' || true
 ```
 
 ## 4. Configuration app (porte P2)
@@ -97,7 +100,7 @@ Dans ATLAS : **Plus > Partage backend**.
 
 - URL : `http://127.0.0.1:8010`
 - Jeton : contenu de
-  `/home/nill/.local/share/atlas-qa/r1/backend-token.txt` (saisie manuelle ou
+  `$HOME/.local/share/atlas-qa/r1/backend-token.txt` (saisie manuelle ou
   canal local, jamais dans un log).
 - Enregistrer.
 
@@ -144,12 +147,12 @@ Aucune écriture calendrier, aucun événement synthétique dans R1.
 ## 8. Clôture et état final
 
 ```bash
-adb -s 45301FDAS001QT reverse --remove tcp:8010
-adb -s 45301FDAS001QT reverse --list
+adb -s $PIXEL_SERIAL reverse --remove tcp:8010
+adb -s $PIXEL_SERIAL reverse --list
 # Arrêter le backend (Ctrl-C ou kill du PID uvicorn)
 ```
 
-- Conserver `/home/nill/.local/share/atlas-qa/r1/` (APK 0.1.0, token de
+- Conserver `$HOME/.local/share/atlas-qa/r1/` (APK 0.1.0, token de
   session, sauvegarde app-only, preuves) hors dépôt, mode 600.
 - Ne pas supprimer le plan utilisateur ni les préférences sans accord.
 - Si le Pixel se débranche : arrêter, marquer les étapes restantes `NOT_RUN`,

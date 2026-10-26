@@ -5,7 +5,7 @@ Date: 2026-10-26
 Agent: da6f402a-09dd-4699-bdd1-809c2f927da7
 Profil vérifié: provider=codex, model=gpt-6-luna, effectiveThinkingOptionId=xhigh,
 mode auto-review
-Worktree: /home/nill/.paseo/worktrees/073527gm/audit-v63-l1-03-access
+Worktree: $HOME/.paseo/worktrees/073527gm/audit-v63-l1-03-access
 Base: 932c8d2af2748f5ef3d27c5ff1ff8b61c861800c
 Worktree RO (chmod a-w), aucun build, aucun test, aucun ADB.
 

@@ -2,12 +2,12 @@ PASS native-ui-360dp
 PASS native-ui-320dp
 PASS native-landscape
 PASS native-focus-screen
-FAIL location-prepare-sharing-consent (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-prepare-sharing-consent.log)
-FAIL location-injected-coarse (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-injected-coarse.log)
-FAIL location-permission-refused (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-permission-refused.log)
-FAIL location-api26-timeout-unavailable (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-api26-timeout-unavailable.log)
-FAIL location-revoke-during-capture (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-revoke-during-capture.log)
+FAIL location-prepare-sharing-consent (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-prepare-sharing-consent.log)
+FAIL location-injected-coarse (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-injected-coarse.log)
+FAIL location-permission-refused (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-permission-refused.log)
+FAIL location-api26-timeout-unavailable (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-api26-timeout-unavailable.log)
+FAIL location-revoke-during-capture (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/location-revoke-during-capture.log)
 PASS mobility-prepare-sharing-consent
-FAIL mobility-visible-service (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/mobility-visible-service.log)
+FAIL mobility-visible-service (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/mobility-visible-service.log)
 NOTE: proceeding to independent Focus/Goals Gateway E2E; location/service failures remain recorded above.
-FAIL gateway-real-context-accelerated-focus (see /home/nill/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/gateway-real-context-accelerated-focus.log)
+FAIL gateway-real-context-accelerated-focus (see $HOME/perso/AndroCoach/atlas-preparation/docs/v6-2/logs/recette-native/20261019T223331Z/gateway-real-context-accelerated-focus.log)

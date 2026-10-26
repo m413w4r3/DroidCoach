@@ -1,1 +1,1 @@
-0e553d99df83dbcf9ebdc26873dbda5ca069a0432fd2f6bc4f1f7f4b7054fde1  /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
+0e553d99df83dbcf9ebdc26873dbda5ca069a0432fd2f6bc4f1f7f4b7054fde1  $HOME/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk

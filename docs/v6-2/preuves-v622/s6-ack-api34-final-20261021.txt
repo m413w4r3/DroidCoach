@@ -73,7 +73,7 @@ Commandes exécutées
   wc -l /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
   sha256sum -c /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
   adb -P 5037 devices  # résumé local expurgé; aucun serial non assigné consigné
-  /home/nill/Android/Sdk/emulator/emulator -list-avds
+  $HOME/Android/Sdk/emulator/emulator -list-avds
   ps -eo comm=,args=  # filtrage local des processus emulator/qemu
 
 Les rapports S5 consultés sont `docs/v6-2/INTEGRATION_V622.md` et

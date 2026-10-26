@@ -1,6 +1,6 @@
 APK SHA-256: 63d04aa1e6a14ca5ebbf753c1c62dede0b5723a7ead0742c0be28116c35f2884
 
-$ /home/nill/Android/Sdk/build-tools/37.0.0/aapt2 dump permissions android/app/build/outputs/apk/debug/app-debug.apk
+$ $HOME/Android/Sdk/build-tools/37.0.0/aapt2 dump permissions android/app/build/outputs/apk/debug/app-debug.apk
 package: dev.atlas.coach
 uses-permission: name='android.permission.INTERNET'
 uses-permission: name='android.permission.PACKAGE_USAGE_STATS'
@@ -9,7 +9,7 @@ uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'
 permission: dev.atlas.coach.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
 uses-permission: name='dev.atlas.coach.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
 
-$ /home/nill/Android/Sdk/cmdline-tools/latest/bin/apkanalyzer manifest target-sdk android/app/build/outputs/apk/debug/app-debug.apk
+$ $HOME/Android/Sdk/cmdline-tools/latest/bin/apkanalyzer manifest target-sdk android/app/build/outputs/apk/debug/app-debug.apk
 36
 
 Target SDK: 36

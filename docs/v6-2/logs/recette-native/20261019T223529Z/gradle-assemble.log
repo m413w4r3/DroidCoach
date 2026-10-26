@@ -117,7 +117,7 @@ java.lang.Exception
 	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
 	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
 	at java.base/java.lang.Thread.run(Thread.java:1583)
-Caused by: java.lang.AssertionError: java.lang.Exception: Could not close incremental caches in /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
+Caused by: java.lang.AssertionError: java.lang.Exception: Could not close incremental caches in $HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
 	at org.jetbrains.kotlin.com.google.common.io.Closer.close(Closer.java:218)
 	at org.jetbrains.kotlin.incremental.IncrementalCachesManager.close(IncrementalCachesManager.kt:55)
 	at kotlin.io.CloseableKt.closeFinally(Closeable.kt:46)
@@ -139,12 +139,12 @@ Caused by: java.lang.AssertionError: java.lang.Exception: Could not close increm
 	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
 	at java.rmi/sun.rmi.transport.tcp.TCPTransport$ConnectionHandler.run(TCPTransport.java:720)
 	... 3 more
-Caused by: java.lang.Exception: Could not close incremental caches in /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
+Caused by: java.lang.Exception: Could not close incremental caches in $HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
 	at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:95)
 	at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.close(BasicMapsOwner.kt:53)
 	at org.jetbrains.kotlin.com.google.common.io.Closer.close(Closer.java:205)
 	... 22 more
-	Suppressed: java.lang.IllegalStateException: Storage for [/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] is already registered
+	Suppressed: java.lang.IllegalStateException: Storage for [$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] is already registered
 		at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:410)
 		at org.jetbrains.kotlin.com.intellij.util.io.PagedFileStorage.<init>(PagedFileStorage.java:72)
 		at org.jetbrains.kotlin.com.intellij.util.io.ResizeableMappedFile.<init>(ResizeableMappedFile.java:68)
@@ -166,10 +166,10 @@ Caused by: java.lang.Exception: Could not close incremental caches in /home/nill
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner$close$1.invoke(BasicMapsOwner.kt:53)
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:87)
 		... 24 more
-		Suppressed: java.lang.Exception: Storage[/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] registration stack trace
+		Suppressed: java.lang.Exception: Storage[$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] registration stack trace
 			at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:437)
 			... 43 more
-	Suppressed: java.lang.IllegalStateException: Storage for [/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] is already registered
+	Suppressed: java.lang.IllegalStateException: Storage for [$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] is already registered
 		at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:410)
 		at org.jetbrains.kotlin.com.intellij.util.io.PagedFileStorage.<init>(PagedFileStorage.java:72)
 		at org.jetbrains.kotlin.com.intellij.util.io.ResizeableMappedFile.<init>(ResizeableMappedFile.java:68)
@@ -192,15 +192,15 @@ Caused by: java.lang.Exception: Could not close incremental caches in /home/nill
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner$close$1.invoke(BasicMapsOwner.kt:53)
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:87)
 		... 24 more
-		Suppressed: java.lang.Exception: Storage[/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] registration stack trace
+		Suppressed: java.lang.Exception: Storage[$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] registration stack trace
 			at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:437)
 			... 44 more
-	Suppressed: java.lang.Exception: Could not close incremental caches in /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups: lookups.tab
+	Suppressed: java.lang.Exception: Could not close incremental caches in $HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups: lookups.tab
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:95)
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.close(BasicMapsOwner.kt:53)
 		at org.jetbrains.kotlin.incremental.LookupStorage.close(LookupStorage.kt:155)
 		... 23 more
-		Suppressed: java.lang.IllegalStateException: Storage for [/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] is already registered
+		Suppressed: java.lang.IllegalStateException: Storage for [$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] is already registered
 			at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:410)
 			at org.jetbrains.kotlin.com.intellij.util.io.PagedFileStorage.<init>(PagedFileStorage.java:72)
 			at org.jetbrains.kotlin.com.intellij.util.io.ResizeableMappedFile.<init>(ResizeableMappedFile.java:68)
@@ -223,7 +223,7 @@ Caused by: java.lang.Exception: Could not close incremental caches in /home/nill
 			at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner$close$1.invoke(BasicMapsOwner.kt:53)
 			at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:87)
 			... 25 more
-			Suppressed: java.lang.Exception: Storage[/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] registration stack trace
+			Suppressed: java.lang.Exception: Storage[$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] registration stack trace
 				at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:437)
 				... 45 more
 
@@ -272,7 +272,7 @@ Failed to compile with Kotlin daemon: java.lang.Exception
 	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
 	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
 	at java.base/java.lang.Thread.run(Thread.java:1583)
-Caused by: java.lang.AssertionError: java.lang.Exception: Could not close incremental caches in /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
+Caused by: java.lang.AssertionError: java.lang.Exception: Could not close incremental caches in $HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
 	at org.jetbrains.kotlin.com.google.common.io.Closer.close(Closer.java:218)
 	at org.jetbrains.kotlin.incremental.IncrementalCachesManager.close(IncrementalCachesManager.kt:55)
 	at kotlin.io.CloseableKt.closeFinally(Closeable.kt:46)
@@ -294,12 +294,12 @@ Caused by: java.lang.AssertionError: java.lang.Exception: Could not close increm
 	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
 	at java.rmi/sun.rmi.transport.tcp.TCPTransport$ConnectionHandler.run(TCPTransport.java:720)
 	... 3 more
-Caused by: java.lang.Exception: Could not close incremental caches in /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
+Caused by: java.lang.Exception: Could not close incremental caches in $HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin: proto.tab, internal-name-to-source.tab
 	at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:95)
 	at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.close(BasicMapsOwner.kt:53)
 	at org.jetbrains.kotlin.com.google.common.io.Closer.close(Closer.java:205)
 	... 22 more
-	Suppressed: java.lang.IllegalStateException: Storage for [/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] is already registered
+	Suppressed: java.lang.IllegalStateException: Storage for [$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] is already registered
 		at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:410)
 		at org.jetbrains.kotlin.com.intellij.util.io.PagedFileStorage.<init>(PagedFileStorage.java:72)
 		at org.jetbrains.kotlin.com.intellij.util.io.ResizeableMappedFile.<init>(ResizeableMappedFile.java:68)
@@ -321,10 +321,10 @@ Caused by: java.lang.Exception: Could not close incremental caches in /home/nill
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner$close$1.invoke(BasicMapsOwner.kt:53)
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:87)
 		... 24 more
-		Suppressed: java.lang.Exception: Storage[/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] registration stack trace
+		Suppressed: java.lang.Exception: Storage[$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab] registration stack trace
 			at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:437)
 			... 43 more
-	Suppressed: java.lang.IllegalStateException: Storage for [/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] is already registered
+	Suppressed: java.lang.IllegalStateException: Storage for [$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] is already registered
 		at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:410)
 		at org.jetbrains.kotlin.com.intellij.util.io.PagedFileStorage.<init>(PagedFileStorage.java:72)
 		at org.jetbrains.kotlin.com.intellij.util.io.ResizeableMappedFile.<init>(ResizeableMappedFile.java:68)
@@ -347,15 +347,15 @@ Caused by: java.lang.Exception: Could not close incremental caches in /home/nill
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner$close$1.invoke(BasicMapsOwner.kt:53)
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:87)
 		... 24 more
-		Suppressed: java.lang.Exception: Storage[/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] registration stack trace
+		Suppressed: java.lang.Exception: Storage[$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab] registration stack trace
 			at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:437)
 			... 44 more
-	Suppressed: java.lang.Exception: Could not close incremental caches in /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups: lookups.tab
+	Suppressed: java.lang.Exception: Could not close incremental caches in $HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups: lookups.tab
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:95)
 		at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.close(BasicMapsOwner.kt:53)
 		at org.jetbrains.kotlin.incremental.LookupStorage.close(LookupStorage.kt:155)
 		... 23 more
-		Suppressed: java.lang.IllegalStateException: Storage for [/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] is already registered
+		Suppressed: java.lang.IllegalStateException: Storage for [$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] is already registered
 			at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:410)
 			at org.jetbrains.kotlin.com.intellij.util.io.PagedFileStorage.<init>(PagedFileStorage.java:72)
 			at org.jetbrains.kotlin.com.intellij.util.io.ResizeableMappedFile.<init>(ResizeableMappedFile.java:68)
@@ -378,7 +378,7 @@ Caused by: java.lang.Exception: Could not close incremental caches in /home/nill
 			at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner$close$1.invoke(BasicMapsOwner.kt:53)
 			at org.jetbrains.kotlin.incremental.storage.BasicMapsOwner.forEachMapSafe(BasicMapsOwner.kt:87)
 			... 25 more
-			Suppressed: java.lang.Exception: Storage[/home/nill/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] registration stack trace
+			Suppressed: java.lang.Exception: Storage[$HOME/perso/AndroCoach/atlas-preparation/android/app/build/kotlin/compileDebugAndroidTestKotlin/cacheable/caches-jvm/lookups/lookups.tab] registration stack trace
 				at org.jetbrains.kotlin.com.intellij.util.io.FilePageCache.registerPagedFileStorage(FilePageCache.java:437)
 				... 45 more
 Using fallback strategy: Compile without Kotlin daemon

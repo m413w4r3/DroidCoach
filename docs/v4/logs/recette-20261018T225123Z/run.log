@@ -8,7 +8,7 @@ PASS: adb devices
 ===== versions Android/Gradle/Kotlin =====
 Horodatage UTC : 20261018T225123Z
 Commit : b44b14c015b9f56ee5735959f0dbfb180a182a49
-ANDROID_HOME=/home/nill/Android/Sdk
+ANDROID_HOME=$HOME/Android/Sdk
 ANDROID_SERIAL=emulator-5556
 SDK platform : 37.2
 Build tools installés :
@@ -233,18 +233,18 @@ PASS: connectedDebugAndroidTest (AVD existant)
     _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-- generated xml file: /home/nill/perso/AndroCoach/atlas-preparation/docs/v4/logs/recette-20261018T225123Z/pytest.xml -
+- generated xml file: $HOME/perso/AndroCoach/atlas-preparation/docs/v4/logs/recette-20261018T225123Z/pytest.xml -
 14 passed, 1 warning in 0.60s
 PASS: pytest backend (venv)
 
 ===== SHA-256 APK debug =====
-76975a1cd56e88318c466538a50d03c844b8acccb00c663db740eaa5e0637ef3  /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
+76975a1cd56e88318c466538a50d03c844b8acccb00c663db740eaa5e0637ef3  $HOME/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
 PASS: SHA-256 APK debug
 
 ===== collecte des rapports XML =====
 Rapports XML Android copiés : 16
-Rapport XML pytest : /home/nill/perso/AndroCoach/atlas-preparation/docs/v4/logs/recette-20261018T225123Z/pytest.xml
+Rapport XML pytest : $HOME/perso/AndroCoach/atlas-preparation/docs/v4/logs/recette-20261018T225123Z/pytest.xml
 PASS: collecte des rapports XML
 
-Rapport de recette : /home/nill/perso/AndroCoach/atlas-preparation/docs/v4/logs/recette-20261018T225123Z
+Rapport de recette : $HOME/perso/AndroCoach/atlas-preparation/docs/v4/logs/recette-20261018T225123Z
 Résultat global : PASS

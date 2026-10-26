@@ -16,12 +16,12 @@ vérifiée.
 
 ## Sources à lire
 
-- Bridge local : `/home/nill/perso/work/Bridges/chatgpt-bridge` (SHA
+- Bridge local : `$HOME/perso/work/Bridges/chatgpt-bridge` (SHA
   `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa`), en particulier `README.md`,
   `AGENTS.md`, `docs/chatgpt_bridge_operations.md`, `bridge/contracts.py`,
   `bridge/routes_bridge.py`, `bridge/routes_openai.py`, `bridge/run_service.py`,
   tests du registre durable, de recherche et des contrôles UI.
-- OpenClaw installé : `/home/nill/.nvm/versions/node/v24.18.0/lib/node_modules/openclaw`
+- OpenClaw installé : `$HOME/.nvm/versions/node/v24.18.0/lib/node_modules/openclaw`
   version **2026.10.5**, docs `docs/plugins/tool-plugins.md`,
   `docs/plugins/manifest.md`, `docs/plugins/sdk-setup.md`,
   `docs/plugins/sdk-overview.md`, `docs/plugins/sdk-subpaths.md`,

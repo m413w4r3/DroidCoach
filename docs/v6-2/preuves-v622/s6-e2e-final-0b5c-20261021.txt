@@ -25,11 +25,11 @@ L'AVD était arrêté au départ. Il a été démarré sans chargement ni sauveg
 Commande AVD réellement lancée :
 
 ```sh
-export ANDROID_HOME=/home/nill/Android/Sdk \
-  ANDROID_SDK_ROOT=/home/nill/Android/Sdk \
+export ANDROID_HOME=$HOME/Android/Sdk \
+  ANDROID_SDK_ROOT=$HOME/Android/Sdk \
   ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home \
   ADB_SERVER_PORT=5037
-/home/nill/Android/Sdk/emulator/emulator -avd atlas_v622_s1_api34 -port 5580 \
+$HOME/Android/Sdk/emulator/emulator -avd atlas_v622_s1_api34 -port 5580 \
   -no-snapshot-load -no-snapshot-save \
   > /tmp/atlas-v622-s6/openclaw-real-final-0b5c-20261021/avd-boot.log 2>&1
 ```
@@ -41,8 +41,8 @@ Un précontrôle strict du runner a été `BLOCKED` avant instrumentation, car l
 Commande de rejeu (les valeurs d'URL et d'authentification restent dans la configuration locale, jamais dans les journaux ou cette preuve) :
 
 ```sh
-export ANDROID_HOME=/home/nill/Android/Sdk \
-  ANDROID_SDK_ROOT=/home/nill/Android/Sdk \
+export ANDROID_HOME=$HOME/Android/Sdk \
+  ANDROID_SDK_ROOT=$HOME/Android/Sdk \
   ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home \
   ADB_SERVER_PORT=5037 ANDROID_SERIAL=emulator-5580
 ATLAS_V622_S6_CANDIDATE_DIR=/tmp/atlas-v622-s6/quarantine-correction-20261021 \

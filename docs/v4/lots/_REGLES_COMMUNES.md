@@ -3,7 +3,7 @@
 Contexte : lire `AGENTS.md`, `README.md`, `prompts/REPRISE_V4_ANDROID17.md` (§ du lot concerné + §6/§7) et `docs/v4/00-baseline-android17.md`.
 
 ## Environnement
-- Dépôt : `/home/nill/perso/AndroCoach/atlas-preparation`, branche `feat/atlas-v4-android17`. Ne jamais `push`, ne jamais toucher `main`, jamais `--force`/`reset --hard`/`clean`.
+- Dépôt : `$HOME/perso/AndroCoach/atlas-preparation`, branche `feat/atlas-v4-android17`. Ne jamais `push`, ne jamais toucher `main`, jamais `--force`/`reset --hard`/`clean`.
 - adb : `$HOME/Android/Sdk/platform-tools/adb`. Émulateur Android 17 / API 37.2 : **`emulator-5556`** (lancé par Android Studio). Toujours `export ANDROID_SERIAL=emulator-5556`. Ne pas lancer, recréer, wiper ni arrêter d'AVD. Ne jamais supposer un Pixel physique.
 - Un seul module Gradle `:app`. Un seul émulateur partagé : n'installer/tester sur l'AVD que si le brief l'autorise ; sinon tests JVM uniquement.
 - Backend : venv `/tmp/v4/venv` (`/tmp/v4/venv/bin/python -m pytest -q`).

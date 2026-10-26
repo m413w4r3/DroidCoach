@@ -10,7 +10,7 @@ sauvegarde, retour arrière, test attendu et état final.
 - ATLAS installé : `dev.atlas.coach` 0.1.0, versionCode 1, `DEBUGGABLE`,
   certificat `CN=Android Debug` SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`.
 - APK installé sauvegardé hors dépôt :
-  `/home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-48c7766e.apk`
+  `$HOME/.local/share/atlas-qa/r1/atlas-installed-0.1.0-48c7766e.apk`
   (mode 600), SHA-256 `48c7766e9090010692f0eaafc1d0cbaf4b22e51259847f94b642a2d060b33583`.
 - `run-as dev.atlas.coach` accessible (app debug) ; `tar` Toybox disponible.
 - Données app actuelles : `shared_prefs/atlas_local_state.xml` (13 976 octets),
@@ -22,9 +22,9 @@ sauvegarde, retour arrière, test attendu et état final.
 
 ```bash
 adb -s <serial> shell run-as dev.atlas.coach tar -cf - shared_prefs files \
-  > /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
-chmod 600 /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
-sha256sum /home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar
+  > $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar
+chmod 600 $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar
+sha256sum $HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar
 ```
 
 - Archive hors dépôt, hors `/tmp` seul, mode 600.

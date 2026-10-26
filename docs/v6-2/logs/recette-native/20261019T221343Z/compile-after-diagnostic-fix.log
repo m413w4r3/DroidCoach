@@ -27,7 +27,7 @@
 > Task :app:bundleDebugClassesToCompileJar
 
 > Task :app:compileDebugAndroidTestKotlin FAILED
-e: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/androidTest/java/dev/atlas/coach/app/V62NativeUiCaptureTest.kt:117:21 Unresolved reference 'onAllNodesWithText'.
+e: file://$HOME/perso/AndroCoach/atlas-preparation/android/app/src/androidTest/java/dev/atlas/coach/app/V62NativeUiCaptureTest.kt:117:21 Unresolved reference 'onAllNodesWithText'.
 
 FAILURE: Build failed with an exception.
 

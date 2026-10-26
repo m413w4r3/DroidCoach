@@ -15,7 +15,7 @@ commit, push ou merge n'a été effectué.
   lancé avec :
 
   ```sh
-  /home/nill/Android/Sdk/emulator/emulator -avd Pixel_9_Pro_XL_2 -no-snapshot-save -no-boot-anim -no-window -port 5556
+  $HOME/Android/Sdk/emulator/emulator -avd Pixel_9_Pro_XL_2 -no-snapshot-save -no-boot-anim -no-window -port 5556
   ```
 
   Aucun `-wipe-data`, recréation ou effacement de données n'a été effectué.

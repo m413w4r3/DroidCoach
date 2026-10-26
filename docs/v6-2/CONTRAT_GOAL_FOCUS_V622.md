@@ -234,6 +234,6 @@ S3 ne touche pas `AtlasController.kt`, l’UI, les tests contrôleur/Compose ou 
 
 La branche et le HEAD correspondent à la référence du prompt maître. L’arbre partagé avait déjà deux non-suivis avant ce livrable, [ORCHESTRATION_V622.md](ORCHESTRATION_V622.md) et [Prompt_Maitre_6.2.2.md](../../prompts/Prompt_Maitre_6.2.2.md) ; ils sont préexistants et préservés.
 
-Inventaire en lecture seule : JDK/OpenJDK 21.0.12.1, Python 3.12.3, Gradle système 4.4.1 (ancien), wrapper présent sous `android/gradlew`, SDK Android `/home/nill/Android/Sdk` avec plateformes 23–37.2 et Build Tools 30.0.3 à 37.0.0, ADB 34.0.4 (`/usr/bin/adb`), pytest 9.1.1 et `backend/.venv` présent. `sdkmanager` n’est pas sur le `PATH`. Cet inventaire ne prouve ni compileSdk effectif ni résultat de test.
+Inventaire en lecture seule : JDK/OpenJDK 21.0.12.1, Python 3.12.3, Gradle système 4.4.1 (ancien), wrapper présent sous `android/gradlew`, SDK Android `$HOME/Android/Sdk` avec plateformes 23–37.2 et Build Tools 30.0.3 à 37.0.0, ADB 34.0.4 (`/usr/bin/adb`), pytest 9.1.1 et `backend/.venv` présent. `sdkmanager` n’est pas sur le `PATH`. Cet inventaire ne prouve ni compileSdk effectif ni résultat de test.
 
 Pour respecter la fenêtre S0, aucune commande de build ou de test n’a été lancée et aucun fichier source/test n’a été édité. Les tests cités sont un inventaire des fichiers présents, pas des résultats V6.2.2. Les validations métier listées en §6 restent à exécuter dans leurs lots après gel des signatures.

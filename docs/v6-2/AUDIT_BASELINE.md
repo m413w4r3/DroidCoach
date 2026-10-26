@@ -19,7 +19,7 @@ Documents lus : `README.md`, `AGENTS.md`, `docs/01-produit.md`, `docs/06-directi
 | Git | 2.43.0 |
 | Java | OpenJDK 21.0.12.1 |
 | Gradle Android | Wrapper 9.6.0; Kotlin 2.3.21 |
-| Android SDK | `ANDROID_HOME=/home/nill/Android/Sdk`; platform `android-37.2`, build-tools `37.0.0`; `minSdk=26`, `targetSdk=36` |
+| Android SDK | `ANDROID_HOME=$HOME/Android/Sdk`; platform `android-37.2`, build-tools `37.0.0`; `minSdk=26`, `targetSdk=36` |
 | SDK Manager | Binaire présent dans `cmdline-tools/latest/bin`, absent du `PATH` |
 | ADB / émulateur | Binaires présents; aucune commande `adb` ou `emulator` exécutée pour cette mission |
 | Python système | 3.12.3, pytest 9.1.1 |

@@ -85,7 +85,7 @@ Le journal actuel ne fournit que la classe d'exception. Le défaut observé n'es
 ### P2-C — Documentation et poids du dépôt
 
 - `docs/v6-2/LIVRAISON.md` parle encore d'un checkout non commité à la base V6.1 : conserver le rapport historique mais ajouter un statut post-push daté et le HEAD V6.2.
-- `docs/v6-2/REVUE_INDEPENDANTE.md` possède des liens absolus `/home/nill/...` et des constats historiques corrigés ensuite. Ajouter un tableau d'issues `corrigé/à confirmer/ouvert` et des liens relatifs.
+- `docs/v6-2/REVUE_INDEPENDANTE.md` possède des liens absolus `$HOME/...` et des constats historiques corrigés ensuite. Ajouter un tableau d'issues `corrigé/à confirmer/ouvert` et des liens relatifs.
 - `docs/v6-2/` comprend 797 fichiers suivis au HEAD, dont 605 sous `logs/` et 168 captures PNG. Conserver les preuves nécessaires, mais éviter les nouveaux duplicatas volumineux ; publier un index de captures représentatives et archiver les preuves annexes sans effacer unilatéralement l'historique.
 - Les clones `references/repos/**` ne sont pas suivis (normal). Ne pas importer un nouveau projet tiers en V6.2.1.
 - L'issue GitHub #1 (localisation à la demande) reste ouverte malgré l'implémentation ; vérifier son périmètre et la fermer seulement avec lien vers tests et réserves.

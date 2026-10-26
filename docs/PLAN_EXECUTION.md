@@ -9,7 +9,7 @@ Source des lots : `docs/09-plan-lots-et-recette-vm.md` (prévaut). Orchestrateur
 | Arch | x86_64, Linux 6.8 |
 | JDK | OpenJDK 21.0.12 |
 | Gradle système | 4.4.1 (inutilisable → wrapper obligatoire, distributions en cache : 8.9-bin, 8.10.2-bin/all) |
-| SDK | `/home/nill/Android/Sdk` (platforms 23…35, 37.0, 37.1 ; build-tools 34.0.0, 35.0.0…) |
+| SDK | `$HOME/Android/Sdk` (platforms 23…35, 37.0, 37.1 ; build-tools 34.0.0, 35.0.0…) |
 | adb | 34.0.4 ; emulator présent ; `avdmanager`/`sdkmanager` hors PATH (cmdline-tools dans le SDK) |
 | AVD | `Pixel_9_Pro_XL`, `Pixel_9_Pro_XL_API_30_2` ; **emulator-5554 actif : Android 11 / API 30 / x86_64** |
 | KVM | `/dev/kvm` root:kvm 660 ; utilisateur hors groupe kvm (émulateur déjà en marche, non bloquant) |

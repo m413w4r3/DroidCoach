@@ -55,8 +55,8 @@ Unable to strip the following libraries, packaging them as they are: libandroidx
 > Task :app:lintAnalyzeDebug
 
 > Task :app:lintReportDebug
-Wrote HTML report to file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.html
-Wrote SARIF report to file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.sarif
+Wrote HTML report to file://$HOME/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.html
+Wrote SARIF report to file://$HOME/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.sarif
 
 > Task :app:lintDebug
 

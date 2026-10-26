@@ -7,7 +7,7 @@
 | Profil | `provider=codex`, `model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh` |
 | Base | `f625f0de21725485c91247e96986fdccd4eee597` |
 | Worktree | `audit/v63-r3-bridge-plugin`, `chmod -R a-w`, HEAD et statut inchangés |
-| Bridge | `/home/nill/perso/work/Bridges/chatgpt-bridge` @ `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa` |
+| Bridge | `$HOME/perso/work/Bridges/chatgpt-bridge` @ `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa` |
 | OpenClaw | installé `2026.10.5` ; `references/repos/openclaw` absent du worktree (ignoré par Git), audit sur l'installation locale |
 | Tests | **aucun exécuté** ; aucun appel réseau, aucune installation, aucun redémarrage |
 

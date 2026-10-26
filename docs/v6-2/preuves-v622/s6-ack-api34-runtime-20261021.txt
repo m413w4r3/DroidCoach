@@ -27,7 +27,7 @@ par défaut et ne listait pas le profil S6. Le registre assigné a ensuite été
 vérifié explicitement :
 
 ```text
-ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home /home/nill/Android/Sdk/emulator/emulator -list-avds
+ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home $HOME/Android/Sdk/emulator/emulator -list-avds
 ```
 
 Il contenait `atlas_v622_s1_api34`. Avant le démarrage, les ports 5580/5581
@@ -38,7 +38,7 @@ cible non-émulateur; cette dernière n'a jamais été ciblée.
 L'AVD a été démarré sans wipe avec :
 
 ```text
-ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home /home/nill/Android/Sdk/emulator/emulator -avd atlas_v622_s1_api34 -port 5580 -no-window -no-audio -no-boot-anim
+ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home $HOME/Android/Sdk/emulator/emulator -avd atlas_v622_s1_api34 -port 5580 -no-window -no-audio -no-boot-anim
 ```
 
 Une fois démarré, les commandes ciblées ont confirmé :

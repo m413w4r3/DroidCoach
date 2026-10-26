@@ -33,7 +33,7 @@ Le SHA épinglé est aussi le `HEAD` annoncé par `git ls-remote` au moment de l
 | JDK / Python | OpenJDK 21.0.12; Python 3.12.3 |
 | Gradle système | 4.4.1; non utilisé pour compiler |
 | Gradle de spike | Wrapper du clone Reef, Gradle 9.5.0, uniquement avec `--project-dir _research/spikes/reef-extraction` |
-| Android SDK | `/home/nill/Android/Sdk`; plateformes 37.0, 37.1 et 37.2 maintenant présentes |
+| Android SDK | `$HOME/Android/Sdk`; plateformes 37.0, 37.1 et 37.2 maintenant présentes |
 | Outils Android | `adb` est présent mais non utilisé; `sdkmanager` et `kotlinc` ne sont pas dans le `PATH` |
 | Émulateur / build ATLAS | Aucun émulateur interrogé ou lancé. Aucun Gradle du projet ATLAS exécuté. |
 
@@ -62,10 +62,10 @@ Le ticket [Reef #91](https://github.com/aload0/Reef/issues/91) est toujours ouve
 
 **Compatibilité Android 37.** La configuration du dépôt déclare `compileSdk = 37`, `targetSdk = 37`, `minSdk = 26`, Java 17. Cela établit seulement une intention de build à niveau 37. B n’a pas construit Reef ni installé l’application sur un AVD. Les services exacts, notifications promues, `SPECIAL_USE`, Usage Access et démarrage d’Activity doivent être validés séparément sur API 37.2; le code n’apporte pas cette preuve.
 
-**Spike.** [_research/spikes/reef-extraction](/home/nill/perso/AndroCoach/atlas-preparation/_research/spikes/reef-extraction/README.md) contient une copie de cinq sources pures : `TimerState.kt`, `FocusStats.kt`, `Routine.kt`, `RoutineEvaluator.kt`, `RoutineTimeCalculator.kt`. Commande lancée depuis `_research/Reef` :
+**Spike.** [_research/spikes/reef-extraction]($HOME/perso/AndroCoach/atlas-preparation/_research/spikes/reef-extraction/README.md) contient une copie de cinq sources pures : `TimerState.kt`, `FocusStats.kt`, `Routine.kt`, `RoutineEvaluator.kt`, `RoutineTimeCalculator.kt`. Commande lancée depuis `_research/Reef` :
 
 ```sh
-./gradlew --project-dir /home/nill/perso/AndroCoach/atlas-preparation/_research/spikes/reef-extraction compileKotlin --no-daemon
+./gradlew --project-dir $HOME/perso/AndroCoach/atlas-preparation/_research/spikes/reef-extraction compileKotlin --no-daemon
 ```
 
 Résultat : **BUILD SUCCESSFUL**, Gradle 9.5.0, une tâche `compileKotlin` exécutée en 1 min 10 s. Aucun test n’a été ajouté ou lancé; aucun service Android, notification ou composable n’a été compilé dans ce spike. Les sources copiées dans `_research` ne font pas partie du code ATLAS.

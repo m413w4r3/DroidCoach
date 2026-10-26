@@ -13,7 +13,7 @@ sans le remplacer, `docs/v6-3/REGISTRE_TACHES.md`.
 | Arbre de travail | propre avant création de la branche |
 | JDK | OpenJDK 21.0.12.1 |
 | Gradle wrapper | 9.6.0 |
-| Android SDK | `ANDROID_HOME=/home/nill/Android/Sdk` |
+| Android SDK | `ANDROID_HOME=$HOME/Android/Sdk` |
 | Python | 3.12.3 |
 | Node | v24.18.0 |
 | Émulateur autorisé | `emulator-5554` |
@@ -87,7 +87,10 @@ jamais « Pixel ».
 |---|---|---|
 | 2026-10-26 | Pré-vol Git, outils, AVD API 37 | **PASS** — base `4386169`, AVD API 37.2, sauvegardes effectuées |
 | 2026-10-26 | Inventaire AVD | **PASS lecture** — ATLAS préinstallé, HOME ATLAS préexistant, aucun calendrier provider |
-| 2026-10-26 | Wave A lancée | voir journal ci-dessous |
+| 2026-10-26 | Baseline backend | **PASS** — `170 passed, 1 skipped` |
+| 2026-10-26 | Audit confidentialité des preuves | **PASS avec correctifs** — serial, nom de calendrier personnel et chemins `$HOME` masqués ; historique Git non réécrit ; voir `PREUVES_CONFIDENTIALITE.md` |
+| 2026-10-26 | Fixtures UI avant | **PASS** — plan vide, 0 puis 3 activités, habitudes 0/1/5, historique, thème, HOME |
+| 2026-10-26 | Wave A lancée | 3 enfants `codex:gpt-6-luna` / `xhigh` vérifiés : `ed02e2cd…` (CAL), `2bb09cbf…` (UI), `ca7f5e7a…` (SPORT) |
 
 ## 7. Preuves
 

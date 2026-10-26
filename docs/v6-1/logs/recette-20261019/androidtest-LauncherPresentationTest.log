@@ -85,7 +85,7 @@ FAILURE: Build failed with an exception.
 
 * What went wrong:
 Execution failed for task ':app:connectedDebugAndroidTest' (registered by plugin 'com.android.internal.application').
-> There were failing tests. See the report at: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/androidTests/connected/debug/index.html
+> There were failing tests. See the report at: file://$HOME/perso/AndroCoach/atlas-preparation/android/app/build/reports/androidTests/connected/debug/index.html
 
 * Try:
 > Run with --stacktrace option to get the stack trace.

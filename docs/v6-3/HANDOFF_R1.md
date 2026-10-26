@@ -41,16 +41,16 @@ distant.
   `1791030`, APK SHA-256
   `5956bb6f59d46c1f18f28f9fd764d2f51fda1a0250b32a148fb2d277d6c03d5f`.
 - APK 0.1.0 précédent sauvegardé :
-  `/home/nill/.local/share/atlas-qa/r1/atlas-installed-0.1.0-48c7766e.apk`.
+  `$HOME/.local/share/atlas-qa/r1/atlas-installed-0.1.0-48c7766e.apk`.
 - Sauvegarde app-only avant mise à jour :
-  `/home/nill/.local/share/atlas-qa/r1/app-data-before-r1.tar` (SHA-256
+  `$HOME/.local/share/atlas-qa/r1/app-data-before-r1.tar` (SHA-256
   `28a74099402c6ca2f2d28d4733f7e1638734a4188e0d42c6aa8cbc7c767bfcdd`).
 - Backend ATLAS : `127.0.0.1:8010`, `/health` 200, adapter `openclaw`,
   capability `plan_revision=true`, DB
-  `/home/nill/.local/share/atlas-qa/r1/atlas-r1.sqlite3`.
-- Token de session : `/home/nill/.local/share/atlas-qa/r1/backend-token.txt`
+  `$HOME/.local/share/atlas-qa/r1/atlas-r1.sqlite3`.
+- Token de session : `$HOME/.local/share/atlas-qa/r1/backend-token.txt`
   (0600). Il est déjà saisi dans l'app (Keystore) ; **ne jamais l'afficher**.
-- `adb -s 45301FDAS001QT reverse tcp:8010 tcp:8010` actif.
+- `adb -s $PIXEL_SERIAL reverse tcp:8010 tcp:8010` actif.
 - App : Sync activée, URL `http://127.0.0.1:8010` enregistrée, jeton enregistré
   et chiffré, aucune catégorie de partage sélectionnée. L'écran courant est
   **Plus > Diagnostic avancé > Configurer le partage backend**.
@@ -148,7 +148,7 @@ accès aux secrets.
 - La recherche Bridge reste `PROMPT_INSTRUCTED_UNVERIFIED` ; ne jamais la
   présenter comme vérifiée.
 - `.env` et token sont en 0600, jamais affichés. Les preuves QA sont dans
-  `/home/nill/.local/share/atlas-qa/r1/` (0700).
+  `$HOME/.local/share/atlas-qa/r1/` (0700).
 - Un résultat inconnu (calendrier, wger, OpenClaw) ne justifie jamais un second
   effet aveugle ; réconcilier ou signaler `UNKNOWN`.
 - Aucun push, PR, merge distant, ni action destructive sur le téléphone sans
@@ -161,7 +161,7 @@ accès aux secrets.
   L5-01 `998e3ac3-...`, L3-01a `6d98e14c-...`, L1-03 `b5722d8a-...`.
 - Relecteurs : L5-01 `f4bfb411-...`, L3-01a `97538bfb-...`,
   L8-02 `f87c50b3-...`.
-- Worktrees sous `/home/nill/.paseo/worktrees/073527gm/` ; les scouts RO sont
+- Worktrees sous `$HOME/.paseo/worktrees/073527gm/` ; les scouts RO sont
   en `chmod -R a-w`. Ne pas réutiliser un worktree d'un autre agent.
 
 ## 10. Fichiers de référence

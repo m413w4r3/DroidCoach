@@ -49,9 +49,9 @@ Unable to strip the following libraries, packaging them as they are: libandroidx
 > Task :app:mergeDebugJavaResource
 
 > Task :app:compileDebugUnitTestKotlin
-w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
-w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
-w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://$HOME/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://$HOME/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://$HOME/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
 
 > Task :app:dexBuilderDebug
 > Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
@@ -66,8 +66,8 @@ w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/jav
 > Task :app:lintAnalyzeDebug
 
 > Task :app:lintReportDebug
-Wrote HTML report to file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.html
-Wrote SARIF report to file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.sarif
+Wrote HTML report to file://$HOME/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.html
+Wrote SARIF report to file://$HOME/perso/AndroCoach/atlas-preparation/android/app/build/reports/lint-results-debug.sarif
 
 > Task :app:lintDebug
 

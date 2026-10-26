@@ -6,7 +6,7 @@
 - Source de vérité : `prompts/Prompt_Maitre_6.2.2.md`, préexistant non suivi, à préserver.
 - HEAD initial vérifié : `bf647cc18a142dd0f5cd5e68b21c36d511014388`, conforme à la référence.
 - Branche créée : `feat/atlas-v6-2-2`. Aucun push/merge/tag.
-- Checkout partagé : `/home/nill/perso/AndroCoach/atlas-preparation`. Propriété exclusive ci-dessous ; aucun travail dans les worktrees historiques.
+- Checkout partagé : `$HOME/perso/AndroCoach/atlas-preparation`. Propriété exclusive ci-dessous ; aucun travail dans les worktrees historiques.
 - Pas de `.codegraph/` à la racine : lecture directe autorisée.
 - Toutes les sous-sessions : `openai-codex:gpt-6-luna`, effort `xhigh`, `notifyOnComplete=true`.
 - Reprise événementielle : notifications natives `spawn_session`, puis `get_session_result`, revue et `send_prompt` à la même session si correction. Aucun polling de statut.

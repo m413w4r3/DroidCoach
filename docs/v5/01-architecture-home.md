@@ -34,7 +34,7 @@ L'audit Lawnchair Apache-2.0 n'a pas identifié de composant nécessaire pour ce
 
 ## Validation et travaux restants
 
-Inventaire pendant le lot : branche `feat/atlas-v5-launcher`; JDK 21.0.12.1; Gradle wrapper 9.6.0; Android SDK indiqué par `ANDROID_HOME=/home/nill/Android/Sdk`; Python 3.12.4. Aucune configuration Gradle n'a été modifiée.
+Inventaire pendant le lot : branche `feat/atlas-v5-launcher`; JDK 21.0.12.1; Gradle wrapper 9.6.0; Android SDK indiqué par `ANDROID_HOME=$HOME/Android/Sdk`; Python 3.12.4. Aucune configuration Gradle n'a été modifiée.
 
 Depuis `android/`, les commandes suivantes ont réussi :
 

@@ -5,6 +5,6 @@ PASS: Android instrumentation method restoredFocusCanPauseResumeAndCancel.
 PASS: Android instrumentation method limitedMandatePreauthorizesFocusPlanOnAndroid.
 PASS: grep -F confirmed OpenClaw Gateway token is absent from repository files.
 PASS: grep -F confirmed random ATLAS bearer token is absent from repository files.
-PASS: Android 17 E2E artifacts saved in /tmp/v621/e2e-real-2 and /home/nill/perso/AndroCoach/atlas-preparation/docs/v6/captures.
+PASS: Android 17 E2E artifacts saved in /tmp/v621/e2e-real-2 and $HOME/perso/AndroCoach/atlas-preparation/docs/v6/captures.
 OK (1 test)
 INSTRUMENTATION_CODE: -1

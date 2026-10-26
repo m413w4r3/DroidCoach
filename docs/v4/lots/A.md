@@ -12,11 +12,11 @@
 
 ## Modifications
 
-- [android/build.gradle.kts](/home/nill/perso/AndroCoach/atlas-preparation/android/build.gradle.kts) : AGP 9.4.1 et plugin Compose 2.2.10. AGP fournit Kotlin 2.2.10 intégré.
-- [android/app/build.gradle.kts](/home/nill/perso/AndroCoach/atlas-preparation/android/app/build.gradle.kts) : `compileSdk` réglé sur release 37, mineure 2; suppression du plugin Kotlin Android redondant avec AGP 9; migration vers `compilerOptions` pour garder le bytecode Java/Kotlin en 17.
-- [android/gradle/wrapper/gradle-wrapper.properties](/home/nill/perso/AndroCoach/atlas-preparation/android/gradle/wrapper/gradle-wrapper.properties) : Gradle 9.6.0, minimum indiqué par AGP 9.4.
-- [scripts/android17-env.sh](/home/nill/perso/AndroCoach/atlas-preparation/scripts/android17-env.sh) : exporte `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `ANDROID_SERIAL` (par défaut `emulator-5556`), puis vérifie `adb`, la plateforme locale 37.2, le nom AVD `Pixel_9_Pro_XL_2`, `SDK_INT=37` et `sdk_full=37.2`. Le script ne démarre, n’arrête, ne recrée et ne wipe aucun AVD.
-- [scripts/v4-recette.sh](/home/nill/perso/AndroCoach/atlas-preparation/scripts/v4-recette.sh) : collecte `adb devices`, versions, unit tests, assemble, lint, tests connectés, pytest via `/tmp/v4/venv`, SHA-256 APK et XML Gradle/pytest dans un dossier horodaté de `docs/v4/logs/`.
+- [android/build.gradle.kts]($HOME/perso/AndroCoach/atlas-preparation/android/build.gradle.kts) : AGP 9.4.1 et plugin Compose 2.2.10. AGP fournit Kotlin 2.2.10 intégré.
+- [android/app/build.gradle.kts]($HOME/perso/AndroCoach/atlas-preparation/android/app/build.gradle.kts) : `compileSdk` réglé sur release 37, mineure 2; suppression du plugin Kotlin Android redondant avec AGP 9; migration vers `compilerOptions` pour garder le bytecode Java/Kotlin en 17.
+- [android/gradle/wrapper/gradle-wrapper.properties]($HOME/perso/AndroCoach/atlas-preparation/android/gradle/wrapper/gradle-wrapper.properties) : Gradle 9.6.0, minimum indiqué par AGP 9.4.
+- [scripts/android17-env.sh]($HOME/perso/AndroCoach/atlas-preparation/scripts/android17-env.sh) : exporte `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `ANDROID_SERIAL` (par défaut `emulator-5556`), puis vérifie `adb`, la plateforme locale 37.2, le nom AVD `Pixel_9_Pro_XL_2`, `SDK_INT=37` et `sdk_full=37.2`. Le script ne démarre, n’arrête, ne recrée et ne wipe aucun AVD.
+- [scripts/v4-recette.sh]($HOME/perso/AndroCoach/atlas-preparation/scripts/v4-recette.sh) : collecte `adb devices`, versions, unit tests, assemble, lint, tests connectés, pytest via `/tmp/v4/venv`, SHA-256 APK et XML Gradle/pytest dans un dossier horodaté de `docs/v4/logs/`.
 - `docs/v4/00-baseline-android17.md` : inventaire SDK et résultats après migration.
 - [Logs et XML de la recette](../logs/recette-20261018T225123Z/).
 
@@ -34,7 +34,7 @@ Le maintien de `targetSdk=35` est explicite et réversible jusqu’à l’audit 
 
 ## Environnement observé
 
-- SDK : `/home/nill/Android/Sdk`; `sdkmanager` 16.0. `sdkmanager --list` réussit avec un avertissement non bloquant indiquant que l’outil connaît les SDK XML jusqu’à version 3 mais en a rencontré un de version 4.
+- SDK : `$HOME/Android/Sdk`; `sdkmanager` 16.0. `sdkmanager --list` réussit avec un avertissement non bloquant indiquant que l’outil connaît les SDK XML jusqu’à version 3 mais en a rencontré un de version 4.
 - Plateformes présentes après installation : Android 23, 24, 26, 31, 33, 34, 35, 37.0, 37.1, 37.2.
 - Build Tools présents après build : 30.0.3, 34.0.0, 35.0.0, 36.0.0-rc1, 36.0.0, 37.0.0.
 - Hôte : OpenJDK 21.0.12.1; ABI AVD x86_64; série ADB `emulator-5556`.

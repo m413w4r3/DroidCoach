@@ -57,7 +57,7 @@ sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug.apk /tmp/atla
 sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
 wc -l /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
 sha256sum -c /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
-/home/nill/Android/Sdk/emulator/emulator -list-avds
+$HOME/Android/Sdk/emulator/emulator -list-avds
 adb -P 5038 devices -l
 ```
 

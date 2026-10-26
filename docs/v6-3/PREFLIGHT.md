@@ -162,7 +162,7 @@ historiques et ne valent pas preuve pour les nouveaux SHA.
 
 | Élément | Constat |
 |---|---|
-| `pwd` | `/home/nill/perso/AndroCoach/atlas-preparation` |
+| `pwd` | `$HOME/perso/AndroCoach/atlas-preparation` |
 | `main` / `origin/main` | `ab477ef70dcf7749fb8283b0213c4fcdaa824341` (aligné) |
 | Branche de reprise | `feat/atlas-v6-3-reprise`, créée depuis `ab477ef` |
 | Worktrees | 27 worktrees préexistants conservés ; aucun supprimé |
@@ -185,7 +185,7 @@ Aucun push, aucune PR, aucun merge distant, aucune action destructive.
 | Signature ATLAS installé | certificat `CN=Android Debug`, SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` — **identique au debug.keystore local** ; une mise à jour APK debug en place est possible sans désinstallation |
 | APK installé (empreinte) | SHA-256 `48c7766e9090010692f0eaafc1d0cbaf4b22e51259847f94b642a2d060b33583` (pull local, non versionné) |
 | Réseau debug Android | `network_security_config.xml` autorise déjà le cleartext pour `127.0.0.1` et `10.0.2.2` ; aucune modification nécessaire pour `adb reverse` |
-| Jeton OpenClaw Gateway | fichier `/home/nill/.config/atlas/openclaw-gateway-token`, mode `600`, non vide ; contenu jamais affiché |
+| Jeton OpenClaw Gateway | fichier `$HOME/.config/atlas/openclaw-gateway-token`, mode `600`, non vide ; contenu jamais affiché |
 | Package de test | `dev.atlas.coach.test` présent |
 | Etar | `ws.xsoh.etar` installé |
 | wger | `de.wger.flutter` installé |
@@ -203,7 +203,7 @@ sauvegarde ou écriture n'a été faite.
 | Bridge ChatGPT | **actif** sur `127.0.0.1:8001` ; `/health` = 200, extension connectée (`extension_connected=true`, `busy=false`) ; `/ready` = 200, `accepting_runs=true`, auth HTTP configurée, registre SQLite accessible |
 | Bridge capabilities | **401 sans Bearer** ; avec le Bearer du `.env` (jamais affiché) : **200**, `transport=chatgpt_web_ui`, `extension_connected=true`, `serialization=single_request`, `text=true`, `new_chat=true`, `streaming=final_delta_only`. **Limite majeure** : `web_search="prompt_instructed"`, `controls.web_search_toggle="unavailable"`, `controls.model_selection="unavailable"`, `actual_model_version=false`, `structured_output="prompt_and_client_validation"`. L'état UI mis en cache indique « ni bouton de recherche ni menu d'outils » et est périmé (> 4 jours). **Une recherche récente vérifiée (`ui_tool`) n'est donc pas disponible dans cet environnement** ; seule une recherche `prompt_instructed` non vérifiée est possible. |
 | Bridge métriques | 256 runs démarrés, 238 terminés, 18 échoués, 7 hits de déduplication, 0 conflit de payload, 0 run actif, extension connectée |
-| Bridge source | `/home/nill/perso/work/Bridges/chatgpt-bridge`, Git `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa`, état local conservé |
+| Bridge source | `$HOME/perso/work/Bridges/chatgpt-bridge`, Git `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa`, état local conservé |
 | OpenClaw Gateway | actif sur `127.0.0.1:18789` (loopback), authentification token existante |
 | OpenClaw installé | version **2026.10.5** (npm global) ; SDK `openclaw/plugin-sdk/tool-plugin` disponible (`defineToolPlugin`, Node ≥ 24.16) |
 | Agent OpenClaw `atlas` | `tools.deny: ["*"]` — planificateur sans outil, conforme à la séparation des rôles |

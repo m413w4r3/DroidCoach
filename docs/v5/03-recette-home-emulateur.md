@@ -7,7 +7,7 @@ Date : 19 octobre 2026. Branche `feat/atlas-v5-launcher`, HEAD de départ `6c2cb
 | Contrôle | Commande | Sortie observée |
 |---|---|---|
 | Branche | `git branch --show-current` | `feat/atlas-v5-launcher` |
-| AVD | `/home/nill/Android/Sdk/emulator/emulator -list-avds` | `Pixel_9_Pro_XL_2` |
+| AVD | `$HOME/Android/Sdk/emulator/emulator -list-avds` | `Pixel_9_Pro_XL_2` |
 | Appareil connecté | `adb devices -l` | `emulator-5554 device product:sdk_gphone16k_x86_64 model:sdk_gphone16k_x86_64 device:emu64xa16k` |
 | Version Android | `adb shell getprop ro.build.version.release`; `adb shell getprop ro.build.version.sdk` | `17`; `37` (image SDK 37.2) |
 | JDK / Gradle | `java -version`; `cd android && ./gradlew --version` | OpenJDK `21.0.12.1`; Gradle `9.6.0` |

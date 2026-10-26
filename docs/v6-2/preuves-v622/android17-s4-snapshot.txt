@@ -26,7 +26,7 @@ Commandes principales:
   bash -n scripts/v622-android17-recipe.sh
   ./scripts/v622-android17-recipe.sh
   ./scripts/v622-android17-recipe.sh --self-test
-  ADB wrapper: /home/nill/Android/Sdk/platform-tools/adb -P 5038 -s emulator-5582
+  ADB wrapper: $HOME/Android/Sdk/platform-tools/adb -P 5038 -s emulator-5582
   Example instrumentation form:
     adb -P 5038 -s emulator-5582 shell am instrument -w -r -e class \
       dev.atlas.coach.location.V62LocationCaptureInstrumentedTest#deniedPermissionStateReturnsFunctionalErrorWithoutCrashing \

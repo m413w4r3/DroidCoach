@@ -49,7 +49,7 @@ Routes livrées :
 
 - Python `3.12.3`, venv créé dans `backend/.venv`.
 - FastAPI `0.115.12`, Pydantic `2.11.5`, Uvicorn `0.34.3`, pytest `8.4.0`, httpx `0.28.1`.
-- Linux x86_64, OpenJDK `21.0.12.1`, Android SDK présent (`ANDROID_HOME=/home/nill/Android/Sdk`), ADB `34.0.4`.
+- Linux x86_64, OpenJDK `21.0.12.1`, Android SDK présent (`ANDROID_HOME=$HOME/Android/Sdk`), ADB `34.0.4`.
 - `adb devices -l` listait `emulator-5554`; les AVD disponibles étaient `Pixel_9_Pro_XL` et `Pixel_9_Pro_XL_API_30_2`. Aucun test Android ou sur Pixel physique n’a été lancé pour ce lot backend.
 - Répertoire `.git` absent.
 

@@ -33,7 +33,7 @@ Lecture intégrale de `AGENTS.md`, `README.md`, `prompts/Prompt_Maitre_6.2.2.md`
 | Hôte | Linux x86_64, noyau `6.8.0-146-generic` |
 | JDK | OpenJDK `21.0.12.1`; `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64` |
 | Gradle / AGP | Wrapper Gradle `9.6.0`; Android Gradle Plugin `9.4.1` |
-| Android | SDK `/home/nill/Android/Sdk`; `compileSdk 37.2`, `minSdk 26`, `targetSdk 36`; émulateur installé `37.2.12`, Build Tools `37.0.0` |
+| Android | SDK `$HOME/Android/Sdk`; `compileSdk 37.2`, `minSdk 26`, `targetSdk 36`; émulateur installé `37.2.12`, Build Tools `37.0.0` |
 | Plateformes SDK installées | Android `23`, `24`, `26`, `31`, `33`, `34`, `35`, `37.0`, `37.1`, `37.2` |
 | Build Tools installés | `30.0.3`, `34.0.0`, `35.0.0`, `36.0.0`, `36.0.0-rc1`, `37.0.0` |
 | Python système | `3.12.4` |

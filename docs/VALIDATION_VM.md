@@ -4,7 +4,7 @@
 
 - Hôte : Linux x86_64, JDK OpenJDK 21.0.12.1.
 - Gradle système : 4.4.1 ; inutilisé. Le wrapper du projet utilise Gradle 8.9.
-- Outils Android : SDK `/home/nill/Android/Sdk`, `adb` 34.0.4.
+- Outils Android : SDK `$HOME/Android/Sdk`, `adb` 34.0.4.
 - Émulateur : `emulator-5554`, Android 11, API 30, ABI `x86_64` (`Pixel_9_Pro_XL_API_30_2`). Aucun appareil Pixel réel n'a été utilisé.
 - Android : `compileSdk` / `targetSdk` 35, `minSdk` 26.
 - Versions : AGP 8.7.3, Kotlin 2.0.21, plugin Compose Kotlin 2.0.21, Compose BOM 2024.12.01.
@@ -29,7 +29,7 @@ Le premier essai de `connectedDebugAndroidTest` a échoué à compiler à cause 
 Depuis la racine du dépôt, génération du wrapper avec Gradle 8.9 déjà présent dans le cache :
 
 ```sh
-/home/nill/.gradle/wrapper/dists/gradle-8.9-bin/90cnw93cvbtalezasaz0blq0a/gradle-8.9/bin/gradle \
+$HOME/.gradle/wrapper/dists/gradle-8.9-bin/90cnw93cvbtalezasaz0blq0a/gradle-8.9/bin/gradle \
   -p android wrapper --gradle-version 8.9 --distribution-type bin
 ```
 
@@ -44,17 +44,17 @@ Build debug et tests :
 La première exécution a terminé avec `BUILD SUCCESSFUL in 39s` et a affiché :
 
 ```text
-APK: /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
+APK: $HOME/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Installation, démarrage et capture :
 
 ```sh
-/home/nill/Android/Sdk/platform-tools/adb -s emulator-5554 install -r \
-  /home/nill/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
-/home/nill/Android/Sdk/platform-tools/adb -s emulator-5554 shell am start \
+$HOME/Android/Sdk/platform-tools/adb -s emulator-5554 install -r \
+  $HOME/perso/AndroCoach/atlas-preparation/android/app/build/outputs/apk/debug/app-debug.apk
+$HOME/Android/Sdk/platform-tools/adb -s emulator-5554 shell am start \
   -n dev.atlas.coach/dev.atlas.coach.app.MainActivity
-/home/nill/Android/Sdk/platform-tools/adb -s emulator-5554 exec-out screencap -p \
+$HOME/Android/Sdk/platform-tools/adb -s emulator-5554 exec-out screencap -p \
   > docs/captures/vm0-accueil.png
 ```
 
@@ -83,7 +83,7 @@ La liste a contenu `dev.atlas.coach/.app.AtlasHomeActivity`. La résolution a re
 
 ## Environnement et artefacts
 
-- Hôte Linux x86_64, JDK 21.0.12.1, SDK `/home/nill/Android/Sdk`.
+- Hôte Linux x86_64, JDK 21.0.12.1, SDK `$HOME/Android/Sdk`.
 - Émulateur utilisé : `emulator-5554`, Android 11 / API 30, ABI x86_64 (`Pixel_9_Pro_XL_API_30_2`). Aucun téléphone Pixel réel n'a été utilisé et aucun AVD n'a été créé ou effacé.
 - Application `dev.atlas.coach`, module unique `:app`, minSdk 26, compile/target SDK 35.
 - APK debug final : [`android/app/build/outputs/apk/debug/app-debug.apk`](../android/app/build/outputs/apk/debug/app-debug.apk), 9 627 215 octets, SHA-256 `a0f70653348711034c72101ed6fd9909c5692b89bd386e02a9d3632025cd1ba4`.
@@ -112,7 +112,7 @@ Sortie finale : `BUILD SUCCESSFUL in 13s`, 1 test exécuté sur `Pixel_9_Pro_XL_
 Pendant l'ajout d'une assertion de persistance UI, deux exécutions intermédiaires du test instrumenté ont échoué parce qu'il cherchait Habitudes alors qu'une session active restaurait l'écran Focus. Le parcours a été corrigé pour revenir à Accueil puis ouvrir Habitudes; la sortie finale ci-dessus passe et confirme que l'habitude est toujours présente après recréation. L'AVD s'est déconnecté d'ADB après le second échec. Le même appareil virtuel a été redémarré, sans création ni wipe :
 
 ```sh
-/home/nill/Android/Sdk/emulator/emulator -avd Pixel_9_Pro_XL_API_30_2 -port 5554 -no-window -no-audio
+$HOME/Android/Sdk/emulator/emulator -avd Pixel_9_Pro_XL_API_30_2 -port 5554 -no-window -no-audio
 ```
 
 Après réinstallation, `KEYCODE_HOME` a ouvert `ResolverActivity`, comme au début; aucun choix HOME n'a été effectué.
@@ -240,7 +240,7 @@ La capability `launcherHome` reste `false` par défaut dans le code; elle a ét�
 
 ### Environnement et APK finale
 
-- Hôte Linux x86_64, OpenJDK 21.0.12.1, wrapper Gradle 8.9, SDK `/home/nill/Android/Sdk`, ADB 34.0.4.
+- Hôte Linux x86_64, OpenJDK 21.0.12.1, wrapper Gradle 8.9, SDK `$HOME/Android/Sdk`, ADB 34.0.4.
 - AVD déjà actif : `emulator-5554`, Android 11 / API 30, ABI x86_64 (`Pixel_9_Pro_XL_API_30_2`). Aucun appareil Pixel réel, aucun AVD créé/effacé/wipé.
 - APK finale : [`android/app/build/outputs/apk/debug/app-debug.apk`](../android/app/build/outputs/apk/debug/app-debug.apk), 9 660 087 octets, SHA-256 `24c48f833b15ef66cf2ca95bda92b624a3917e0b2193c973f2b6acecab32ebf2`.
 - `adb -s emulator-5554 devices -l` a listé `emulator-5554 device product:sdk_phone_x86_64 model:Android_SDK_built_for_x86_64 device:generic_x86_64`; `getprop ro.build.version.release` a répondu `11`, `getprop ro.build.version.sdk` a répondu `30`.

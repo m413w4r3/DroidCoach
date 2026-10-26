@@ -66,9 +66,9 @@ Commandes exécutées
 sha256sum /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug.apk /tmp/atlas-v622-s5-ack-positive-final-20261021/app-debug-androidTest.apk /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
 wc -l /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
 sha256sum -c /tmp/atlas-v622-s5-ack-positive-final-20261021/sources-tests-scripts.sha256
-/home/nill/Android/Sdk/emulator/emulator -list-avds
+$HOME/Android/Sdk/emulator/emulator -list-avds
 adb devices -l
-ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home /home/nill/Android/Sdk/emulator/emulator -list-avds
+ANDROID_AVD_HOME=/tmp/atlas-v622-s1/avd-home $HOME/Android/Sdk/emulator/emulator -list-avds
 ```
 
 Les contrôles locaux des ports 5580/5581 et processus emulator/qemu étaient en
