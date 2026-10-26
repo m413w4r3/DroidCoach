@@ -23,6 +23,13 @@ from atlas_backend.integrations.wger import (
 )
 
 
+class _RedactedArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        del message
+        self.print_usage(sys.stderr)
+        self.exit(2, f"{self.prog}: invalid arguments\n")
+
+
 def _line(mode: str, result: WgerResourceProbe) -> str:
     return json.dumps(
         {
@@ -37,7 +44,7 @@ def _line(mode: str, result: WgerResourceProbe) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = _RedactedArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("api_token", "jwt_refresh"))
     parser.add_argument("--read-only", action="store_true", required=True)
     parser.add_argument("--env-file", type=Path)
@@ -59,8 +66,9 @@ def main(argv: list[str] | None = None) -> int:
             raise WgerError("CONFIG_REQUIRED")
         auth = ApiTokenWgerAuth(token)
         limits = WgerLimits(page_size=1, max_pages=1, max_items=1)
-        with httpx.Client() as http:
-            probe = WgerClient("https://wger.de", auth, http, limits).probe()
+        base_url = os.environ.get("WGER_BASE_URL", "https://wger.de")
+        with httpx.Client(follow_redirects=False) as http:
+            probe = WgerClient(base_url, auth, http, limits).probe()
         print(_line(mode, probe.routines))
         print(_line(mode, probe.exercises))
         return 0
@@ -68,6 +76,16 @@ def main(argv: list[str] | None = None) -> int:
         unavailable = WgerResourceProbe(
             status_http=error.status_code,
             error_category=error.code,
+            element_count=0,
+            pagination_present=False,
+        )
+        print(_line(mode, unavailable))
+        print(_line(mode, unavailable))
+        return 2
+    except (OSError, RuntimeError, ValueError):
+        unavailable = WgerResourceProbe(
+            status_http=None,
+            error_category="CONFIG_REQUIRED",
             element_count=0,
             pagination_present=False,
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ from atlas_backend.integrations.wger import (
     WgerClient,
     WgerError,
     WgerLimits,
+    WgerResourceProbe,
 )
 
 BASE = "https://wger.example"
@@ -237,3 +239,97 @@ def test_probe_output_contains_only_allowlisted_fields_and_no_names():
     }
     assert parsed["pagination_present"] is True
     assert "Private Routine Name" not in output
+
+
+def test_diagnostic_uses_configured_base_url_and_disables_redirects(monkeypatch, capsys):
+    from scripts import wger_diagnostic as diagnostic
+
+    base_url = "https://custom-wger.example"
+    observed = {}
+    monkeypatch.setenv("WGER_AUTH_MODE", "api_token")
+    monkeypatch.setenv("WGER_API_TOKEN", "diagnostic-token-canary")
+    monkeypatch.setenv("WGER_BASE_URL", base_url)
+
+    class FakeHttp:
+        def __init__(self, **kwargs):
+            observed["http_options"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeWgerClient:
+        def __init__(self, configured_base_url, auth, http, limits):
+            observed["base_url"] = configured_base_url
+
+        def probe(self):
+            result = WgerResourceProbe(200, None, 1, False)
+            return SimpleNamespace(routines=result, exercises=result)
+
+    monkeypatch.setattr(diagnostic.httpx, "Client", FakeHttp)
+    monkeypatch.setattr(diagnostic, "WgerClient", FakeWgerClient)
+    result = diagnostic.main(["--mode", "api_token", "--read-only"])
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert observed["base_url"] == base_url
+    assert observed["http_options"] == {"follow_redirects": False}
+    assert base_url not in output
+    assert "diagnostic-token-canary" not in output
+
+
+def test_diagnostic_rejects_non_https_base_url_without_echoing_it(monkeypatch, capsys):
+    from scripts import wger_diagnostic as diagnostic
+
+    base_url = "http://wger.invalid/private-path"
+    options = []
+    monkeypatch.setenv("WGER_AUTH_MODE", "api_token")
+    monkeypatch.setenv("WGER_API_TOKEN", "diagnostic-token-canary")
+    monkeypatch.setenv("WGER_BASE_URL", base_url)
+
+    class FakeHttp:
+        def __init__(self, **kwargs):
+            options.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(diagnostic.httpx, "Client", FakeHttp)
+    result = diagnostic.main(["--mode", "api_token", "--read-only"])
+    output = capsys.readouterr().out
+
+    assert result == 2
+    assert options == [{"follow_redirects": False}]
+    assert '"error_category":"CONFIG_REQUIRED"' in output
+    assert base_url not in output
+    assert "diagnostic-token-canary" not in output
+
+
+def test_diagnostic_dotenv_and_argument_errors_are_redacted(monkeypatch, capsys):
+    from scripts import wger_diagnostic as diagnostic
+
+    path_canary = "/tmp/private-env-path-canary"
+    monkeypatch.setattr(
+        diagnostic,
+        "load_dotenv_if_enabled",
+        lambda _path: (_ for _ in ()).throw(WgerError("CONFIG_REQUIRED")),
+    )
+    result = diagnostic.main(
+        ["--mode", "api_token", "--read-only", "--env-file", path_canary]
+    )
+    output = capsys.readouterr().out
+    assert result == 2
+    assert path_canary not in output
+    assert "Traceback" not in output
+
+    with pytest.raises(SystemExit) as invalid_argument:
+        diagnostic.main(["--mode", "argument-canary", "--read-only"])
+    errors = capsys.readouterr().err
+    assert invalid_argument.value.code == 2
+    assert "argument-canary" not in errors
+    assert "Traceback" not in errors
