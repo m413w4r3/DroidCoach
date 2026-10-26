@@ -16,11 +16,13 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 | T6 | Tests instrumentés API 37 | `am instrument` ciblé | NOT_RUN |
 | T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 23 tests, 6 fichiers, sur SHA intégré |
 | T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | **PASS** le 2026-10-26 |
-| T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | NOT_RUN |
-| T10 | Interop Kotlin ↔ Node | relais local + client de test | NOT_RUN |
+| T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | **PASS** — 25 tests, vecteurs Paseo + cross-vector Node à clés fixes |
+| T10 | Interop Kotlin ↔ Node | relais local + client de test | **PASS** — Android Kotlin ↔ relais ↔ connecteur Node ↔ FastAPI, 4 phases |
 | T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | NOT_RUN |
 | T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — handshake protégé, auth, proposition V3, rejeu, cache |
 | T13 | Calendrier local réel + Etar | tests instrumentés + captures | **PASS** — création, relecture, move/edit/delete, visibilité |
+| T14 | Moteur durable + permissions réelles | tests instrumentés provider réel | **PASS** — reprise, idempotence, crash injecté, revoke/grant, divergence Etar |
+| T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 25 tests sur SHA intégré |
 
 ## 2. Transport — cryptographie
 
@@ -46,32 +48,32 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 | ID | Cas | Statut |
 |---|---|---|
 | F1 | PC seul, relais absent | NOT_RUN |
-| F2 | Android seul, relais absent | NOT_RUN |
-| F3 | Relais présent, backend absent | NOT_RUN |
-| F4 | Backend restauré | NOT_RUN |
-| F5 | Perte réseau simulée | NOT_RUN |
-| F6 | Coupure relais | NOT_RUN |
-| F7 | Redémarrage connecteur PC | NOT_RUN |
-| F8 | Changement d'identité serveur | NOT_RUN |
-| F9 | Demande expirée | NOT_RUN |
-| F10 | Demande répétée (idempotence) | NOT_RUN |
-| F11 | Résultat reçu deux fois | NOT_RUN |
+| F2 | Android seul, relais absent | **PASS** — `OFFLINE`, requête refusée |
+| F3 | Relais présent, backend absent | **PARTIAL** — testé avec stubs côté PC ; arrêt réel de FastAPI non rejoué |
+| F4 | Backend restauré | **PARTIAL** — live check PC ; cycle d'arrêt réel non rejoué |
+| F5 | Perte réseau simulée | **PASS** — coupure du relais |
+| F6 | Coupure relais | **PASS** — phase 2 |
+| F7 | Redémarrage connecteur PC | **PASS** — phase 4, reconnexion Android et révision valide |
+| F8 | Changement d'identité serveur | NOT_RUN (test JVM de handshake altéré disponible) |
+| F9 | Demande expirée | **PASS (JVM)** — expiration refusée |
+| F10 | Demande répétée (idempotence) | **PASS** — E2E, même payload + clé |
+| F11 | Résultat reçu deux fois | **PASS** — `replayed=true`, résultat identique |
 | F12 | Résultat après changement de version du plan | NOT_RUN |
-| F13 | File de requêtes pleine | NOT_RUN |
-| F14 | Redémarrage application Android | NOT_RUN |
-| F15 | Aucun `adb reverse` | NOT_RUN |
+| F13 | File de requêtes pleine | **PASS (JVM)** — file bornée |
+| F14 | Redémarrage application Android | **PASS** — chaque phase est un processus instrumenté neuf |
+| F15 | Aucun `adb reverse` | **PASS** — liste vide avant/pendant l'E2E |
 
 ## 4. Transport — E2E majeur
 
 | ID | Cas | Statut |
 |---|---|---|
-| E1 | Android → relais → Noise → connecteur → FastAPI → Android | NOT_RUN |
-| E2 | Réponse réellement issue de FastAPI | NOT_RUN |
-| E3 | Révision `DayPlan` via transport | NOT_RUN |
-| E4 | Validation Android existante appliquée | NOT_RUN |
-| E5 | Fermeture relais → déconnexion constatée | NOT_RUN |
-| E6 | Relais rétabli → reconnexion valide | NOT_RUN |
-| E7 | Aucun doublon ni requête périmée rejouée | NOT_RUN |
+| E1 | Android → relais → Noise → connecteur → FastAPI → Android | **PASS** — test instrumenté sur `emulator-5554`, `10.0.2.2:4400` |
+| E2 | Réponse réellement issue de FastAPI | **PASS** — `agent_status=ok`, proposition V3 déterministe |
+| E3 | Révision `DayPlan` via transport | **PASS** — `plan.revision.request`, base_version 4 |
+| E4 | Validation Android existante appliquée | **PASS** — `PlanRevisionProposalV3.parse` |
+| E5 | Fermeture relais → déconnexion constatée | **PASS** — phase 2 `OFFLINE` |
+| E6 | Relais rétabli → reconnexion valide | **PASS** — phase 3 |
+| E7 | Aucun doublon ni requête périmée rejouée | **PASS** — rejeu idempotent, métriques 2 erreurs attendues sans doublon |
 
 ## 5. Calendrier
 

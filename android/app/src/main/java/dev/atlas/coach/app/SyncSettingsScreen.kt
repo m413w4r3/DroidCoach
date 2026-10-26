@@ -33,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.sync.SyncDataCategory
 import dev.atlas.coach.app.ui.AtlasRule
+import dev.atlas.coach.app.ui.AtlasSecondaryButton
 
 @Composable
 fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
@@ -104,6 +105,17 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
         }
         Text("Backend", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         AtlasRule()
+        AtlasSecondaryButton(
+            label = "Connexion relayée (PC)",
+            onClick = { controller.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) },
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+        )
+        Text(
+            "Le mode relayé joint le backend du PC à travers un relais chiffré, sans VPN. " +
+                "Le mode direct reste utilisé par défaut.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text("URL du backend", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth().testTag("sync_backend_url"),

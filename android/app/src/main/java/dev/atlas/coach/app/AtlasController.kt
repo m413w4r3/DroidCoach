@@ -114,6 +114,8 @@ import dev.atlas.coach.sync.SyncGateway
 import dev.atlas.coach.sync.SyncResult
 import dev.atlas.coach.sync.SyncStatus
 import dev.atlas.coach.plan.PlanRevisionApiClient
+import dev.atlas.coach.plan.PlanRevisionProposalClient
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.sync.agent.AgentActionType
 import dev.atlas.coach.sync.agent.AgentMode
@@ -225,6 +227,8 @@ class AtlasController @JvmOverloads constructor(
     private val syncOutbox: EventOutbox = syncOutboxOverride ?: AndroidSyncStorage.outbox(appContext)
     private val syncTokenStore = SharedPreferencesBearerTokenStore(appContext)
     private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
+    /** Optional relayed transport; it never opens a socket in DIRECT or OFFLINE mode. */
+    val relaySettings = RelaySettingsController(appContext, clock = { clock.nowMillis() })
     private val persistedSyncSettings = syncSettingsStore.read()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val syncWorker: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { task ->
@@ -2650,20 +2654,26 @@ class AtlasController @JvmOverloads constructor(
      * Plan-revision client for the explicit coach flow. Proposal-only: the
      * capability and a live mandate are rechecked on every request.
      */
-    fun planRevisionClient(): PlanRevisionApiClient? {
+    fun planRevisionClient(): PlanRevisionProposalClient? {
+        val requestAllowed = {
+            capabilities[CAP_PLAN_REVISION] == true &&
+                capabilities[CAP_AGENT] == true &&
+                !revocationBarrier.isAgentBlocked() &&
+                !agentMandateStore.current().let { mandate ->
+                    mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis
+                }
+        }
+        when (relaySettings.mode) {
+            RelayTransportMode.RELAY -> return relaySettings.relayPlanRevisionClient(requestAllowed)
+            RelayTransportMode.OFFLINE -> return null
+            RelayTransportMode.DIRECT -> Unit
+        }
         if (syncTokenStore.token() == null) return null
         if (syncBaseUrl.isBlank() || !isAllowedAgentBackendUrl(syncBaseUrl)) return null
         return PlanRevisionApiClient(
             baseUrl = syncBaseUrl,
             tokenProvider = syncTokenStore,
-            requestAllowed = {
-                capabilities[CAP_PLAN_REVISION] == true &&
-                    capabilities[CAP_AGENT] == true &&
-                    !revocationBarrier.isAgentBlocked() &&
-                    !agentMandateStore.current().let { mandate ->
-                        mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis
-                    }
-            },
+            requestAllowed = requestAllowed,
         )
     }
 
@@ -3727,6 +3737,7 @@ class AtlasController @JvmOverloads constructor(
         recordDailyPlanDue()
         queueProactiveRun()
         refreshProactiveCoachWork()
+        relaySettings.onAppResumed()
     }
 
     fun usageAccessSettingsIntent(): Intent = systemUsageAccessSettingsIntent()

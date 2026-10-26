@@ -118,6 +118,7 @@ fun AtlasApp(
         AtlasScreenId.AGENT_EFFECTS -> "Journal des effets"
         AtlasScreenId.DIAGNOSTICS -> "Diagnostic avancé"
         AtlasScreenId.SYNC_SETTINGS -> "Partage backend"
+        AtlasScreenId.RELAY_SETTINGS -> "Connexion relayée"
         AtlasScreenId.CALENDAR_DIAGNOSTIC -> "Diagnostic calendrier"
         else -> controller.navigationState.current
     }
@@ -160,6 +161,7 @@ fun AtlasApp(
             AtlasScreenId.SIMULATOR -> SimulatorScreen(controller, revision)
             AtlasScreenId.DIAGNOSTICS -> DiagnosticsScreen(controller)
             AtlasScreenId.SYNC_SETTINGS -> SyncSettingsScreen(controller, revision)
+            AtlasScreenId.RELAY_SETTINGS -> RelaySettingsScreen(controller.relaySettings)
             AtlasScreenId.CALENDAR_DIAGNOSTIC -> CalendarPermissionScreen()
             AtlasScreenId.OBSERVATION -> ObservationScreen(controller, context, requestNotifications)
             AtlasScreenId.FOCUS_STATS -> FocusStatsScreen(controller)

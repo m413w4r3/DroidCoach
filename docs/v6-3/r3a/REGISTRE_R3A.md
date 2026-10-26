@@ -87,6 +87,9 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-26 | Permissions réelles `WRITE_CALENDAR` | **PASS** — `pm revoke` → refus sans effet ; `pm grant` → création/suppression ; processus neuf à chaque fois |
 | 2026-10-26 | Modification manuelle dans Etar | **PASS** — titre édité dans `EditEventActivity`, marqueurs conservés, `verify` → `DIVERGED` ; capture `captures/etar-manual-edit.png` |
 | 2026-10-26 | Vague B lancée | `R3-SPORT-WIRE-01` (`d2ad8ba9…`) et `R3-CALENDAR-ETAR-01` (`44871d16…`), profils vérifiés |
+| 2026-10-27 | Second crash AVD pendant build Gradle | **INCIDENT** — APK déjà construit, redémarrage sans wipe, E2E relancé sans Gradle |
+| 2026-10-27 | Connecteur PC + appareil synthétique | identité X25519 persistée, appareil `4812ce79…` appairé, capacités `plan.revision` |
+| 2026-10-27 | E2E Android relayé | **RUNNING** — test instrumenté `RelayE2eInstrumentedTest` via `10.0.2.2:4400`, sans `adb reverse` |
 
 ## 5. Preuves
 
