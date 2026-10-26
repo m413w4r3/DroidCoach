@@ -151,3 +151,96 @@ politique stricte Pydantic (`models_v2.py`), 4 fichiers de tests.
 | Deux enfants dans deux worktrees | **PASS** — `feat/v63-plan-domain` (`17bb723`) et `feat/v63-calendar-read` (`dd9760d`), worktrees distincts, notifications reçues |
 | Revue du parent avant intégration | **PASS** — diffs bornés inspectés, oracles rejoués sur `81e1bd2` puis `f78e3d9`/`5dedcf6` |
 | Sous-délégation | **REFUSÉE** — un enfant a demandé `list_agents`, refus explicite ; aucun enfant n'a créé d'agent |
+
+## 11. Reprise de mission — 26 octobre 2026 (R0)
+
+Cette section **remplace les constats d'environnement** des sections 2, 3, 5, 6 et 10
+pour la campagne de reprise. Les preuves de la première campagne restent
+historiques et ne valent pas preuve pour les nouveaux SHA.
+
+### 11.1 Git et préservation
+
+| Élément | Constat |
+|---|---|
+| `pwd` | `/home/nill/perso/AndroCoach/atlas-preparation` |
+| `main` / `origin/main` | `ab477ef70dcf7749fb8283b0213c4fcdaa824341` (aligné) |
+| Branche de reprise | `feat/atlas-v6-3-reprise`, créée depuis `ab477ef` |
+| Worktrees | 27 worktrees préexistants conservés ; aucun supprimé |
+| État local préservé | 10 suppressions non commitées sous `prompts/` + `prompts/PROMPT_MAITRE.md` non suivi. **Non commités, non modifiés.** |
+| Contradiction `WORKFLOW.md` | Corrigée dans la branche de reprise : 6 enfants max au total, 3 tickets d'implémentation max, **aucune sous-délégation**. `skills/README.md` aligné. |
+| `AGENTS.md` | Inchangé (6 enfants, Luna XHigh, aucune sous-délégation). |
+
+Aucun push, aucune PR, aucun merge distant, aucune action destructive.
+
+### 11.2 Appareils connectés (pré-vol lecture seule)
+
+| Élément | Constat |
+|---|---|
+| Pixel physique | **connecté**, `device`, modèle Pixel 9 Pro XL (`komodo`) |
+| Android | **17 / API 37**, build `CP3A.260905.009`, patch sécurité `2026-09-05` |
+| Identifiant appareil | **non journalisé** (politique ATLAS) |
+| Stockage /data | 109 G, 29 G disponibles (74 % utilisé) |
+| Émulateur | `emulator-5554` également connecté ; le Pixel physique reste prioritaire |
+| ATLAS installé | `dev.atlas.coach` versionName `0.1.0`, versionCode 1, targetSdk 36, dernière MAJ `2026-10-25 00:11` |
+| Package de test | `dev.atlas.coach.test` présent |
+| Etar | `ws.xsoh.etar` installé |
+| wger | `de.wger.flutter` installé |
+| Rôle HOME | **NexusLauncher** (`com.google.android.apps.nexuslauncher`) ; ATLAS n'est pas le HOME par défaut |
+| Permissions calendrier | non vérifiées dans ce pré-vol ; aucun octroi effectué |
+
+Le pré-vol n'a exécuté que des lectures (`getprop`, `pm list packages`, `df`,
+`resolve-activity`, `dumpsys package`). Aucune permission, installation,
+sauvegarde ou écriture n'a été faite.
+
+### 11.3 Services locaux
+
+| Service | Constat vérifié |
+|---|---|
+| Bridge ChatGPT | **actif** sur `127.0.0.1:8001` ; `/health` = 200, extension connectée (`extension_connected=true`, `busy=false`) ; `/ready` = 200, `accepting_runs=true`, auth HTTP configurée, registre SQLite accessible |
+| Bridge capabilities | `/v1/bridge/capabilities` = **401 sans Bearer** ; la clé n'a pas été affichée et aucune requête authentifiée n'a encore été faite |
+| Bridge source | `/home/nill/perso/work/Bridges/chatgpt-bridge`, Git `0a181f844c09d68b62d0e17e3c3d6e83e34a58aa`, état local conservé |
+| OpenClaw Gateway | actif sur `127.0.0.1:18789` (loopback), authentification token existante |
+| OpenClaw installé | version **2026.10.5** (npm global) ; SDK `openclaw/plugin-sdk/tool-plugin` disponible (`defineToolPlugin`, Node ≥ 24.16) |
+| Agent OpenClaw `atlas` | `tools.deny: ["*"]` — planificateur sans outil, conforme à la séparation des rôles |
+| Référence OpenClaw locale | `references/repos/openclaw` à `e3fe108378f6eca2d4e2a4333fd08bf81bb87105` ; le code **installé** prime pour les capacités |
+| Port 8000 | occupé par un service tiers non identifié (`GET /health` → 404). **Ne pas l'utiliser.** |
+| Port 8001 | Bridge ChatGPT (voir ci-dessus) |
+| Backend ATLAS | non démarré. Port de développement retenu pour la reprise : **8010** (voir décisions) |
+
+### 11.4 Secrets (noms seulement)
+
+`.env` racine : ignoré par Git (`.gitignore:8`), non suivi, non affiché.
+Variables présentes : `WGER_BASE_URL`, `WGER_API_TOKEN`, `WGER_REFRESH_TOKEN`,
+`ATLAS_BRIDGE_BASE_URL`, `ATLAS_BRIDGE_API_KEY`. Aucune valeur n'a été lue,
+affichée ou transmise à un agent. `WGER_AUTH_MODE` est **absent** : le mode
+retenu par défaut est `api_token`, jamais `jwt_refresh` implicite.
+
+### 11.5 Références Paseo
+
+| Dépôt | SHA vérifié | Licence / état |
+|---|---|---|
+| `references/repos/paseo` | `902b0c7a1637cc7a6c2ee268dca8161965a35def` | clone de référence, non versionné |
+| `references/repos/paseo-relay` | `3fc41c96c8c63f3a7109e832899cc57d473c4531` | clone de référence, non versionné |
+
+Ces répertoires restent des références hors build ; aucun code n'est importé
+sans audit de licence et mention `THIRD_PARTY_NOTICES.md`.
+
+### 11.6 Outillage
+
+JDK 21.0.12.1 LTS ; Gradle wrapper 9.6.0 ; compileSdk 37.2 / build-tools 37.0.0 ;
+Kotlin 2.2.10 ; Python 3.12.3 (`backend/.venv`) ; Node 24.18.0 ; ADB 1.0.41.
+
+### 11.7 Smoke-test Paseo de la reprise
+
+À exécuter avant toute intégration de la campagne : une session Luna XHigh en
+lecture seule, deux worktrees distincts, notification de fin, vérification des
+métadonnées de session et absence d'écriture. Résultat consigné ci-dessous dès
+réception.
+
+| Étape | Résultat |
+|---|---|
+| Enfant Luna XHigh en lecture seule | à compléter |
+| Deux enfants dans deux worktrees | à compléter |
+| Notification de fin reçue | à compléter |
+| Modèle/effort effectifs vérifiés | à compléter |
+| Sous-délégation refusée | à compléter |

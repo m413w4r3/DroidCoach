@@ -27,12 +27,12 @@ diff, exécute l'oracle sur le SHA intégré et met à jour ce registre.
 | V63-L2-01 | Sonde CalendarContract lecture seule + abstraction testable, sans permission manifeste | L0-01 | `android/.../calendar/**` (main+test) | JVM fake provider + compile Android | **INTEGRATED** (`81e1bd2`) |
 | V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers, **accord propriétaire requis** | L2-01 + accord | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **BLOCKED_APPROVAL** |
 | V63-L2-03 | Lecture événements/conflits réels sur Pixel + Etar installé | L2-02 + appareil | preuves `docs/v6-3/preuves/**` | Pixel + Etar, `PASS/FAIL` | **BLOCKED_DEVICE** |
-| V63-L3-01 | Proposition de révision par OpenClaw, diff et confirmation groupée | L1-01, backend v3 | backend `models_v2.py`/`main.py` + Kotlin `plan` | pytest + JVM stale/expiry | **READY** |
+| V63-L3-01 | Proposition de révision par OpenClaw, diff et confirmation groupée | L1-01, backend v3 | backend `plan_agent_v3.py`/`main.py` + Kotlin `plan` | pytest + JVM stale/expiry | **READY — scindé L3-01a (backend) / L3-01b (Android)** |
 | V63-L4-01 | Écritures calendrier réelles, liens stables, réconciliation | L2-03 + L3-01 + accord | `dev/atlas/coach/calendar/write/**` | provider fake + Pixel/Etar | **BLOCKED_APPROVAL** |
-| V63-L5-01 | Connexion wger lecture (auth, routines, logs), **identifiants requis** | accord | backend `integrations/wger.py`, Android `training/**` | payloads synthétiques + compte réel | **BLOCKED_CREDENTIALS** |
+| V63-L5-01 | Connexion wger lecture (auth, routines, logs), **identifiants requis** | accord | backend `integrations/wger.py`, Android `training/**` | payloads synthétiques + compte réel | **READY — reprise : mode `api_token` lecture seule, identifiants présents** |
 | V63-L6-01 | Boucle sportive complète + écriture autorisée/vérifiée | L5-01 + accord | `training/**`, `ExternalOperation` | fixture puis compte réel | **BLOCKED_CREDENTIALS** |
 | V63-L7-01 | `MemoryFact` local, rétention, révocation, proactivité bornée | L1-01 | `dev/atlas/coach/memory/**` | JVM rétention/revoke | **READY** |
-| V63-L8-01 | Adaptateur Bridge `/health`/capabilities/runs + provenance | Bridge déployé + accord | `backend/integrations/bridge.py`, `dev/atlas/coach/research/**` | mock contrat + service réel | **BLOCKED_SERVICE** |
+| V63-L8-01 | Adaptateur Bridge `/health`/capabilities/runs + provenance | Bridge déployé + accord | `backend/integrations/bridge.py`, `dev/atlas/coach/research/**` | mock contrat + service réel | **READY — reprise : Bridge actif ; plugin OpenClaw consommateur principal** |
 | V63-L9-01 | Mesure de durée UsageStats + `UsageSummary` minimisé | L0-01 | `dev/atlas/coach/usage/**` | JVM + comparaison système Pixel | **READY (JVM)** |
 | V63-L9-02 | Quotas/fenêtres + friction launcher réellement testée | L9-01 | `dev/atlas/coach/rules/**`, launcher | JVM + Pixel | **READY (JVM)** |
 | V63-L9-03 | Blocage inter-applications (Accessibility) | audit séparé + accord | hors MVP | — | **BLOCKED_POLICY** |
@@ -90,3 +90,53 @@ manifeste, aucune donnée personnelle, commit local dans le worktree.
 | 2026-10-26 | V63-L1-02 correction P1/P2 | `5dedcf6` | `6cef04b` | ciblé 66 PASS ; JVM 424 PASS ; backend 91 passed/1 skipped ; lint 0 erreur ; build/androidTest PASS | re-revue : 1 P1 collision + 1 evidence gap |
 | 2026-10-26 | V63-L1-02 collision de hachage | `6cef04b` | `4003095` | ciblé 68 PASS ; JVM 426 PASS ; backend 91 passed/1 skipped ; lint 0 erreur ; build/androidTest PASS | ACCEPTED / INTEGRATED |
 | 2026-10-26 | Revue indépendante finale | `4003095` | docs courantes | re-revue ciblée : collision corrigée, preuves visibles, aucun P0/P1 ; P2 documentaire corrigé | **GO_WITH_LIMITATIONS** |
+
+## Campagne de reprise — 26 octobre 2026
+
+Base de reprise : `ab477ef70dcf7749fb8283b0213c4fcdaa824341` (`main`).
+Branche : `feat/atlas-v6-3-reprise`. Registre unique conservé.
+
+### Constats qui débloquent des tickets
+
+- Pixel 9 Pro XL Android 17/API 37 connecté (pré-vol lecture seule PASS).
+- Bridge actif sur `127.0.0.1:8001`, extension connectée, `accepting_runs=true`.
+- OpenClaw 2026.10.5 actif, SDK `defineToolPlugin` disponible.
+- `.env` contient les clés wger et Bridge (noms vérifiés, valeurs jamais lues).
+- Port 8000 occupé par un tiers : backend de dev sur **8010**.
+
+### Tickets de la reprise
+
+| TASK_ID | Objectif observable | Dépendances | Scope d'écriture exclusif | Oracle | Statut |
+|---|---|---|---|---|---|
+| V63-R0-01 | Pré-vol, alignement documentaire, registre, décisions, smoke Paseo | — | `.agents/WORKFLOW.md`, `.agents/skills/README.md`, `docs/v6-3/PREFLIGHT.md`, `REGISTRE_TACHES.md`, `docs/DECISIONS_AUTOMATIQUES.md`, `docs/v6-3/tickets/**` | revue parent + smoke Paseo | **RUNNING** |
+| V63-R3-SCOUT-01 | Audit lecture seule Bridge local + SDK plugin OpenClaw ; plan d'implémentation `atlas_chatgpt_research` | — | aucun (lecture seule) | rapport avec chemins, API, prérequis, risques, oracle de recette | **READY** |
+| V63-R5-SCOUT-01 | Audit lecture seule transport Paseo/Relay : composants, licences, vecteurs, plan de réemploi | — | aucun (lecture seule) | rapport avec SHA, fichiers, licences, gaps Android | **READY** |
+| V63-L3-01a | Endpoint backend `POST /v3/agent/plan-revision` : OpenClaw propose `plan.revise_day`, validation stricte, idempotence durable, aucun outil | L0-02 | `backend/atlas_backend/plan_agent_v3.py`, `openclaw_adapter.py`, `main.py`, `store.py`, `backend/tests/test_plan_agent_v3*.py` | pytest ciblé + suite backend ; 2e POST idempotent ; contenu différent même clé → 409 ; proposition invalide rejetée | **READY** |
+| V63-L5-01 | Client wger lecture seule `ApiTokenWgerAuth` + `RotatingJwtWgerAuth` sous interface unique, stockage JWT atomique 0600, diagnostic sans secret | accord lecture | `backend/atlas_backend/integrations/**`, `backend/atlas_backend/config.py`, `backend/tests/test_wger*.py` | pytest mock 200/pagination/401/403/429/5xx/timeout/schéma ; aucun secret dans logs | **READY** |
+| V63-L1-03 | Carte « prochaine action » sur HOME issue du plan approuvé | L1-01/L1-02 | `android/.../app/LauncherHomeScreen.kt`, `AtlasScreens.kt`, tests ciblés | JVM ciblé + suite | **READY** |
+| V63-L3-01b | Android : parse strict V3, diff, confirmation groupée, application locale idempotente | L3-01a (contrat gelé) | `android/.../plan/**` (nouveaux fichiers + tests) | JVM stale/expiry/idempotence/contenu altéré | **READY (vague 2)** |
+| V63-L8-02 | Plugin OpenClaw `atlas_chatgpt_research` (outil unique, données non fiables, provenance) | R3-SCOUT-01 | `openclaw-plugin/**` | `openclaw plugins validate` + tests Node + recette Bridge mock | **READY (vague 2)** |
+| V63-L2-02 | Permission `READ_CALENDAR` + écran diagnostic calendriers | accord explicite | manifest + `CalendarPermissionScreen.kt` | permission refusée/accordée, probe | **BLOCKED_APPROVAL** |
+| V63-L4-01 | Écritures calendrier réelles, liens stables, réconciliation | L2-03 + L3-01 + accord | `dev/atlas/coach/calendar/write/**` | provider fake + Pixel/Etar | **BLOCKED_APPROVAL** |
+| V63-L7-01 | `MemoryFact` local, rétention, révocation | L1-01 | `dev/atlas/coach/memory/**` | JVM rétention/revoke | **READY (vague 3)** |
+| V63-L9-01 | Mesure de durée UsageStats + `UsageSummary` minimisé | L0-01 | `dev/atlas/coach/usage/**` | JVM + comparaison Pixel | **READY (vague 3)** |
+
+### Vague 1 — trois implémentations + deux scouts
+
+| Enfant | Worktree | Périmètre | Statut |
+|---|---|---|---|
+| `V63-R3-SCOUT-01` | worktree dédié, `chmod a-w` | Bridge + SDK OpenClaw | READY |
+| `V63-R5-SCOUT-01` | worktree dédié, `chmod a-w` | transport Paseo | READY |
+| `V63-L3-01a` | worktree dédié | backend plan revision | READY |
+| `V63-L5-01` | worktree dédié | backend integrations wger | READY |
+| `V63-L1-03` | worktree dédié | HOME next action | READY |
+
+Contraintes communes : `provider=codex`, `model=gpt-6-luna`, `effort=xhigh`,
+aucune sous-délégation, aucun push, aucune action ADB/Pixel, aucun secret réel
+dans le prompt ou les fixtures, commit local dans le worktree.
+
+### Journal de la reprise
+
+| Date | Ticket | SHA base | SHA résultat | Oracle | Verdict |
+|---|---|---|---|---|---|
+| 2026-10-26 | V63-R0-01 | `ab477ef` | à compléter | pré-vol + alignement | RUNNING |

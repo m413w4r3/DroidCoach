@@ -190,3 +190,23 @@
 | 2026-10-26 | Les événements ATLAS seront marqués par `CUSTOM_APP_PACKAGE` + `CUSTOM_APP_URI`; tout marqueur ambigu est en lecture seule | Colonnes vérifiées dans le SDK 37.2; protège les événements étrangers. |
 | 2026-10-26 | Aucune action Pixel/ADB : aucun appareil connecté au pré-vol | Ne jamais inventer un test physique; les gates physiques restent `BLOCKED_DEVICE`/`NOT_RUN`. |
 | 2026-10-26 | Les exécutions Gradle des enfants sont autorisées uniquement pour compiler/tester et accéder au cache `~/.gradle` | Opération réversible, sans réseau ni donnée personnelle; aucune installation ni action ADB. |
+
+## V6.3 — Reprise de campagne (2026-10-26, R0)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-10-26 | Branche locale `feat/atlas-v6-3-reprise` depuis `ab477ef`; aucun push/merge distant | Le prompt maître autorise le développement local et interdit toute opération distante sans accord ciblé. |
+| 2026-10-26 | Alignement documentaire : **6 enfants directs maximum au total, dont 3 tickets d'implémentation maximum, aucune sous-délégation**. `WORKFLOW.md` et `skills/README.md` corrigés | Le prompt maître exige 6 enfants sans réduire le plafond et interdit la sous-délégation; la phrase contradictoire est supprimée. |
+| 2026-10-26 | Le parent est la session Paseo de l'utilisateur (`deepseek-flash`); tous les enfants sont `provider=codex`, `model=gpt-6-luna`, `effort=xhigh` vérifiés dans les métadonnées | Profil imposé par `AGENTS.md` et le prompt maître; aucun fallback. |
+| 2026-10-26 | Backend ATLAS de développement sur `127.0.0.1:8010` au lieu de 8000 | Le port 8000 est occupé par un service tiers non identifié; `adb reverse tcp:8010 tcp:8010` sera utilisé. Le service tiers n'est ni modifié ni arrêté. |
+| 2026-10-26 | Le Bridge existant `127.0.0.1:8001` est utilisé en lecture/diagnostic; aucun nouveau Bridge, aucun redémarrage sans accord | `/health` et `/ready` sont verts et l'extension est connectée; le prompt maître interdit de recréer un service concurrent. |
+| 2026-10-26 | Le futur `atlas_chatgpt_research` est un **plugin OpenClaw** (`defineToolPlugin`) consommateur direct du Bridge; le backend n'orchestre pas une seconde recherche | Séparation des rôles du prompt maître §2.4/§6.2; le Bridge reste un service autonome. |
+| 2026-10-26 | wger : mode par défaut `api_token` en lecture seule; `WGER_REFRESH_TOKEN` n'est **jamais** consommé automatiquement | `WGER_AUTH_MODE` absent; le refresh token est rotatif et exige une persistance qualifiée avant activation. |
+| 2026-10-26 | `plan.revise_day` est exposé par un **nouvel** endpoint `POST /v3/agent/plan-revision` avec enveloppe V3 existante, et non par extension du flux inbox V2 | Le contrat V3 imbrique `proposal` dans une enveloppe `schema_version: 3`; un client V2 doit refuser la version inconnue. Le flux V2 reste inchangé et compatible. |
+| 2026-10-26 | Le backend ne fait qu'une **pré-validation déterministe** (`validate_plan_revision`); Android recalcule diff, effets, hash et confirmation | Android reste l'autorité finale; une proposition IA n'est jamais une permission. |
+| 2026-10-26 | L'envoi du plan au coach local exige un indicateur explicite `plan_context_consented=true` dans la requête, émis seulement après action UI de divulgation | Le plan est une donnée personnelle; l'accord doit être visible et révocable, sans créer encore un nouveau modèle de consentement complet. |
+| 2026-10-26 | Le planificateur OpenClaw conserve `tools.deny: ["*"]`; le futur agent/contexte de recherche reçoit uniquement `atlas_chatgpt_research` | Séparation planificateur/recherche du prompt maître §6.9; aucun outil arbitraire. |
+| 2026-10-26 | Les permissions `READ_CALENDAR`/`WRITE_CALENDAR` restent **non déclarées** jusqu'à accord ciblé du propriétaire | Ajout sensible et installation d'APK soumis à autorisation; L2-02 reste `BLOCKED_APPROVAL`. |
+| 2026-10-26 | Le rôle HOME reste NexusLauncher; ATLAS n'est pas promu HOME pendant R0 | Toute modification de rôle HOME exige un accord ciblé et une restauration. |
+| 2026-10-26 | Les clones `references/repos/paseo` et `paseo-relay` sont utilisés uniquement comme références de lecture, aux SHA `902b0c7` et `3fc41c9` | Audit de licence et de vecteurs requis avant tout réemploi; aucun sous-module ni dépendance de build. |
+| 2026-10-26 | Le smoke-test Paseo (session Luna XHigh lecture seule, deux worktrees, notification, modèle vérifié) est rejoué pour cette campagne | Les preuves de la campagne précédente ne valent pas pour les nouveaux SHA. |
