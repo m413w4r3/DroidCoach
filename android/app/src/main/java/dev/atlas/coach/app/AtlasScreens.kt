@@ -692,6 +692,7 @@ internal fun MoreScreen(controller: AtlasController) {
         Text("Autres espaces", style = MaterialTheme.typography.headlineSmall)
         AtlasSection("Programme") {
             AtlasSecondaryButton("Plan du jour", onClick = { controller.navigationState.navigate(AtlasScreenId.PLAN) })
+            AtlasSecondaryButton("Diagnostic calendrier", onClick = { controller.navigationState.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) })
         }
         AtlasSection("Bibliothèque et journal") {
             AtlasSecondaryButton("Bibliothèque", onClick = { controller.navigationState.navigate(AtlasScreenId.LIBRARY) })

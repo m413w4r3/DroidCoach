@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -46,13 +47,15 @@ import java.time.Duration
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Local day-plan surface. Every mutation is previewed before it is applied; no
- * network, calendar provider or agent is contacted from this screen.
+ * Local day-plan surface. Local mutations are previewed before application.
+ * The explicit coach request is the only network path: it requires the
+ * planRevision capability and consent, and it still produces only a preview.
  */
 @Composable
-internal fun PlanScreen(controller: PlanController) {
+internal fun PlanScreen(controller: PlanController, atlasController: AtlasController? = null) {
     val plan = controller.plan
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<PlanActivity?>(null) }
@@ -127,6 +130,7 @@ internal fun PlanScreen(controller: PlanController) {
             }
         } else {
             PlanHeaderCard(plan)
+            PlanAgentSection(controller, atlasController)
             AtlasPrimaryButton("Ajouter une activité", onClick = { showAdd = true })
             AtlasSection("Créneaux") {
                 if (plan.activities.isEmpty()) {
@@ -246,6 +250,137 @@ internal fun PlanScreen(controller: PlanController) {
             },
             onConfirm = {
                 controller.confirmPreview()
+            },
+        )
+    }
+}
+
+@Composable
+private fun PlanAgentSection(controller: PlanController, atlasController: AtlasController?) {
+    if (atlasController == null) return
+    var showConsent by remember { mutableStateOf(false) }
+    var showRequest by remember { mutableStateOf(false) }
+    var agentMessage by remember { mutableStateOf("Propose une organisation de ma journée.") }
+    var configurationMessage by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val enabled = atlasController.capabilities[AtlasController.CAP_PLAN_REVISION] == true
+    val configured = atlasController.syncTokenConfigured && atlasController.syncBaseUrl.isNotBlank()
+
+    AtlasSection("Coach") {
+        if (!enabled) {
+            Text(
+                "Les révisions par le coach sont désactivées. Le programme reste entièrement local.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            AtlasPrimaryButton("Activer les révisions par le coach", onClick = { showConsent = true })
+        } else {
+            Text(
+                "Le coach peut proposer une révision du programme. Rien n'est appliqué sans votre confirmation groupée.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            configurationMessage?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (!configured) {
+                Text(
+                    "Configurez l'URL et le jeton du backend dans Plus > Partage backend.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                AtlasPrimaryButton(
+                    if (busy) "Demande en cours…" else "Demander au coach",
+                    onClick = {
+                        if (!busy) {
+                            configurationMessage = null
+                            showRequest = true
+                        }
+                    },
+                )
+            }
+            AtlasSecondaryButton(
+                "Désactiver les révisions par le coach",
+                onClick = {
+                    atlasController.setCapability(AtlasController.CAP_PLAN_REVISION, false)
+                    if (controller.preview != null) controller.cancelPreview()
+                },
+            )
+        }
+    }
+
+    if (showConsent) {
+        AlertDialog(
+            onDismissRequest = { showConsent = false },
+            title = { Text("Envoyer le programme au coach local ?") },
+            text = {
+                Text(
+                    "Le programme du jour (titre, horaires, durées, priorités, objectif) sera envoyé au backend local ATLAS puis au coach OpenClaw. Aucun calendrier, aucune note libre et aucun identifiant wger ne sont envoyés. Vous pouvez désactiver cette fonction à tout moment.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    atlasController.setCapability(AtlasController.CAP_PLAN_REVISION, true)
+                    showConsent = false
+                }) { Text("Activer") }
+            },
+            dismissButton = { TextButton(onClick = { showConsent = false }) { Text("Annuler") } },
+        )
+    }
+
+    if (showRequest) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showRequest = false },
+            title = { Text("Demander une révision au coach") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Décrivez la journée souhaitée. La proposition restera un aperçu jusqu'à votre confirmation.")
+                    OutlinedTextField(
+                        value = agentMessage,
+                        onValueChange = { if (it.length <= 2_000) agentMessage = it },
+                        label = { Text("Message") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !busy && agentMessage.isNotBlank(),
+                    onClick = {
+                        val client = atlasController.planRevisionClient()
+                        val mandate = atlasController.planRevisionMandate
+                        if (client == null || mandate == null) {
+                            configurationMessage = "Configurez le backend, le jeton et le mandat du Coach avant de demander une révision."
+                            showRequest = false
+                            return@TextButton
+                        }
+                        showRequest = false
+                        busy = true
+                        scope.launch {
+                            try {
+                                controller.proposeAgentRevisionSuspending(
+                                    client = client,
+                                    conversationId = null,
+                                    message = agentMessage,
+                                    mandate = mandate,
+                                    planContextConsented = true,
+                                    planRevisionCapabilityEnabled = true,
+                                )
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                ) { Text(if (busy) "Envoi…" else "Envoyer") }
+            },
+            dismissButton = {
+                TextButton(enabled = !busy, onClick = { showRequest = false }) { Text("Annuler") }
             },
         )
     }

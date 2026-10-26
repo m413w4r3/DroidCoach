@@ -117,6 +117,7 @@ fun AtlasApp(
         AtlasScreenId.AGENT_EFFECTS -> "Journal des effets"
         AtlasScreenId.DIAGNOSTICS -> "Diagnostic avancé"
         AtlasScreenId.SYNC_SETTINGS -> "Partage backend"
+        AtlasScreenId.CALENDAR_DIAGNOSTIC -> "Diagnostic calendrier"
         else -> controller.navigationState.current
     }
     AtlasScreenFrame(
@@ -138,7 +139,7 @@ fun AtlasApp(
     ) {
         when (controller.navigationState.current) {
             AtlasScreenId.HOME -> HomeScreen(controller, revision)
-            AtlasScreenId.PLAN -> PlanScreen(planController)
+            AtlasScreenId.PLAN -> PlanScreen(planController, controller)
             AtlasScreenId.FOCUS -> FocusScreen(controller, revision, onChooseHabit = { showLinkChoices = true })
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)
@@ -157,6 +158,7 @@ fun AtlasApp(
             AtlasScreenId.SIMULATOR -> SimulatorScreen(controller, revision)
             AtlasScreenId.DIAGNOSTICS -> DiagnosticsScreen(controller)
             AtlasScreenId.SYNC_SETTINGS -> SyncSettingsScreen(controller, revision)
+            AtlasScreenId.CALENDAR_DIAGNOSTIC -> CalendarPermissionScreen()
             AtlasScreenId.OBSERVATION -> ObservationScreen(controller, context, requestNotifications)
             AtlasScreenId.FOCUS_STATS -> FocusStatsScreen(controller)
             AtlasScreenId.ROUTINES -> FocusRoutinesScreen(controller)
