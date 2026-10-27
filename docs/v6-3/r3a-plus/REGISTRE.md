@@ -52,7 +52,7 @@ Le numéro de série matériel n'est pas reporté dans les preuves versionnées.
 | `R3AP-PREFLIGHT-01` | pré-vol, branche, docs, sauvegarde Pixel | `docs/v6-3/r3a-plus/**` | pré-vol + backup + baseline | **ACCEPTED (parent)** |
 | `R3AP-WSS-01` | politique réseau WSS, validation PC/Android, infra TLS de test | `integrations/relay/pc/src/relay-link.ts`, `integrations/relay/pc/test/relay-url.test.ts`, `android/app/src/main/java/dev/atlas/coach/sync/relay/{RelayConfig,RelayConfigurationValidator,PaseoRelayClient}.kt`, tests JVM de ces fichiers, `android/app/src/debug/**`, `tools/relay-tls-test/**`, `docs/v6-3/r3a-plus/preuves/wss-*` | WSS de test accepté, WS distant refusé, mauvais hostname/CA/identité refusés, FastAPI privé | **READY** |
 | `R3AP-PACKAGING-01` | packaging reproductible + supervision utilisateur | `integrations/relay/pc/{package.json,package-lock.json}`, `integrations/relay/pc/scripts/**`, `integrations/relay/pc/vendor/**`, `integrations/relay/pc/packaging/**`, `integrations/relay/pc/systemd/**`, `THIRD_PARTY_NOTICES.md`, `docs/v6-3/r3a-plus/{INSTALLATION_PC,SUPERVISION_PC}.md`, `docs/v6-3/r3a-plus/preuves/packaging-*` | installation propre sans clone Paseo, hash vérifié, unité systemd valide, secrets non affichés | **READY** |
-| `R3AP-CALENDAR-01` | scénarios C1–C5 réels et tests instrumentés | `android/app/src/main/java/dev/atlas/coach/calendar/**` (correctifs ciblés), `android/app/src/test/java/dev/atlas/coach/calendar/**`, `android/app/src/androidTest/java/dev/atlas/coach/calendar/**`, `docs/v6-3/r3a-plus/preuves/calendar-*` | tests JVM + androidTest compilés ; scénarios exécutables sur Pixel | **READY** |
+| `R3AP-CALENDAR-01` | scénarios C1–C5 réels et tests instrumentés | `android/app/src/main/java/dev/atlas/coach/calendar/**` (correctifs ciblés), `android/app/src/test/java/dev/atlas/coach/calendar/**`, `android/app/src/androidTest/java/dev/atlas/coach/calendar/**`, `docs/v6-3/r3a-plus/preuves/calendar-*` | tests JVM + androidTest compilés ; scénarios exécutables sur Pixel | **ACCEPTED / INTEGRATED** — `e66d2ef`, merge `0f3426a` ; 64 tests JVM ciblés PASS rejoués par le parent ; androidTest compilé ; Pixel NOT_RUN |
 | `R3AP-RESILIENCE-01` | résilience et idempotence du connecteur | `integrations/relay/pc/src/{connector,session,operations,backend,metrics,protocol}.ts`, `integrations/relay/pc/test/**` hors fichiers A1 | 13 scénarios de résilience, échec fermé, pas de rejeu aveugle | **PENDING** |
 | `R3AP-PAIRING-01` | appairage/révocation atomiques | `integrations/relay/pc/src/{main,device-registry,secure-files,file-lock}.ts`, tests correspondants | aucun appareil orphelin autorisé, token jamais sur stdout, concurrence sûre | **PENDING** |
 | `R3AP-ANDROID-P3-01` | corrections P3 et messages | fichiers UI/usage/relais ciblés, tests correspondants | quota désactivé affiché « Désactivé », erreurs TLS/identité/permission distinctes | **PENDING** |
@@ -84,6 +84,9 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Branche `feat/atlas-v6-3-r3a-plus` créée sur `9a05dca` | **PASS** |
 | 2026-10-27 | Contrats R3-A+ figés | **PASS (doc)** |
 | 2026-10-27 | Preuve de pré-vol Pixel | `preuves/preflight-pixel.txt` |
+| 2026-10-27 | `R3AP-CALENDAR-01` livré | `e66d2ef` + doc `a827d69` ; 64 JVM ciblés et 590 JVM complets annoncés par l'agent ; androidTest compilé |
+| 2026-10-27 | Revue parent `R3AP-CALENDAR-01` | scope conforme, pas de symlink commité, pas de sortie de build ; 64 tests ciblés rejoués PASS sur le merge |
+| 2026-10-27 | Intégration calendrier | merge `0f3426a` ; suite JVM complète à rejouer (écart 590 vs 651 à expliquer) ; Pixel NOT_RUN |
 
 ## 5. Preuves
 

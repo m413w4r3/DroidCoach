@@ -8,6 +8,9 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 |---|---|---|---|---|
 | `preflight-pixel.txt` | `012b101` | installé `6ab95fac` | pré-vol, sauvegarde, baseline Pixel | **final (pré-vol)** |
 | `backend-baseline.txt` | `012b101` | n/a | backend et routes connecteur | **final (baseline)** |
+| `calendar-unit-tests.txt` | `e66d2ef` | n/a | JVM calendrier et compilation androidTest | **final (JVM)** |
+| `calendar-androidtest-commands.txt` | `e66d2ef` | n/a | commandes Pixel C1–C5 | **à exécuter** |
+| `calendar-merged-targeted.txt` | `0f3426a` (merge) | n/a | 64 tests JVM ciblés rejoués par le parent | **final (JVM)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles
