@@ -1,0 +1,34 @@
+TASK_ID: R3AP-CALENDAR-01
+BASE_SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+CODE_SHA_TESTED: e66d2efa7ad2de415fe98b2aaeb28502dfa4606f
+DATE: 2026-10-27
+ENVIRONMENT: local JVM / Android Gradle build, JDK 21; no ADB and no device access
+
+TARGETED CALENDAR JVM TESTS
+Command (from android/):
+  ./gradlew --offline :app:testDebugUnitTest --tests 'dev.atlas.coach.calendar.*' --rerun-tasks --max-workers=1
+Status: PASS
+Count: 64 tests, 3 suites, 0 failures, 0 errors, 0 skipped
+Suites: CalendarReadConsentTest (3), CalendarReadServiceTest (23), CalendarWriteServiceTest (38)
+
+FULL JVM SUITE
+Command (from android/):
+  ./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1
+Status: PASS
+Count: 590 tests, 88 suites, 0 failures, 0 errors, 0 skipped
+
+INSTRUMENTED APK COMPILATION (OFFLINE)
+Command (from android/):
+  ./gradlew --offline :app:assembleDebugAndroidTest
+Status: PASS
+The 13 C1-C5 methods in AtlasR3aPlusCalendarInstrumentedTest compiled. They were NOT_RUN on a device.
+
+DIFF CHECK
+Command (from repository root):
+  git diff --check
+Status: PASS
+
+LIMITS
+- No ADB command was run; no APK was installed; no Pixel/AVD scenario was executed.
+- C1 SIGKILL/recovery and C2-C5 provider behavior remain NOT_RUN until the parent runs the commands in calendar-androidtest-commands.txt on the owner-authorized Pixel.
+- Non-blocking existing Kotlin warnings appeared in PlanScreen.kt and unchecked casts in unrelated JVM tests; no compilation or test failure resulted.
