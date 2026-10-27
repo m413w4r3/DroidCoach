@@ -134,7 +134,7 @@ export class SessionManager {
     for (const [deviceId, peer] of this.active) {
       try {
         const device = await this.registry.get(deviceId);
-        if (!device || device.revoked_at) peer.close(4001, "device revoked");
+        if (!device || device.revoked_at) await peer.revoke();
       } catch {
         peer.close(4001, "device unavailable");
       }
@@ -220,6 +220,13 @@ export class PeerSession {
       await this.sendError(remoteError, currentRequestId);
       if (!this.auth || remoteError.code === "AUTH_REQUIRED" || remoteError.code === "DEVICE_REVOKED") this.close(4001, remoteError.message);
     }
+  }
+
+  /** Notifies the client before closing so the UI can distinguish revocation from a network error. */
+  async revoke(): Promise<void> {
+    if (this.closed) return;
+    await this.sendError(new RemoteError("DEVICE_REVOKED"), null);
+    this.close(4001, "device revoked");
   }
 
   close(code = 1000, reason = "closed"): void {

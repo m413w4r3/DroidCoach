@@ -1,0 +1,48 @@
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 10.06
+
+OK (1 test)
+
+
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 0.036
+
+OK (1 test)
+
+
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 1.971
+
+OK (1 test)
+
+
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 0.042
+
+OK (1 test)
+
+
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 8.116
+
+OK (1 test)
+
+
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 8.057
+
+OK (1 test)
+
+

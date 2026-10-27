@@ -11,6 +11,7 @@ const ALLOWED_KEYS = new Set([
   "ATLAS_BACKEND_URL",
   "ATLAS_SERVICE_TOKEN",
   "ATLAS_ALLOW_LOOPBACK_WS",
+  "ATLAS_HANDSHAKE_TIMEOUT_MS",
   "ATLAS_METRICS_PORT",
   "ATLAS_TEST_RELAY_URL",
 ]);
@@ -84,6 +85,14 @@ export function inspectConfiguration(environment, { checkState = true } = {}) {
   }
   if (environment.ATLAS_RELAY_SERVER_ID && Buffer.byteLength(environment.ATLAS_RELAY_SERVER_ID, "utf8") > 200) {
     errors.push("relay server id must not exceed 200 UTF-8 bytes");
+  }
+  const handshakeRaw = environment.ATLAS_HANDSHAKE_TIMEOUT_MS;
+  if (handshakeRaw !== undefined) {
+    if (!/^\d+$/.test(handshakeRaw) || Number(handshakeRaw) < 100 || Number(handshakeRaw) > 60_000) {
+      errors.push("ATLAS_HANDSHAKE_TIMEOUT_MS must be an integer from 100 to 60000");
+    } else {
+      checks.push(`relay responder handshake timeout is ${handshakeRaw} ms`);
+    }
   }
   if (checkState && isAbsolute(stateDir)) {
     const state = inspectStateDirectory(stateDir);

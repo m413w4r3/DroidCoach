@@ -207,6 +207,52 @@ class RelayBackendTransportTest {
         } finally { transport.close() }
     }
 
+    @Test
+    fun heartbeatReconnectsWhenThePeerStopsAnswering() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(staticPair)
+        val transport = RelayBackendTransport(
+            config = RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 2),
+            credentialStore = InMemoryRelayCredentialStore(credentials),
+            socketFactory = sockets,
+            heartbeatIntervalMillis = 80,
+            heartbeatTimeoutMillis = 80,
+        )
+        try {
+            transport.start()
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(4)
+            while (System.nanoTime() < deadline && sockets.connectCount.get() < 2) {
+                Thread.sleep(20)
+            }
+            assertTrue("heartbeat did not force a reconnect", sockets.connectCount.get() >= 2)
+        } finally {
+            transport.close()
+        }
+    }
+
+    @Test
+    fun heartbeatPongKeepsAHealthySessionConnected() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(staticPair, respondToPings = true)
+        val transport = RelayBackendTransport(
+            config = RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 0),
+            credentialStore = InMemoryRelayCredentialStore(credentials),
+            socketFactory = sockets,
+            heartbeatIntervalMillis = 50,
+            heartbeatTimeoutMillis = 200,
+        )
+        try {
+            transport.start()
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+            Thread.sleep(400)
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+            assertEquals("a pong must keep the session alive", 1, sockets.connectCount.get())
+        } finally {
+            transport.close()
+        }
+    }
+
     private fun transport(
         credentials: RelayCredentials,
         sockets: FakeRelaySocketFactory,

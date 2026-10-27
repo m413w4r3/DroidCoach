@@ -24,6 +24,16 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `node-merged-packaging.txt` | `722cdde` | n/a | 10 fichiers / 40 tests Node avec tarball vendoré | **final (Node)** |
 | `packaging-clean-merged.txt` | `89f881e` | n/a | copie propre sans `references/`, offline, 40/40 | **final (PC)** |
 | `wss-android-test-compile.txt` | `89f881e` | n/a | compilation du test instrumenté WSS Android | **final (compile)** |
+| `pixel-wss-summary.txt` | `3c6aef1` + correctifs | `66645143…` | synthèse W1–W10 sur Pixel | **final (Pixel)** |
+| `pixel-wss-roundtrip.txt` | `3c6aef1` + correctifs | `66645143…` | round-trip WSS Pixel | **final (Pixel)** |
+| `pixel-wss-negative.txt` | `3c6aef1` + correctifs | `66645143…` | refus TLS/identité/isolation Pixel | **final (Pixel)** |
+| `pixel-wss-tls-interruption.txt` | `3c6aef1` + correctifs | `66645143…` | coupure/reconnexion TLS Pixel | **final (Pixel)** |
+| `pixel-wss-connector-restart.txt` | `3c6aef1` + correctifs | `66645143…` | redémarrage connecteur Pixel | **final (Pixel)** |
+| `pixel-wss-relay-restart.txt` | `3c6aef1` + correctifs | `66645143…` | redémarrage relais Pixel | **final (Pixel)** |
+| `pixel-wss-revocation.txt` | `3c6aef1` + correctifs | `66645143…` | révocation Pixel, état REVOKED | **final (Pixel)** |
+| `pixel-apk-migration.txt` | `3c6aef1` + correctifs | `6ab95fac…→66645143…` | migration APK et données préservées | **final (Pixel)** |
+| `stale-client-timeout.txt` | `3c6aef1` + correctifs | n/a | timeout handshake du connecteur | **final (Node)** |
+| `heartbeat-jvm.txt` | `3c6aef1` + correctifs | n/a | tests JVM heartbeat | **final (JVM)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles

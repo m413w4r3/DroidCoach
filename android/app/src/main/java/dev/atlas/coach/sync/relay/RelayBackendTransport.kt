@@ -25,9 +25,16 @@ class RelayBackendTransport internal constructor(
     config: RelayConfig,
     private val credentialStore: RelayCredentialStore,
     socketFactory: RelaySocketFactory = OkHttpRelaySocketFactory(config),
-    scheduler: java.util.concurrent.ScheduledExecutorService =
+    private val scheduler: java.util.concurrent.ScheduledExecutorService =
         java.util.concurrent.Executors.newSingleThreadScheduledExecutor { Thread(it, "atlas-relay-transport").apply { isDaemon = true } },
+    private val heartbeatIntervalMillis: Long = 15_000,
+    private val heartbeatTimeoutMillis: Long = 8_000,
 ) : AutoCloseable {
+    init {
+        require(heartbeatIntervalMillis > 0 && heartbeatTimeoutMillis > 0) {
+            "heartbeat interval and timeout must be positive"
+        }
+    }
     private val lock = Any()
     private val client = PaseoRelayClient(
         config = config,
@@ -49,6 +56,9 @@ class RelayBackendTransport internal constructor(
     @Volatile private var connectionState = RelayConnectionState.LOCAL
     private var appSessionId: String? = null
     private var appSessionExpiry: Instant? = null
+    private var heartbeatTask: java.util.concurrent.ScheduledFuture<*>? = null
+    private var heartbeatNonce: String? = null
+    private var heartbeatSentAtNanos: Long = 0L
     private var negotiatedRequestLimit = AtlasRemoteProtocol.MAX_REQUEST_BYTES
     private var negotiatedResponseLimit = AtlasRemoteProtocol.MAX_RESPONSE_BYTES
     private var started = false
@@ -64,6 +74,7 @@ class RelayBackendTransport internal constructor(
             started = true
         }
         client.start()
+        scheduleHeartbeat()
     }
 
     fun execute(
@@ -149,6 +160,9 @@ class RelayBackendTransport internal constructor(
             started = false
             appSessionId = null
             appSessionExpiry = null
+            heartbeatTask?.cancel(false)
+            heartbeatTask = null
+            heartbeatNonce = null
             setStateLocked(RelayConnectionState.LOCAL)
             failures = (queue.toList() + inFlight.values).distinct()
             queue.clear()
@@ -183,7 +197,7 @@ class RelayBackendTransport internal constructor(
             "response" -> handleResponse(envelope)
             "error" -> handleError(envelope)
             "ping" -> handlePing(envelope)
-            "pong" -> Unit
+            "pong" -> handlePong(envelope)
             else -> failProtocol(RelayProtocolException("unexpected server envelope"))
         }
     }
@@ -203,6 +217,8 @@ class RelayBackendTransport internal constructor(
         synchronized(lock) {
             appSessionId = session
             appSessionExpiry = Instant.now().plusSeconds(envelope.optLong("expires_in_seconds"))
+            heartbeatNonce = null
+            heartbeatSentAtNanos = 0L
             negotiatedRequestLimit = minOf(AtlasRemoteProtocol.MAX_REQUEST_BYTES, envelope.optInt("max_request_bytes"))
             negotiatedResponseLimit = minOf(AtlasRemoteProtocol.MAX_RESPONSE_BYTES, envelope.optInt("max_response_bytes"))
             setStateLocked(RelayConnectionState.RELAY_CONNECTED)
@@ -292,6 +308,68 @@ class RelayBackendTransport internal constructor(
             .put("kind", "pong")
             .put("nonce", envelope.getString("nonce"))
         if (!client.sendTextFrame(AtlasRemoteProtocol.encode(pong))) failProtocol(RelayProtocolException("could not reply to ping"))
+    }
+
+    private fun scheduleHeartbeat() {
+        synchronized(lock) {
+            heartbeatTask?.cancel(false)
+            heartbeatTask = try {
+                scheduler.scheduleAtFixedRate(
+                    { heartbeatTick() },
+                    heartbeatIntervalMillis,
+                    heartbeatIntervalMillis,
+                    TimeUnit.MILLISECONDS,
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    private fun heartbeatTick() {
+        var pendingPing: Pair<String, ByteArray>? = null
+        val shouldReconnect = synchronized(lock) {
+            if (!started || connectionState != RelayConnectionState.RELAY_CONNECTED || appSessionId == null) {
+                heartbeatNonce = null
+                return
+            }
+            val outstanding = heartbeatNonce
+            if (outstanding != null) {
+                if (System.nanoTime() - heartbeatSentAtNanos < TimeUnit.MILLISECONDS.toNanos(heartbeatTimeoutMillis)) {
+                    return
+                }
+                heartbeatNonce = null
+                true
+            } else {
+                val nonce = AtlasRemoteProtocol.newUuid().replace("-", "").take(32)
+                val ping = JSONObject()
+                    .put("protocol", AtlasRemoteProtocol.PROTOCOL)
+                    .put("kind", "ping")
+                    .put("nonce", nonce)
+                val encoded = runCatching { AtlasRemoteProtocol.encode(ping) }.getOrNull()
+                if (encoded == null) {
+                    heartbeatNonce = null
+                } else {
+                    heartbeatNonce = nonce
+                    heartbeatSentAtNanos = System.nanoTime()
+                    pendingPing = nonce to encoded
+                }
+                false
+            }
+        }
+        pendingPing?.let { (nonce, encoded) ->
+            if (!client.sendTextFrame(encoded)) {
+                synchronized(lock) { if (heartbeatNonce == nonce) heartbeatNonce = null }
+            }
+        }
+        if (shouldReconnect) client.reconnect("heartbeat timeout")
+    }
+
+    private fun handlePong(envelope: JSONObject) {
+        val nonce = envelope.optString("nonce")
+        synchronized(lock) {
+            if (heartbeatNonce != null && heartbeatNonce == nonce) heartbeatNonce = null
+        }
     }
 
     private fun pump() {
@@ -421,6 +499,7 @@ class RelayBackendTransport internal constructor(
                 if (mappedState != RelayConnectionState.RELAY_CONNECTED) {
                     appSessionId = null
                     appSessionExpiry = null
+                    heartbeatNonce = null
                     val sent = inFlight.values.toList()
                     inFlight.clear()
                     sent.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)) }
@@ -435,6 +514,7 @@ class RelayBackendTransport internal constructor(
         synchronized(lock) {
             appSessionId = null
             appSessionExpiry = null
+            heartbeatNonce = null
             val sent = inFlight.values.toList()
             inFlight.clear()
             sent.forEach {

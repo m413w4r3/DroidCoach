@@ -16,6 +16,7 @@ export interface ConnectorConfig {
   backendUrl: string;
   serviceToken?: string;
   metricsPort: number;
+  handshakeTimeoutMs?: number;
 }
 
 export interface ConnectorRuntime {
@@ -39,6 +40,7 @@ export function configFromEnvironment(): ConnectorConfig {
     backendUrl: process.env.ATLAS_BACKEND_URL ?? "http://127.0.0.1:8100",
     ...(process.env.ATLAS_SERVICE_TOKEN ? { serviceToken: process.env.ATLAS_SERVICE_TOKEN } : {}),
     metricsPort,
+    handshakeTimeoutMs: integerEnv("ATLAS_HANDSHAKE_TIMEOUT_MS", 8000, 100, 60_000),
   };
 }
 
@@ -71,6 +73,7 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
     daemonKeyPair: keyPair,
     sessions,
     metrics,
+    ...(config.handshakeTimeoutMs !== undefined ? { handshakeTimeoutMs: config.handshakeTimeoutMs } : {}),
   });
   let revocationPoll: ReturnType<typeof setInterval> | null = null;
   return {

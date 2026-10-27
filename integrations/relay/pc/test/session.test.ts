@@ -79,6 +79,23 @@ describe("device authentication and session controls", () => {
     }
   });
 
+  it("notifies the revoked device before closing its session", async () => {
+    const context = await makeContext();
+    try {
+      const session = await authenticate(context);
+      await context.registry.revoke(session.deviceId);
+      await context.manager.closeRevokedSessions();
+      const error = session.channel.sent.find((message) => {
+        const record = message as Record<string, unknown>;
+        return record.kind === "error";
+      }) as Record<string, unknown> | undefined;
+      expect(error).toMatchObject({ kind: "error", error: { code: "DEVICE_REVOKED" } });
+      expect(session.channel.closeEvents[0]).toMatchObject({ code: 4001 });
+    } finally {
+      await context.dispose();
+    }
+  });
+
   it("replaces a device's previous session and applies the per-minute quota", async () => {
     const context = await makeContext();
     try {

@@ -1,0 +1,40 @@
+ATLAS V6.3 R3-A+ — PIXEL APK MIGRATION AND DATA PRESERVATION
+Date: 2026-10-27
+Device: Pixel 9 Pro XL physique, Android 17 / API 37
+
+APK LINEAGE
+- Pre-campaign installed APK: 6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886
+- Intermediate R3-A+ APK (A1/A2/A3 + WSS probe): c2e1c6b77a2ad3405cce51cbbd6cd8110fffe83103d7e1a1d970e089714fa342
+- Final B3 APK: 9ff0ae52145049d04abb03a2213889c1b2ea428a0d9ca6ab5bada2d8c07ce33b
+- Final heartbeat APK installed and tested: 66645143b0e6d861b90bbad4acfcc8fe85cae5c939e1d394e3e81c9ecad518b5
+- Final test APK: 5d8370e9cb46e87c7fa41237bd523524b2f34145f7e093313ce623b3525dea2a
+
+INSTALL METHOD
+- adb install -r for the main APK, adb install -r -t for the test APK.
+- No pm clear, no uninstall, no factory reset, no data wipe.
+- Same package dev.atlas.coach and same Android Debug signing certificate.
+- The installed APK hash after each update matched the built file.
+
+APP DATA HASHES (SHA-256, unchanged across installs)
+files/plans/day-plan-2026-10-26.json
+  fc003a7f8734de958a8aa97d6d0c204d404d39b22c420e75192ba2800863af3d
+shared_prefs/atlas_local_state.xml
+  6e72d8b2d8462d72310db02a505f5051b16e097e9aa53ecfa56e1d1f7724b9a5
+shared_prefs/atlas_sync_configuration.xml
+  745038187c38bbc4907268bf002d8d7fd24d357fd46613f1d643005506508742
+files/atlas_agent_inbox_v2.json
+  c5a1f5ed484e57d8470fae0c02e420591230ac451a17d625198e26a6d9bf7c5d
+
+PRE-INSTALL BACKUP
+- ~/.local/share/atlas-v63-r3a-plus/backups/atlas-app-data-pre-r3a-plus.tar
+- SHA-256 d1ffca6a15c5a371aa0e913858e262b6a16a141bb7234aa81bf829ab390172ed
+- Extraction check PASS; the archive is restorable and was not injected back.
+
+LIMITS
+- The final APK adds the Android heartbeat and the connector handshake timeout;
+  the WSS positive/negative paths were re-run on it.
+- The app data contains a pre-existing backend bearer token in
+  atlas_sync_configuration.xml. Its value was never displayed, logged or copied
+  into this evidence; the file hash above is sufficient to prove preservation.
+- The test APK is a test artifact; the main APK remains installed after the
+  campaign unless the owner asks for removal.

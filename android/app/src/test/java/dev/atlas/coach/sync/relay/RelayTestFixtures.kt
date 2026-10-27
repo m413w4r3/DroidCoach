@@ -33,6 +33,7 @@ internal class FakeRelaySocketFactory(
     private val dropRequestResponses: Boolean = false,
     private val mismatchResponseId: Boolean = false,
     private val result: JSONObject = JSONObject().put("accepted", true),
+    private val respondToPings: Boolean = false,
     private val onConnected: (FakeRelaySocket, Int) -> Unit = { _, _ -> },
 ) : RelaySocketFactory {
     val connectCount = AtomicInteger()
@@ -57,6 +58,7 @@ internal class FakeRelaySocketFactory(
             dropRequestResponses,
             mismatchResponseId,
             result,
+            respondToPings,
         )
         sockets += socket
         callbacks.onOpen(socket)
@@ -79,6 +81,7 @@ internal class FakeRelaySocket(
     private val dropRequestResponses: Boolean,
     private val mismatchResponseId: Boolean,
     private val result: JSONObject,
+    private val respondToPings: Boolean,
 ) : RelaySocket {
     val sentText = CopyOnWriteArrayList<String>()
     val helloSends = CountDownLatch(2)
@@ -150,6 +153,13 @@ internal class FakeRelaySocket(
                 }
             }
             "cancel" -> factory.recordCancel(envelope)
+            "ping" -> if (respondToPings) {
+                sendEnvelope(
+                    JSONObject().put("protocol", AtlasRemoteProtocol.PROTOCOL)
+                        .put("kind", "pong")
+                        .put("nonce", envelope.getString("nonce")),
+                )
+            }
         }
         return true
     }

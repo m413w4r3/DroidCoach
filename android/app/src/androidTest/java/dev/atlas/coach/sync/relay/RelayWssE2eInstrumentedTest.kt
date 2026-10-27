@@ -166,6 +166,72 @@ class RelayWssE2eInstrumentedTest {
         }
     }
 
+    @Test
+    fun connectorRestartDisconnectsAndReconnects() {
+        restartScenario("connector-restart.marker")
+    }
+
+    @Test
+    fun relayRestartDisconnectsAndReconnects() {
+        restartScenario("relay-restart.marker")
+    }
+
+    @Test
+    fun deviceRevocationIsReported() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val marker = File(context.cacheDir, "revocation.marker")
+        marker.delete()
+        val transport = transport(relayUrl, maxReconnectAttempts = 2)
+        try {
+            assertTrue(
+                "relay did not connect before revocation",
+                awaitState(transport, RelayConnectionState.RELAY_CONNECTED, 25_000),
+            )
+            marker.writeText("connected\n")
+            assertTrue(
+                "the session was not closed after device revocation",
+                awaitStateNot(transport, RelayConnectionState.RELAY_CONNECTED, 15_000),
+            )
+            assertTrue(
+                "expected AUTH_REQUIRED/REVOKED after revocation, got ${transport.state()}",
+                transport.state() in setOf(
+                    RelayConnectionState.AUTH_REQUIRED,
+                    RelayConnectionState.REVOKED,
+                ),
+            )
+        } finally {
+            marker.delete()
+            transport.close()
+        }
+    }
+
+    private fun restartScenario(markerName: String) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val marker = File(context.cacheDir, markerName)
+        marker.delete()
+        val transport = transport(relayUrl, maxReconnectAttempts = 12)
+        try {
+            assertTrue(
+                "relay did not connect before restart",
+                awaitState(transport, RelayConnectionState.RELAY_CONNECTED, 25_000),
+            )
+            marker.writeText("connected\n")
+            assertTrue(
+                "the client stayed connected across the restart",
+                awaitStateNot(transport, RelayConnectionState.RELAY_CONNECTED, 20_000),
+            )
+            assertTrue(
+                "the client did not reconnect after the restart",
+                awaitState(transport, RelayConnectionState.RELAY_CONNECTED, 40_000),
+            )
+            val health = transport.execute("backend.health", JSONObject(), timeoutMillis = 20_000)
+            assertTrue("health after restart failed: $health", health is RelayCallResult.Success)
+        } finally {
+            marker.delete()
+            transport.close()
+        }
+    }
+
     private fun transport(
         url: String,
         maxReconnectAttempts: Int,
@@ -188,6 +254,8 @@ class RelayWssE2eInstrumentedTest {
             config = config,
             credentialStore = InMemoryRelayCredentialStore(credentials),
             socketFactory = OkHttpRelaySocketFactory(config, RelayDebugDns),
+            heartbeatIntervalMillis = 3_000,
+            heartbeatTimeoutMillis = 2_000,
         ).also { it.start() }
     }
 

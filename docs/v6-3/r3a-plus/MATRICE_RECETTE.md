@@ -31,46 +31,46 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 
 | ID | Cas | Statut |
 |---|---|---|
-| W1 | WSS CA de test approuvée | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
-| W2 | Mauvais hostname | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
-| W3 | Certificat non approuvé | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
-| W4 | TLS interrompu | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
-| W5 | `ws://` distant refusé | **PASS (Node/JVM)** sur `733cd78` |
-| W6 | Mauvaise identité Noise | **PASS (JVM)** sur `733cd78` ; WSS Android PENDING |
-| W7 | Reconnexion après coupure TLS | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
-| W8 | FastAPI inaccessible publiquement | **PASS (Node/TLS)** — sentinelle 8100 jamais atteinte via le proxy |
-| W9 | Révocation | PENDING (vague C) |
-| W10 | Redémarrage connecteur/relais | PENDING (vague C) |
+| W1 | WSS CA de test approuvée | **PASS** — Pixel APK `66645143…`, round-trip health + plan revision ; Node/TLS aussi |
+| W2 | Mauvais hostname | **PASS** — Pixel, certificat wrong-host refusé |
+| W3 | Certificat non approuvé | **PASS** — Pixel, certificat self-signed refusé |
+| W4 | TLS interrompu | **PASS** — Pixel, déconnexion puis reconnexion après redémarrage du proxy |
+| W5 | `ws://` distant refusé | **PASS** — Pixel/JVM/Node |
+| W6 | Mauvaise identité Noise | **PASS** — Pixel, TLS valide mais identité épinglée fausse refusée |
+| W7 | Reconnexion après coupure TLS | **PASS** — Pixel, même test que W4 |
+| W8 | FastAPI inaccessible publiquement | **PASS** — Pixel, plain HTTP via le proxy n'atteint jamais la sentinelle 8100 |
+| W9 | Révocation | **PASS** — Pixel, `DEVICE_REVOKED` avant fermeture 4001, état REVOKED |
+| W10 | Redémarrage connecteur/relais | **PASS** — Pixel, connecteur 6,6 s et relais 6,4 s, reprise health |
 
 ## 3. Fiabilité connecteur
 
 | ID | Cas | Statut |
 |---|---|---|
-| R1 | Redémarrage connecteur | PENDING |
-| R2 | Redémarrage relais | PENDING |
-| R3 | Redémarrage FastAPI | PENDING |
-| R4 | Arrêt brutal connecteur | PENDING |
-| R5 | Identité conservée | PENDING |
-| R6 | Registre conservé | PENDING |
-| R7 | Appareil révoqué après redémarrage | PENDING |
-| R8 | Clients synthétiques concurrents | PENDING |
-| R9 | Registre illisible → échec fermé | PENDING |
-| R10 | Réponse perdue après effet backend | PENDING |
-| R11 | Requête expirée | PENDING |
-| R12 | Même idempotency key, même contenu | PENDING |
-| R13 | Même clé, contenus différents | PENDING |
+| R1 | Redémarrage connecteur | **PASS** — JVM + Pixel, identité/registre conservés, client reconnecté après heartbeat |
+| R2 | Redémarrage relais | **PASS** — JVM fake + Pixel relais réel |
+| R3 | Redémarrage FastAPI | **PARTIAL** — disponibilité synthétique et health réel ; arrêt/redémarrage réel de FastAPI non rejoué |
+| R4 | Arrêt brutal connecteur | **PASS** — SIGKILL réel d'un processus enfant (JVM) |
+| R5 | Identité conservée | **PASS** — JVM |
+| R6 | Registre conservé | **PASS** — JVM |
+| R7 | Appareil révoqué après redémarrage | **PASS** — JVM |
+| R8 | Clients synthétiques concurrents | **PASS** — JVM, 8 clients |
+| R9 | Registre illisible → échec fermé | **PASS** — JVM |
+| R10 | Réponse perdue après effet backend | **PASS** — JVM, backend appelé une fois, rejeu bloqué |
+| R11 | Requête expirée | **PASS** — JVM |
+| R12 | Même idempotency key, même contenu | **PASS** — JVM |
+| R13 | Même clé, contenus différents | **PASS** — JVM |
 
 ## 4. Appairage
 
 | ID | Cas | Statut |
 |---|---|---|
-| P1 | Fichier token déjà présent | PENDING |
-| P2 | Répertoire inaccessible | PENDING |
-| P3 | Fichier refusé | PENDING |
-| P4 | Appairage concurrent | PENDING |
-| P5 | Révocation concurrente | PENDING |
-| P6 | Redémarrage pendant appairage | PENDING |
-| P7 | Token absent de stdout | PENDING |
+| P1 | Fichier token déjà présent | **PASS** — `pairing.test.ts` |
+| P2 | Répertoire inaccessible | **PASS** — `pairing.test.ts` |
+| P3 | Fichier refusé | **PASS** — `pairing.test.ts` |
+| P4 | Appairage concurrent | **PASS** — `pairing.test.ts` + stress verrou |
+| P5 | Révocation concurrente | **PASS** — `pairing.test.ts` |
+| P6 | Redémarrage pendant appairage | **PASS** — `pairing.test.ts` |
+| P7 | Token absent de stdout | **PASS** — CLI capturé, fichier 0600 |
 
 ## 5. Calendrier sur Pixel
 
@@ -86,11 +86,11 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 
 | ID | Cas | Statut |
 |---|---|---|
-| A1 | Données ATLAS préexistantes préservées après mise à jour APK | PENDING |
-| A2 | Plan/habitudes/mémoire/consentements après force-stop | PENDING |
-| A3 | Identité relayée après redémarrage | PENDING |
-| A4 | Credentials supprimés après révocation explicite | PENDING |
-| A5 | Aucun secret dans les sauvegardes ordinaires | PENDING |
+| A1 | Données ATLAS préexistantes préservées après mise à jour APK | **PASS** — 4 hashes identiques après installs intermédiaire et finale |
+| A2 | Plan/habitudes/mémoire/consentements après force-stop | PENDING (recette calendrier/persistance) |
+| A3 | Identité relayée après redémarrage | PENDING (identité key-store, vague C) |
+| A4 | Credentials supprimés après révocation explicite | PARTIAL — révocation PC testée ; suppression locale UI à rejouer |
+| A5 | Aucun secret dans les sauvegardes ordinaires | PASS (doc) — backup app-only hors repo, valeur du token non affichée |
 
 ## 7. Verdict
 

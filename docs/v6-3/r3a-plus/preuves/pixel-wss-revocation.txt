@@ -1,0 +1,8 @@
+
+dev.atlas.coach.sync.relay.RelayWssE2eInstrumentedTest:.
+
+Time: 0.644
+
+OK (1 test)
+
+

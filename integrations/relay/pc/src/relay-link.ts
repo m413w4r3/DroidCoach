@@ -35,6 +35,8 @@ export interface RelayLinkOptions {
   testOnlyTlsOptions?: TestOnlyTlsOptions;
   reconnectMinMs?: number;
   reconnectMaxMs?: number;
+  /** Responder handshake deadline for a relay-forwarded client. Defaults to 8 seconds. */
+  handshakeTimeoutMs?: number;
 }
 
 interface DataConnection {
@@ -209,12 +211,35 @@ export class RelayLink {
       },
     };
     const transport = createTransport(connection.socket);
+    const timeoutMs = this.options.handshakeTimeoutMs ?? 8_000;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 100) {
+      if (connection.socket.readyState === WebSocket.OPEN) connection.socket.close(4002, "invalid handshake timeout");
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
     try {
-      const channel = await openDaemonSecureChannel(transport, {
+      const opening = openDaemonSecureChannel(transport, {
         daemonKeyPair: this.options.daemonKeyPair,
         minimumMode: "protected",
         events,
       });
+      // A relay can keep a stale client socket alive after a connector restart.
+      // The client never sends a fresh e2ee_hello, so the responder must bound
+      // the handshake and close the data socket instead of hanging forever.
+      opening.then((channel) => {
+        if (connection.socket.readyState !== WebSocket.OPEN) {
+          try {
+            channel.close(4002, "late secure handshake");
+          } catch {
+            // The transport is already closed.
+          }
+        }
+      }).catch(() => {});
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("secure handshake timeout")), timeoutMs);
+        timer.unref?.();
+      });
+      const channel = await Promise.race([opening, timedOut]);
       if (channel.securityMode() !== "protected") {
         channel.close(1008, "protected endpoint security required");
         throw new RemoteError("AUTH_FAILED");
@@ -227,6 +252,8 @@ export class RelayLink {
     } catch (error) {
       const code = error instanceof SecureChannelRejectedError ? error.closeCode : 4002;
       if (connection.socket.readyState === WebSocket.OPEN) connection.socket.close(code, "secure handshake failed");
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 

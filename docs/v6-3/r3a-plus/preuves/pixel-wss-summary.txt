@@ -1,0 +1,76 @@
+ATLAS V6.3 R3-A+ — PIXEL WSS END-TO-END SUMMARY
+Date: 2026-10-27
+Device: Pixel 9 Pro XL physique, Android 17 / API 37 (emulator not used)
+Source: campaign branch feat/atlas-v6-3-r3a-plus
+Final APK: 66645143b0e6d861b90bbad4acfcc8fe85cae5c939e1d394e3e81c9ecad518b5
+Final test APK: 5d8370e9cb46e87c7fa41237bd523524b2f34145f7e093313ce623b3525dea2a
+
+TOPOLOGY ACTUALLY EXERCISED
+Pixel Android
+  -> wss://relay.atlas.test:4443 (debug DNS to 127.0.0.1, adb reverse to PC)
+  -> test TLS terminator (test CA, loopback only)
+  -> real Paseo Relay image atlas-paseo-relay:r3a on 127.0.0.1:4400
+  -> Noise NK protected
+  -> ATLAS PC connector on loopback
+  -> FastAPI 127.0.0.1:8100 (plan_revision enabled for the test)
+No public relay, domain, firewall, DNS or system host change was made. The
+test CA private key remains outside the repository under
+~/.local/share/atlas-v63-r3a-plus/pki/. The test CA is trusted only by the
+debug network-security config for the three .atlas.test names.
+
+TEST RESULTS (instrumented, final APK)
+W1  wssProtectedRoundTripReachesFastApi              PASS (0.612 s)
+    backend.health and plan.revision.request reached FastAPI through Noise.
+W2  wssWrongHostnameIsRefused                        PASS (8.057 s)
+    CA-signed certificate for wrong-host.atlas.test refused for relay.atlas.test.
+W3  wssUntrustedCertificateIsRefused                 PASS (8.116 s)
+    self-signed relay.atlas.test certificate refused.
+W4  tlsInterruptionDisconnectsAndReconnects          PASS (1.971 s)
+    TLS terminator stopped; client disconnected and reconnected after restart.
+W5  wsRemoteIsRejectedByConfigurationPolicy          PASS (0.042 s)
+    ws://relay.example.org rejected in debug and release policy.
+W6  badPinnedNoiseIdentityIsRefused                  PASS (10.06 s)
+    valid TLS but wrong pinned X25519 identity never reached a protected session.
+W7  reconnect after TLS cut                         PASS (same W4)
+W8  fastApiIsNotReachableThroughTheTlsProxy          PASS (0.036 s)
+    plain HTTP to the public test interface never reached the 127.0.0.1:8100
+    sentinel; the proxy forwards only to the relay.
+W9  deviceRevocationIsReported                       PASS (0.644 s)
+    connector sends DEVICE_REVOKED before closing 4001; Android state is REVOKED.
+W10 connectorRestartDisconnectsAndReconnects         PASS (6.62 s)
+    connector process restarted; stale relay socket was released and the client
+    reconnected and executed backend.health.
+W10 relayRestartDisconnectsAndReconnects             PASS (6.443 s)
+    real relay container stopped and restarted; connector and Android recovered.
+
+HEARTBEAT / STALE-SOCKET CORRECTION
+- Connector: responder handshake timeout (default 8 s) closes a relay data
+  socket that never receives a fresh e2ee_hello after a connector restart.
+  Test: integration/relay/pc/test/stale-client-timeout.test.ts PASS.
+- Android: RelayBackendTransport sends an application ping every 15 s
+  (8 s timeout) and reconnects on missing pong. The instrumented tests use a
+  3 s/2 s cadence. JVM tests:
+  heartbeatReconnectsWhenThePeerStopsAnswering PASS,
+  heartbeatPongKeepsAHealthySessionConnected PASS.
+- Without these, a client whose connector died could remain attached to the
+  relay with a dead Noise session and never reconnect.
+
+EVIDENCE FILES
+- pixel-wss-roundtrip.txt
+- pixel-wss-negative.txt (W2, W3, W5, W6, W8 and the TLS interruption rerun)
+- pixel-wss-tls-interruption.txt
+- pixel-wss-connector-restart.txt
+- pixel-wss-relay-restart.txt
+- pixel-wss-revocation.txt
+- stale-client-timeout.txt
+- heartbeat-jvm.txt
+- wss-harness-merged.txt (Node/TLS harness on the merged source)
+- wss-android-test-compile.txt
+
+LIMITS
+- This is a closed test environment, not a public Internet or LTE/5G proof.
+- No H24 availability, Doze instant delivery or Pixel sleep autonomy is claimed.
+- The test CA is debug-only and must never be trusted by a release build.
+- Each synthetic device was revoked after its scenario; the connector state
+  directory and test credentials are disposable and are removed at cleanup.
+- No token, private key or personal calendar data appears in this evidence.
