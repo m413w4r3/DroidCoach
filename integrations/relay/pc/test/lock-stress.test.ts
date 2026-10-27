@@ -36,15 +36,17 @@ describe("ticket lock recovery stress", () => {
       );
 
       const readyPath = join(directory, `ready-${round}.txt`);
+      const attemptPath = join(directory, `attempt-${round}.txt`);
       const barrierPath = join(directory, `barrier-${round}.txt`);
       const workers = Array.from({ length: 6 }, (_, index) => {
-        const child = fork(WORKER, [lockPath, logPath, String(index), readyPath, barrierPath, "20"], {
+        const child = fork(WORKER, [lockPath, logPath, String(index), readyPath, attemptPath, barrierPath, "20"], {
           stdio: ["ignore", "ignore", "inherit", "ipc"],
           execArgv: [],
         });
         return once(child, "exit");
       });
       await waitForLines(readyPath, 6);
+      await waitForLines(attemptPath, 6);
       await writeFile(barrierPath, "go\n");
       const exits = await Promise.all(workers);
       expect(exits.every(([code]) => code === 0)).toBe(true);
@@ -65,17 +67,19 @@ describe("ticket lock recovery stress", () => {
     const lockPath = join(directory, "arrival.lock.d");
     const logPath = join(directory, "arrival.log");
     const readyPath = join(directory, "arrival.ready");
+    const attemptPath = join(directory, "arrival.attempt");
     await writeFile(logPath, "");
-    const first = fork(WORKER, [lockPath, logPath, "0", "", "", "500"], {
+    const first = fork(WORKER, [lockPath, logPath, "0", "", "", "", "500"], {
       stdio: ["ignore", "ignore", "inherit", "ipc"],
       execArgv: [],
     });
     await waitForText(logPath, "start 0");
-    const second = fork(WORKER, [lockPath, logPath, "1", readyPath, "", "20"], {
+    const second = fork(WORKER, [lockPath, logPath, "1", readyPath, attemptPath, "", "20"], {
       stdio: ["ignore", "ignore", "inherit", "ipc"],
       execArgv: [],
     });
     await waitForLines(readyPath, 1);
+    await waitForLines(attemptPath, 1);
     expect((await readFile(logPath, "utf8"))).not.toContain("start 1");
     const exits = await Promise.all([once(first, "exit"), once(second, "exit")]);
     expect(exits.every(([code]) => code === 0)).toBe(true);
