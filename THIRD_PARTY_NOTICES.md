@@ -1046,3 +1046,19 @@ Le texte ci-dessous accompagne l’attribution à Android Open Source Project et
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+## Paseo Relay npm runtime used by the ATLAS PC connector
+
+- Package: `@getpaseo/relay` `0.13.1`, upstream repository
+  `https://github.com/getpaseo/paseo`, package path `packages/relay`.
+- Source commit: `902b0c7a1637cc7a6c2ee268dca8161965a35def`.
+- Vendored artifact: `integrations/relay/pc/vendor/relay-0.13.1.tgz`;
+  SHA-256 `cc1102a64892dc6f9de5bacbc813b472758a6675be26ef65534d5bf7b5d70452`;
+  npm SHA-512 integrity
+  `sha512-6bA7X2zugIPcp8jttqlx11QG64xLohXdNsfyCx+2oPErNs9W+OkKTALapRCO7NNgKbtNu4e4OWQkfvV7kZBtwg==`.
+- The published artifact was byte-for-byte reproduced by building and packing
+  the relay package at the source commit. The tarball contains the upstream
+  package metadata and compiled `dist/` output only; no daemon, server, or
+  unrelated Paseo library source is copied.
+- License: Apache-2.0. The license text above applies; runtime dependencies keep
+  their own licenses as recorded by npm metadata and the connector lockfile.

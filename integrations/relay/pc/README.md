@@ -6,21 +6,32 @@ closed operation set to FastAPI on loopback.
 
 ## Local setup
 
-The package expects the repository's local Paseo reference clone and a Relay
-instance on loopback. From this directory:
+The vendored relay runtime is a small npm tarball built from the pinned Paseo
+commit; no `references/` checkout is needed. From this directory:
 
 ```sh
-npm install
+npm ci
 npm run build
-npm test
-npm start
+npm run test:unit
+```
+
+The full `npm test` suite also runs an integration case that requires the real
+Relay health endpoint at `127.0.0.1:4400`. Start the test relay before running
+that full suite. This is **not Android end-to-end evidence**.
+
+For a host installation with an external environment file and restricted
+configuration checks, follow
+[`docs/v6-3/r3a-plus/INSTALLATION_PC.md`](../../../docs/v6-3/r3a-plus/INSTALLATION_PC.md).
+The Linux user unit and rollback procedure are in
+[`docs/v6-3/r3a-plus/SUPERVISION_PC.md`](../../../docs/v6-3/r3a-plus/SUPERVISION_PC.md).
 ```
 
 `npm test` includes a Node Noise client against the real local Relay at
 `127.0.0.1:4400`; keep that local service running. It also exercises a Node
 client and Node connector directly. This is **not Android end-to-end evidence**.
 
-The connector defaults to the Relay at `ws://127.0.0.1:4400`, FastAPI at
+The connector accepts only a loopback Relay WebSocket endpoint and defaults to
+`ws://127.0.0.1:4400`, FastAPI at
 `http://127.0.0.1:8100`, state under `~/.local/state/atlas-relay`, and metrics
 on `127.0.0.1:4401/metrics`. FastAPI can be started separately with a
 synthetic service token in the local environment. The connector never binds
@@ -80,9 +91,9 @@ adapter: `GET /health`, `GET /v2/agent/status`, `GET /v1/plan/today`, and
 `POST /v3/agent/plan-revision`. It has no URL, path, or command forwarding
 field. `plan.revision.result` and `sync.status` are local operations.
 
-The frozen contract also lists `GET /v1/sport/plan`; that route is absent from
-the current `backend/atlas_backend/main.py`. The connector maps it only to
-that fixed route and reports `OPERATION_UNAVAILABLE` when FastAPI returns 404.
+`GET /v1/sport/plan` is implemented by FastAPI (`sport-plan-v1`) and is mapped
+by the connector only to that fixed route. It does not accept a caller-chosen
+URL or path.
 
 Requests are limited to 32 KiB, responses to 256 KiB, the per-device quota is
 60 requests per minute with at most four in flight, sessions expire after one
@@ -91,8 +102,12 @@ not include tokens, payloads, or backend response bodies.
 
 ## Paseo dependency provenance
 
-`@getpaseo/relay` is installed from
-`file:../../../references/repos/paseo/packages/relay`. Its built package comes
-from Paseo commit `902b0c7a1637cc7a6c2ee268dca8161965a35def` (0.13.1), under
-Apache-2.0. Runtime imports use the public `@getpaseo/relay/e2ee` API. No
-daemon or relay source is copied into this connector.
+`@getpaseo/relay` is pinned to 0.13.1 and installed from
+`vendor/relay-0.13.1.tgz`. The artifact is the exact npm publication whose
+integrity matches the package built from Paseo commit
+`902b0c7a1637cc7a6c2ee268dca8161965a35def`; its SHA-256 and regeneration
+procedure are recorded in `vendor/relay-0.13.1.tgz.sha256` and
+`scripts/build-vendored-relay.mjs`. Only the published package output (`dist/`
+and package metadata) is vendored. Runtime imports use the public
+`@getpaseo/relay/e2ee` API. The package is licensed Apache-2.0; see the root
+`THIRD_PARTY_NOTICES.md`.

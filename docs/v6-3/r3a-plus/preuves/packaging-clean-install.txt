@@ -1,0 +1,54 @@
+TASK_ID: R3AP-PACKAGING-01
+STATUS: PASS
+BASE_SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+BRANCH: feat/r3a-plus-packaging
+
+Runtime/build environment: Node v24.18.0, npm 11.16.0.
+
+Clean-copy command, run from repository root (the copy was created in /tmp,
+outside the repository):
+
+  repo="$PWD"
+  tmpdir=$(mktemp -d /tmp/atlas-pc-clean.XXXXXX)
+  tar -C "$repo/integrations/relay/pc" --exclude=node_modules --exclude=dist -cf - . | tar -C "$tmpdir" -xf -
+  test ! -e "$tmpdir/references"
+  cd "$tmpdir"
+  npm ci --offline
+  npm run build
+  npm test
+  npm run verify:artifact
+  sha256sum vendor/relay-0.13.1.tgz
+
+Result: PASS. npm ci installed 62 packages from the available cache with
+references/ absent; the preinstall artifact check passed. Build passed. npm
+test passed all 9 files and 35 tests, including the relay interoperability
+test. Artifact verification passed with SHA-256
+cc1102a64892dc6f9de5bacbc813b472758a6675be26ef65534d5bf7b5d70452.
+The clean-copy install required no network because the required npm packages
+were cached. The package lock records the complete dependency tree.
+
+Worktree install verification:
+
+  cd integrations/relay/pc
+  npm run verify:install
+
+Result: PASS; Node 24 check, npm ci, build, local relay health detection and
+the full suite passed (9 files, 35 tests). A relay was reachable on
+127.0.0.1:4400 during this run.
+
+Dependency review:
+
+  npm audit --omit=dev --json
+  npm audit --json
+
+Runtime audit: PASS, 0 vulnerabilities. Full online audit: WARN, 3 development
+dependency findings (1 moderate, 2 critical) in the baseline Vitest 3.2.7
+tree: @vitest/mocker, tinypool and vitest. npm reports Vitest 5.0.5 as the
+available fix. No version modernization was taken: package.json and lockfile
+retain the base-resolved ws 8.22.0 and Vitest 3.2.7. The online audit was run
+separately because npm's audit report is not available from an offline cache.
+
+Documentation correction: README.md now states that FastAPI implements
+GET /v1/sport/plan with sport-plan-v1 behavior and that the connector maps the
+operation only to that fixed route. This corrects the previous false claim
+that the route was absent. No backend or connector source was modified.
