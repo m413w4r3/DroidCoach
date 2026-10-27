@@ -1,0 +1,45 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:generateDebugRFile
+
+> Task :app:compileDebugKotlin
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/main/java/dev/atlas/coach/app/PlanScreen.kt:336:47 Condition is always 'false'.
+
+> Task :app:javaPreCompileDebug
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:587:74 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:673:77 Unchecked cast of 'Any?' to 'ThreadLocal<String?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:712:68 Unchecked cast of 'Any?' to 'MutableState<AgentHomeState>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/V621ReviewFindingsTest.kt:82:78 Unchecked cast of 'Any?' to 'MutableState<AgentHomeState>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 27s
+24 actionable tasks: 24 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.6.0/userguide/configuration_cache_enabling.html

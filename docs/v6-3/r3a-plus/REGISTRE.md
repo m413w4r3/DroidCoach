@@ -86,7 +86,7 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Preuve de pré-vol Pixel | `preuves/preflight-pixel.txt` |
 | 2026-10-27 | `R3AP-CALENDAR-01` livré | `e66d2ef` + doc `a827d69` ; 64 JVM ciblés et 590 JVM complets annoncés par l'agent ; androidTest compilé |
 | 2026-10-27 | Revue parent `R3AP-CALENDAR-01` | scope conforme, pas de symlink commité, pas de sortie de build ; 64 tests ciblés rejoués PASS sur le merge |
-| 2026-10-27 | Intégration calendrier | merge `0f3426a` ; suite JVM complète à rejouer (écart 590 vs 651 à expliquer) ; Pixel NOT_RUN |
+| 2026-10-27 | Intégration calendrier | merge `0f3426a` ; suite JVM complète rejouée : 91 suites / 654 tests / 0 échec sur `fe54e20` ; l'annonce 590/590 de l'agent est corrigée par la mesure parent |
 
 ## 5. Preuves
 

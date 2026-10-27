@@ -10,7 +10,7 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 | ID | Gate | Commande | Statut |
 |---|---|---|---|
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 187 passed, 1 skipped sur `012b101` |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | PENDING |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 654 tests, 0 échec sur `fe54e20` (après merge calendrier) |
 | T3 | Lint | `android/gradlew :app:lintDebug` | PENDING |
 | T4 | Build debug | `android/gradlew :app:assembleDebug` | PENDING |
 | T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | PENDING |
