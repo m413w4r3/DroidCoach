@@ -9,7 +9,7 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `preflight-pixel.txt` | `012b101` | installé `6ab95fac` | pré-vol, sauvegarde, baseline Pixel | **final (pré-vol)** |
 | `backend-baseline.txt` | `012b101` | n/a | backend et routes connecteur | **final (baseline)** |
 | `calendar-unit-tests.txt` | `e66d2ef` | n/a | JVM calendrier et compilation androidTest | **final (JVM)** |
-| `calendar-androidtest-commands.txt` | `e66d2ef` | n/a | commandes Pixel C1–C5 | **à exécuter** |
+| `calendar-androidtest-commands.txt` | `e66d2ef` | n/a | commandes Pixel C1–C5 | **final (commandes exécutées ; résultats dans `calendar-pixel-summary.txt`)** |
 | `calendar-merged-targeted.txt` | `0f3426a` (merge) | n/a | 64 tests JVM ciblés rejoués par le parent | **final (JVM)** |
 | `jvm-merged-calendar.txt` | `fe54e20` | n/a | suite JVM complète 91/654, 0 échec | **final (JVM partiel)** |
 | `wss-policy.txt` | `b2cbebc` | n/a | politique PC/Android et tests JVM | **final (Node/JVM)** |
@@ -37,8 +37,10 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `calendar-pixel-summary.txt` | `38fd4a0` | `66645143…` | synthèse C1–C5 et nettoyage Pixel | **final (Pixel)** |
 | `calendar-pixel-c1-phase1.txt` … `calendar-pixel-cleanup.txt` | `38fd4a0` | `66645143…` | preuves C1–C5, permissions, force-stop, nettoyage | **final (Pixel)** |
 | `gates-agent-run.txt` | `f6c11d0` | build agent `5dd79984…` | gates non-device déléguées, après corrections revue | **final (agent)** |
+| `gates-agent-run-delta.txt` | `2bcce51` | debug `5dd79984…`, androidTest `2d0c2726…` | gates non-device sur le SHA final ; backend/JVM/lint/builds runner, Node/config/clean-copy repris par le parent | **final (agent + reprise parent)** |
 | `review-fixes.txt` | corrections post-revue | n/a | P1/P2/P3 corrigés ou expliqués | **final (revue)** |
-| `REVUE_INDEPENDANTE_R3A_PLUS.md` | `8f38f2a` + corrections | n/a | revue initiale et delta | **en cours** |
+| `delta-review-p2-fixes.txt` | `2bcce51` | n/a | deux P2 de vérification + P3 documentaire corrigés après re-revue delta | **final (revue delta)** |
+| `REVUE_INDEPENDANTE_R3A_PLUS.md` | `f6c11d0` + `2bcce51` | n/a | revue initiale et re-revue delta GO sans P0/P1 | **final (revue)** |
 
 ## Règles
 

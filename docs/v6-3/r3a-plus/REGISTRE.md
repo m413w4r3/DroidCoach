@@ -1,7 +1,8 @@
 # ATLAS V6.3 — Campagne R3-A+ — Registre
 
-Statut : **OPEN**. R3-A reste **CLOSED_LOCAL / GO_WITH_LIMITATIONS** ; V6.3 global
-reste **NO_GO**. Cette campagne ne modifie aucune conclusion historique R3-A.
+Statut : **CLOSED_LOCAL — GO_PREDEPLOYMENT_WITH_LIMITATIONS**. R3-A reste
+**CLOSED_LOCAL / GO_WITH_LIMITATIONS** ; V6.3 global reste **NO_GO**. Cette
+campagne ne modifie aucune conclusion historique R3-A.
 
 ## 1. Base et environnement
 
@@ -56,10 +57,10 @@ Le numéro de série matériel n'est pas reporté dans les preuves versionnées.
 | `R3AP-RESILIENCE-01` | résilience et idempotence du connecteur | `integrations/relay/pc/src/{connector,session,operations,backend,metrics,protocol}.ts`, `integrations/relay/pc/test/**` hors fichiers B2 | 13 scénarios de résilience, échec fermé, pas de rejeu aveugle | **ACCEPTED / INTEGRATED** — `d19a5e3`, merge `9686c87` ; 26 tests ciblés, 52 tests Node sans variable d'env, SIGKILL réel, rejeu POST bloqué |
 | `R3AP-PAIRING-01` | appairage/révocation atomiques | `integrations/relay/pc/src/{main,device-registry,secure-files,file-lock}.ts`, tests correspondants | aucun appareil orphelin autorisé, token jamais sur stdout, concurrence sûre | **ACCEPTED / INTEGRATED** — `afa4615`, merge `51e3405` ; 20 tests ciblés, 48 tests Node, invariant token-livré-avant-autorisation |
 | `R3AP-ANDROID-P3-01` | corrections P3 et messages | fichiers UI/usage/relais ciblés, tests correspondants | quota désactivé affiché « Désactivé », erreurs TLS/identité/permission distinctes | **ACCEPTED / INTEGRATED** — `90739a6`, merge `3c6aef1` ; 25 tests ciblés, 666 JVM, lint 0 erreur / 70 avertissements |
-| `R3AP-E2E-01` | recette WSS bout en bout sur Pixel | scripts de recette parent, preuves | Android physique → TLS/WSS test → relais réel → Noise → connecteur → FastAPI | **IN_PROGRESS** — W1–W10 PASS ; calendrier C1–C5 et nettoyage PASS ; persistance PASS ; revue indépendante en cours |
-| `R3AP-GATES-01` | gates finales non-device déléguées | aucun (lecture/build uniquement) | Node, backend, JVM, lint, builds, installation propre | **ACCEPTED** — session `e38897ac…`, rapport `preuves/gates-agent-run.txt`, tout PASS sur `38fd4a0` |
-| `R3AP-REVIEW-01` | revue indépendante lecture seule | aucun | grille P0/P1/P2/P3 | **NO_GO INITIAL / CORRECTIONS APPLIQUÉES / DELTA EN COURS** — session `a5dc2140…` ; 1 P1 + 3 P2 + 1 P3 corrigés ou expliqués ; re-revue delta à confirmer |
-| `R3AP-REPORT-01` | rédaction du rapport final à partir des preuves | `docs/v6-3/r3a-plus/RAPPORT_FINAL.md` | rapport lié aux SHA et preuves | **ACCEPTED (brouillon)** — session `7a0bc3e4…`, rapport copié et ajusté par le parent |
+| `R3AP-E2E-01` | recette WSS bout en bout sur Pixel | scripts de recette parent, preuves | Android physique → TLS/WSS test → relais réel → Noise → connecteur → FastAPI | **ACCEPTED** — W1–W10 PASS ; calendrier C1–C5 et nettoyage PASS ; persistance PASS ; re-revue delta GO sans P0/P1 |
+| `R3AP-GATES-01` | gates finales non-device déléguées | aucun (lecture/build uniquement) | Node, backend, JVM, lint, builds, installation propre | **ACCEPTED** — session `e38897ac…` sur `2bcce51` : backend 187/1 skip, JVM 94/669, lint 0/71, builds PASS ; Node/config/clean-copy rejoués par le parent après échec relais du runner : 14/62, 7/7, clean-copy 62/62 ; `preuves/gates-agent-run-delta.txt` |
+| `R3AP-REVIEW-01` | revue indépendante lecture seule | aucun | grille P0/P1/P2/P3 | **GO_PREDEPLOYMENT_WITH_LIMITATIONS (delta)** — session `a5dc2140…` ; aucun P0/P1 sur `f6c11d0` ; 2 P2 de vérification + 1 P3 documentaire corrigés dans `2bcce51`/docs |
+| `R3AP-REPORT-01` | rédaction du rapport final à partir des preuves | `docs/v6-3/r3a-plus/RAPPORT_FINAL.md` | rapport lié aux SHA et preuves | **ACCEPTED** — session `7a0bc3e4…`, rapport copié et finalisé par le parent |
 
 ## 3.1 Sessions Paseo vérifiées
 
@@ -93,7 +94,7 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Contrats R3-A+ figés | **PASS (doc)** |
 | 2026-10-27 | `R3AP-WSS-01` livré | `b2cbebc` ; 18 fichiers, aucune clé privée, aucun symlink, aucun binaire ; Node 40/40 avec opt-in loopback, JVM relais 16/16 annoncés, harnais WSS 6/6 |
 | 2026-10-27 | Revue parent `R3AP-WSS-01` | scope conforme ; Node 40/40 rejoué, JVM relais 36/36 rejoué, `assembleDebugAndroidTest` PASS, harnais WSS réel 6/6 rejoué sur le merge |
-| 2026-10-27 | Intégration WSS | merge `733cd78` ; Android runtime WSS, révocation et redémarrages restent à exécuter en vague C |
+| 2026-10-27 | Intégration WSS | merge `733cd78` ; Android runtime WSS, révocation et redémarrages restaient à exécuter en vague C, puis ont été exécutés sur Pixel (voir recette WSS) |
 | 2026-10-27 | Suivi WSS noté | `relay-reconnect.test.ts` doit passer `allowLoopbackWs: true` pour rester vert sans variable globale (ticket B1) ; `npm ci` signale 1 advisory modérée et 2 critiques préexistantes à revoir |
 | 2026-10-27 | `R3AP-PACKAGING-01` livré | `d8a425d` ; tarball vendoré `@getpaseo/relay@0.13.1` SHA-256 `cc1102a…` identique à l'intégrité npm, clean install sans `references/` 9/35 PASS, audit runtime 0, systemd-analyze PASS, README sport corrigé |
 | 2026-10-27 | Revue parent packaging | scope conforme, aucun secret/symlink, artefact binaire intentionnel et hashé ; défaut détecté : config checker et INSTALLATION_PC encore loopback-only |
@@ -128,7 +129,11 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Revue indépendante lancée | session `a5dc2140…`, plan mode, cible `8f38f2a` / code `38fd4a0` |
 | 2026-10-27 | Verdict initial revue | **NO_GO** — P1 runbook `ATLAS_SERVICE_TOKEN_FILE` non supporté ; P2 message révocation écrasé, P2 trailing slash checker/connecteur, P2 SHA APK inexpliqué, P3 placeholders |
 | 2026-10-27 | Corrections revue | runbook aligné sur `ATLAS_SERVICE_TOKEN` ; fermeture 4001 ne réécrit plus REVOKED ; checker aligné sur le chemin brut ; APK dex/resources/manifest identiques ; placeholders retirés |
-| 2026-10-27 | Re-revue delta | PENDING — doit confirmer l'absence de P0/P1 après corrections |
+| 2026-10-27 | Re-revue delta | **GO_PREDEPLOYMENT_WITH_LIMITATIONS — aucun P0/P1** sur `f6c11d0` ; 2 P2 de vérification + 1 P3 documentaire résiduels |
+| 2026-10-27 | Correctifs P2 delta | `2bcce51` : checker rejette `?`/`#` bruts ; test révocation déterministe sur session établie avec latches REVOKED/AUTH ; config 7/7, JVM 669/669, Node 62/62 |
+| 2026-10-27 | Gates delta runner `2bcce51` | backend 187/1 skip, JVM 94/669 (`RelayBackendTransportTest` 10/10), lint 0/71, builds PASS ; APK debug `5dd79984…`, androidTest `2d0c2726…` ; relais Node du runner en échec health (Node/config/clean-copy NOT_RUN) |
+| 2026-10-27 | Reprise parent Node/config/clean-copy | relais neuf health 200 ; Node 14/62, config 7/7, clean-copy offline 62/62 PASS ; incident runner consigné dans `preuves/gates-agent-run-delta.txt` |
+| 2026-10-27 | Clôture documentaire | verdict delta, SHAs et limites enregistrés ; `RAPPORT_FINAL.md`, `REVUE_INDEPENDANTE_R3A_PLUS.md`, `MATRICE_RECETTE.md`, `PROVENANCE.md` alignés |
 | 2026-10-27 | `R3AP-CALENDAR-01` livré | `e66d2ef` + doc `a827d69` ; 64 JVM ciblés et 590 JVM complets annoncés par l'agent ; androidTest compilé |
 | 2026-10-27 | Revue parent `R3AP-CALENDAR-01` | scope conforme, pas de symlink commité, pas de sortie de build ; 64 tests ciblés rejoués PASS sur le merge |
 | 2026-10-27 | Intégration calendrier | merge `0f3426a` ; suite JVM complète rejouée : 91 suites / 654 tests / 0 échec sur `fe54e20` ; l'annonce 590/590 de l'agent est corrigée par la mesure parent |

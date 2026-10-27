@@ -1,0 +1,75 @@
+ATLAS V6.3 R3-A+ — CORRECTIFS P2 DE LA RE-REVUE DELTA
+Date: 2026-10-27
+Code final: 2bcce51f9c24f3faff7dba64b3e045f377e034e3 (2bcce51)
+Code revu par la re-revue delta: f6c11d07c8c6764f60ef93eeb2a82ffe538b19c2
+Verdict de la re-revue delta: GO_PREDEPLOYMENT_WITH_LIMITATIONS, aucun P0/P1
+Revue: session a5dc2140…, provider codex, modèle gpt-6-luna, effort xhigh,
+plan mode lecture seule.
+
+CONSTATS RÉSIDUELS ET TRAITEMENT
+
+1. P2 — le config checker acceptait `?` ou `#` bruts
+- `scripts/lib/config.mjs` rejette désormais toute présence brute de `?` ou `#`
+  dans l'URL, en plus des contrôles `URL.search`/`URL.hash`. La règle est
+  identique à `parseRelayUrl` (`value.includes("?") || value.includes("#")`).
+- Tests ajoutés : `wss://relay.example.org?` et `wss://relay.example.org#` sont
+  refusés, comme les variantes avec query/fragment non vides.
+- Commande : `node --test scripts/lib/config-policy.check.mjs`
+- Résultat : 7 tests passés, 0 échec, 0 ignoré.
+
+2. P2 — le test de révocation ne prouvait pas le chemin de fermeture
+- Le test utilise maintenant une session établie (hello_ok), injecte un
+  `DEVICE_REVOKED` protégé, attend le latch REVOKED, ferme ensuite le socket
+  avec le code 4001, puis attend un latch AUTH négatif.
+- Il vérifie que l'état reste REVOKED et que le dernier échec est REVOKED :
+  la fermeture 4001 ne peut plus être créditée par le drain de handshake.
+- Commande ciblée :
+  `./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.RelayBackendTransportTest'`
+- Résultat ciblé : BUILD SUCCESSFUL, répété trois fois consécutives avec
+  `--rerun-tasks` (3/3 PASS).
+- Commande complète :
+  `./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest`
+- Résultat complet : 94 fichiers XML de suite, 669 tests, 0 échec, 0 erreur,
+  0 ignoré.
+
+3. P3 — statuts de revue encore en attente
+- `RAPPORT_FINAL.md`, `REVUE_INDEPENDANTE_R3A_PLUS.md`, `REGISTRE.md` et
+  `MATRICE_RECETTE.md` enregistrent le verdict delta et les SHAs finaux.
+- Aucun statut `PENDING` de clôture ne subsiste ; les limitations réelles
+  restent explicites (systemd transitoire, FastAPI réel, wger, A3/A4, UI).
+
+TESTS COMPLÉMENTAIRES SUR LE CONTENU FINAL
+- Suite Node complète avec relais local épinglé :
+  `docker run -d --rm --name atlas-r3a-plus-delta-relay -p 127.0.0.1:4400:4000 atlas-paseo-relay:r3a`
+  puis `npm test` dans `integrations/relay/pc`.
+  Résultat : 14 fichiers, 62 tests, 0 échec. Conteneur arrêté après le test.
+- `git diff --check` : aucun problème.
+- La suite backend, le JVM complet, le lint et les builds ont été rejoués par
+  le gate-runner sur `2bcce51` : backend 187 passed / 1 skipped, JVM 94
+  suites / 669 tests, lint 0 erreur / 71 avertissements, builds PASS, APK debug
+  `5dd79984…`, APK androidTest `2d0c2726…`.
+- Le relais du gate-runner a échoué au health check avant la gate Node
+  (`Connection reset by peer`) ; le parent a rejoué Node, config policy et
+  clean-copy avec un conteneur neuf : Node 14/62, config 7/7, clean-copy
+  offline 62/62 PASS. L'incident et la reprise sont consignés dans
+  `gates-agent-run-delta.txt`.
+
+PORTÉE DU CHANGEMENT
+- Le runtime du connecteur et le code Android principal sont inchangés depuis
+  `f6c11d0` ; `config.mjs` est un script opérationnel de vérification et les
+  modifications Android sont limitées aux fixtures/tests JVM.
+- L'APK Pixel `66645143…` reste construit depuis `38fd4a0`. Il ne contient pas
+  le correctif de message de révocation de `f6c11d0`, ni les améliorations de
+  test de `2bcce51` ; les parcours WSS/calendrier ne sont pas affectés.
+- Aucune nouvelle revue indépendante n'a été exécutée après `2bcce51`. Le
+  verdict GO sans P0/P1 porte sur `f6c11d0` ; les deux P2 et le P3 résiduels
+  sont corrigés et couverts par les tests ci-dessus, sans modification du
+  runtime.
+
+LIMITES
+- Pas de relais public, Internet, LTE/5G, H24, Doze ou livraison instantanée
+  qualifiés.
+- systemd transitoire NOT_RUN ; redémarrage réel de FastAPI PARTIAL ; lecture
+  wger réelle NOT_RUN ; persistance Android A3 NOT_RUN ; A4 PARTIAL ; suite UI
+  historique NOT_RUN.
+- V6.3 global reste NO_GO avant la recette R3-B.

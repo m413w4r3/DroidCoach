@@ -1,0 +1,87 @@
+TASK_ID: R3AP-GATES-01 (delta)
+BASE_SHA: 2bcce51f9c24f3faff7dba64b3e045f377e034e3
+HEAD: 2bcce51f9c24f3faff7dba64b3e045f377e034e3
+BRANCH: test/r3a-plus-gates (worktree), parent branch feat/atlas-v6-3-r3a-plus
+WORKTREE: /home/nill/.paseo/worktrees/073527gm/test-r3a-plus-gates
+DATE: 2026-10-27
+SESSION: provider=codex, model=gpt-6-luna, effective effort=xhigh,
+session 01a17f17-fd7d-76e0-ab6e-71abe98e1201, full-access, no sub-delegation.
+Commit verified in the worktree before running: 2bcce51.
+
+ENVIRONMENT
+- Linux amd64; Node v24.18.0, npm 11.16.0, Python 3.12.3,
+  OpenJDK 21.0.12.1, Gradle 9.6.0, Docker 27.1.1.
+- No ADB, Pixel, emulator or instrumented execution was used.
+- No source or test files were modified by the gate runner.
+- No commit or push was made.
+
+GATE 1 — BACKEND: PASS (gate runner)
+Command: `backend/.venv/bin/python -m pytest -q`
+Result: 187 passed, 1 skipped, 0 failures.
+
+GATE 2 — ANDROID JVM: PASS (gate runner)
+Command: `./gradlew --offline :app:testDebugUnitTest --rerun-tasks --max-workers=1`
+Result: BUILD SUCCESSFUL. Parsed TEST-*.xml: 94 suite files, 669 tests,
+0 failures, 0 errors, 0 skipped.
+`RelayBackendTransportTest`: 10 tests passed, including
+`revocationCloseDoesNotOverwriteRevokedFailureWithAuthentication`.
+
+GATE 3 — ANDROID LINT / BUILDS: PASS (gate runner)
+Command: `./gradlew --offline :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest`
+Result: BUILD SUCCESSFUL. Lint: 0 errors, 71 warnings.
+APK SHA-256:
+- app-debug.apk: 5dd79984fb1c0212d6b20bf955b15d4db3ef33566db2a1702660d0321c3d102d
+- app-debug-androidTest.apk: 2d0c2726e8d53b7a3a6e416ea6671aa96091b6fce520696c5bb2d279b787ec8e
+The debug APK hash is identical to the f6c11d0 gate build; production code is
+unchanged by the delta.
+
+GATE 4 — NODE CONNECTOR (gate runner attempt): NOT_RUN
+- The gate runner started the pinned `atlas-paseo-relay:r3a` on
+  `127.0.0.1:4400` and waited for `/health`, but the health request exited 56
+  (`Recv failure: Connection reset by peer`) after the retry window.
+- It stopped and removed the container. Node tests, config policy and clean
+  copy were not run by the gate runner. This is an environment/readiness
+  incident, not a source failure; the parent reran them (below).
+
+GATE 4bis — NODE CONNECTOR (parent rerun on the same SHA): PASS
+- Relay: `docker run -d --rm --name atlas-r3a-plus-delta2-relay
+  -p 127.0.0.1:4400:4000 atlas-paseo-relay:r3a`; `/health` returned HTTP 200.
+- Command: `npm test` in `integrations/relay/pc`.
+- Result: 14 test files passed, 62 tests passed, 0 failures.
+- Config policy: `node --test scripts/lib/config-policy.check.mjs` -> 7 tests
+  passed, 0 failed, including rejection of bare `?` and `#`.
+- Relay stopped after the run.
+
+GATE 5 — CLEAN-COPY OFFLINE INSTALLATION (parent rerun): PASS
+- A first parent attempt used a wrong relative rsync source, produced an empty
+  temporary directory and failed `npm ci` with EUSAGE. It was discarded with no
+  product conclusion.
+- Corrected attempt: `rsync -a --exclude=node_modules --exclude=dist
+  --exclude=references <absolute package path>/ <temp>/`; verified
+  `references/` absent and `package-lock.json` present.
+- `npm ci --offline`: PASS, 62 packages installed from the local cache.
+- `npm run build`: PASS.
+- `node --test scripts/lib/config-policy.check.mjs`: 7 passed, 0 failed.
+- `npm run verify:artifact`: PASS;
+  `@getpaseo/relay` 0.13.1 SHA-256
+  `cc1102a64892dc6f9de5bacbc813b472758a6675be26ef65534d5bf7b5d70452`.
+- `npm test`: 14 test files passed, 62 tests passed, 0 failures.
+- Temporary copy removed; relay `atlas-r3a-plus-delta3-relay` stopped.
+
+CLEANUP
+- No atlas containers remain.
+- Ports 4400, 4401, 4402, 4443, 4444, 4445 and 8100 have no listeners.
+- No `adb reverse`; no Pixel or ADB command was run in this delta.
+- `git diff --check` passed in the gate worktree and the parent worktree.
+
+LIMITS
+- Node, config policy and clean-copy evidence is parent-run because the gate
+  runner's relay readiness failed; the exact SHA was verified before the
+  parent run. The runner's backend/JVM/lint/builds results are delegated.
+- Instrumentation was NOT_RUN (parent owns the Pixel; no device access here).
+- `npm ci` reports 3 development-dependency advisories (1 moderate, 2
+  critical), unchanged from the prior gate run.
+- The Pixel APK remains `66645143…` from `38fd4a0`; the final code
+  `2bcce51` changes only the operational checker and JVM tests, not the
+  production connector or Android main code.
+- No public Internet/LTE/5G/H24/Doze qualification is claimed.

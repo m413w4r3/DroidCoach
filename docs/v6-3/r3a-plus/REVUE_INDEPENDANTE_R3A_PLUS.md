@@ -31,8 +31,8 @@
 | R3 | PARTIAL | redémarrage réel de FastAPI non rejoué |
 | P1–P7 | PASS | appairage atomique, concurrence, token absent de stdout |
 | T1 backend | PASS | 187 passés, 1 ignoré |
-| T2 JVM | PASS | 94 suites, 668 tests |
-| T3 lint | PASS | 0 erreur, 62 avertissements |
+| T2 JVM | PASS | 94 suites, 668 tests à la revue initiale ; 669 après le test de révocation final |
+| T3 lint | PASS | 0 erreur, 62 avertissements à la revue initiale ; 71 au gate delta `2bcce51` |
 | T4–T5 builds | PASS | APK debug et androidTest compilés |
 | T6 Pixel | PASS | WSS et C1–C5 ciblés ; suite UI R3-A historique NOT_RUN |
 | T7 Node | PASS | 14 fichiers, 62 tests ; 3 advisories de développement |
@@ -41,16 +41,16 @@
 | T10 systemd | PARTIAL | validation statique seulement |
 | T11–T12 Pixel | PASS | WSS et calendrier |
 | T13 route backend | PARTIAL | mapping et pytest ; wger réel NOT_RUN |
-| T14 revue | FAIL initial | P1 bloquant identifié |
+| T14 revue | FAIL initial → GO delta | P1 initial corrigé ; re-revue delta GO sans P0/P1 ; P2/P3 résiduels corrigés |
 | T15 module relay | PASS | inclus dans le JVM |
-| T16 config | PARTIAL → corrigé | divergence trailing slash corrigée |
+| T16 config | PARTIAL → PASS | divergence de chemin puis marqueurs bruts corrigés ; 7/7 |
 
 ## 3. Corrections parent et re-revue delta
 
 Cible delta : `f6c11d07c8c6764f60ef93eeb2a82ffe538b19c2` (`f6c11d0`), diff
 `8f38f2a..f6c11d0`. Les corrections sont détaillées dans
-`preuves/review-fixes.txt` et liées au commit de clôture. La re-revue delta doit
-vérifier :
+`preuves/review-fixes.txt` et liées au commit de clôture. La re-revue delta a
+vérifié :
 
 - le runbook utilise `ATLAS_SERVICE_TOKEN` dans l'environnement 0600, sans
   variable inexistante ;
@@ -60,13 +60,31 @@ vérifier :
   documentée ;
 - les placeholders sont résolus et le rapport final reflète les statuts exacts.
 
-Verdict delta : **PENDING** (à compléter après la re-revue).
+**Verdict delta : `GO_PREDEPLOYMENT_WITH_LIMITATIONS` — aucun P0/P1.**
+
+La re-revue a toutefois relevé deux P2 de qualité de vérification et un P3
+documentaire, corrigés dans `2bcce51` et le présent commit :
+
+| Sévérité | Constat | Correction / preuve | Statut |
+|---|---|---|---|
+| P2 | le checker acceptait `?`/`#` bruts alors que `parseRelayUrl` les refuse | rejet de toute présence brute de `?`/`#` dans `config.mjs` ; tests 7/7 dont `wss://relay.example.org?` et `…/#` | **CORRIGÉ** |
+| P2 | le test de révocation pouvait passer sans prouver la fermeture 4001 après `DEVICE_REVOKED` | test sur session établie : injection `DEVICE_REVOKED`, latch REVOKED, puis close 4001, latch AUTH négatif ; JVM 669/669 | **CORRIGÉ** |
+| P3 | statuts de revue encore en attente dans les documents | verdict delta et SHAs enregistrés ; plus de `PENDING` de clôture | **CORRIGÉ** |
+
+Le détail des commandes et résultats est dans
+`preuves/delta-review-p2-fixes.txt`. Aucune nouvelle revue indépendante n'a été
+exécutée après `2bcce51` : ce delta ne modifie que le script de vérification et
+les tests JVM, pas le runtime du connecteur ni le code Android principal.
 
 ## 4. Limites de la revue
 
 - Revue documentaire et statique : aucun test, build, ADB ou service n'a été
   exécuté par le relecteur.
-- La revue initiale s'est arrêtée au P1 ; la re-revue delta doit confirmer
-  l'absence de P0/P1 sur le périmètre livré.
+- La revue initiale s'est arrêtée au P1 ; la re-revue delta a confirmé
+  l'absence de P0/P1 sur le périmètre livré (`f6c11d0`).
+- Les deux P2 et le P3 résiduels de la re-revue delta ont été corrigés dans
+  `2bcce51` et ce commit documentaire ; ils ne touchent que le checker
+  opérationnel et les tests JVM. Aucune nouvelle revue indépendante n'a été
+  exécutée après ce delta.
 - Les limites produit restent celles du rapport final : pas de relais public,
   LTE/5G, H24, Doze, systemd transitoire, wger réel, R3 FastAPI réel, A3/A4.
