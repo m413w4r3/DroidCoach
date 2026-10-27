@@ -47,6 +47,63 @@ class CalendarWriteServiceTest {
     }
 
     @Test
+    fun createRechecksWritePermissionImmediatelyBeforeProviderMutation() {
+        val provider = FakeCalendarWriteProvider()
+        val service = CalendarWriteService(
+            provider = provider,
+            journal = InMemoryCalendarWriteJournal(),
+            nowMillis = { NOW },
+            beforeFinalPermissionRecheck = { provider.permissionsForCall = { deniedPermissions() } },
+        )
+
+        val result = service.create(CALENDAR_ID, draft(), "permission-race-create")
+
+        assertEquals(CalendarWriteError.PERMISSION_DENIED, result.error)
+        assertEquals(0, provider.insertCalls)
+        assertTrue(provider.events.isEmpty())
+    }
+
+    @Test
+    fun updateRechecksWritePermissionImmediatelyBeforeProviderMutation() {
+        val harness = Harness()
+        val created = harness.service.create(CALENDAR_ID, draft(), "permission-race-update-source")
+        val service = CalendarWriteService(
+            provider = harness.provider,
+            journal = harness.journal,
+            nowMillis = { NOW },
+            beforeFinalPermissionRecheck = { harness.provider.permissionsForCall = { deniedPermissions() } },
+        )
+
+        val result = service.update(
+            requireNotNull(created.link),
+            draft(title = "Must remain original"),
+            "permission-race-update",
+        )
+
+        assertEquals(CalendarWriteError.PERMISSION_DENIED, result.error)
+        assertEquals(0, harness.provider.updateCalls)
+        assertEquals("Focus", harness.provider.getEvent(requireNotNull(created.link?.eventId))?.title)
+    }
+
+    @Test
+    fun deleteRechecksWritePermissionImmediatelyBeforeProviderMutation() {
+        val harness = Harness()
+        val created = harness.service.create(CALENDAR_ID, draft(), "permission-race-delete-source")
+        val service = CalendarWriteService(
+            provider = harness.provider,
+            journal = harness.journal,
+            nowMillis = { NOW },
+            beforeFinalPermissionRecheck = { harness.provider.permissionsForCall = { deniedPermissions() } },
+        )
+
+        val result = service.delete(requireNotNull(created.link), "permission-race-delete")
+
+        assertEquals(CalendarWriteError.PERMISSION_DENIED, result.error)
+        assertEquals(0, harness.provider.deleteCalls)
+        assertNotNull(harness.provider.getEvent(requireNotNull(created.link?.eventId)))
+    }
+
+    @Test
     fun sameKeyDifferentPayloadIsRejected() {
         val harness = Harness()
         harness.service.create(CALENDAR_ID, draft(), "conflicting-key")

@@ -1,0 +1,108 @@
+TASK_ID: R3AP-CALENDAR-01
+CODE_SHA: e66d2efa7ad2de415fe98b2aaeb28502dfa4606f
+TARGET: owner Pixel 9 Pro XL, Android 17 / API 37
+INSTRUMENTATION: dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+TEST CLASS: dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest
+
+PRE-FLIGHT / SHARED SYNTHETIC CALENDAR
+- Record the Pixel's initial READ_CALENDAR and WRITE_CALENDAR grant state. Restore that exact state after C1-C5.
+- Before C1-C3 and C5, grant READ_CALENDAR and WRITE_CALENDAR to dev.atlas.coach if either is absent. Restore the recorded initial state after all scenarios.
+- Permission-denial cases below change permissions only for dev.atlas.coach. Never revoke Etar or another package.
+- The first C1 phase provisions the existing production synthetic account/calendar constants only if absent: account atlas-r3a-test / display ATLAS R3A TEST. This shared ATLAS-only calendar remains in place; its test events are cleaned by the phases.
+- The instrumentation tests do not grant/revoke permissions. The C4 race method logs FINAL_PERMISSION_RECHECK_BLOCKED and waits up to 30 seconds for the parent to revoke WRITE_CALENDAR externally. If Android kills the process on revocation, that is an acceptable fail-closed observation. If it survives, it rechecks and must return PERMISSION_DENIED without a provider write.
+- No test requires a global timezone change, shell content insert, direct SQL, account deletion, or deletion of a non-synthetic calendar/event.
+
+Use these exact class/method invocations. Run one method at a time:
+
+C1 PHASE 1 — durable UNKNOWN plus real process SIGKILL
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c1Phase1PersistUnknownThenKillRealProcess' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: instrumentation terminates abnormally because Process.killProcess(Process.myPid()) sends SIGKILL after the provider insert and durable UNKNOWN journal/link writes. This phase is expected not to report a normal JUnit PASS. It leaves one ATLAS TEST event and the durable UNKNOWN record for phase 2.
+Cleanup: run C1 phase 2 next; it reconciles, proves exactly one event and cleans only this exact synthetic event and its private journal directory.
+
+C1 PHASE 2 — new process recovery, idempotent replay, cleanup
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c1Phase2RecoverUnknownWithoutDuplicateAndCleanFixture' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; prior state is UNKNOWN, recoverPending() makes it interpretable/RECONCILED, exactly one provider event remains after replay, and the event is then deleted.
+Cleanup: performed by the test using the event's exact ATLAS provenance URI; no calendar/account is deleted.
+
+C2 — foreign synthetic event unchanged
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c2ForeignSyntheticEventIsRejectedAndFullProviderRowIsUnchanged' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; engine returns FOREIGN_EVENT and every CalendarContract Events column read for the synthetic foreign row matches before/after.
+Cleanup: the test deletes only the inserted row ID in the ATLAS synthetic calendar when its synthetic title and test markers still identify it.
+
+C3 — deleted empty disposable calendar fails closed
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c3DeletedEmptyDisposableCalendarFailsClosed' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; test creates one empty ATLAS R3A PLUS TEST calendar under the existing synthetic account, verifies it has no event rows, deletes that exact calendar, then expects CALENDAR_NOT_LOCAL and no event.
+Cleanup: targeted deletion occurs only for this run's empty disposable calendar. If an event is present, the test fails closed and preserves the calendar. The shared account is never deleted.
+
+C4 — READ_CALENDAR denied
+Commands:
+  adb shell pm revoke dev.atlas.coach android.permission.READ_CALENDAR
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c4ReadPermissionDeniedDoesNotEnumerateCalendars' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; READ is DENIED, catalog is empty, providerAvailable is false, and no calendar enumeration is attempted by the service.
+Cleanup: restore the recorded initial READ_CALENDAR state after the permission scenarios.
+
+C4 — WRITE_CALENDAR denied
+Commands (restore READ first so WRITE denial is isolated):
+  adb shell pm grant dev.atlas.coach android.permission.READ_CALENDAR
+  adb shell pm revoke dev.atlas.coach android.permission.WRITE_CALENDAR
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c4WritePermissionDeniedBlocksCreate' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; PERMISSION_DENIED and no event.
+Cleanup: restore WRITE_CALENDAR to the recorded initial state after the permission scenarios.
+
+C4 — restored READ/WRITE state allows a synthetic write and delete
+Precondition: grant both permissions for the test, without changing Etar:
+  adb shell pm grant dev.atlas.coach android.permission.READ_CALENDAR
+  adb shell pm grant dev.atlas.coach android.permission.WRITE_CALENDAR
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c4RestoredPermissionsAllowSyntheticCreateAndDelete' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; one synthetic event is created/read back and then deleted.
+Cleanup: performed by the test. Restore the Pixel's recorded initial permission state after all C4 methods.
+
+C4 — permission revoked during the operation
+Precondition: READ and WRITE are granted. Start the instrumentation command in one terminal:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c4PermissionRevokedAtFinalGateFailsClosed' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+In a second terminal, observe the hook marker:
+  adb logcat -s AtlasR3aPlusCalendar:I
+As soon as FINAL_PERMISSION_RECHECK_BLOCKED appears, revoke only ATLAS WRITE_CALENDAR:
+  adb shell pm revoke dev.atlas.coach android.permission.WRITE_CALENDAR
+Expected: either Android terminates the target process on revoke (accepted fail-closed observation) or the instrumentation finishes with PERMISSION_DENIED and no provider event after the final permission recheck.
+Cleanup: grant/revoke READ/WRITE back to the exact recorded initial state; no event is written before the gate.
+
+C5 — explicit timezone change and DST fixtures
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c5ExplicitTimezoneChangeAndDstFixturesRoundTrip' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; explicit America/New_York spring gap and fall overlap fixtures resolve to expected instants; a timezone update to Pacific/Auckland is read back. The phone timezone is untouched.
+Cleanup: performed by the test for each exact synthetic provenance URI.
+
+C5 — external edit and delete reconciliation
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c5ExternalEditAndExternalDeleteAreReconciled' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; external CalendarContract title edit yields DIVERGED/READ_BACK_MISMATCH; external deletion yields MISSING_EVENT; the edit fixture is restored before the separate delete fixture is removed.
+Cleanup: performed by the test with event ID, synthetic calendar ID, ATLAS package and exact provenance constraints.
+
+C5 — revised/new plan idempotence and parallel same-activity operations
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c5NewPlanReplayAndParallelSameActivityDoNotDuplicate' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; replay for a new plan and an updated plan revision each leave one provider row; two concurrent operations for one activity resolve to the same event ID and one row.
+Cleanup: performed by the test for the two synthetic provenance URIs.
+
+C5 PHASE 1 — create durable event before force-stop
+Command:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c5Phase1CreateBeforeForceStop' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS; one synthetic event and confirmed durable link exist.
+
+C5 PHASE 2 — force-stop/restart verification and cleanup
+Between phases, run:
+  adb shell am force-stop dev.atlas.coach
+Then run:
+  adb shell am instrument -w -e class 'dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest#c5Phase2VerifyAfterForceStopAndCleanFixture' dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Expected: PASS in a fresh process; recovery/verification and replay preserve exactly one event, then the test deletes that event and its durable test directory.
+
+FINAL STATE
+- Verify the initial permission grants are restored exactly.
+- C1/C2/C4/C5 synthetic events are removed by their paired/method cleanup. C3's disposable calendar is removed only when empty.
+- Preserve the shared synthetic ATLAS R3A TEST account/calendar and every pre-existing personal calendar/event. Never call AtlasLocalCalendar.remove().
