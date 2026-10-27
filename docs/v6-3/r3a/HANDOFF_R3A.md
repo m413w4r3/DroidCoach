@@ -37,7 +37,9 @@ déploiement public n'a été effectué.
   `41c1ad85…`), événements ATLAS supprimés, permissions calendrier révoquées,
   Usage Access remis à `default`, APK de test désinstallé, connecteur/FastAPI/
   relais arrêtés. Le calendrier local vide et son compte synthétique sont
-  conservés. Détail : `preuves/cleanup-final.txt`.
+  conservés. L'émulateur s'est arrêté après un crash post-nettoyage ; son
+  userdata conserve l'APK final et les données restaurées. Détail :
+  `preuves/cleanup-final.txt`.
 
 ## 3. Ce qui est réellement prouvé
 

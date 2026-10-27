@@ -132,6 +132,7 @@ Statut : **CLOSED_LOCAL — GO_WITH_LIMITATIONS** pour R3-A sur émulateur ;
 | 2026-10-27 | Lifecycle calendrier final `02a5040` | **PASS** — restore/move/delete/restore, fixture `_id=27`, capture `etar-final-restored.png` |
 | 2026-10-27 | Nettoyage émulateur | **PASS** — données app restaurées, événements ATLAS supprimés, permissions révoquées, appops default, test APK désinstallé ; voir `preuves/cleanup-final.txt` |
 | 2026-10-27 | Arrêt services | **PASS** — connecteur, FastAPI 8100 et relais arrêtés ; ports 4400/4401/8100 fermés |
+| 2026-10-27 | Crash post-nettoyage | **INCIDENT** — émulateur arrêté après le nettoyage ; userdata restauré intact, aucun ADB attaché |
 
 ## 5. Preuves
 

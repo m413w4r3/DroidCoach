@@ -25,7 +25,7 @@ calendar_permissions=READ_CALENDAR=false, WRITE_CALENDAR=false
 adb_reverse_entries=0
 services=connector, FastAPI 8100 and relay were restarted for the final PC live check, then stopped and the container removed at 2026-10-27T09:09Z
 ports=4400, 4401, 8100 closed
-emulator=running with the final APK and restored pre-R3A app data
+emulator=stopped after a post-cleanup crash; AVD userdata retains the final APK and the restored pre-R3A app data; no ADB device attached at the end
 pixel_physical=untouched
 --- limitations ---
 The pre-R3A APK was not stored, so the final R3-A APK remains installed. The empty local calendar and its synthetic local account are retained; removing the account has no supported product/CLI path and the campaign safety rule only requires deleting ATLAS events.
