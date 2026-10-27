@@ -1,0 +1,61 @@
+ATLAS V6.3 R3-A+ — PREFLIGHT PIXEL PHYSIQUE
+Date: 2026-10-27 (Europe/Paris)
+Base SHA: 9a05dcab71e2327c58c720d82623882fc4d1cfc1
+Campaign branch: feat/atlas-v6-3-r3a-plus
+
+DEVICE
+- adb state: device
+- model: Pixel 9 Pro XL (komodo)
+- Android release: 17
+- SDK: 37
+- build fingerprint prefix: google/komodo/komodo:17/CP3A.260905.009/...
+- serial: recorded in the parent session only, not in this evidence file
+- screen state at preflight: on, no lockscreen showing
+- battery: AC powered, health OK
+- storage: 109G total, 29G available
+
+ANDROID PACKAGES
+- dev.atlas.coach: versionName 0.1.0, versionCode 1, DEBUGGABLE, installed APK SHA-256
+  6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886
+- signing certificate: Android Debug, SHA-256
+  da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee
+- dev.atlas.coach.test: installed, same signing certificate, target dev.atlas.coach
+- test instrumentation: dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+- ws.xsoh.etar: versionName 1.0.57, versionCode 57, targetSdk 37
+- calendar provider: com.android.providers.calendar/.CalendarProvider2
+
+BACKUP (app-only, outside repo)
+- file: ~/.local/share/atlas-v63-r3a-plus/backups/atlas-app-data-pre-r3a-plus.tar
+- SHA-256: d1ffca6a15c5a371aa0e913858e262b6a16a141bb7234aa81bf829ab390172ed
+- installed APK backup:
+  ~/.local/share/atlas-v63-r3a-plus/backups/atlas-installed-pre-r3a-plus.apk
+- installed APK SHA-256: 6ab95fac9d635ea9f5a4947b6fabc901526b6d953f7f930e04e39fcfbf51c886
+- archive extraction check: PASS (16 files extracted in a temporary directory,
+  atlas_local_state.xml and atlas_agent_inbox_v2.json present, temp removed)
+- existing app data: 521 KiB; contains a backend bearer token in
+  atlas_sync_configuration.xml. The value was not displayed and must be preserved.
+
+CALENDAR BASELINE (personal data minimized)
+- calendar rows: 12
+- event rows: 91
+- event counts by calendar id: 2=41, 4=41, 5=1, 6=7, 10=1
+- ATLAS account type dev.atlas.coach.calendar: absent (0)
+- ATLAS events with customAppPackage=dev.atlas.coach: none
+- Google/personal calendars: never written during R3-A+
+- ATLAS calendar permissions before campaign: READ_CALENDAR denied, WRITE_CALENDAR denied
+- Etar installed; its data is not modified directly
+
+ADB REVERSE (test transport only)
+- `adb reverse tcp:4999 tcp:4999` succeeded and was removed immediately
+- no reverse mapping remains
+- no HTTP proxy configured
+
+TOOLS
+- JDK 21.0.12.1
+- Node v24.18.0 / npm 11.16.0
+- Python 3.12.3
+- Docker 27.1.1
+- relay image atlas-paseo-relay:r3a present
+- ports 4400/4401/8100/4443 closed at preflight
+
+STATUS: PASS for preflight and backup. No phone data was modified.

@@ -59,6 +59,17 @@ Le numéro de série matériel n'est pas reporté dans les preuves versionnées.
 | `R3AP-E2E-01` | recette WSS bout en bout sur Pixel | scripts de recette parent, preuves | Android physique → TLS/WSS test → relais réel → Noise → connecteur → FastAPI | **PENDING** |
 | `R3AP-REVIEW-01` | revue indépendante lecture seule | aucun | grille P0/P1/P2/P3 | **PENDING** |
 
+## 3.1 Sessions Paseo vérifiées
+
+| TASK_ID | Agent ID | Session Codex | Modèle effectif | Effort effectif | Worktree |
+|---|---|---|---|---|---|
+| `R3AP-WSS-01` | `7c16a073-23a2-4961-9f80-69e1a9a646ec` | `01a17ee3-6b10-78e2-ab34-7e99988af6e6` | `gpt-6-luna` | `xhigh` | `feat-r3a-plus-wss` |
+| `R3AP-PACKAGING-01` | `1c83bff5-cc1a-4528-be27-2d6b478d2486` | `01a17ee3-e1d6-7a71-9e85-a64d1292c1a0` | `gpt-6-luna` | `xhigh` | `feat-r3a-plus-packaging` |
+| `R3AP-CALENDAR-01` | `e8b64fe2-9fdd-4128-96cf-62e7a0689cec` | `01a17ee3-eb93-7bf1-bbf1-727b16580b97` | `gpt-6-luna` | `xhigh` | `feat-r3a-plus-calendar` |
+
+Les trois sessions ont été créées en mode `full-access`, sans sous-délégation,
+avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
+
 ## 4. Journal
 
 | Date | Événement | Résultat |
@@ -66,10 +77,13 @@ Le numéro de série matériel n'est pas reporté dans les preuves versionnées.
 | 2026-10-27 | Pré-vol Git : base `9a05dca`, arbre propre | **PASS** |
 | 2026-10-27 | Pré-vol outils : JDK 21, Node 24, Python 3.12, Docker 27 | **PASS** |
 | 2026-10-27 | Pixel physique Android 17/API 37 connecté, état `device` | **PASS** |
-| 2026-10-27 | Baseline calendrier : 91 événements personnels, aucun événement ATLAS | **PASS** |
-| 2026-10-27 | Sauvegarde app-only ATLAS + APK installé + hashes | **PASS** |
+| 2026-10-27 | Baseline calendrier : 12 calendriers, 91 événements personnels, aucun événement ATLAS | **PASS** |
+| 2026-10-27 | Sauvegarde app-only ATLAS + APK installé + hashes ; extraction de contrôle | **PASS** — archive 16 fichiers, temp supprimé |
+| 2026-10-27 | Signature APK installé = certificat debug ; APK test même certificat | **PASS** |
+| 2026-10-27 | `adb reverse` testé puis retiré ; aucun proxy HTTP global | **PASS** |
 | 2026-10-27 | Branche `feat/atlas-v6-3-r3a-plus` créée sur `9a05dca` | **PASS** |
 | 2026-10-27 | Contrats R3-A+ figés | **PASS (doc)** |
+| 2026-10-27 | Preuve de pré-vol Pixel | `preuves/preflight-pixel.txt` |
 
 ## 5. Preuves
 
