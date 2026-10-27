@@ -1,0 +1,11 @@
+TASK_ID: R3AP-PACKAGING-01
+STATUS: REVIEW_REQUIRED
+BASE_SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+BRANCH: feat/r3a-plus-packaging
+WORKTREE: current assigned worktree
+PROFILE: codex / gpt-6-luna / xhigh (effective profile verified from Paseo session metadata)
+WRITE_SCOPE: integrations/relay/pc package, scripts, vendor, packaging, systemd; PC README; INSTALLATION_PC.md; SUPERVISION_PC.md; packaging evidence; THIRD_PARTY_NOTICES.md provenance append
+ORACLE: clean copy of integrations/relay/pc without references; npm ci --offline; npm run build; npm test; artifact SHA; systemd-analyze --user verify; operational smoke
+PERMISSIONS: no push, PR, merge, service installation, enablement, or personal-session unit start
+DEPENDENCIES: none
+REVIEW: implementation and evidence complete; parent review pending

@@ -1,0 +1,34 @@
+[Unit]
+Description=ATLAS PC relay connector
+StartLimitIntervalSec=5min
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Change this path if the package is installed somewhere else.
+WorkingDirectory=%h/.local/lib/atlas-relay
+EnvironmentFile=%h/.config/atlas/relay.env
+ExecStart=/usr/bin/node dist/main.js start
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=%h/.local/state/atlas-relay
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atlas-relay
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,33 @@
+TASK_ID: R3AP-PACKAGING-01
+STATUS: PASS
+BASE_SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+BRANCH: feat/r3a-plus-packaging
+
+Runtime/build environment: Node v24.18.0, npm 11.16.0.
+
+Published artifact provenance:
+
+  npm view @getpaseo/relay@0.13.1 dist.integrity dist.tarball --json
+
+  dist.tarball: https://registry.npmjs.org/@getpaseo/relay/-/relay-0.13.1.tgz
+  dist.integrity: sha512-6bA7X2zugIPcp8jttqlx11QG64xLohXdNsfyCx+2oPErNs9W+OkKTALapRCO7NNgKbtNu4e4OWQkfvV7kZBtwg==
+
+Pinned source and regeneration:
+
+  git -C references/repos/paseo rev-parse HEAD
+  node integrations/relay/pc/scripts/build-vendored-relay.mjs --upstream references/repos/paseo
+  sha256sum integrations/relay/pc/vendor/relay-0.13.1.tgz
+  cat integrations/relay/pc/vendor/relay-0.13.1.tgz.sha256
+
+  Upstream HEAD: 902b0c7a1637cc7a6c2ee268dca8161965a35def (Paseo 0.13.1).
+  Result: PASS; build script rebuilt the package from the pinned commit, checked
+  npm publication integrity and the fixed SHA-256, and left the artifact
+  unchanged.
+  Artifact SHA-256: cc1102a64892dc6f9de5bacbc813b472758a6675be26ef65534d5bf7b5d70452.
+  Artifact size: 26,691 bytes; package contents are compiled dist/ output and
+  package metadata only. No full Paseo library or relay server is vendored.
+  License: Apache-2.0; provenance appended to THIRD_PARTY_NOTICES.md.
+
+The package dependency is the local tarball, so npm ci does not resolve a
+Paseo checkout or references/ path. The build script needs a checkout at the
+pinned upstream commit only when intentionally regenerating the artifact.

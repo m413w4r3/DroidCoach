@@ -1,0 +1,44 @@
+TASK_ID: R3AP-PACKAGING-01
+STATUS: PASS (validation); NOT_RUN (isolated transient service)
+BASE_SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+BRANCH: feat/r3a-plus-packaging
+
+Systemd validation environment: systemd 255 (255.4-1ubuntu8.18).
+
+  systemd-analyze --user verify integrations/relay/pc/systemd/atlas-relay.service
+
+Result: PASS. The user unit verifies with Restart=on-failure, bounded restart
+delay/start limit, SIGTERM clean-stop timeout, external EnvironmentFile,
+configurable WorkingDirectory, preserved state directory, hardened writable
+paths, and rate-limited journald output. ExecStart contains no token or
+credential argument.
+
+Unit installation, enablement, and start: NOT_RUN. No service was installed or
+enabled in the owner's personal session. No separate disposable user manager
+was available for this validation; using the active personal manager would not
+be isolated, so the transient test is NOT_RUN.
+
+Operational smoke results (temporary state/config only; a random synthetic
+service token was checked against captured command output and never printed):
+
+  node scripts/check-config.mjs --env-file <temporary-private-env-file>
+  node scripts/check-secret.mjs --env-file <temporary-private-env-file>
+  scripts/show-identity.sh <temporary-private-env-file>
+  node scripts/run-cli.mjs <temporary-private-env-file> pair-device --label synthetic-smoke --token-file <temporary-device-token-file> --capabilities sync.status,plan.revision
+  scripts/revoke-device.sh <temporary-private-env-file> <paired-device-uuid>
+  node scripts/backup-state.mjs <temporary-private-env-file> <temporary-backup-dir>
+  node scripts/restore-state.mjs <temporary-private-env-file> <temporary-backup-dir> --confirm-fingerprint <sha256-fingerprint> --pre-restore-backup <temporary-failed-state-dir> --service-stopped
+  node scripts/diagnose-network.mjs ws://127.0.0.1:<temporary-port>
+
+Result: PASS for configuration policy, secret presence/mode reporting,
+show-identity, pair/revoke CLI commands, 0700/0600 modes, backup/restore with
+fingerprint confirmation and pre-restore backup, and a loopback WS upgrade.
+Restore was exercised only against disposable synthetic state.
+
+TLS diagnostic smoke:
+
+  NODE_EXTRA_CA_CERTS=<temporary-test-ca.pem> node scripts/diagnose-network.mjs wss://localhost:<temporary-port>
+
+Result: PASS for DNS, TCP reachability, trusted TLS certificate and hostname
+validation, WebSocket upgrade and clean close. The server and certificate
+were temporary local fixtures; no token or application payload was sent.

@@ -1,24 +1,34 @@
 {
   "name": "@atlas/relay-pc",
-  "version": "0.1.0-r3a",
+  "version": "0.1.0-r3a-plus",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
+    "preinstall": "node scripts/verify-artifact.mjs",
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && vitest run",
-    "start": "node dist/main.js start"
+    "test:unit": "npm run build && vitest run --exclude test/relay.integration.test.ts",
+    "start": "node dist/main.js start",
+    "verify:artifact": "node scripts/verify-artifact.mjs",
+    "verify:install": "bash scripts/verify-install.sh",
+    "check:config": "node scripts/check-config.mjs",
+    "check:secret": "node scripts/check-secret.mjs",
+    "diagnose:network": "node scripts/diagnose-network.mjs",
+    "vendor:relay": "node scripts/build-vendored-relay.mjs",
+    "backup:state": "node scripts/backup-state.mjs",
+    "restore:state": "node scripts/restore-state.mjs"
   },
   "dependencies": {
-    "@getpaseo/relay": "file:../../../references/repos/paseo/packages/relay",
-    "ws": "^8.18.3"
+    "@getpaseo/relay": "file:vendor/relay-0.13.1.tgz",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/ws": "^8.18.1",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "3.2.7"
   }
 }
