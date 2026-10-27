@@ -91,10 +91,10 @@ content insert`, aucune donnée système fabriquée ne sert de preuve.
 | C16 | Révocation `WRITE_CALENDAR` | refus fail-closed | **PASS** — `pm revoke` externe puis test à processus neuf |
 | C17 | Refus d'effet après révocation | aucun nouvel événement | **PASS** — `PERMISSION_DENIED`, provider inchangé |
 | C18 | Événement étranger non modifié | `FOREIGN_EVENT` | **PASS (JVM)** — provider réel non testé avec un événement étranger |
-| C19 | Calendrier supprimé/indisponible | `PROVIDER_UNAVAILABLE`/`CALENDAR_NOT_LOCAL` | NOT_RUN |
-| C20 | READ_CALENDAR refusé | aucune lecture | NOT_RUN |
-| C21 | WRITE_CALENDAR refusé | aucune écriture | NOT_RUN |
-| C22 | Restauration des fixtures | état initial restauré | NOT_RUN |
+| C19 | Calendrier supprimé/indisponible | `PROVIDER_UNAVAILABLE`/`CALENDAR_NOT_LOCAL` | **PASS (JVM)** — mapping testé ; suppression réelle du calendrier non rejouée |
+| C20 | READ_CALENDAR refusé | aucune lecture | **PARTIAL (JVM)** — fail-closed testé ; parcours UI externe non rejoué |
+| C21 | WRITE_CALENDAR refusé | aucune écriture | **PASS** — révocation externe, `PERMISSION_DENIED`, provider inchangé |
+| C22 | Restauration des fixtures | état initial restauré | **PASS** — `restoresFixture` final, `_id=18`, capture `etar-final-restored.png` |
 
 ## 5. Règles de sûreté
 

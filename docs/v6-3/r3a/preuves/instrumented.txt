@@ -1,12 +1,16 @@
 # ATLAS V6.3 R3-A — final instrumented evidence
-date_utc=2026-10-26T23:55:00Z
-apk_sha256=3ee62e6d10b7b6e91954f85b003ef66dfc05a85cd79079dd0514ec9a08aa0d0f
+source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
+date_utc=2026-10-27T00:31:07Z
+apk_sha256=e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd
 device=emulator-5554 API 37
 adb_reverse_count=0
 --- R2 reference suite (17 tests) ---
 OK (17 tests)
 INSTRUMENTATION_CODE: -1
---- relay E2E (transport) ---
+--- calendar provider/engine ---
+OK (4 tests)
+INSTRUMENTATION_CODE: -1
+--- relay E2E ---
 OK (1 test)
 INSTRUMENTATION_CODE: -1
 --- app controller relay plan revision ---

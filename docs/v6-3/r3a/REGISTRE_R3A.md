@@ -1,6 +1,7 @@
 # ATLAS V6.3 — Campagne R3-A — Registre
 
-Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
+Statut : **CLOSING — re-revue indépendante en cours**. Ce registre est la source
+de vérité R3-A.
 
 ## 1. Base et environnement
 
@@ -26,6 +27,8 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | Paseo Relay | `3fc41c96…` |
 | Sauvegarde AVD | snapshot `atlas-r3a-pre` |
 | Sauvegarde app ATLAS | `~/.local/share/atlas-v63-r3a/backups/atlas-app-data-pre-r3a.tar`, SHA-256 `41c1ad85700fdd57f8f0a8a9ba602a9ef443b6b89c117c1afb786e8521380eb1` |
+| SHA source final | `ad42b1c515074e563699c599ce2f4ca52f6bd58c` |
+| APK final | `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` |
 
 ## 2. Règles appliquées
 
@@ -52,10 +55,10 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | `R3-CALENDAR-LOCAL-01` | compte local + sync adapter + authentificateur + manifeste | parent : `calendar/local/**`, manifeste, XML | création provider + relecture + visibilité Etar | **ACCEPTED (parent)** — voir `preuves/calendar-local.txt` |
 | `R3-RELAY-E2E-01` | raccordement Android ↔ relais ↔ PC ↔ FastAPI | parent : fichiers communs UI/config | E2E émulateur sans `adb reverse` | **ACCEPTED (parent)** — 4 phases + app controller, états UI |
 | `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | `PlanScreen.kt`, `CalendarPermissionScreen.kt`, nouveaux `Calendar*.kt` | 22 scénarios calendrier | **ACCEPTED_WITH_P1_FIXED / INTEGRATED** — `29b7439`, merge `eaad907` ; 18 ciblés, 589 JVM ; correctifs parent scroll imbriqué + init fail-closed |
-| `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI parent à faire |
-| `R3-MEMORY-UI-01` | parcours mémoire complet | selon ticket | JVM + UI | **PLANNED** |
-| `R3-USAGE-UI-01` | Usage Access réel sur émulateur | selon ticket | permission + statistiques | **PLANNED** |
-| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTION_REQUIRED** — 3 P1 + 2 P2 ; correctifs appliqués, re-revue à faire |
+| `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f`, UI `4d6a875` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI vérifié (UNAVAILABLE + démo explicite) |
+| `R3-MEMORY-UI-01` | parcours mémoire complet | `memory/**`, `app/Memory*.kt` | tests JVM + UI réelle + persistance | **ACCEPTED (parent)** — `ee085a8`, merge `06c1e2e` ; tests JVM, ajout/consentement/affichage, force-stop/relance, capture |
+| `R3-USAGE-UI-01` | Usage Access réel sur émulateur | `usage/**`, `app/GlobalUsage*.kt` | permission + statistiques | **ACCEPTED (parent)** — `7e65b9f`, merge `b9ba1ef` ; `GET_USAGE_STATS: allow`, 6 événements réels, révocation/purge, persistance ; quota non configuré |
+| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTIONS_APPLIED / RE-REVIEW_PENDING** — 3 P1 + 2 P2 corrigés sur `ad42b1c` ; provenance renforcée ; seconde revue à faire |
 
 ## 4. Journal
 
@@ -98,10 +101,16 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-27 | Recette UI calendrier | **PASS** — plan v2→v3→v4, confirmations groupées, provider réel, Etar création/déplacement/suppression |
 | 2026-10-27 | Suite instrumentée de référence | **PASS** — 17/17 sur l'APK final |
 | 2026-10-27 | Écriture durable config relay | **FIX** — `apply()` → `commit()` ; préférences vérifiées après seed |
-| 2026-10-27 | APK final | SHA-256 `3ee62e6d10b7b6e91954f85b003ef66dfc05a85cd79079dd0514ec9a08aa0d0f` ; E2E + app controller + calendrier PASS |
+| 2026-10-27 | APK intermédiaire | SHA-256 `3ee62e6d10b7b6e91954f85b003ef66dfc05a85cd79079dd0514ec9a08aa0d0f` ; E2E + app controller + calendrier PASS |
+| 2026-10-27 | APK final après correctifs | SHA-256 `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` ; 17/17 + 4/4 + E2E relay + app controller + lifecycle 4/4 PASS |
 | 2026-10-27 | Revue indépendante | **NO_GO** — P1 token CLI imprimé, P1 registre sans verrou, P1 preuves non liées au SHA ; P2 compte local dans une preuve, P2 re-création calendrier bloquée, P2 doc crypto Tink/Bouncy Castle |
-| 2026-10-27 | Correctifs revue | token CLI écrit en 0600 sans stdout ; verrou registre inter-processus ; clé de re-création calendrier ; doc crypto corrigée ; preuve `nill` redactée ; provenance SHA à régénérer |
+| 2026-10-27 | Correctifs revue | token CLI écrit en 0600 sans stdout ; verrou registre inter-processus ; clé de re-création calendrier ; doc crypto corrigée ; preuve nominative redactée ; provenance SHA à régénérer |
 | 2026-10-27 | Tests après correctifs | Node 24/24 ; `CalendarEffectControllerTest` 8/8 dont re-création après suppression externe |
+| 2026-10-27 | Parcours mémoire réel | **PASS** — préférence synthétique ajoutée avec consentement, métadonnées affichées, persistée après `force-stop` ; captures `memory-preference.png`, `memory-persistence.png` |
+| 2026-10-27 | Usage Access réel | **PASS** — appops allow, consentement + catégorie package_names, résumé 6 événements (ATLAS/Etar/Pixel Launcher), révocation et purge ; capture `usage-global-summary.png` |
+| 2026-10-27 | Lifecycle calendrier final | **PASS** — restore/move/delete/restore sur APK `e8937c62`, fixture `_id=18`, capture `etar-final-restored.png` |
+| 2026-10-27 | Gates finales | **PASS** — backend 187/1 skip ; JVM 91 suites/649 tests ; lint 0 erreur ; builds ; Node 24 ; Bridge 50 ; voir `preuves/gates-final.txt` |
+| 2026-10-27 | Provenance des preuves | `preuves/PROVENANCE.md` distingue preuves finales `ad42b1c` et captures historiques |
 
 ## 5. Preuves
 

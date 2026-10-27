@@ -1,7 +1,12 @@
+# PC live: Node client -> real relay -> protected connector -> real FastAPI
+source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
+date_utc=2026-10-27T00:39:38Z
+command=ATLAS_SERVICE_TOKEN=<0600 file> node scripts/pc-live-check.mjs (relay 127.0.0.1:4400, backend 127.0.0.1:8100)
+---
 {
   "status": "PASS",
   "scope": "Node client -> real relay -> protected connector -> real FastAPI",
-  "server_id": "atlas-r3a-live-83a6008e",
+  "server_id": "atlas-r3a-live-a95685ca",
   "steps": [
     "relay_control",
     "noise_protected",

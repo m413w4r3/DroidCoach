@@ -1,0 +1,45 @@
+# final APK lifecycle rerun
+date_utc=2026-10-27T00:40:37Z
+source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
+apk_sha256=e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd
+command=am instrument -w -e class dev.atlas.coach.calendar.local.AtlasEtarLifecycleInstrumentedTest#<method> dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+--- restoresFixture ---
+
+dev.atlas.coach.calendar.local.AtlasEtarLifecycleInstrumentedTest:.
+
+Time: 0.04
+
+OK (1 test)
+
+
+--- movesAndEditsFixture ---
+
+dev.atlas.coach.calendar.local.AtlasEtarLifecycleInstrumentedTest:.
+
+Time: 0.031
+
+OK (1 test)
+
+
+--- deletesFixture ---
+
+dev.atlas.coach.calendar.local.AtlasEtarLifecycleInstrumentedTest:.
+
+Time: 0.026
+
+OK (1 test)
+
+
+--- restoresFixture ---
+
+dev.atlas.coach.calendar.local.AtlasEtarLifecycleInstrumentedTest:.
+
+Time: 0.026
+
+OK (1 test)
+
+--- provider after final restore ---
+Row: 0 _id=18, calendar_id=1, title=ATLAS TEST Etar visibility, dtstart=1793136600000, dtend=1793139300000, deleted=0, customAppPackage=dev.atlas.coach, customAppUri=atlas://plan/00000000-0000-4000-8000-000000000001/activity/00000000-0000-4000-8000-000000000002
+--- Etar relaunch capture ---
+capture=captures/etar-final-restored.png (October 2026, event restored)
+status=PASS

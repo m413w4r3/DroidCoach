@@ -9,19 +9,19 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 | ID | Gate | Commande | Statut |
 |---|---|---|---|
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 187 passed, 1 skipped |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 648 tests, 0 échec (à rejouer après correctifs de revue) |
-| T3 | Lint | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** |
-| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** |
-| T6 | Tests instrumentés API 37 | `am instrument` ciblé | **PASS** — 17/17 sur l'APK de recette ; à rejouer après correctifs de revue |
-| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 23 tests, 6 fichiers, sur SHA intégré |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 649 tests, 0 échec (rejoué sur `ad42b1c`) |
+| T3 | Lint | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 70 avertissements |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — source `ad42b1c` |
+| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — source `ad42b1c` |
+| T6 | Tests instrumentés API 37 | `am instrument` ciblé | **PASS** — 17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 app controller ; lifecycle 4/4 rejoué ; source `ad42b1c`, APK `e8937c62…` |
+| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 24 tests, 7 fichiers, sur `ad42b1c` |
 | T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | **PASS** le 2026-10-26 |
 | T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | **PASS** — 25 tests, vecteurs Paseo + cross-vector Node à clés fixes |
 | T10 | Interop Kotlin ↔ Node | relais local + client de test | **PASS** — Android Kotlin ↔ relais ↔ connecteur Node ↔ FastAPI, 4 phases |
-| T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — APK final `3ee62e6d…`, E2E et suites exécutés dessus |
-| T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — handshake protégé, auth, proposition V3, rejeu, cache |
-| T13 | Calendrier local réel + Etar | tests instrumentés + captures | **PASS** — création, relecture, move/edit/delete, visibilité |
-| T14 | Moteur durable + permissions réelles | tests instrumentés provider réel | **PASS** — reprise, idempotence, crash injecté, revoke/grant, divergence Etar |
+| T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — APK final `e8937c62…`, installé le 2026-10-27 01:30:41 ; suites et E2E exécutés dessus |
+| T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — rerun 2026-10-27T00:39Z sur `ad42b1c` : handshake protégé, auth, proposition V3, rejeu, cache |
+| T13 | Calendrier local réel + Etar | tests instrumentés + captures | **PASS** — création, relecture, move/edit/delete, visibilité ; lifecycle final rejoué sur APK `e8937c62` |
+| T14 | Moteur durable + permissions réelles | tests instrumentés provider réel | **PASS** — reprise, idempotence, crash injecté, revoke/grant, divergence Etar ; correctif de re-création testé en JVM |
 | T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 25 tests sur SHA intégré |
 
 ## 2. Transport — cryptographie
@@ -77,9 +77,11 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 
 ## 5. Calendrier
 
-Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`. Les scénarios
-C1–C18 sont PASS ou PARTIAL avec preuves provider/Etar ; C19–C22 dépendent de la
-restauration finale.
+Les 22 scénarios C1–C22 sont détaillés dans `CALENDRIER_ETAR.md`. C1–C18 sont
+PASS ou PARTIAL avec preuves provider/Etar ; C19 est PASS (JVM), C20 PARTIAL,
+C21 PASS (révocation réelle) et C22 PASS (fixture restaurée sur l'APK final).
+Les captures UI antérieures à `bfbb9db` sont identifiées comme historiques dans
+`preuves/PROVENANCE.md`.
 
 | ID | Gate | Statut |
 |---|---|---|
@@ -101,7 +103,7 @@ restauration finale.
 | K16 | Modification extérieure | **PASS** — titre modifié dans l'UI Etar |
 | K17 | Divergence | **PASS** — `DIVERGED` / `READ_BACK_MISMATCH` |
 | K18 | Révocation | **PASS** — révocation externe + refus d'effet |
-| K19 | Restauration fixtures | NOT_RUN |
+| K19 | Restauration fixtures | **PASS** — lifecycle restore/move/delete/restore sur APK final, `_id=18`, capture `etar-final-restored.png` |
 
 ## 6. Intégrations C
 
@@ -110,10 +112,10 @@ restauration finale.
 | S1 | wger lecture réelle → contrat sport-plan-v1 → Android | **PARTIAL** — route testée avec clients factices ; aucun accès wger réel |
 | S2 | États `FRESH`/`STALE`/`UNAVAILABLE`/`MISMATCH` | **PASS (tests)** — mapping backend + client Android |
 | S3 | `trainingRef` persisté dans `DayPlan` | **PASS (JVM)** — round-trip, plan legacy, révision |
-| M1 | Parcours mémoire complet | NOT_RUN |
-| U1 | Usage Access réel sur émulateur | NOT_RUN |
-| U2 | Quotas et révocation | NOT_RUN |
-| B1 | Plugin Bridge : tests existants non régressés | NOT_RUN |
+| M1 | Parcours mémoire complet | **PASS** — ajout, consentement, affichage, persistance après force-stop et relance ; `preuves/memory-ui.txt` |
+| U1 | Usage Access réel sur émulateur | **PASS** — appops `GET_USAGE_STATS: allow`, consentement, résumé de 6 événements, capture ; `preuves/usage-global-ui.txt` |
+| U2 | Quotas et révocation | **PARTIAL** — révocation et purge PASS en UI et après redémarrage ; aucun quota configuré, évaluation couverte en JVM seulement |
+| B1 | Plugin Bridge : tests existants non régressés | **PASS** — 50 tests / 3 fichiers, plugin ni installé ni activé |
 
 ## 7. Verdict
 

@@ -1,0 +1,14 @@
+# Durable local memory — real UI flow
+source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
+date_utc=2026-10-27T00:35:26Z
+apk_sha256=e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd
+device=emulator-5554 API 37
+flow=Plus > Mémoire locale > Ajouter une préférence
+fixture=PrefereDemarrageCalme (synthetic, non-personal)
+consent=explicit checkbox checked before saving; sensitivity normal; expiration none
+result=fact listed with category=préférence, provenance=user, observed timestamp, confidence 100 %, confirmed by user
+correction_actions=Corriger / Révoquer / Supprimer visible
+durability=am force-stop dev.atlas.coach; relaunch; fact and metadata still listed
+capture=captures/memory-preference.png
+persistence_capture=captures/memory-persistence.png
+status=PASS

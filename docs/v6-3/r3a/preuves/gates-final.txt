@@ -1,0 +1,33 @@
+# Final technical gates
+source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
+date_utc=2026-10-27T00:43:56Z
+device_for_instrumented=emulator-5554 API 37
+--- T1 backend ---
+command=backend/.venv/bin/python -m pytest -q
+result=PASS — 187 passed, 1 skipped, 1 warning in 14.60s
+--- T2 Android JVM ---
+command=android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1
+result=PASS — 91 suites, 649 tests, 0 failures, 0 errors, 0 skipped
+--- T3 lint ---
+command=android/gradlew :app:lintDebug
+result=PASS — 0 errors, 70 warnings
+--- T4 debug build ---
+command=android/gradlew :app:assembleDebug
+result=PASS
+--- T5 androidTest build ---
+command=android/gradlew :app:assembleDebugAndroidTest
+result=PASS
+--- T7 Node transport ---
+command=npm test (integrations/relay/pc)
+result=PASS — 7 files, 24 tests
+--- B1 Bridge plugin tests (not activated) ---
+command=npm test (integrations/openclaw/atlas_chatgpt_research)
+result=PASS — 3 files, 50 tests; plugin not installed or activated
+--- APK identity ---
+app-debug.apk=e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd
+app-debug-androidTest.apk=e05507565dcedb54857acee06b90d328aba3123f95da848dc686feeed8c23b7e
+installed_lastUpdateTime=2026-10-27 01:30:41
+--- T6 instrumented ---
+see=instrumented.txt (17 R2 + 4 calendar + 1 relay E2E + 1 app controller) and calendar-lifecycle-final.txt
+--- T10/T12 PC live ---
+see=pc-live-fastapi.txt (PASS, rerun on source_sha=ad42b1c)

@@ -1,7 +1,8 @@
 # ATLAS V6.3 R3-A — Handoff
 
-Statut : **campagne locale, GO_WITH_LIMITATIONS en cours de revue**. Aucun push,
-PR, merge distant ni déploiement public n'a été effectué.
+Statut : **campagne locale, GO_WITH_LIMITATIONS sous réserve de la re-revue
+indépendante**. Aucun push, PR, merge distant ni déploiement public n'a été
+effectué.
 
 ## 1. Reprise immédiate
 
@@ -10,7 +11,8 @@ PR, merge distant ni déploiement public n'a été effectué.
 | Branche de campagne | `feat/atlas-v6-3-r3a-relay-calendar` |
 | Base `main` vérifiée | `6a22c12bc5a2c63c3d3ab56253679c897fadb75d` |
 | SHA des contrats | `4f7b9263c76986c0a410f87a22268993568b3646` |
-| Dernier SHA de référence | voir `git rev-parse HEAD` (les commits R3-A sont locaux) |
+| Dernier SHA de référence | `ad42b1c515074e563699c599ce2f4ca52f6bd58c` (commits R3-A locaux) |
+| APK final | `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` |
 | Registre | `docs/v6-3/r3a/REGISTRE_R3A.md` |
 | Décisions | `docs/v6-3/r3a/DECISIONS_ARCHITECTURE.md` |
 | Transport | `docs/v6-3/r3a/TRANSPORT_PASEO.md` |
@@ -74,11 +76,22 @@ PR, merge distant ni déploiement public n'a été effectué.
 - `trainingRef` optionnel, rétrocompatible et préservé par les révisions.
 - Preuve : `preuves/sport-ui.txt`, captures `sport-*.png`.
 
+### Mémoire et usage global
+
+- Mémoire locale durable : ajout d'une préférence synthétique avec consentement
+  explicite, affichage des métadonnées, persistance après `force-stop` et
+  relance. Capture `memory-preference.png`.
+- Usage Access réel sur `emulator-5554` : `GET_USAGE_STATS: allow`, consentement
+  séparé avec catégorie `package_names`, résumé de 6 événements réels
+  (ATLAS, Etar, Pixel Launcher), révocation et purge, persistance après
+  redémarrage. Capture `usage-global-summary.png`. Quotas non configurés :
+  évaluation JVM seulement.
+- Preuves : `preuves/memory-ui.txt`, `preuves/usage-global-ui.txt`.
+
 ### Intégrations C
 
-- Mémoire et usage global : voir l'état final dans le registre. Si les tickets
-  Wave C ne sont pas intégrés, ils restent `PLANNED`/`BLOCKED` et ne doivent pas
-  être présentés comme terminés.
+- Le plugin Bridge optionnel conserve ses 50 tests PASS ; il n'a été ni installé
+  ni activé, et le Gateway personnel n'a pas été modifié.
 
 ## 4. Ce qui n'est PAS prouvé
 
@@ -88,10 +101,11 @@ PR, merge distant ni déploiement public n'a été effectué.
 | LTE/5G, Internet, 24 h/24 | **BLOCKED_INFRA** — aucun déploiement |
 | Relais public, TLS/WSS réel | **NOT_RUN** — procédure seulement |
 | wger réel en lecture | **NOT_RUN** — pas de credentials utilisés |
-| Usage Access réel sur Pixel | **NOT_RUN** — émulateur seulement si exécuté |
+| Usage Access réel sur Pixel | **NOT_RUN** — émulateur qualifié seulement |
+| Quotas d'usage configurés | **NOT_RUN / PARTIAL** — aucun quota réel, évaluateur JVM |
 | SIGKILL réel pendant une écriture | **PARTIAL** — crash injecté |
 | Événement calendrier étranger sur émulateur | **PASS JVM**, non rejoué provider réel |
-| Suppression/indisponibilité du calendrier | **NOT_RUN** |
+| Suppression/indisponibilité du calendrier | **PASS JVM**, non rejoué provider réel |
 | TalkBack matériel | **NOT_RUN** |
 | Défaut de sécurité npm du Bridge | **non corrigé**, plugin non activé |
 | Rotation/supervision 24 h/24 du connecteur | procédure seulement |
@@ -101,13 +115,17 @@ PR, merge distant ni déploiement public n'a été effectué.
 | Gate | Résultat |
 |---|---|
 | Backend `pytest -q` | **187 passed, 1 skipped** |
-| Android JVM | **87 suites, 628 tests, 0 échec** |
-| Lint | **PASS** (0 erreur ; avertissements existants) |
+| Android JVM | **91 suites, 649 tests, 0 échec** |
+| Lint | **PASS** (0 erreur, 70 avertissements) |
 | `assembleDebug` / `assembleDebugAndroidTest` | **PASS** |
-| Instrumentés de référence | **17/17 PASS** |
-| Calendrier provider/Etar | **PASS** (création, relecture, move, delete, divergence, permissions) |
-| Relay Node | **23 tests PASS** + relais réel + live FastAPI |
-| APK final | SHA-256 `949be084ebb6dfcbfffd3d9c8ca4b2a4c6a627b65f9b5793f2894c331ecd37ba` |
+| Instrumentés de référence | **17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 app controller** |
+| Lifecycle calendrier final | **4/4 PASS** (restore/move/delete/restore) |
+| Relay Node | **24 tests PASS** + relais réel + live FastAPI |
+| Bridge plugin (non activé) | **50 tests PASS** |
+| Parcours mémoire / usage | **PASS** (usage : quotas PARTIAL) |
+| APK final | SHA-256 `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` |
+
+Détail : `preuves/gates-final.txt`, `preuves/PROVENANCE.md`.
 
 ## 6. Prochaines actions
 
@@ -130,11 +148,13 @@ PR, merge distant ni déploiement public n'a été effectué.
 | R3-CALENDAR-ETAR-01 | `44871d16…` | `codex/gpt-6-luna/xhigh` |
 | R3-MEMORY-UI-01 | `89bbab64…` | `codex/gpt-6-luna/xhigh` |
 | R3-USAGE-UI-01 | `33b6c3b3…` | `codex/gpt-6-luna/xhigh` |
-| Revue indépendante | `c3f97221…` | `codex/gpt-6-luna/xhigh` |
+| Revue indépendante (1) | `c3f97221…` | `codex/gpt-6-luna/xhigh` |
+| Re-revue indépendante (2) | à lancer sur `ad42b1c` | `codex/gpt-6-luna/xhigh` |
 
 ## 8. Verdict
 
 Verdict local proposé : **GO_WITH_LIMITATIONS** pour la portée R3-A sur
-émulateur, sous réserve de la revue indépendante et des tickets Wave C.
+émulateur, sous réserve de la seconde revue indépendante sur `ad42b1c`.
 V6.3 reste **NO_GO** globalement tant que Pixel physique, accès Internet réel,
-TLS/WSS public et recette LTE/5G ne sont pas qualifiés.
+TLS/WSS public, recette LTE/5G et veille/Doze ne sont pas qualifiés. Les quotas
+d'usage et la supervision 24 h/24 restent partiels.

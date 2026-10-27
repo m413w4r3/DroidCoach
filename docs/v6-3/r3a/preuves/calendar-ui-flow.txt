@@ -1,4 +1,7 @@
 # Calendar UI flow on emulator-5554 (Plan -> grouped confirmation -> provider -> Etar)
+source_commit=eaad9078f4a742af0a36e4f134eab952e5e653d7 (captures before bfbb9db scroll/fail-closed fixes)
+apk_sha256=not_recorded
+provenance=historical UI capture; provider lifecycle rerun on final APK is calendar-lifecycle-final.txt
 date_utc=2026-10-26T23:41:48Z
 device=emulator-5554 Android 17/API 37
 calendar=ATLAS R3A TEST _id=1 account_type=dev.atlas.coach.calendar
