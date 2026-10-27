@@ -1,5 +1,5 @@
 # Durable local memory — final APK UI flow
-source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
+source_sha=02a5040283d087c4d401fd0f6e8f95f9cda752c3
 date_utc=2026-10-27T08:12:58Z
 apk_sha256=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
 device=emulator-5554 API 37

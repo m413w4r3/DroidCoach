@@ -1,9 +1,9 @@
 # ATLAS V6.3 R3-A — final instrumented evidence
-source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
-date_utc=2026-10-27T08:42:17Z
+source_sha=02a5040283d087c4d401fd0f6e8f95f9cda752c3
+date_utc=2026-10-27T09:08:59Z
 apk_sha256=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
 test_apk_sha256=8c9ae1308b297ec2a229389e382918bb49005eac6fa88580d66664fb0f061c60
-note=the Android APK rebuilt after c45b64f is byte-identical; only connector, tests and docs changed after the instrumented run
+note=the Android APK rebuilt after 02a5040 is byte-identical; only connector, tests and docs changed after the instrumented run
 device=emulator-5554 API 37
 adb_reverse_count=0
 --- R2 reference suite (17 tests) ---

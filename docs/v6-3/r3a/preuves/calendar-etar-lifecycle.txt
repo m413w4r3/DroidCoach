@@ -1,7 +1,7 @@
 # Etar lifecycle: restore -> move/edit -> delete -> restore
 source_commit=531f51da5136a3c257e58c1b61102cb3f46902d4
 apk_sha256=not_recorded
-provenance=historical; final APK lifecycle rerun is calendar-lifecycle-final.txt on source_sha=c45b64f
+provenance=historical; final APK lifecycle rerun is calendar-lifecycle-final.txt on source_sha=02a5040
 date_utc=2026-10-26T22:35:48Z
 device=emulator-5554 API 37
 calendar_id=1 account_type=dev.atlas.coach.calendar

@@ -1,6 +1,6 @@
 # Paseo Relay local image and loopback health
-source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
-date_utc=2026-10-27T08:42:17Z
+source_sha=02a5040283d087c4d401fd0f6e8f95f9cda752c3
+date_utc=2026-10-27T09:08:59Z
 upstream_sha=3fc41c96c8c63f3a7109e832899cc57d473c4531
 image=atlas-paseo-relay:r3a
 image_id=sha256:75d68fd8bdb9d60a26203cd7c49c07c035f1f400c47740770056814e76846889

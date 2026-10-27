@@ -1,7 +1,7 @@
 # ATLAS V6.3 — Campagne R3-A — Registre
 
-Statut : **CLOSING — cinquième revue indépendante en cours**. Ce registre est la
-source de vérité R3-A.
+Statut : **CLOSED_LOCAL — GO_WITH_LIMITATIONS** pour R3-A sur émulateur ;
+**V6.3 global NO_GO**. Ce registre est la source de vérité R3-A.
 
 ## 1. Base et environnement
 
@@ -27,11 +27,12 @@ source de vérité R3-A.
 | Paseo Relay | `3fc41c96…` |
 | Sauvegarde AVD | snapshot `atlas-r3a-pre` |
 | Sauvegarde app ATLAS | `~/.local/share/atlas-v63-r3a/backups/atlas-app-data-pre-r3a.tar`, SHA-256 `41c1ad85700fdd57f8f0a8a9ba602a9ef443b6b89c117c1afb786e8521380eb1` |
-| SHA source final | `c45b64f3543453c0887eb00a5e29b0ad239e7c2a` |
+| SHA source final | `02a5040283d087c4d401fd0f6e8f95f9cda752c3` |
 | APK final | `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c` |
 | SHA de la revue 2 | `e28b7a9bfc0d6405cd0d311eb87d4d2dd33f5832` (NO_GO : 3 P1, 4 P2) |
 | SHA de la revue 3 | `7b3dc31f531fed94a6c1ef617c553a56e2f2d16d` / code `d89a626` (NO_GO : 1 P1, 2 P2, 1 P3) |
 | SHA de la revue 4 | `bc6fb3ba028dc1ae3938b3dd4e2bff9fcf1691ea` / code `3811ea5` (NO_GO : 1 P1, 2 P2, 1 P3) |
+| SHA de la revue 5 | `cf75d09884cf7381935143912e3fc9334268efdb` / code `c45b64f` (GO_WITH_LIMITATIONS : 1 P2, 3 P3) |
 
 ## 2. Règles appliquées
 
@@ -61,7 +62,7 @@ source de vérité R3-A.
 | `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f`, UI `4d6a875` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI vérifié (UNAVAILABLE + démo explicite) |
 | `R3-MEMORY-UI-01` | parcours mémoire complet | `memory/**`, `app/Memory*.kt` | tests JVM + UI réelle + persistance | **ACCEPTED (parent)** — `ee085a8`, merge `06c1e2e` ; tests JVM, ajout/consentement/affichage, force-stop/relance, capture |
 | `R3-USAGE-UI-01` | Usage Access réel sur émulateur | `usage/**`, `app/GlobalUsage*.kt` | permission + statistiques | **ACCEPTED (parent)** — `7e65b9f`, merge `b9ba1ef` ; `GET_USAGE_STATS: allow`, 6 événements finaux, quota 90 min configuré et validé, révocation/purge, persistance |
-| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTIONS_APPLIED / FIFTH_REVIEW_PENDING** — 1 P1 + 2 P2 + 1 P3 de `bc6fb3b`/`3811ea5` corrigés sur `c45b64f` ; cinquième revue à faire |
+| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **GO_WITH_LIMITATIONS / DELTA_CONFIRMED** — 1 P2 + 3 P3 de `cf75d09`/`c45b64f` ; P2 registre corrigé et confirmé sur `02a5040` ; P3 test d'arrivée tardive accepté comme limitation de test |
 
 ## 4. Journal
 
@@ -124,8 +125,13 @@ source de vérité R3-A.
 | 2026-10-27 | Correctifs revue 3 | verrou bakery à records stables par nonce + stress 10 rounds ; timeout 15 s ; validation UI 1–1440 ; matrice synchronisée |
 | 2026-10-27 | Quatrième revue indépendante | **NO_GO** sur `3811ea5` — P1 lecture du verrou en échec traitée comme absence de contention ; P2 stress non déterministe, P2 PID recyclé hors Linux ; P3 capture mémoire avec doublon |
 | 2026-10-27 | Correctifs revue 4 | `readEntries` fail-closed (ENOENT par record seulement), tests EACCES/record invalide, barrière de course + arrivée après entrée, README Linux/liveness, capture mémoire expliquée |
-| 2026-10-27 | Gates finales `c45b64f` | backend 187/1 skip ; JVM 91/651 ; lint 0 erreur ; Node 33 ; Bridge 50 ; PC live PASS ; APK `8ad8d2d` ; voir `preuves/gates-final.txt` |
-| 2026-10-27 | Lifecycle calendrier final `c45b64f` | **PASS** — restore/move/delete/restore, fixture `_id=27`, capture `etar-final-restored.png` |
+| 2026-10-27 | Cinquième revue indépendante | **GO_WITH_LIMITATIONS** sur `c45b64f` — aucun P0/P1 ; P2 registre initialisé hors verrou, P3 tests verrou/capture/quota |
+| 2026-10-27 | Correctif P2 revue 5 | `load()` sans effet de bord ; tests lecture concurrente/premier pair, EACCES record, arrivée synchronisée ; Node 35 |
+| 2026-10-27 | Revue delta P2 | **GO_WITH_LIMITATIONS** — aucun P0/P1/P2 résiduel ; P3 de synchronisation du test d'arrivée tardive accepté |
+| 2026-10-27 | Gates finales `02a5040` | backend 187/1 skip ; JVM 91/651 ; lint 0 erreur ; Node 35 ; Bridge 50 ; PC live PASS ; APK `8ad8d2d` ; voir `preuves/gates-final.txt` |
+| 2026-10-27 | Lifecycle calendrier final `02a5040` | **PASS** — restore/move/delete/restore, fixture `_id=27`, capture `etar-final-restored.png` |
+| 2026-10-27 | Nettoyage émulateur | **PASS** — données app restaurées, événements ATLAS supprimés, permissions révoquées, appops default, test APK désinstallé ; voir `preuves/cleanup-final.txt` |
+| 2026-10-27 | Arrêt services | **PASS** — connecteur, FastAPI 8100 et relais arrêtés ; ports 4400/4401/8100 fermés |
 
 ## 5. Preuves
 

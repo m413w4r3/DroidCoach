@@ -9,20 +9,20 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 | ID | Gate | Commande | Statut |
 |---|---|---|---|
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 187 passed, 1 skipped |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 651 tests, 0 échec (rejoué sur `c45b64f`) |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 651 tests, 0 échec (rejoué sur `02a5040`) |
 | T3 | Lint | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 70 avertissements |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — source `c45b64f` |
-| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — source `c45b64f` |
-| T6 | Tests instrumentés API 37 | `am instrument` ciblé | **PASS** — 17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 offline + 1/1 app controller + 4/4 lifecycle + 1/1 authenticator = 29 ; source `c45b64f`, APK `8ad8d2d…` |
-| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 33 tests, 9 fichiers, sur `c45b64f` (dont stress de reprise concurrente) |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — source `02a5040` |
+| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — source `02a5040` |
+| T6 | Tests instrumentés API 37 | `am instrument` ciblé | **PASS** — 17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 offline + 1/1 app controller + 4/4 lifecycle + 1/1 authenticator = 29 ; source `02a5040`, APK `8ad8d2d…` |
+| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 35 tests, 9 fichiers, sur `02a5040` (dont stress de reprise concurrente) |
 | T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | **PASS** le 2026-10-26 |
 | T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | **PASS** — 31 tests du module relay, dont 5 `NoiseProtocolTest` avec vecteurs Paseo + cross-vector Node à clés fixes |
 | T10 | Interop Kotlin ↔ Node | relais local + client de test | **PASS** — Android Kotlin ↔ relais ↔ connecteur Node ↔ FastAPI ; round trip et offline sur APK final |
 | T11 | APK installé = SHA annoncé | `sha256sum` + `dumpsys package` + pull | **PASS** — APK final `8ad8d2d…`, installé le 2026-10-27 08:53:57 ; suites et E2E exécutés dessus |
-| T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — rerun 2026-10-27T08:42Z sur `c45b64f` après redémarrage du connecteur : handshake protégé, auth, proposition V3, rejeu, cache |
+| T12 | PC live Node → relais → connecteur → FastAPI | `node scripts/pc-live-check.mjs` | **PASS** — rerun 2026-10-27T09:08Z sur `02a5040` après redémarrage du connecteur : handshake protégé, auth, proposition V3, rejeu, cache |
 | T13 | Calendrier local réel + Etar | tests instrumentés + captures | **PASS** — parcours UI v2→v3→v4 rejoué sur APK final, lifecycle final, fixture visible dans Etar |
 | T14 | Moteur durable + permissions réelles | tests instrumentés provider réel | **PASS** — reprise, idempotence, crash injecté, revoke/grant, divergence Etar ; re-création testée en JVM |
-| T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 31 tests sur `c45b64f` |
+| T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 31 tests sur `02a5040` |
 
 ## 2. Transport — cryptographie
 
@@ -120,5 +120,8 @@ historiques dans `preuves/PROVENANCE.md`.
 
 ## 7. Verdict
 
-Verdict final à établir dans `HANDOFF_R3A.md`. Aucun `GO` V6.3 possible sans
-recette Pixel physique et connexion extérieure réelle.
+Verdict local R3-A : **GO_WITH_LIMITATIONS** (cinquième revue indépendante et
+revue delta, aucun P0/P1/P2 résiduel). V6.3 global : **NO_GO**, aucun `GO`
+possible sans recette Pixel physique, connexion extérieure réelle, TLS/WSS
+public, LTE/5G et veille/Doze. Détail : `HANDOFF_R3A.md`,
+`REVUE_INDEPENDANTE_R3A.md`.

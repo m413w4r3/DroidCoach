@@ -66,22 +66,33 @@
 
 ## 5. Cinquième revue (lecture seule)
 
-- Périmètre demandé : SHA `c45b64f3543453c0887eb00a5e29b0ad239e7c2a`,
-  APK `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
-- Session : à lancer.
-- Verdict : **EN ATTENTE**.
+- Session : `398a9aea-3579-4155-b23a-7a21f8bba42b`, modèle `codex/gpt-6-luna`,
+  effort `xhigh`, worktree `review-r3a-final-cf75d09`.
+- Périmètre : docs `cf75d09884cf7381935143912e3fc9334268efdb`, code
+  `c45b64f3543453c0887eb00a5e29b0ad239e7c2a`, APK
+  `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
+- Verdict : **GO_WITH_LIMITATIONS** (aucun P0/P1 ; 1 P2, 3 P3).
 
-La cinquième revue doit vérifier au minimum :
+| Sévérité | Constat | Suite donnée | Statut |
+|---|---|---|---|
+| P2 | `list()`/`get()` pouvaient créer un registre vide et écraser un premier appairage concurrent | `load()` sans effet de bord ; le registre n'est créé que par `pair()` sous verrou ; test lecture concurrente + premier pair | **CORRIGÉ sur `02a5040`** |
+| P3 | pas de test EACCES sur la lecture d'un record | test ajouté dans `file-lock.test.ts` | **CORRIGÉ sur `02a5040`** |
+| P3 | arrivée tardive non synchronisée | le worker signale `ready` avant sa tentative ; le test vérifie qu'il n'entre pas pendant la section critique | **CORRIGÉ sur `02a5040`** |
+| P3 | captures mémoire avec doublon | note explicite dans `memory-ui.txt` ; les images sont identifiées comme artefacts de test et les données sont purgées au nettoyage | **DOCUMENTÉ** |
+| P3 | quota désactivé affiché `UNKNOWN` | défaut d'affichage de faible impact, accepté comme limitation connue | **LIMITATION** |
 
-1. Absence de token ou de secret dans stdout, logs, preuves et captures.
-2. Verrou bakery fail-closed : énumération/lecture/parsing en erreur refusés,
-   reprise concurrente et arrivée après entrée testées, révocation non écrasée.
-3. Re-création calendrier, parcours UI final et absence de doublon.
-4. Provenance : chaque PASS final lié à `c45b64f` et à l'APK `8ad8d2d…`, avec
-   note d'identité Android entre `3811ea5` et `c45b64f`.
-5. Quota : validation 1–1440, persistance, sémantique `UNKNOWN` sur couverture
-   partielle, fenêtre hebdomadaire.
-6. Authenticator : permission de liaison et AccountManager fonctionnel.
-7. Mémoire et Usage Access : consentement, purge, persistance, aucune lecture de
-   contenu d'écran.
-8. Aucune activation du Bridge/OpenClaw, aucun déploiement public, aucun push.
+## 6. Revue delta du correctif P2 (lecture seule)
+
+- Périmètre : SHA `02a5040283d087c4d401fd0f6e8f95f9cda752c3`,
+  APK inchangé `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
+- Session : reprise de `398a9aea…`.
+- Verdict delta : **GO_WITH_LIMITATIONS** — aucun P0/P1/P2 résiduel.
+
+| Sévérité | Constat | Statut |
+|---|---|---|
+| P2 | `load()` écrivait un registre vide et pouvait écraser un premier appairage | **CORRIGÉ** — lectures sans effet de bord, création uniquement par `pair()` sous verrou, test lecture concurrente + premier pair |
+| P3 | le test d'arrivée tardive signale `ready` juste avant l'appel, sans prouver que la tentative a commencé | **LIMITATION DE TEST** — l'ordre final et le test de propriétaire vivant couvrent déjà l'exclusion ; test à resynchroniser dans un futur lot |
+
+La revue delta n'a exécuté aucun test ; la stabilité d'exécution reste
+`NOT_VERIFIED`. Le verdict final local est **GO_WITH_LIMITATIONS** ; V6.3 global
+reste **NO_GO**.

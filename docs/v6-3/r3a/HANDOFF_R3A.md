@@ -1,8 +1,8 @@
 # ATLAS V6.3 R3-A — Handoff
 
-Statut : **campagne locale, GO_WITH_LIMITATIONS sous réserve de la cinquième
-revue indépendante**. Aucun push, PR, merge distant ni déploiement public n'a
-été effectué.
+Statut : **campagne locale, GO_WITH_LIMITATIONS** (revue indépendante et revue
+delta terminées). V6.3 global : **NO_GO**. Aucun push, PR, merge distant ni
+déploiement public n'a été effectué.
 
 ## 1. Reprise immédiate
 
@@ -11,7 +11,7 @@ revue indépendante**. Aucun push, PR, merge distant ni déploiement public n'a
 | Branche de campagne | `feat/atlas-v6-3-r3a-relay-calendar` |
 | Base `main` vérifiée | `6a22c12bc5a2c63c3d3ab56253679c897fadb75d` |
 | SHA des contrats | `4f7b9263c76986c0a410f87a22268993568b3646` |
-| Dernier SHA de référence | `c45b64f3543453c0887eb00a5e29b0ad239e7c2a` (commits R3-A locaux) |
+| Dernier SHA de référence | `02a5040283d087c4d401fd0f6e8f95f9cda752c3` (commits R3-A locaux) |
 | APK final | `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c` |
 | Registre | `docs/v6-3/r3a/REGISTRE_R3A.md` |
 | Décisions | `docs/v6-3/r3a/DECISIONS_ARCHITECTURE.md` |
@@ -33,6 +33,11 @@ revue indépendante**. Aucun push, PR, merge distant ni déploiement public n'a
 - Pixel physique : **non disponible, non touché**.
 - Sauvegardes : snapshot AVD `atlas-r3a-pre`, données app
   `~/.local/share/atlas-v63-r3a/backups/atlas-app-data-pre-r3a.tar`.
+- Nettoyage final : données app restaurées depuis la sauvegarde (SHA-256
+  `41c1ad85…`), événements ATLAS supprimés, permissions calendrier révoquées,
+  Usage Access remis à `default`, APK de test désinstallé, connecteur/FastAPI/
+  relais arrêtés. Le calendrier local vide et son compte synthétique sont
+  conservés. Détail : `preuves/cleanup-final.txt`.
 
 ## 3. Ce qui est réellement prouvé
 
@@ -122,7 +127,7 @@ revue indépendante**. Aucun push, PR, merge distant ni déploiement public n'a
 | Lint | **PASS** (0 erreur, 70 avertissements) |
 | `assembleDebug` / `assembleDebugAndroidTest` | **PASS** |
 | Instrumentés de référence | **17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 offline + 1/1 app controller + 4/4 lifecycle + 1/1 authenticator = 29** |
-| Relay Node | **33 tests PASS** + relais réel + live FastAPI |
+| Relay Node | **35 tests PASS** + relais réel + live FastAPI |
 | Bridge plugin (non activé) | **50 tests PASS** |
 | Parcours mémoire / usage | **PASS** (quota configuré et persisté ; évaluation effective PARTIAL) |
 | APK final | SHA-256 `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c` |
@@ -154,12 +159,14 @@ Détail : `preuves/gates-final.txt`, `preuves/PROVENANCE.md`.
 | Re-revue indépendante (2) | `d87dec39…` (NO_GO sur `e28b7a9`) | `codex/gpt-6-luna/xhigh` |
 | Re-revue indépendante (3) | `ebb8d049…` (NO_GO sur `d89a626`) | `codex/gpt-6-luna/xhigh` |
 | Re-revue indépendante (4) | `17a3189e…` (NO_GO sur `3811ea5`) | `codex/gpt-6-luna/xhigh` |
-| Re-revue indépendante (5) | à lancer sur `c45b64f` | `codex/gpt-6-luna/xhigh` |
+| Re-revue indépendante (5) | `398a9aea…` (GO_WITH_LIMITATIONS sur `c45b64f`) | `codex/gpt-6-luna/xhigh` |
+| Revue delta P2 | `398a9aea…` (GO_WITH_LIMITATIONS sur `02a5040`) | `codex/gpt-6-luna/xhigh` |
 
 ## 8. Verdict
 
-Verdict local proposé : **GO_WITH_LIMITATIONS** pour la portée R3-A sur
-émulateur, sous réserve de la cinquième revue indépendante sur `c45b64f`.
+Verdict local final : **GO_WITH_LIMITATIONS** pour la portée R3-A sur
+émulateur, confirmé par la cinquième revue indépendante et sa revue delta.
 V6.3 reste **NO_GO** globalement tant que Pixel physique, accès Internet réel,
 TLS/WSS public, recette LTE/5G et veille/Doze ne sont pas qualifiés. L'évaluation
-effective des quotas et la supervision 24 h/24 restent partielles.
+effective des quotas, la synchronisation fine d'un test de concurrence et la
+supervision 24 h/24 restent partielles.
