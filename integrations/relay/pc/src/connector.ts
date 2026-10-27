@@ -11,6 +11,7 @@ import { SessionManager } from "./session.js";
 export interface ConnectorConfig {
   stateDir: string;
   relayUrl: string;
+  allowLoopbackWs: boolean;
   serverId?: string;
   backendUrl: string;
   serviceToken?: string;
@@ -33,6 +34,7 @@ export function configFromEnvironment(): ConnectorConfig {
   return {
     stateDir,
     relayUrl: process.env.ATLAS_RELAY_URL ?? "ws://127.0.0.1:4400",
+    allowLoopbackWs: process.env.ATLAS_ALLOW_LOOPBACK_WS === "1",
     ...(process.env.ATLAS_RELAY_SERVER_ID ? { serverId: process.env.ATLAS_RELAY_SERVER_ID } : {}),
     backendUrl: process.env.ATLAS_BACKEND_URL ?? "http://127.0.0.1:8100",
     ...(process.env.ATLAS_SERVICE_TOKEN ? { serviceToken: process.env.ATLAS_SERVICE_TOKEN } : {}),
@@ -41,8 +43,10 @@ export function configFromEnvironment(): ConnectorConfig {
 }
 
 export async function createConnector(config: ConnectorConfig): Promise<ConnectorRuntime> {
-  const identityPath = join(config.stateDir, "identity.json");
   const registry = new DeviceRegistry(join(config.stateDir, "devices.json"));
+  // Validate existing state before creating any connector identity or opening a relay.
+  await registry.list();
+  const identityPath = join(config.stateDir, "identity.json");
   const { identity, keyPair } = await loadOrCreateIdentity(identityPath);
   const metrics = new ConnectorMetrics();
   const backend = new BackendClient({
@@ -53,13 +57,16 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   const operationExecutor = new OperationExecutor(backend, {
     relayConnected: () => relay.connected,
     backendConfigured: () => Boolean(config.backendUrl && config.serviceToken),
-  });
+    uncertainOutcome: () => metrics.uncertainOutcome(),
+  }, Date.now, join(config.stateDir, "operations.json"));
+  await operationExecutor.initialize();
   const sessions = new SessionManager(registry, operationExecutor, metrics, {
     relayConnected: () => relay.connected,
     backendConfigured: () => Boolean(config.backendUrl && config.serviceToken),
   });
   relay = new RelayLink({
     relayUrl: config.relayUrl,
+    allowLoopbackWs: config.allowLoopbackWs,
     serverId: config.serverId ?? `atlas-pc-${identity.fingerprint.slice(0, 32)}`,
     daemonKeyPair: keyPair,
     sessions,

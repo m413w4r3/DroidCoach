@@ -10,6 +10,18 @@ export interface BackendConfig {
   fetcher?: FetchLike;
 }
 
+/** A backend error with an explicit statement about whether a POST may have taken effect. */
+export class BackendRequestError extends RemoteError {
+  constructor(
+    code: ConstructorParameters<typeof RemoteError>[0],
+    retryable: boolean,
+    readonly outcomeMayHaveOccurred: boolean,
+    message?: string,
+  ) {
+    super(code, retryable, message);
+  }
+}
+
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 export function assertLoopbackHttpUrl(value: string): URL {
@@ -51,17 +63,29 @@ export class BackendClient {
     try {
       response = await this.fetcher(new URL(route.path, this.baseUrl), init);
     } catch (error) {
-      if (signal?.aborted) throw new RemoteError("CANCELLED");
-      throw new RemoteError("BACKEND_UNAVAILABLE", true);
+      if (signal?.aborted) {
+        throw new BackendRequestError("CANCELLED", false, route.method === "POST");
+      }
+      throw new BackendRequestError("BACKEND_UNAVAILABLE", route.method === "GET", route.method === "POST");
     }
     if (response.status === 404) throw new RemoteError("OPERATION_UNAVAILABLE");
-    if (!response.ok) throw new RemoteError("BACKEND_REJECTED", response.status >= 500);
-    const result = await readBoundedJson(response);
-    if (operation === "backend.health") {
-      return { status: result.status === "ok" ? "ok" : "unavailable" };
+    if (!response.ok) {
+      const mayHaveOccurred = route.method === "POST" && (response.status >= 500 || response.status === 408);
+      throw new BackendRequestError("BACKEND_REJECTED", response.status >= 500, mayHaveOccurred);
     }
-    assertSmallResponse(result);
-    return result;
+    try {
+      const result = await readBoundedJson(response);
+      if (operation === "backend.health") {
+        return { status: result.status === "ok" ? "ok" : "unavailable" };
+      }
+      assertSmallResponse(result);
+      return result;
+    } catch (error) {
+      if (route.method === "POST" && error instanceof RemoteError) {
+        throw new BackendRequestError(error.code, error.retryable, true, error.message);
+      }
+      throw error;
+    }
   }
 }
 

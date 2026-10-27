@@ -1,0 +1,76 @@
+ATLAS V6.3 R3-A+ — R3AP-RESILIENCE-01
+Date: 2026-10-27
+Branch: feat/r3a-plus-resilience
+Base SHA: 51ad6fafd56a4ad41e0fba818be4a4c720481345
+Model/session: codex / gpt-6-luna / xhigh (Paseo metadata verified)
+Environment: Node v24.18.0, npm 11.16.0, Linux; no ADB/Pixel use
+
+Commands and results (run in integrations/relay/pc):
+
+PASS — npm ci
+  Added 57 packages; 59 packages audited. Existing dependency audit reports
+  3 vulnerabilities: 1 moderate and 2 critical. No package manifest or lockfile
+  changes were made.
+
+PASS — npm run build
+  TypeScript build completed with exit status 0.
+
+PASS — npx vitest run test/operations.test.ts test/session.test.ts test/relay-reconnect.test.ts test/connector-resilience.test.ts test/crash-resilience.test.ts
+  5 test files passed; 26 tests passed.
+
+PASS — env -u ATLAS_ALLOW_LOOPBACK_WS npm test
+  TypeScript build passed; 12 test files passed; 52 tests passed; 0 failures.
+  The real local Paseo Relay integration test connected to the already-running
+  ws://127.0.0.1:4400 relay. The test did not stop or replace that relay.
+
+R1-R13 scenario results:
+
+R1 PASS — connector runtime restarted against the same state directory.
+R2 PASS — fake relay was stopped and restarted; connector control reconnected.
+R3 PASS — synthetic backend unavailability/recovery; the same safe GET request
+         succeeded after availability returned. Real FastAPI restart NOT_RUN;
+         parent-owned wave C covers real FastAPI restart/unavailability.
+R4 PASS — real Node child process running the connector authenticated a
+         synthetic client, dispatched a backend POST, then received SIGKILL.
+R5 PASS — connector X25519 public identity was unchanged after restart.
+R6 PASS — enrolled device registry contents were unchanged after restart.
+R7 PASS — a device revoked before restart was refused after restart.
+R8 PASS — 8 synthetic clients held independent sessions and issued requests
+         concurrently.
+R9 PASS — partial JSON and unreadable registry paths failed closed; pairing did
+         not replace the partial file, and neither corrupt nor unreadable startup
+         created an identity file.
+R10 PASS — simulated response loss after a backend effect called the backend
+          once; a retry and connector restart did not dispatch another POST.
+R11 PASS — expired request returned EXPIRED without calling the backend.
+R12 PASS — same POST idempotency key and content replayed the stored result;
+          the backend was called once, including after restart.
+R13 PASS — same idempotency key with different content returned
+          IDEMPOTENCY_CONFLICT.
+
+Fail-closed/idempotency contract:
+
+- ATLAS_ALLOW_LOOPBACK_WS must equal "1" to opt into local ws:// through
+  configFromEnvironment(); default is deny. Tests pass the option explicitly.
+- Effectful plan.revision.request POSTs are journaled atomically in the private
+  state directory before backend dispatch. A recovered in-flight entry becomes
+  uncertain and is never replayed blindly.
+- Same-key retries during the 10-minute cache window return
+  BACKEND_UNAVAILABLE, retryable=false, with the deterministic message:
+  "backend outcome is uncertain; retry is blocked until the 10-minute
+  idempotency window expires". Different content returns IDEMPOTENCY_CONFLICT.
+- Safe GET/read operations remain retryable. Completed POST outcomes are
+  journaled and replayed without another backend call.
+- ENOENT for devices.json may start an empty registry; invalid JSON and ordinary
+  read errors fail startup/authentication closed.
+
+Limits / NOT_RUN:
+
+- Real relay process restart and real FastAPI process restart were not run here;
+  the parent reserved them for wave C. Fake relay reconnect and synthetic
+  backend availability/lost-response scenarios passed.
+- Android/Pixel qualification, ADB, real FastAPI restart, authenticated writes
+  to an external backend, and deployment were not run.
+- No dependency was added. npm ci reported the dependency audit findings above.
+- No additional service was left running by these tests; the pre-existing parent
+  relay on 127.0.0.1:4400 was left running.

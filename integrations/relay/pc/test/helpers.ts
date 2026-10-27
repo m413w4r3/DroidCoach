@@ -59,7 +59,7 @@ export interface TestContext {
   dispose(): Promise<void>;
 }
 
-export async function makeContext(options: { now?: () => number; fetcher?: FetchLike } = {}): Promise<TestContext> {
+export async function makeContext(options: { now?: () => number; fetcher?: FetchLike; journalPath?: string } = {}): Promise<TestContext> {
   const dir = await mkdtemp(join(tmpdir(), "atlas-relay-test-"));
   const registry = new DeviceRegistry(join(dir, "devices.json"));
   const metrics = new ConnectorMetrics();
@@ -69,7 +69,7 @@ export async function makeContext(options: { now?: () => number; fetcher?: Fetch
     return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: { "content-type": "application/json" } });
   });
   const backend = new BackendClient({ baseUrl: "http://127.0.0.1:8100", serviceToken: "synthetic-service-token", fetcher });
-  const operations = new OperationExecutor(backend, { relayConnected: () => true, backendConfigured: () => true }, options.now);
+  const operations = new OperationExecutor(backend, { relayConnected: () => true, backendConfigured: () => true }, options.now, options.journalPath);
   const manager = new SessionManager(registry, operations, metrics, { relayConnected: () => true, backendConfigured: () => true }, options.now);
   return { dir, registry, metrics, manager, backendCalls, dispose: () => rm(dir, { recursive: true, force: true }) };
 }

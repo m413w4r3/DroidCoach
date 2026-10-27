@@ -12,6 +12,7 @@ describe("Relay control reconnect", () => {
     const port = await freeLoopbackPort();
     const link = new RelayLink({
       relayUrl: `ws://127.0.0.1:${port}`,
+      allowLoopbackWs: true,
       serverId: `atlas-local-test-${randomUUID()}`,
       daemonKeyPair: generateKeyPair(),
       sessions: context.manager,

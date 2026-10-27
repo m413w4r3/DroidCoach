@@ -1,7 +1,8 @@
-import { chmod, stat } from "node:fs/promises";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadOrCreateIdentity } from "../src/identity.js";
+import { DeviceRegistry } from "../src/device-registry.js";
 import { RemoteError } from "../src/errors.js";
 import { request, makeContext, authenticate, hello, paired, FakeSecureChannel } from "./helpers.js";
 
@@ -94,6 +95,61 @@ describe("device authentication and session controls", () => {
       }
       await newPeer.receive(JSON.stringify(request(sessionId, "sync.status")));
       expect(newChannel.lastMessage()).toMatchObject({ kind: "error", error: { code: "RATE_LIMITED" } });
+
+      const independentClient = await authenticate(context);
+      await independentClient.peer.receive(JSON.stringify(request(independentClient.sessionId, "sync.status")));
+      expect(independentClient.channel.lastMessage()).toMatchObject({ kind: "response", operation: "sync.status" });
+    } finally {
+      await context.dispose();
+    }
+  });
+
+  it("serves multiple synthetic clients concurrently with per-device sessions", async () => {
+    const context = await makeContext();
+    try {
+      const clients = await Promise.all(Array.from({ length: 8 }, () => authenticate(context)));
+      expect(context.manager.activeSessionCount()).toBe(8);
+      await Promise.all(clients.map((client) => client.peer.receive(JSON.stringify(request(client.sessionId, "sync.status")))));
+      expect(clients.every((client) => client.channel.lastMessage().kind === "response")).toBe(true);
+      expect(context.backendCalls).toHaveLength(0);
+    } finally {
+      await context.dispose();
+    }
+  });
+
+  it("fails closed on a partial registry and never replaces the damaged file", async () => {
+    const context = await makeContext();
+    try {
+      const partialRegistry = "{\"schema_version\":1,\"devices\":[";
+      await writeFile(context.registry.path, partialRegistry, "utf8");
+      await expect(context.registry.get("550e8400-e29b-41d4-a716-446655440000")).rejects.toThrow();
+      await expect(context.registry.pair("must not overwrite registry")).rejects.toThrow();
+
+      const channel = new FakeSecureChannel();
+      const peer = context.manager.create(channel);
+      await peer.receive(JSON.stringify(hello(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        { capabilities: ["sync.status"] },
+      )));
+      expect(channel.lastMessage()).toMatchObject({ kind: "error", error: { code: "AUTH_FAILED" } });
+      expect(channel.closeEvents[0]?.code).toBe(4001);
+      expect(context.manager.activeSessionCount()).toBe(0);
+      expect(await readFile(context.registry.path, "utf8")).toBe(partialRegistry);
+    } finally {
+      await context.dispose();
+    }
+  });
+
+  it("does not treat an unreadable registry path as an empty registry", async () => {
+    const context = await makeContext();
+    try {
+      const unreadablePath = join(context.dir, "registry-directory");
+      await mkdir(unreadablePath);
+      const unreadableRegistry = new DeviceRegistry(unreadablePath);
+      await expect(unreadableRegistry.get("550e8400-e29b-41d4-a716-446655440000")).rejects.toThrow();
+      await expect(unreadableRegistry.pair("must remain unavailable")).rejects.toThrow();
+      expect((await stat(unreadablePath)).isDirectory()).toBe(true);
     } finally {
       await context.dispose();
     }

@@ -71,7 +71,12 @@ export class SessionManager {
     this.cleanupNonces(now);
     const timestamp = Date.parse(hello.timestamp);
     if (!Number.isFinite(timestamp) || Math.abs(now - timestamp) > 120_000) throw new RemoteError("AUTH_FAILED");
-    const record = await this.registry.get(hello.device_id);
+    let record: DeviceRecord | undefined;
+    try {
+      record = await this.registry.get(hello.device_id);
+    } catch {
+      throw new RemoteError("AUTH_FAILED");
+    }
     if (!record) throw new RemoteError("AUTH_FAILED");
     if (record.revoked_at) throw new RemoteError("DEVICE_REVOKED");
     const rawToken = Buffer.from(hello.auth.token, "base64url");
@@ -97,7 +102,12 @@ export class SessionManager {
   }
 
   async checkActive(deviceId: string, peer: PeerSession): Promise<DeviceRecord> {
-    const device = await this.registry.get(deviceId);
+    let device: DeviceRecord | undefined;
+    try {
+      device = await this.registry.get(deviceId);
+    } catch {
+      throw new RemoteError("AUTH_REQUIRED");
+    }
     if (!device || device.revoked_at) throw new RemoteError("DEVICE_REVOKED");
     if (this.active.get(deviceId) !== peer) throw new RemoteError("AUTH_REQUIRED");
     return device;
