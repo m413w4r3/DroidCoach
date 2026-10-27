@@ -1,0 +1,17 @@
+ATLAS V6.3 R3-A+ — INSTRUMENTATION SMOKE (pre-integration)
+Date: 2026-10-27
+Device: Pixel 9 Pro XL physique, Android 17 / API 37
+Installed test APK: dev.atlas.coach.test, built before R3-A+ (Oct 25)
+Command:
+  adb shell am instrument -w \
+    -e class dev.atlas.coach.calendar.local.AtlasAccountAuthenticatorServiceInstrumentedTest \
+    dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+Result: FAIL (initializationError, ClassNotFoundException)
+Cause: the installed dev.atlas.coach.test APK predates the calendar R3-A classes;
+it does not contain the requested test class. This is a stale-artifact failure,
+not a device or code failure.
+Side effects: none. The synthetic account count after the run was 0; no event,
+calendar or app data was modified.
+Action: install the freshly built assembleDebugAndroidTest APK after wave A
+integration, then rerun the smoke test and the R3-A+ instrumented suite.
+Status: NOT_RUN for the smoke itself (stale test APK); no PASS claimed.

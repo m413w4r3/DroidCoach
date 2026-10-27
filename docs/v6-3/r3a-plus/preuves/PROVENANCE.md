@@ -6,6 +6,8 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 
 | Fichier | Commit source | APK | Portée | Statut |
 |---|---|---|---|---|
+| `preflight-pixel.txt` | `012b101` | installé `6ab95fac` | pré-vol, sauvegarde, baseline Pixel | **final (pré-vol)** |
+| `backend-baseline.txt` | `012b101` | n/a | backend et routes connecteur | **final (baseline)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles

@@ -1,0 +1,21 @@
+ATLAS V6.3 R3-A+ — BACKEND BASELINE
+Date: 2026-10-27
+SHA: 012b101eab15ec5b9784f06d78e448d269e0de0d (campaign branch, pre-integration)
+Command: backend/.venv/bin/python -m pytest -q
+Result: 187 passed, 1 skipped, 2 warnings in 10.09s
+Status: PASS
+
+ROUTES USED BY THE CONNECTOR
+- GET /health: present
+- GET /v1/plan/today: present
+- POST /v3/agent/plan-revision: present (backend/atlas_backend/main.py:619)
+- GET /v1/sport/plan: present (backend/atlas_backend/main.py:418)
+- GET /v2/agent/status: see backend route inventory; connector maps it only to its fixed path
+
+WGER REAL READ-ONLY TEST
+- WGER_API_TOKEN: ABSENT in the current environment
+- WGER_BASE_URL: ABSENT
+- No real wger request was made; no refresh token was read or rotated.
+- Status: NOT_RUN (configuration unavailable). The route remains covered by the
+  existing backend tests and will be checked through the connector with fake
+  clients; no write is performed.
