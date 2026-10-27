@@ -24,18 +24,18 @@ configuration checks, follow
 [`docs/v6-3/r3a-plus/INSTALLATION_PC.md`](../../../docs/v6-3/r3a-plus/INSTALLATION_PC.md).
 The Linux user unit and rollback procedure are in
 [`docs/v6-3/r3a-plus/SUPERVISION_PC.md`](../../../docs/v6-3/r3a-plus/SUPERVISION_PC.md).
-```
 
 `npm test` includes a Node Noise client against the real local Relay at
 `127.0.0.1:4400`; keep that local service running. It also exercises a Node
 client and Node connector directly. This is **not Android end-to-end evidence**.
 
-The connector accepts only a loopback Relay WebSocket endpoint and defaults to
-`ws://127.0.0.1:4400`, FastAPI at
+The connector accepts remote `wss://` Relay endpoints and, only with the
+explicit `ATLAS_ALLOW_LOOPBACK_WS=1` development opt-in, `ws://` on exact
+loopback. It defaults to `ws://127.0.0.1:4400` for local development, FastAPI at
 `http://127.0.0.1:8100`, state under `~/.local/state/atlas-relay`, and metrics
-on `127.0.0.1:4401/metrics`. FastAPI can be started separately with a
-synthetic service token in the local environment. The connector never binds
-its metrics listener beyond loopback.
+on `127.0.0.1:4401/metrics`. FastAPI can be started separately with a synthetic
+service token in the local environment. The connector never binds its metrics
+listener beyond loopback, and it never forwards a generic HTTP route.
 
 ## Host support and registry lock
 
@@ -57,11 +57,12 @@ is the expected race with a concurrent release.
 
 | Variable | Purpose |
 |---|---|
-| `ATLAS_RELAY_URL` | Loopback WebSocket base URL for Paseo Relay. Non-loopback hosts are rejected. |
+| `ATLAS_RELAY_URL` | Relay WebSocket base URL. Remote relays must use `wss://`. `ws://` is accepted only on exact loopback with `ATLAS_ALLOW_LOOPBACK_WS=1`. Credentials, query, fragment and arbitrary paths are rejected. |
 | `ATLAS_RELAY_SERVER_ID` | Optional stable Relay routing ID; defaults to a value derived from the public identity fingerprint. |
 | `ATLAS_RELAY_STATE_DIR` | Directory for the private server identity and device registry. |
 | `ATLAS_BACKEND_URL` | Loopback FastAPI base URL. Non-loopback hosts, URL paths, query strings, and credentials are rejected. |
 | `ATLAS_SERVICE_TOKEN` | Bearer token used for authenticated FastAPI routes. It is read from the environment and never persisted or logged. |
+| `ATLAS_ALLOW_LOOPBACK_WS` | Set to `1` only for explicit local loopback `ws://` development; default deny. |
 | `ATLAS_METRICS_PORT` | Loopback metrics port; defaults to `4401`. |
 | `ATLAS_TEST_RELAY_URL` | Optional loopback Relay URL used by the real-relay integration test. |
 

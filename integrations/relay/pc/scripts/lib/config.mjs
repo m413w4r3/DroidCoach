@@ -1,5 +1,6 @@
 import { lstat, readFile } from "node:fs/promises";
 import { lstatSync as lstatFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -9,6 +10,7 @@ const ALLOWED_KEYS = new Set([
   "ATLAS_RELAY_STATE_DIR",
   "ATLAS_BACKEND_URL",
   "ATLAS_SERVICE_TOKEN",
+  "ATLAS_ALLOW_LOOPBACK_WS",
   "ATLAS_METRICS_PORT",
   "ATLAS_TEST_RELAY_URL",
 ]);
@@ -56,12 +58,17 @@ export function inspectConfiguration(environment, { checkState = true } = {}) {
   const backendValue = environment.ATLAS_BACKEND_URL ?? "http://127.0.0.1:8100";
   const stateDir = environment.ATLAS_RELAY_STATE_DIR ?? join(homedir(), ".local", "state", "atlas-relay");
   const metricsRaw = environment.ATLAS_METRICS_PORT ?? "4401";
+  const allowLoopbackRaw = environment.ATLAS_ALLOW_LOOPBACK_WS;
+  const allowLoopbackWs = allowLoopbackRaw === "1";
+  if (allowLoopbackRaw !== undefined && allowLoopbackRaw !== "0" && allowLoopbackRaw !== "1") {
+    errors.push("ATLAS_ALLOW_LOOPBACK_WS must be 0 or 1");
+  }
   let relayUrl;
   try {
-    relayUrl = validateRelayUrl(relayValue);
-    checks.push("relay URL follows the connector loopback WebSocket policy");
+    relayUrl = validateRelayUrl(relayValue, { allowLoopbackWs });
+    checks.push("relay URL follows the WSS/loopback policy");
   } catch {
-    errors.push("relay URL must be ws:// or wss:// on loopback with no credentials, query, or fragment");
+    errors.push("relay URL must be wss:// for a remote relay, or ws:// on exact loopback with ATLAS_ALLOW_LOOPBACK_WS=1; no credentials, query, fragment, or path");
   }
   try {
     validateBackendUrl(backendValue);
@@ -86,13 +93,41 @@ export function inspectConfiguration(environment, { checkState = true } = {}) {
   return { errors, checks, relayUrl, backendUrl: backendValue, stateDir, metricsPort: metricsRaw };
 }
 
-export function validateRelayUrl(value) {
+export function validateRelayUrl(value, { allowLoopbackWs = false } = {}) {
   const url = new URL(value);
-  if (!["ws:", "wss:"].includes(url.protocol) || !LOOPBACK_HOSTS.has(url.hostname.toLowerCase()) ||
-      url.username || url.password || (url.pathname !== "/" && url.pathname !== "/ws") || url.search || url.hash) {
-    throw new Error("invalid relay URL");
+  if (!["ws:", "wss:"].includes(url.protocol)) throw new Error("invalid relay URL");
+  if (url.username || url.password || url.search || url.hash) throw new Error("invalid relay URL");
+  if (!["/", "/ws"].includes(url.pathname)) throw new Error("invalid relay URL");
+  if (!isValidRelayHost(url.hostname)) throw new Error("invalid relay URL");
+  if (url.port) {
+    const port = Number(url.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("invalid relay URL");
+  }
+  if (url.protocol === "ws:") {
+    const host = normalizeHost(url.hostname);
+    if (!allowLoopbackWs || !LOOPBACK_HOSTS.has(host) && !LOOPBACK_HOSTS.has(url.hostname.toLowerCase())) {
+      throw new Error("invalid relay URL");
+    }
   }
   return url;
+}
+
+function normalizeHost(hostname) {
+  const lower = hostname.toLowerCase();
+  return lower.startsWith("[") && lower.endsWith("]") ? lower.slice(1, -1) : lower;
+}
+
+function isValidRelayHost(hostname) {
+  if (!hostname) return false;
+  const host = normalizeHost(hostname);
+  if (host === "localhost") return true;
+  const ipVersion = isIP(host);
+  if (ipVersion === 4 || ipVersion === 6) return true;
+  if (/^[0-9.]+$/.test(host)) return false;
+  if (host.length > 253) return false;
+  return host.split(".").every((label) =>
+    label.length >= 1 && label.length <= 63 &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label));
 }
 
 export function validateProbeUrl(value) {

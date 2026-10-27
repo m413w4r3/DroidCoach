@@ -7,20 +7,18 @@ L’installation et la configuration restent locales au compte utilisateur.
 ## Prérequis
 
 - Linux, Node.js 24 et npm.
-- Le relais Paseo de test joignable sur l’adresse loopback configurée. Le port
-  par défaut est `127.0.0.1:4400`.
+- Le relais Paseo joignable à l’adresse configurée. En recette locale, le port
+  par défaut est `127.0.0.1:4400` ; en R3-B, le relais public est en `wss://`.
 - FastAPI sur `127.0.0.1:8100` si les opérations authentifiées doivent être
   utilisées.
 - Pour supervision automatique, systemd avec un gestionnaire utilisateur.
 
-Le connecteur PC présent dans ce commit valide les URL de relais loopback
-uniquement (`ws://` ou `wss://`, sans identifiants, query ni fragment). Le
-contrat de prédéploiement prévoit aussi une URL WSS distante, mais cette forme
-n'est pas acceptée par le code PC actuel. `diagnose-network.mjs` sait sonder un
-WSS public pour vérifier DNS, TLS et l'upgrade WebSocket ; cela ne rend pas cette
-URL utilisable par le connecteur. Le déploiement direct vers un WSS distant reste
-à traiter dans un ticket autorisant le code du connecteur. Pour la recette
-actuelle, configurez le endpoint loopback du relais local.
+Le connecteur accepte un relais distant en `wss://` (TLS système, certificat et
+hostname vérifiés) et n'accepte `ws://` que sur loopback exact, avec l'opt-in
+explicite `ATLAS_ALLOW_LOOPBACK_WS=1`. Les identifiants, query, fragment et
+chemins arbitraires sont refusés. FastAPI et les métriques restent limités au
+loopback. La recette locale peut utiliser le relais loopback ; le déploiement
+R3-B utilise le WSS public.
 
 ## Installation reproductible
 
@@ -51,13 +49,18 @@ pas des secrets ; indiquez un server ID opaque si vous souhaitez le fixer :
 install -d -m 0700 "$HOME/.config/atlas"
 umask 077
 cat > "$HOME/.config/atlas/relay.env" <<EOF
-ATLAS_RELAY_URL=ws://127.0.0.1:4400
+ATLAS_RELAY_URL=wss://relay.example.org
 ATLAS_RELAY_STATE_DIR=$HOME/.local/state/atlas-relay
 ATLAS_BACKEND_URL=http://127.0.0.1:8100
 ATLAS_METRICS_PORT=4401
 EOF
 chmod 0600 "$HOME/.config/atlas/relay.env"
 ```
+
+Pour la recette locale loopback uniquement, remplacez la première ligne par
+`ATLAS_RELAY_URL=ws://127.0.0.1:4400` et ajoutez
+`ATLAS_ALLOW_LOOPBACK_WS=1`. Ne conservez pas cet opt-in pour un relais distant :
+un `ws://` distant est toujours refusé.
 
 Ajoutez `ATLAS_SERVICE_TOKEN` à ce fichier uniquement si FastAPI exige un token
 pour les opérations protégées. Éditez-le avec un éditeur local fiable, sans
@@ -81,11 +84,12 @@ Pour un démarrage manuel au premier plan avec ce fichier externe :
 scripts/start.sh "$HOME/.config/atlas/relay.env"
 ```
 
-Le contrôle de configuration vérifie l'URL loopback du relais, l'URL loopback
-FastAPI, le port métriques fixe sur `127.0.0.1`, et les modes `0700`/`0600` du
-répertoire d'état, de l'identité et du registre. Il ne lit ni n'affiche la
-valeur du token. Le contrôle secret affiche uniquement `present` ou `absent`
-et le mode du fichier de configuration.
+Le contrôle de configuration vérifie l'URL du relais (WSS distant, ou ws
+loopback avec `ATLAS_ALLOW_LOOPBACK_WS=1`), l'URL loopback FastAPI, le port
+métriques fixe sur `127.0.0.1`, et les modes `0700`/`0600` du répertoire d'état,
+de l'identité et du registre. Il ne lit ni n'affiche la valeur du token. Le
+contrôle secret affiche uniquement `present` ou `absent` et le mode du fichier
+de configuration.
 
 Pour vérifier l'identité publique et la comparer hors bande :
 
@@ -162,6 +166,8 @@ d'appareil en clair.
 ## Limites
 
 - Cette recette ne prouve pas un échange Android ni un test sur Pixel.
+- Le relais WSS public n'est pas déployé pendant R3-A+ ; le WSS de recette est
+  un proxy TLS local avec une CA de test strictement confinée au debug.
 - `npm run test:unit` omet le test d'interopérabilité qui exige un relais réel
   sur `127.0.0.1:4400`; `npm test` exécute aussi ce test.
 - FastAPI et les métriques restent sur loopback. Aucun port entrant du PC n'est

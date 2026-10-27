@@ -1,0 +1,58 @@
+ATLAS V6.3 R3-A+ — CONFIG POLICY INTEGRATION CORRECTION
+Date: 2026-10-27
+Base before fix: 722cdde1d1394ef05c7f39d1d4c25d6e39b5fd6d
+Scope: integrations/relay/pc/scripts/lib/config.mjs, scripts/lib/config-policy.check.mjs,
+       scripts/verify-install.sh, README.md, docs/v6-3/r3a-plus/INSTALLATION_PC.md
+
+DEFECT FOUND DURING PARENT INTEGRATION
+A2 was based on the pre-WSS branch and documented/validated a loopback-only
+relay URL policy. After A1's integration, relay-link.ts accepts remote wss://
+and allows ws:// only on exact loopback with ATLAS_ALLOW_LOOPBACK_WS=1. The
+operational config checker still rejected wss:// remote and did not allow the
+ATLAS_ALLOW_LOOPBACK_WS key, which would have blocked the primary R3-A+ goal.
+
+CORRECTION
+- config.mjs validates: wss:// remote accepted; ws:// only on 127.0.0.1,
+  localhost, or ::1 with ATLAS_ALLOW_LOOPBACK_WS=1; credentials, query,
+  fragment, arbitrary paths and invalid hosts/ports rejected.
+- ATLAS_ALLOW_LOOPBACK_WS is an allowed environment key and must be 0 or 1.
+- check-config explains the WSS/loopback policy and keeps FastAPI loopback-only.
+- README and INSTALLATION_PC.md now document remote WSS and the local ws opt-in.
+- verify-install.sh runs the new policy check after build.
+
+ORACLE
+Command from integrations/relay/pc:
+  node --test scripts/lib/config-policy.check.mjs
+Result: PASS — 7 tests, 0 failures.
+
+Command, WSS remote env file:
+  node scripts/check-config.mjs --env-file <0600 file with wss://relay.example.org>
+Result: exit 0 — relay policy PASS, FastAPI loopback PASS, metrics loopback PASS,
+state 0700, identity 0600, devices absent.
+
+Command, ws loopback without opt-in:
+  node scripts/check-config.mjs --env-file <0600 file with ws://127.0.0.1:4400>
+Result: exit 1 — "relay URL must be wss:// ... or ws:// on exact loopback with
+ATLAS_ALLOW_LOOPBACK_WS=1". Correct default-deny.
+
+Command, ws loopback with opt-in:
+  env file adds ATLAS_ALLOW_LOOPBACK_WS=1
+Result: exit 0.
+
+Connector startup smoke with remote WSS:
+  ATLAS_RELAY_URL=wss://relay.example.org ATLAS_METRICS_PORT=4499 \
+    node dist/main.js start
+Result: process alive, "ATLAS relay connector started; metrics bound to
+127.0.0.1". The remote host was not deployed; only URL acceptance and startup
+were tested. No connection to a public relay was attempted.
+
+Connector startup smoke with remote cleartext:
+  ATLAS_RELAY_URL=ws://relay.example.org ... node dist/main.js start
+Result: exit 1, "ATLAS relay connector command failed". Correct refusal.
+
+LIMITS
+- The public WSS relay was not deployed; this is a policy/startup test, not an
+  Internet or LTE proof.
+- The vendored artifact and clean install are covered by
+  packaging-clean-install.txt and packaging-artifact.txt.
+- No secret was printed; temporary state and env files were removed.

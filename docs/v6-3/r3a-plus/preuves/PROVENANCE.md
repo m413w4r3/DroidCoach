@@ -17,6 +17,11 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `node-merged-wss.txt` | `733cd78` | n/a | 40 tests Node rejoués par le parent | **final (Node)** |
 | `android-merged-wss.txt` | `733cd78` | n/a | 36 tests JVM relais + androidTest compilé | **final (JVM)** |
 | `wss-harness-merged.txt` | `733cd78` | n/a | 6 contrôles WSS/TLS rejoués par le parent | **final (Node/TLS)** |
+| `packaging-clean-install.txt` | `d8a425d` | n/a | installation propre sans `references/` | **final (PC)** |
+| `packaging-artifact.txt` | `d8a425d` | n/a | provenance et hash du tarball Paseo | **final (PC)** |
+| `packaging-systemd.txt` | `d8a425d` | n/a | vérification statique systemd | **PARTIAL** |
+| `config-policy-integration.txt` | `722cdde` | n/a | correction parent WSS du config checker | **final (PC)** |
+| `node-merged-packaging.txt` | `722cdde` | n/a | 10 fichiers / 40 tests Node avec tarball vendoré | **final (Node)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles
