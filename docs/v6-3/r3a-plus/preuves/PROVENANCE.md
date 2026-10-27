@@ -22,6 +22,8 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `packaging-systemd.txt` | `d8a425d` | n/a | vérification statique systemd | **PARTIAL** |
 | `config-policy-integration.txt` | `722cdde` | n/a | correction parent WSS du config checker | **final (PC)** |
 | `node-merged-packaging.txt` | `722cdde` | n/a | 10 fichiers / 40 tests Node avec tarball vendoré | **final (Node)** |
+| `packaging-clean-merged.txt` | `89f881e` | n/a | copie propre sans `references/`, offline, 40/40 | **final (PC)** |
+| `wss-android-test-compile.txt` | `89f881e` | n/a | compilation du test instrumenté WSS Android | **final (compile)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles

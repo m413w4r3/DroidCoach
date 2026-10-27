@@ -1,0 +1,64 @@
+CLEAN_COPY=/tmp/atlas-pc-clean-merged.42PNxY
+SOURCE_SHA=89f881ec20b4224ac885c33b3b737ac7c57888b6
+NO_REFERENCES=PASS
+NPM_CI=offline PASS
+---BUILD---
+
+> @atlas/relay-pc@0.1.0-r3a-plus build
+> tsc -p tsconfig.json
+
+---CONFIG_POLICY---
+✔ accepts remote WSS relay URLs (5.615281ms)
+✔ rejects remote cleartext ws even with the loopback opt-in (0.329195ms)
+✔ requires an explicit opt-in for loopback ws (0.189339ms)
+✔ rejects credentials, query, fragment, arbitrary paths and invalid ports (0.211283ms)
+✔ configuration accepts a remote WSS relay and loopback FastAPI (0.91025ms)
+✔ configuration requires the explicit loopback opt-in for ws (0.405562ms)
+✔ configuration rejects an invalid loopback opt-in value (0.189806ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80.183399
+---ARTIFACT---
+
+> @atlas/relay-pc@0.1.0-r3a-plus verify:artifact
+> node scripts/verify-artifact.mjs
+
+PASS vendored @getpaseo/relay 0.13.1 SHA-256 cc1102a64892dc6f9de5bacbc813b472758a6675be26ef65534d5bf7b5d70452
+---TEST---
+
+> @atlas/relay-pc@0.1.0-r3a-plus test
+> npm run build && vitest run
+
+
+> @atlas/relay-pc@0.1.0-r3a-plus build
+> tsc -p tsconfig.json
+
+
+ RUN  v3.2.7 /tmp/atlas-pc-clean-merged.42PNxY
+
+ ✓ test/secure-channel.test.ts (2 tests) 100ms
+ ✓ test/protocol.test.ts (6 tests) 8ms
+ ✓ test/relay-url.test.ts (5 tests) 22ms
+ ✓ test/operations.test.ts (6 tests) 39ms
+ ✓ test/session.test.ts (7 tests) 194ms
+ ✓ test/relay.integration.test.ts (1 test) 286ms
+ ✓ test/device-registry.test.ts (4 tests) 430ms
+ ✓ test/relay-reconnect.test.ts (1 test) 464ms
+   ✓ Relay control reconnect > recovers when a loopback relay is absent and later disconnects and returns  462ms
+ ✓ test/file-lock.test.ts (6 tests) 649ms
+   ✓ cross-process ticket lock > does not steal a live owner's ticket  349ms
+ ✓ test/lock-stress.test.ts (2 tests) 3017ms
+   ✓ ticket lock recovery stress > serializes concurrent recoverers after a dead owner  2447ms
+   ✓ ticket lock recovery stress > lets no contender enter after the first one has started  568ms
+
+ Test Files  10 passed (10)
+      Tests  40 passed (40)
+   Start at  21:12:03
+   Duration  3.60s (transform 896ms, setup 0ms, collect 2.34s, tests 5.21s, environment 5ms, prepare 1.34s)
+
+CLEAN_INSTALL=PASS

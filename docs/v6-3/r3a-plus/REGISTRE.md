@@ -95,6 +95,8 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Correction parent packaging | `config.mjs`, test `config-policy.check.mjs`, `verify-install.sh`, README et INSTALLATION_PC alignés sur la politique WSS ; 7/7 tests PASS ; smoke WSS remote accepté et ws remote refusé |
 | 2026-10-27 | Intégration packaging | merge `722cdde` ; suite Node complète avec dépendance vendorée à rejouer, systemd transitoire NON_EXÉCUTÉ (PARTIAL) |
 | 2026-10-27 | Rejeu Node packaging | `npm ci` + `verify:artifact` + config policy 7/7 + `npm test` 10 fichiers / 40 tests PASS sur le merge ; tarball `cc1102a…` |
+| 2026-10-27 | Installation propre finale | copie hors dépôt sans `references/` sur `89f881e` : `npm ci --offline` PASS, build, config 7/7, artefact, 40/40 tests PASS |
+| 2026-10-27 | Test WSS Android préparé | `RelayWssE2eInstrumentedTest` (DNS debug injecté, CA test, mauvais hostname/CA/Noise, interruption TLS, FastAPI privé) compile ; exécution Pixel PENDING vague C |
 | 2026-10-27 | `R3AP-CALENDAR-01` livré | `e66d2ef` + doc `a827d69` ; 64 JVM ciblés et 590 JVM complets annoncés par l'agent ; androidTest compilé |
 | 2026-10-27 | Revue parent `R3AP-CALENDAR-01` | scope conforme, pas de symlink commité, pas de sortie de build ; 64 tests ciblés rejoués PASS sur le merge |
 | 2026-10-27 | Intégration calendrier | merge `0f3426a` ; suite JVM complète rejouée : 91 suites / 654 tests / 0 échec sur `fe54e20` ; l'annonce 590/590 de l'agent est corrigée par la mesure parent |

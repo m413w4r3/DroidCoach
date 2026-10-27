@@ -19,7 +19,7 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 | T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 10 fichiers / 40 tests sur le merge packaging, dépendance vendorée, relais réel ; `ATLAS_ALLOW_LOOPBACK_WS=1` encore requis par le test de reconnexion (correction B1 en cours) |
 | T8 | Build relais local | `docker run ... atlas-paseo-relay:r3a` | **PASS** — image épinglée, `/health` 200 sur `127.0.0.1:4400` |
 | T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 36 tests, 6 suites sur `733cd78` |
-| T9 | Installation propre connecteur | répertoire vierge, sans clone Paseo | **PASS** — clean copy sans `references/`, `npm ci --offline`, build, 9 fichiers / 35 tests sur `d8a425d` ; artefact `cc1102a…` |
+| T9 | Installation propre connecteur | répertoire vierge, sans clone Paseo | **PASS** — copie hors dépôt sans `references/` sur `89f881e`, `npm ci --offline`, build, config 7/7, artefact `cc1102a…`, 40/40 tests |
 | T10 | Unité systemd utilisateur | `systemd-analyze verify` + test isolé | **PARTIAL** — `systemd-analyze --user verify` PASS ; test transitoire isolé NOT_RUN (pas de gestionnaire utilisateur jetable) |
 | T16 | Politique WSS du config checker | `node --test scripts/lib/config-policy.check.mjs` + smoke connecteur | **PASS** — 7/7 tests ; WSS remote accepté au démarrage, ws remote refusé |
 | T11 | WSS bout en bout Pixel | recette C | PENDING |
