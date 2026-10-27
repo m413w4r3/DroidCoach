@@ -5,6 +5,7 @@ export class ConnectorMetrics {
   sessionsOpened = 0;
   requests = 0;
   errors = 0;
+  uncertainOutcomes = 0;
   latencyTotalMs = 0;
   latencyMaxMs = 0;
   relayConnected = false;
@@ -32,6 +33,10 @@ export class ConnectorMetrics {
     this.errors += 1;
   }
 
+  uncertainOutcome(): void {
+    this.uncertainOutcomes += 1;
+  }
+
   latency(milliseconds: number): void {
     this.latencyTotalMs += milliseconds;
     this.latencyMaxMs = Math.max(this.latencyMaxMs, milliseconds);
@@ -46,6 +51,7 @@ export class ConnectorMetrics {
       active_sessions: this.activeSessions,
       requests_total: this.requests,
       errors_total: this.errors,
+      uncertain_outcomes_total: this.uncertainOutcomes,
       latency_average_ms: this.requests ? Math.round(this.latencyTotalMs / this.requests) : 0,
       latency_max_ms: this.latencyMaxMs,
       memory_rss_bytes: memory.rss,

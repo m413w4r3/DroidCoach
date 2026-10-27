@@ -159,6 +159,7 @@ describe("Paseo Relay v2 protected interoperability", () => {
     const runtime = await createConnector({
       stateDir: dir,
       relayUrl: RELAY_URL,
+      allowLoopbackWs: new URL(RELAY_URL).protocol === "ws:",
       serverId,
       backendUrl: "http://127.0.0.1:8100",
       metricsPort: 0,
