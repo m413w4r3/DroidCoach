@@ -1,0 +1,69 @@
+ATLAS V6.3 R3-A+ local TLS/WSS harness evidence
+===============================================
+
+Task: R3AP-WSS-01
+Branch: feat/r3a-plus-wss
+Base SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+Run date: 2026-10-27 (Europe/Paris)
+Workspace: /home/nill/.paseo/worktrees/073527gm/feat-r3a-plus-wss
+
+Environment
+-----------
+Node.js v24.18.0; npm 11.16.0; OpenJDK 21.0.12.1; Python 3.12.3;
+OpenSSL 3.0.13; Docker image atlas-paseo-relay:r3a available locally.
+Loopback ports 4400 and 8100 were free before starting this harness. No system
+hosts file or DNS configuration was changed.
+
+Certificate setup
+-----------------
+Command from the repository root:
+
+  ./tools/relay-tls-test/generate-pki.sh
+  PASS — created a local test CA, a relay.atlas.test certificate, a trusted
+  wrong-host certificate, and an untrusted relay.atlas.test certificate. Private
+  material remains under ~/.local/share/atlas-v63-r3a-plus/pki/. Only the public
+  test CA certificate is in the repository at
+  android/app/src/debug/res/raw/atlas_test_ca.pem. No private key was written to
+  the repository or included in this evidence.
+
+Harness setup and execution
+---------------------------
+Command from the repository root:
+
+  docker run -d --rm --name atlas-r3a-plus-wss-relay -p 127.0.0.1:4400:4000 atlas-paseo-relay:r3a
+  PASS — started the existing, unmodified Paseo Relay image on loopback port
+  4400. The container was stopped after the checks.
+
+  node tools/relay-tls-test/verify-wss.mjs
+  PASS — 6 checks:
+    1. Remote ws:// is rejected; explicit loopback ws:// development opt-in is
+       accepted.
+    2. WSS with the explicitly trusted local CA reaches the real Paseo Relay.
+    3. A CA-signed wrong-host certificate is rejected.
+    4. A certificate outside system and test trust is rejected.
+    5. Plain HTTP sent to the TLS listener does not reach the temporary sentinel
+       bound to 127.0.0.1:8100.
+    6. Interrupting the TLS stream disconnects the client and it reconnects over
+       WSS.
+
+The Python TLS terminator binds only to 127.0.0.1 and forwards decrypted bytes
+only to 127.0.0.1:4400. The Node harness injects DNS answers for the three
+test hostnames directly through the client lookup option. It uses ordinary TLS
+certificate and hostname verification; no verification bypass is enabled.
+
+Android debug DNS is provided by RelayDebugDns in src/debug and can be injected
+into OkHttpRelaySocketFactory by a debug instrumentation test. The debug
+network-security config adds the public test CA only for the three test names.
+Release assembly succeeded; no test CA or debug DNS source appears in release
+resources, and the merged release manifest keeps cleartext traffic disabled.
+
+Not run
+-------
+NOT_RUN — Android instrumentation/runtime TLS handshake, ADB, emulator, and
+Pixel tests. No device was used and no APK was installed.
+
+Attempt note
+------------
+An initial harness invocation from integrations/relay/pc used
+`node ../../tools/relay-tls-test/verify-wss.mjs` and failed to locate the
+script. Running the command above from the repository root passed all checks.

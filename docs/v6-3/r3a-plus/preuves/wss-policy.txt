@@ -1,0 +1,80 @@
+ATLAS V6.3 R3-A+ relay URL policy evidence
+========================================
+
+Task: R3AP-WSS-01
+Branch: feat/r3a-plus-wss
+Base SHA: a514ea172578889f2fdbcaf8bec3d06159063a5c
+Run date: 2026-10-27 (Europe/Paris)
+Workspace: /home/nill/.paseo/worktrees/073527gm/feat-r3a-plus-wss
+
+Environment
+-----------
+Node.js v24.18.0; npm 11.16.0; OpenJDK 21.0.12.1; Python 3.12.3;
+OpenSSL 3.0.13; Android SDK installed at /home/nill/Android/Sdk.
+The existing references/repos symlink was available for npm installation.
+
+Policy implementation
+---------------------
+PASS: PC accepts WSS for validated DNS names and IP addresses, rejects remote
+ws://, and allows ws:// only for exact loopback literals when explicitly set by
+option or ATLAS_ALLOW_LOOPBACK_WS=1. URL credentials, query, fragment,
+unsupported paths/schemes, malformed hosts, and invalid ports are rejected.
+Redirect following is disabled. Production does not read TLS overrides from
+environment variables; normal Node certificate verification remains enabled.
+
+PASS: Android remote relay URLs require WSS. Debug permits ws:// only for
+127.0.0.1, localhost, ::1, and Android Emulator host bridge 10.0.2.2. The app
+controller derives this setting from FLAG_DEBUGGABLE. The validator rejects
+credentials, query, fragment, every explicit path, malformed hosts, and invalid
+ports. WSS continues to require the protected Noise mode.
+
+PASS: `PaseoRelayClientTest.rejectsNoiseResponderThatDoesNotMatchThePinnedStaticKey`
+refuses the mismatched responder identity, closes with protocol error 4002, and
+does not enter RELAY_CONNECTED.
+
+PASS: The Android debug network security config preserves cleartext access to
+127.0.0.1 and 10.0.2.2, trusts the test CA only for relay.atlas.test,
+wrong-host.atlas.test, and untrusted.atlas.test, and retains system trust for
+other domains. Release sources contain no test CA or debug DNS class. The merged
+release manifest retains android:usesCleartextTraffic="false".
+
+Commands and results
+--------------------
+Working directory integrations/relay/pc:
+
+  npm ci
+  PASS — dependencies installed from the existing lockfile. npm reported three
+  audit advisories (one moderate, two critical); dependency manifests were not
+  changed.
+
+  npm run build
+  PASS — TypeScript build.
+
+  npx vitest run test/relay-url.test.ts
+  PASS — 5 tests.
+
+  ATLAS_ALLOW_LOOPBACK_WS=1 npm test
+  PASS — 10 test files, 40 tests. The existing loopback reconnect integration
+  test requires this explicit development opt-in; the new policy tests clear
+  the environment value when checking the default-deny behavior.
+
+Working directory android/:
+
+  ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.RelayConfigurationValidatorTest' --tests 'dev.atlas.coach.sync.relay.PaseoRelayClientTest' :app:compileDebugKotlin :app:assembleDebug :app:compileReleaseKotlin :app:assembleRelease
+  PASS — targeted JVM suites: 8 validator tests and 8 client tests; debug and
+  release Kotlin compilation and APK assembly succeeded.
+
+Not run
+-------
+NOT_RUN — ADB, emulator, and Pixel tests. No device was used and no APK was
+installed.
+
+Attempt notes
+-------------
+An initial npm test without the loopback opt-in and before starting the local
+relay failed 2 tests: the reconnect test was correctly denied by the new
+default policy, and the integration test could not connect to 127.0.0.1:4400.
+The same suite passed after starting the relay and setting the explicit opt-in.
+
+An initial Gradle invocation from the repository root did not start because the
+wrapper is under android/; the command above was rerun from android/ and passed.

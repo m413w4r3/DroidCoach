@@ -1,6 +1,7 @@
 package dev.atlas.coach.app
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ class RelaySettingsController(
     private val transportFactory: (RelayConfig, RelayCredentialStore) -> RelayBackendTransport =
         { config, credentials -> RelayBackendTransport(config, credentials) },
 ) {
+    private val allowLoopbackWs = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     private val settingsStore = AndroidRelaySettingsStore(context)
     private val credentialStore = KeystoreRelayCredentialStore(context, settingsStore)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -82,6 +84,7 @@ class RelaySettingsController(
             deviceId = normalizedDeviceId,
             deviceToken = token,
             requireToken = requireToken,
+            debugBuild = allowLoopbackWs,
         )?.let { return Result.failure(IllegalArgumentException(it)) }
 
         if (token == null && existing != null) {
@@ -213,6 +216,7 @@ class RelaySettingsController(
             deviceId = current.deviceId,
             deviceToken = null,
             requireToken = false,
+            debugBuild = allowLoopbackWs,
         )?.let {
             state = RelayConnectionState.ERROR
             lastError = it
