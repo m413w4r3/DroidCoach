@@ -31,6 +31,7 @@ import dev.atlas.coach.app.ui.AtlasStatus
 import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.app.ui.AtlasTertiaryButton
 import dev.atlas.coach.sync.relay.RelayConnectionState
+import dev.atlas.coach.sync.relay.RelaySettings
 import dev.atlas.coach.sync.relay.RelayTransportMode
 import java.time.Instant
 import java.time.ZoneId
@@ -119,7 +120,7 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                     value = relayUrl,
                     onValueChange = { relayUrl = it },
                     label = { Text("URL du relais") },
-                    placeholder = { Text("ws://10.0.2.2:4400") },
+                    placeholder = { Text(RelaySettings.DEFAULT_RELAY_URL) },
                     singleLine = true,
                 )
                 OutlinedTextField(

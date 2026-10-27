@@ -20,12 +20,16 @@ enum class RelayTransportMode {
 
 data class RelaySettings(
     val mode: RelayTransportMode = RelayTransportMode.DIRECT,
-    val relayUrl: String = "ws://10.0.2.2:4400",
+    val relayUrl: String = DEFAULT_RELAY_URL,
     val serverId: String = "",
     val serverPublicKey: String = "",
     val deviceId: String = "",
     val lastConnectedAtUtcMillis: Long? = null,
-)
+) {
+    companion object {
+        const val DEFAULT_RELAY_URL = "wss://relay.example.org"
+    }
+}
 
 /** Non-secret relay configuration. The device token lives only in [KeystoreRelayCredentialStore]. */
 class AndroidRelaySettingsStore(context: Context) {
@@ -36,7 +40,7 @@ class AndroidRelaySettingsStore(context: Context) {
         mode = RelayTransportMode.entries.firstOrNull {
             it.name == preferences.getString(MODE_KEY, RelayTransportMode.DIRECT.name)
         } ?: RelayTransportMode.DIRECT,
-        relayUrl = preferences.getString(RELAY_URL_KEY, "ws://10.0.2.2:4400").orEmpty(),
+        relayUrl = preferences.getString(RELAY_URL_KEY, RelaySettings.DEFAULT_RELAY_URL).orEmpty(),
         serverId = preferences.getString(SERVER_ID_KEY, "").orEmpty(),
         serverPublicKey = preferences.getString(SERVER_PUBLIC_KEY_KEY, "").orEmpty(),
         deviceId = preferences.getString(DEVICE_ID_KEY, "").orEmpty(),

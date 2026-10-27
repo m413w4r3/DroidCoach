@@ -119,6 +119,30 @@ class GlobalUsageControllerTest {
     }
 
     @Test
+    fun disabledQuotaHasItsOwnStatusWithoutAUsableSummary() {
+        val store = FakeUsageQuotaStore(
+            listOf(
+                UsageQuota(
+                    quotaId = "disabled",
+                    window = UsageQuotaWindow.ROLLING_24H,
+                    limitMs = 60L * MINUTE,
+                    enabled = false,
+                ),
+                UsageQuota(
+                    quotaId = "enabled",
+                    window = UsageQuotaWindow.ROLLING_24H,
+                    limitMs = 60L * MINUTE,
+                ),
+            ),
+        )
+        val state = harness(quotaStore = store).controller.state()
+
+        assertEquals(QuotaStatus.DISABLED, state.quotas[0].status)
+        assertEquals("Désactivé", quotaStatusLabel(state.quotas[0].status))
+        assertEquals(QuotaStatus.UNKNOWN, state.quotas[1].status)
+    }
+
+    @Test
     fun permissionDeniedIsReflectedWithoutQueryingTheSyntheticSource() {
         val harness = harness(allowed = false)
         harness.controller.grantConsent(includePackageNames = false)

@@ -2,8 +2,16 @@ package dev.atlas.coach.usage
 
 object UsageQuotaEvaluator {
     fun evaluate(quota: UsageQuota, summary: UsageSummary?): QuotaEvaluation {
+        if (!quota.enabled) {
+            return QuotaEvaluation(
+                quotaId = quota.quotaId,
+                status = QuotaStatus.DISABLED,
+                observedMinutes = null,
+                limitMinutes = quota.limitMs / MILLIS_PER_MINUTE,
+                reliability = null,
+            )
+        }
         if (
-            !quota.enabled ||
             summary == null ||
             summary.coverage.truncated ||
             summary.coverage.observedMs != summary.windowEnd - summary.windowStart

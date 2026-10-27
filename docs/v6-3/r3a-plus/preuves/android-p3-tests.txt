@@ -1,0 +1,68 @@
+# Android P3 — preuves de tests
+
+- Tâche : `R3AP-ANDROID-P3-01`
+- Branche : `feat/r3a-plus-android-p3`
+- Base SHA : `51ad6fafd56a4ad41e0fba818be4a4c720481345`
+- SHA du code et des tests validés : `339325dd0e2503e9a28a3e8cffa5e4999c8db608`
+- Environnement : OpenJDK 21.0.12.1, Android SDK `/home/nill/Android/Sdk`, Python 3.12.3.
+- Session constatée : `codex/gpt-6-luna`, effort `xhigh`.
+
+La preuve est ajoutée après le commit de code ci-dessus. L’amend final ne contient
+que ce fichier de preuve ; les sources validées restent identiques au SHA indiqué.
+
+## Résultats
+
+1. **PASS — tests JVM ciblés : 25 tests, 0 échec, 0 erreur, 0 ignoré (6 suites).**
+
+   Commande exacte, depuis `android/` :
+
+   ```sh
+   ./gradlew :app:testDebugUnitTest --tests 'dev.atlas.coach.app.GlobalUsageControllerTest' --tests 'dev.atlas.coach.usage.UsageQuotaEvaluatorTest' --tests 'dev.atlas.coach.sync.relay.RelayFailureTest' --tests 'dev.atlas.coach.sync.relay.RelaySettingsDefaultsTest' --tests 'dev.atlas.coach.sync.relay.PaseoRelayClientTest' --tests 'dev.atlas.coach.sync.relay.RelayBackendTransportTest'
+   ```
+
+2. **PASS — suite JVM complète : 666 tests, 0 échec, 0 erreur, 0 ignoré (94 suites).**
+
+   ```sh
+   ./gradlew :app:testDebugUnitTest
+   ```
+
+3. **PASS — lint debug : 0 erreur, 70 avertissements.** Le rapport contient des
+   avertissements dans des appels SharedPreferences et le retry scheduler déjà
+   présents dans les fichiers concernés ; leur baseline n’a pas été mesurée
+   séparément.
+
+   ```sh
+   ./gradlew :app:lintDebug
+   ```
+
+4. **PASS — assemblage debug.**
+
+   ```sh
+   ./gradlew :app:assembleDebug
+   ```
+
+5. **PASS — vérification d’espaces et de marqueurs de conflit.**
+
+   ```sh
+   git diff --check HEAD^ HEAD
+   ```
+
+6. **Échec initial corrigé —** la première exécution du filtre JVM ciblé n’a
+   lancé aucun test : Kotlin ne résolvait pas `DEFAULT_RELAY_URL` depuis le
+   mauvais compagnon. La constante a été déplacée sur `RelaySettings`, puis le
+   filtre ciblé et toutes les vérifications ci-dessus ont réussi.
+
+## Limites
+
+- **NOT_RUN — ADB, émulateur et Pixel physique** : aucune commande ADB ni aucun
+  test matériel n’a été lancé, conformément au ticket.
+- Les tests TLS, hostname, identité Noise, authentification, révocation, réseau
+  et permissions vérifient le mapping typé et les transports synthétiques ;
+  aucun relais réel ni certificat réseau réel n’a été contacté.
+- Le filtre ciblé utilise des fakes JVM. Il ne remplace pas une recette TLS/WSS
+  sur Android 17.
+- La politique existante reste vérifiée par test : `ws://10.0.2.2:4400` est
+  accepté uniquement avec `debugBuild=true`; il est refusé autrement. Le
+  handshake Noise protégé reste requis.
+- Le dossier préexistant non suivi `references/repos` n’a pas été ajouté au
+  commit.

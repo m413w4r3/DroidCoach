@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.app.ui.AtlasRule
+import dev.atlas.coach.usage.QuotaStatus
 import dev.atlas.coach.usage.UsageReliability
 import dev.atlas.coach.usage.UsageSummary
 import java.time.Instant
@@ -167,12 +168,17 @@ internal fun GlobalUsageScreen(
         } else {
             state.quotas.forEach { evaluation ->
                 Text(
-                    "${evaluation.quotaId} · ${evaluation.status.name} · " +
+                    "${evaluation.quotaId} · ${quotaStatusLabel(evaluation.status)} · " +
                         "${evaluation.observedMinutes?.let { "$it min" } ?: "donnée indisponible"} / ${evaluation.limitMinutes} min",
                 )
             }
         }
     }
+}
+
+internal fun quotaStatusLabel(status: QuotaStatus): String = when (status) {
+    QuotaStatus.DISABLED -> "Désactivé"
+    else -> status.name
 }
 
 @Composable

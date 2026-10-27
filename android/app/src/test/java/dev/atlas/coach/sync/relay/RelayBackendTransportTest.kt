@@ -10,8 +10,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class RelayBackendTransportTest {
     @Test
@@ -113,10 +115,57 @@ class RelayBackendTransportTest {
             authTransport.start()
             assertEquals(RelayConnectionState.AUTH_REQUIRED, authTransport.state())
             assertEquals(
-                RelayCallResult.RemoteError("AUTH_REQUIRED", "device authentication required", false),
+                RelayCallResult.RemoteError(
+                    "AUTH_REQUIRED",
+                    RelayFailure.fromRemoteCode("AUTH_REQUIRED").message,
+                    false,
+                ),
                 authTransport.execute("plan.revision.request", JSONObject()),
             )
         } finally { authTransport.close() }
+    }
+
+    @Test
+    fun reportsAuthenticationAndRevocationAsDistinctSafeFailures() {
+        val (authCredentials, authPair) = testCredentials()
+        val authTransport = transport(
+            authCredentials,
+            FakeRelaySocketFactory(
+                authPair,
+                authError = true,
+                remoteErrorMessage = "token=${authCredentials.deviceToken} wss://user:password@relay.example.org",
+            ),
+        )
+        val authFailure = AtomicReference<RelayFailure?>()
+        val authReported = CountDownLatch(1)
+        authTransport.addFailureListener {
+            authFailure.set(it)
+            authReported.countDown()
+        }
+        try {
+            authTransport.start()
+            assertTrue(authReported.await(1, TimeUnit.SECONDS))
+            assertEquals(RelayFailureKind.AUTHENTICATION, authFailure.get()?.kind)
+            assertFalse(authFailure.get()?.message.orEmpty().contains(authCredentials.deviceToken))
+            assertFalse(authFailure.get()?.message.orEmpty().contains("password"))
+            assertEquals(RelayConnectionState.AUTH_REQUIRED, authTransport.state())
+        } finally { authTransport.close() }
+
+        val (revokedCredentials, revokedPair) = testCredentials()
+        val revokedTransport = transport(revokedCredentials, FakeRelaySocketFactory(revokedPair, revokedError = true))
+        val revokedFailure = AtomicReference<RelayFailure?>()
+        val revocationReported = CountDownLatch(1)
+        revokedTransport.addFailureListener {
+            revokedFailure.set(it)
+            revocationReported.countDown()
+        }
+        try {
+            revokedTransport.start()
+            assertTrue(revocationReported.await(1, TimeUnit.SECONDS))
+            assertEquals(RelayFailureKind.REVOKED, revokedFailure.get()?.kind)
+            assertEquals(RelayConnectionState.REVOKED, revokedTransport.state())
+            assertFalse(revokedFailure.get()?.message.orEmpty().contains(revokedCredentials.deviceToken))
+        } finally { revokedTransport.close() }
     }
 
     @Test
