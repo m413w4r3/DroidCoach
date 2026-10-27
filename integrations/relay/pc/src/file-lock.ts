@@ -121,13 +121,24 @@ async function writeCandidate(lockPath: string, record: LockRecord): Promise<str
 }
 
 async function readEntries(lockPath: string): Promise<LockEntry[]> {
-  const names = await readdir(lockPath).catch(() => [] as string[]);
+  // Fail closed: an unreadable lock directory must never look like "no
+  // contenders". Only an ENOENT for one individual record is tolerated,
+  // because it is the expected race with a concurrent release.
+  const names = await readdir(lockPath);
   const entries: LockEntry[] = [];
   for (const name of names) {
     if (!name.endsWith(".json") || name.startsWith(".")) continue;
     const path = join(lockPath, name);
-    const record = parseLockRecord(await readFile(path, "utf8").catch(() => null));
-    if (record !== null) entries.push({ path, record });
+    let text: string;
+    try {
+      text = await readFile(path, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    const record = parseLockRecord(text);
+    if (record === null) throw new Error(`invalid lock record: ${name}`);
+    entries.push({ path, record });
   }
   return entries;
 }

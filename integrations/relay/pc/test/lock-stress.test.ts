@@ -35,13 +35,17 @@ describe("ticket lock recovery stress", () => {
         })}\n`,
       );
 
+      const readyPath = join(directory, `ready-${round}.txt`);
+      const barrierPath = join(directory, `barrier-${round}.txt`);
       const workers = Array.from({ length: 6 }, (_, index) => {
-        const child = fork(WORKER, [lockPath, logPath, String(index)], {
+        const child = fork(WORKER, [lockPath, logPath, String(index), readyPath, barrierPath, "20"], {
           stdio: ["ignore", "ignore", "inherit", "ipc"],
           execArgv: [],
         });
         return once(child, "exit");
       });
+      await waitForLines(readyPath, 6);
+      await writeFile(barrierPath, "go\n");
       const exits = await Promise.all(workers);
       expect(exits.every(([code]) => code === 0)).toBe(true);
 
@@ -55,4 +59,48 @@ describe("ticket lock recovery stress", () => {
       expect(active).toBe(0);
     }
   }, 30_000);
+
+  it("lets no contender enter after the first one has started", async () => {
+    directory = await mkdtemp(join(tmpdir(), "atlas-lock-arrival-"));
+    const lockPath = join(directory, "arrival.lock.d");
+    const logPath = join(directory, "arrival.log");
+    await writeFile(logPath, "");
+    const first = fork(WORKER, [lockPath, logPath, "0", "", "", "200"], {
+      stdio: ["ignore", "ignore", "inherit", "ipc"],
+      execArgv: [],
+    });
+    await waitForText(logPath, "start 0");
+    const second = fork(WORKER, [lockPath, logPath, "1", "", "", "20"], {
+      stdio: ["ignore", "ignore", "inherit", "ipc"],
+      execArgv: [],
+    });
+    const exits = await Promise.all([once(first, "exit"), once(second, "exit")]);
+    expect(exits.every(([code]) => code === 0)).toBe(true);
+    expect((await readFile(logPath, "utf8")).trim().split("\n")).toEqual([
+      "start 0",
+      "end 0",
+      "start 1",
+      "end 1",
+    ]);
+  }, 15_000);
 });
+
+async function waitForLines(path: string, count: number, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const text = await readFile(path, "utf8").catch(() => "");
+    if (text.trim().split("\n").filter(Boolean).length >= count) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`expected ${count} ready workers`);
+}
+
+async function waitForText(path: string, expected: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const text = await readFile(path, "utf8").catch(() => "");
+    if (text.includes(expected)) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`expected ${expected} in ${path}`);
+}

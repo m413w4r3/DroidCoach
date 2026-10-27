@@ -26,6 +26,22 @@ on `127.0.0.1:4401/metrics`. FastAPI can be started separately with a
 synthetic service token in the local environment. The connector never binds
 its metrics listener beyond loopback.
 
+## Host support and registry lock
+
+The qualified host is Linux (the deployment unit in
+`docs/v6-3/r3a/DEPLOIEMENT_DISTANT.md` is a systemd user service). On Linux the
+registry lock uses `/proc/<pid>/stat` start time to distinguish a recycled PID.
+On other POSIX or Windows hosts the liveness check falls back to
+`process.kill(pid, 0)`; a recycled PID can then keep a dead owner's ticket until
+the 15-second timeout. That fallback is availability-only and never permits two
+processes to enter the critical section. macOS and Windows are not qualified
+for this campaign.
+
+The lock directory fails closed: an unreadable directory, an unreadable record,
+or an invalid record aborts the operation instead of treating the lock as
+uncontended. Only an `ENOENT` for an individual record is tolerated, because it
+is the expected race with a concurrent release.
+
 ## Environment
 
 | Variable | Purpose |

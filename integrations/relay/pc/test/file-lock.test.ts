@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -51,6 +51,34 @@ describe("cross-process ticket lock", () => {
     });
     expect(acquired).toBe(true);
     expect((await readdir(lockPath)).filter((name) => name.endsWith(".json"))).toEqual([]);
+  });
+
+  it("fails closed when the lock directory cannot be enumerated", async () => {
+    directory = await mkdtemp(join(tmpdir(), "atlas-file-lock-"));
+    const lockPath = join(directory, "registry.lock.d");
+    await mkdir(lockPath, { mode: 0o700 });
+    await chmod(lockPath, 0o300);
+    try {
+      let acquired = false;
+      await expect(
+        withFileLock(lockPath, async () => { acquired = true; }, { timeoutMs: 500 }),
+      ).rejects.toMatchObject({ code: "EACCES" });
+      expect(acquired).toBe(false);
+    } finally {
+      await chmod(lockPath, 0o700).catch(() => {});
+    }
+  });
+
+  it("fails closed on an invalid record", async () => {
+    directory = await mkdtemp(join(tmpdir(), "atlas-file-lock-"));
+    const lockPath = join(directory, "registry.lock.d");
+    await mkdir(lockPath, { mode: 0o700 });
+    await writeFile(join(lockPath, "invalid.json"), "{}\n");
+    let acquired = false;
+    await expect(
+      withFileLock(lockPath, async () => { acquired = true; }, { timeoutMs: 500 }),
+    ).rejects.toThrow(/invalid lock record/);
+    expect(acquired).toBe(false);
   });
 
   it("removes only its own record on release", async () => {
