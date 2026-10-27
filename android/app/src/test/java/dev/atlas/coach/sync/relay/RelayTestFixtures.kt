@@ -176,6 +176,15 @@ internal class FakeRelaySocket(
         callbacks.onClosed(code, reason)
     }
 
+    fun sendErrorEnvelope(code: String, message: String) {
+        sendEnvelope(
+            JSONObject().put("protocol", AtlasRemoteProtocol.PROTOCOL).put("kind", "error")
+                .put("request_id", JSONObject.NULL).put("session_id", SESSION_ID)
+                .put("error", JSONObject().put("code", code).put("message", message).put("retryable", false))
+                .put("completed_at", Instant.now().toString()),
+        )
+    }
+
     private fun sendEnvelope(envelope: JSONObject) {
         val peer = responder ?: error("handshake not complete")
         val bytes = AtlasRemoteProtocol.encode(envelope)

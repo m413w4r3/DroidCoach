@@ -210,14 +210,28 @@ class RelayBackendTransportTest {
     @Test
     fun revocationCloseDoesNotOverwriteRevokedFailureWithAuthentication() {
         val (credentials, staticPair) = testCredentials()
-        val sockets = FakeRelaySocketFactory(staticPair, revokedError = true)
+        val sockets = FakeRelaySocketFactory(staticPair)
         val transport = transport(credentials, sockets)
+        val revoked = CountDownLatch(1)
+        val authenticationFailure = CountDownLatch(1)
         val lastFailure = AtomicReference<RelayFailure?>()
-        transport.addFailureListener { lastFailure.set(it) }
+        transport.addFailureListener {
+            lastFailure.set(it)
+            if (it.kind == RelayFailureKind.REVOKED) revoked.countDown()
+            if (it.kind == RelayFailureKind.AUTHENTICATION) authenticationFailure.countDown()
+        }
         try {
             transport.start()
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+            val socket = sockets.sockets.single()
+            socket.sendErrorEnvelope("DEVICE_REVOKED", "device revoked")
+            assertTrue("DEVICE_REVOKED was not reported", revoked.await(1, TimeUnit.SECONDS))
             assertEquals(RelayConnectionState.REVOKED, transport.state())
-            sockets.sockets.single().remoteClose(4001)
+            socket.remoteClose(4001)
+            assertFalse(
+                "an AUTH failure must not overwrite the REVOKED message on close 4001",
+                authenticationFailure.await(300, TimeUnit.MILLISECONDS),
+            )
             assertEquals(RelayConnectionState.REVOKED, transport.state())
             assertEquals(RelayFailureKind.REVOKED, lastFailure.get()?.kind)
         } finally {

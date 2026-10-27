@@ -34,6 +34,8 @@ test("requires an explicit opt-in for loopback ws", () => {
 
 test("rejects credentials, query, fragment, arbitrary paths and invalid ports", () => {
   rejects("wss://user:pass@relay.example.org");
+  rejects("wss://relay.example.org?");
+  rejects("wss://relay.example.org#");
   rejects("wss://relay.example.org?token=x");
   rejects("wss://relay.example.org#fragment");
   rejects("wss://relay.example.org/");
