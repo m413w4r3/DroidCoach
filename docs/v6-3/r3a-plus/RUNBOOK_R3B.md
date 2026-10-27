@@ -6,7 +6,8 @@ jusqu'à la recette R3-B.
 
 ## 0. Préconditions et autorisations
 
-- Revue R3-A+ `GO_PREDEPLOYMENT_WITH_LIMITATIONS`, aucun P0/P1 ouvert.
+- Revue indépendante `R3AP-REVIEW-01` terminée sans P0/P1 ouvert sur le SHA
+  livré ; rapport final `GO_PREDEPLOYMENT_WITH_LIMITATIONS` disponible.
 - Hébergement, domaine et certificat publics approuvés par le propriétaire.
 - Autorisation ciblée pour : installation/mise à jour sur le Pixel, données
   mobiles, révocation d'appareil, sauvegarde et restauration app-only.
@@ -40,11 +41,14 @@ un mode non `protected`.
    ATLAS_RELAY_SERVER_ID=atlas-pc-<opaque>
    ATLAS_RELAY_STATE_DIR=~/.local/state/atlas-relay
    ATLAS_BACKEND_URL=http://127.0.0.1:8100
-   ATLAS_SERVICE_TOKEN_FILE=~/.config/atlas/service-token
    ATLAS_METRICS_PORT=4401
    ```
-   Le token de service est lu depuis un fichier 0600 ou l'environnement ; il
-   n'apparaît jamais dans `ExecStart` ni dans un log.
+   Ajouter `ATLAS_SERVICE_TOKEN=<valeur>` dans le fichier d'environnement
+   privé `~/.config/atlas/relay.env` (0600), chargé par systemd via
+   `EnvironmentFile`. Le connecteur lit cette variable d'environnement ; il
+   n'existe pas de variable `ATLAS_SERVICE_TOKEN_FILE` dans le connecteur
+   actuel. Le token n'apparaît jamais dans `ExecStart`, les arguments du
+   processus ou un log.
 4. Démarrer sous l'unité systemd utilisateur fournie. Vérifier :
    - démarrage automatique à l'ouverture de session ;
    - redémarrage après crash ;

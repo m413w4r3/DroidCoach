@@ -1,0 +1,37 @@
+ATLAS V6.3 R3-A+ — CLEANUP FINAL
+Date: 2026-10-27
+Code SHA: 38fd4a09fcb0d151632389bf220644de3529b598
+Docs SHA at cleanup: 8f38f2aa033266edf799da20a63a7eb39bef2bc1
+Device: Pixel 9 Pro XL physique, Android 17 / API 37
+
+SERVICES
+- Connector, FastAPI, and the three TLS test proxies were stopped.
+- The atlas-r3a-plus-relay container was stopped; no atlas container remains.
+- Ports 4400, 4402, 4443, 4444, 4445 and 8100 are closed.
+- All adb reverse mappings were removed; `adb reverse --list` is empty.
+- No public port, no relay deployment, no firewall/DNS change.
+
+PIXEL FINAL STATE
+- ATLAS process: not running.
+- Personal calendars: 12; personal events: 91 (unchanged).
+- ATLAS synthetic account/calendar: 0; ATLAS events: 0.
+- READ_CALENDAR and WRITE_CALENDAR: denied (initial state restored).
+- Main APK installed: 66645143b0e6d861b90bbad4acfcc8fe85cae5c939e1d394e3e81c9ecad518b5.
+- Test APK installed: 6ae90e170fbf12af13814c941af5de0c79428cc95ae66d75b62c1e910e42ccfb.
+- No pm clear, no uninstall, no factory reset, no personal calendar/event modified.
+- App data hashes unchanged (see calendar-pixel-summary.txt and pixel-apk-migration.txt).
+
+RETAINED ARTIFACTS OUTSIDE THE REPOSITORY
+- Pre-campaign app-only backup and installed APK backup:
+  ~/.local/share/atlas-v63-r3a-plus/backups/
+- Test CA and leaf private keys (test-only, debug-only trust):
+  ~/.local/share/atlas-v63-r3a-plus/pki/
+- Ephemeral connector state, device tokens, backend token, FastAPI database and
+  run scripts were removed.
+
+LIMITS
+- The test APK remains installed; the main debug APK was updated during the
+  campaign and remains installed. The owner can ask for removal later.
+- The test CA private key remains outside the repository; it must never be
+  trusted by a release build.
+- The independent review and final report are being finalized separately.

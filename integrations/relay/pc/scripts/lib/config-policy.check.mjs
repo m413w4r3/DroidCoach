@@ -13,7 +13,6 @@ function rejects(value, options) {
 test("accepts remote WSS relay URLs", () => {
   accepts("wss://relay.example.org");
   accepts("wss://relay.example.org:8443");
-  accepts("wss://relay.example.org/");
   accepts("wss://relay.example.org/ws");
   accepts("wss://relay.atlas.test:4443");
 });
@@ -37,6 +36,7 @@ test("rejects credentials, query, fragment, arbitrary paths and invalid ports", 
   rejects("wss://user:pass@relay.example.org");
   rejects("wss://relay.example.org?token=x");
   rejects("wss://relay.example.org#fragment");
+  rejects("wss://relay.example.org/");
   rejects("wss://relay.example.org/private");
   rejects("wss://relay.example.org:0");
   rejects("wss://relay.example.org:65536");

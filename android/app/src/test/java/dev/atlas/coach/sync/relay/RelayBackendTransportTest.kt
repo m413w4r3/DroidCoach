@@ -208,6 +208,24 @@ class RelayBackendTransportTest {
     }
 
     @Test
+    fun revocationCloseDoesNotOverwriteRevokedFailureWithAuthentication() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(staticPair, revokedError = true)
+        val transport = transport(credentials, sockets)
+        val lastFailure = AtomicReference<RelayFailure?>()
+        transport.addFailureListener { lastFailure.set(it) }
+        try {
+            transport.start()
+            assertEquals(RelayConnectionState.REVOKED, transport.state())
+            sockets.sockets.single().remoteClose(4001)
+            assertEquals(RelayConnectionState.REVOKED, transport.state())
+            assertEquals(RelayFailureKind.REVOKED, lastFailure.get()?.kind)
+        } finally {
+            transport.close()
+        }
+    }
+
+    @Test
     fun heartbeatReconnectsWhenThePeerStopsAnswering() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(staticPair)

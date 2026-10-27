@@ -58,7 +58,8 @@ Le numéro de série matériel n'est pas reporté dans les preuves versionnées.
 | `R3AP-ANDROID-P3-01` | corrections P3 et messages | fichiers UI/usage/relais ciblés, tests correspondants | quota désactivé affiché « Désactivé », erreurs TLS/identité/permission distinctes | **ACCEPTED / INTEGRATED** — `90739a6`, merge `3c6aef1` ; 25 tests ciblés, 666 JVM, lint 0 erreur / 70 avertissements |
 | `R3AP-E2E-01` | recette WSS bout en bout sur Pixel | scripts de recette parent, preuves | Android physique → TLS/WSS test → relais réel → Noise → connecteur → FastAPI | **IN_PROGRESS** — W1–W10 PASS ; calendrier C1–C5 et nettoyage PASS ; persistance PASS ; revue indépendante en cours |
 | `R3AP-GATES-01` | gates finales non-device déléguées | aucun (lecture/build uniquement) | Node, backend, JVM, lint, builds, installation propre | **ACCEPTED** — session `e38897ac…`, rapport `preuves/gates-agent-run.txt`, tout PASS sur `38fd4a0` |
-| `R3AP-REVIEW-01` | revue indépendante lecture seule | aucun | grille P0/P1/P2/P3 | **PENDING** |
+| `R3AP-REVIEW-01` | revue indépendante lecture seule | aucun | grille P0/P1/P2/P3 | **NO_GO INITIAL / CORRECTIONS APPLIQUÉES / DELTA EN COURS** — session `a5dc2140…` ; 1 P1 + 3 P2 + 1 P3 corrigés ou expliqués ; re-revue delta à confirmer |
+| `R3AP-REPORT-01` | rédaction du rapport final à partir des preuves | `docs/v6-3/r3a-plus/RAPPORT_FINAL.md` | rapport lié aux SHA et preuves | **ACCEPTED (brouillon)** — session `7a0bc3e4…`, rapport copié et ajusté par le parent |
 
 ## 3.1 Sessions Paseo vérifiées
 
@@ -70,6 +71,9 @@ Le numéro de série matériel n'est pas reporté dans les preuves versionnées.
 | `R3AP-RESILIENCE-01` | `3d0fecbe-a363-424f-a790-35168d9da54b` | `01a17ef8-86af-74d3-881a-a1285f9e9aeb` | `gpt-6-luna` | `xhigh` | `feat-r3a-plus-resilience` |
 | `R3AP-PAIRING-01` | `08271ed4-9794-4412-a24b-7b749f97069e` | `01a17ef8-9197-7ef3-940c-d9daba268759` | `gpt-6-luna` | `xhigh` | `feat-r3a-plus-pairing` |
 | `R3AP-ANDROID-P3-01` | `11be7a22-36f0-458b-879b-7fcf2dc91c53` | `01a17ef8-9b81-7d61-ab3b-9f46b02822ad` | `gpt-6-luna` | `xhigh` | `feat-r3a-plus-android-p3` |
+| `R3AP-GATES-01` | `e38897ac-33e7-4f58-adc2-4429412c465e` | `01a17f17-fd7d-76e0-ab6e-71abe98e1201` | `gpt-6-luna` | `xhigh` | `test-r3a-plus-gates` |
+| `R3AP-REVIEW-01` | `a5dc2140-f437-4f2c-bda8-be459d661327` | `01a17f1e-8d30-7771-9745-707e3d8a3aae` | `gpt-6-luna` | `xhigh` | `review-r3a-plus-final` (plan mode) |
+| `R3AP-REPORT-01` | `7a0bc3e4-fb12-4b36-8146-650ba5f5d496` | `01a17f1e-a439-7460-a830-55422ba23f4a` | `gpt-6-luna` | `xhigh` | `docs-r3a-plus-final-report` |
 
 Les trois sessions ont été créées en mode `full-access`, sans sous-délégation,
 avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
@@ -118,6 +122,12 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Suite UI R3-A de référence sur Pixel | NOT_RUN — risque de modification des données personnelles ; les changements B3 sont couverts par 666 tests JVM et les tests Pixel ciblés sûrs |
 | 2026-10-27 | Gates finales déléguées | session `e38897ac…` : Node 14/62, backend 187/1 skip, JVM 94/668, lint 0/62, builds PASS, clean-copy offline PASS sur `38fd4a0` |
 | 2026-10-27 | Rapport gates | `preuves/gates-agent-run.txt` ; APK de build agent `1cc96587…` (non-déterministe par rapport à l'APK Pixel `66645143…`, même source `38fd4a0`) |
+| 2026-10-27 | Nettoyage final | services arrêtés, ports 4400/4402/4443/4444/4445/8100 fermés, aucun `adb reverse`, aucun conteneur atlas ; appareil à 12 calendriers / 91 événements / 0 ATLAS, permissions refusées |
+| 2026-10-27 | Rapport final délégué | session `7a0bc3e4…` ; `RAPPORT_FINAL.md` copié et ajusté par le parent, statut conditionné à la revue |
+| 2026-10-27 | Revue indépendante lancée | session `a5dc2140…`, plan mode, cible `8f38f2a` / code `38fd4a0` |
+| 2026-10-27 | Verdict initial revue | **NO_GO** — P1 runbook `ATLAS_SERVICE_TOKEN_FILE` non supporté ; P2 message révocation écrasé, P2 trailing slash checker/connecteur, P2 SHA APK inexpliqué, P3 placeholders |
+| 2026-10-27 | Corrections revue | runbook aligné sur `ATLAS_SERVICE_TOKEN` ; fermeture 4001 ne réécrit plus REVOKED ; checker aligné sur le chemin brut ; APK dex/resources/manifest identiques ; placeholders retirés |
+| 2026-10-27 | Re-revue delta | PENDING — doit confirmer l'absence de P0/P1 après corrections |
 | 2026-10-27 | `R3AP-CALENDAR-01` livré | `e66d2ef` + doc `a827d69` ; 64 JVM ciblés et 590 JVM complets annoncés par l'agent ; androidTest compilé |
 | 2026-10-27 | Revue parent `R3AP-CALENDAR-01` | scope conforme, pas de symlink commité, pas de sortie de build ; 64 tests ciblés rejoués PASS sur le merge |
 | 2026-10-27 | Intégration calendrier | merge `0f3426a` ; suite JVM complète rejouée : 91 suites / 654 tests / 0 échec sur `fe54e20` ; l'annonce 590/590 de l'agent est corrigée par la mesure parent |

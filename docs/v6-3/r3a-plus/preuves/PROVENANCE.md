@@ -37,7 +37,8 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `calendar-pixel-summary.txt` | `38fd4a0` | `66645143…` | synthèse C1–C5 et nettoyage Pixel | **final (Pixel)** |
 | `calendar-pixel-c1-phase1.txt` … `calendar-pixel-cleanup.txt` | `38fd4a0` | `66645143…` | preuves C1–C5, permissions, force-stop, nettoyage | **final (Pixel)** |
 | `gates-agent-run.txt` | `38fd4a0` | build agent `1cc96587…` | gates non-device déléguées | **final (agent)** |
-| PENDING | PENDING | PENDING | PENDING | PENDING |
+| `review-fixes.txt` | corrections post-revue | n/a | P1/P2/P3 corrigés ou expliqués | **final (revue)** |
+| `REVUE_INDEPENDANTE_R3A_PLUS.md` | `8f38f2a` + corrections | n/a | revue initiale et delta | **en cours** |
 
 ## Règles
 

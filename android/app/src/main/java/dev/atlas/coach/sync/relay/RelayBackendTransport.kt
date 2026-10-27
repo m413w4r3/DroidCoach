@@ -510,7 +510,8 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun onSocketClosed(code: Int, @Suppress("UNUSED_PARAMETER") reason: String) {
-        if (code == 4001) reportRemoteFailure("AUTH_REQUIRED")
+        val alreadyRevoked = synchronized(lock) { connectionState == RelayConnectionState.REVOKED }
+        if (code == 4001 && !alreadyRevoked) reportRemoteFailure("AUTH_REQUIRED")
         synchronized(lock) {
             appSessionId = null
             appSessionExpiry = null
@@ -518,12 +519,19 @@ class RelayBackendTransport internal constructor(
             val sent = inFlight.values.toList()
             inFlight.clear()
             sent.forEach {
-                val failure = if (code == 4001) RelayCallResult.RemoteError(
-                    "AUTH_REQUIRED",
-                    RelayFailure.fromRemoteCode("AUTH_REQUIRED").message,
-                    false,
-                )
-                else RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
+                val failure = when {
+                    code == 4001 && alreadyRevoked -> RelayCallResult.RemoteError(
+                        "DEVICE_REVOKED",
+                        RelayFailure.fromRemoteCode("DEVICE_REVOKED").message,
+                        false,
+                    )
+                    code == 4001 -> RelayCallResult.RemoteError(
+                        "AUTH_REQUIRED",
+                        RelayFailure.fromRemoteCode("AUTH_REQUIRED").message,
+                        false,
+                    )
+                    else -> RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
+                }
                 completeLocked(it, failure)
             }
         }

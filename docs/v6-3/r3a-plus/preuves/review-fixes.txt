@@ -1,0 +1,65 @@
+ATLAS V6.3 R3-A+ — CORRECTIONS APRÈS REVUE INDÉPENDANTE
+Date: 2026-10-27
+Revue: R3AP-REVIEW-01, session `a5dc2140…`, modèle `codex/gpt-6-luna`, effort
+`xhigh`, plan mode lecture seule, cible docs `8f38f2a` / code `38fd4a0`.
+Verdict initial: **NO_GO** (1 P1, 3 P2, 1 P3).
+
+P1 — RUNBOOK : TOKEN DE SERVICE NON SUPPORTÉ (CORRIGÉ)
+- Constat : `RUNBOOK_R3B.md` documentait `ATLAS_SERVICE_TOKEN_FILE`, absent de
+  l'allowlist du config checker et non lu par le connecteur, qui attend
+  `ATLAS_SERVICE_TOKEN`.
+- Correction : le runbook demande désormais `ATLAS_SERVICE_TOKEN` dans le
+  fichier `relay.env` privé 0600 chargé par systemd via `EnvironmentFile`. Il
+  précise explicitement qu'il n'existe pas de `ATLAS_SERVICE_TOKEN_FILE` dans le
+  connecteur actuel. Aucun secret dans `ExecStart`/les arguments.
+- Vérification : `check-config` accepte `ATLAS_SERVICE_TOKEN` ; la politique
+  WSS 7/7 passe ; le runbook ne contient plus la variable inexistante.
+
+P2 — MESSAGE DE RÉVOCATION ÉCRASÉ (CORRIGÉ)
+- Constat : après `DEVICE_REVOKED`, la fermeture 4001 pouvait rapporter
+  `AUTH_REQUIRED` et écraser le message affiché.
+- Correction : `RelayBackendTransport.onSocketClosed` ne rapporte
+  `AUTH_REQUIRED` que si l'état n'est pas déjà `REVOKED` ; les requêtes en vol
+  reçoivent `DEVICE_REVOKED` dans ce cas.
+- Vérification : nouveau test JVM
+  `revocationCloseDoesNotOverwriteRevokedFailureWithAuthentication` PASS ;
+  tests du transport PASS.
+
+P2 — TRAILING SLASH DIVERGENT (CORRIGÉ)
+- Constat : le config checker acceptait `wss://relay.example.org/` alors que
+  `parseRelayUrl` rejette le chemin `/`.
+- Correction : le checker applique la même règle de chemin brut que le
+  connecteur : chemin vide ou `/ws` uniquement ; `/` et les chemins arbitraires
+  sont refusés.
+- Vérification : `config-policy.check.mjs` 7/7 PASS, dont le rejet explicite de
+  `wss://relay.example.org/` et l'acceptation de `/ws`.
+
+P2 — SHA APK DIFFÉRENTS (EXPLIQUÉ)
+- Constat : APK Pixel `66645143…` et APK du runner `1cc96587…`, même source
+  `38fd4a0`.
+- Vérification comparative : tous les `classes*.dex`, `resources.arsc` et
+  `AndroidManifest.xml` ont des SHA-256 identiques entre les deux APK. La
+  différence de SHA d'APK provient des métadonnées de signature/zip et de la
+  non-reproductibilité octet-pour-octet de la construction Android, pas du code
+  compilé. L'APK installé sur le Pixel correspondait byte-pour-byte au build
+  local au moment de l'installation. Détail : `pixel-apk-migration.txt`.
+- Ce point ne bloque pas R3-B, mais reste une limite de reproductibilité.
+
+P3 — PLACEHOLDERS (CORRIGÉ)
+- `PROVENANCE.md` : ligne PENDING supprimée.
+- `RAPPORT_FINAL.md` : statut et section revue mis à jour ; le SHA final sera
+  renseigné après la re-revue et le commit de clôture.
+
+TESTS EXÉCUTÉS APRÈS CORRECTION
+- `node --test scripts/lib/config-policy.check.mjs` : 7 passed.
+- `npx vitest run test/session.test.ts` : 11 passed.
+- `:app:testDebugUnitTest --tests dev.atlas.coach.sync.relay.RelayBackendTransportTest`
+  : BUILD SUCCESSFUL.
+- Le gate-runner devra rejouer Node complet, backend, JVM complet, lint, builds
+  sur le SHA final après commit.
+
+LIMITES
+- Le review initial s'est arrêté après le P1 ; la re-revue delta doit couvrir
+  les corrections et confirmer l'absence de P0/P1.
+- Le service systemd transitoire reste NOT_RUN (validation statique seulement).
+- R3 réel FastAPI restart reste PARTIAL ; wger réel NOT_RUN.

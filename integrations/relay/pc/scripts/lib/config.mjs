@@ -103,10 +103,13 @@ export function inspectConfiguration(environment, { checkState = true } = {}) {
 }
 
 export function validateRelayUrl(value, { allowLoopbackWs = false } = {}) {
+  const raw = /^(?:[A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(?:\?[^#]*)?(?:#.*)?$/.exec(value);
+  if (!raw) throw new Error("invalid relay URL");
   const url = new URL(value);
   if (!["ws:", "wss:"].includes(url.protocol)) throw new Error("invalid relay URL");
   if (url.username || url.password || url.search || url.hash) throw new Error("invalid relay URL");
-  if (!["/", "/ws"].includes(url.pathname)) throw new Error("invalid relay URL");
+  const rawPath = raw[2] ?? "";
+  if (rawPath !== "" && rawPath !== "/ws") throw new Error("invalid relay URL");
   if (!isValidRelayHost(url.hostname)) throw new Error("invalid relay URL");
   if (url.port) {
     const port = Number(url.port);

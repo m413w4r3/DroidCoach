@@ -38,3 +38,19 @@ LIMITS
   into this evidence; the file hash above is sufficient to prove preservation.
 - The test APK is a test artifact; the main APK remains installed after the
   campaign unless the owner asks for removal.
+
+APK CONTENT COMPARISON (PIXEL BUILD vs GATE-RUNNER BUILD)
+Both APKs come from source `38fd4a0` but have different file SHA-256:
+- Pixel-local build: 66645143b0e6d861b90bbad4acfcc8fe85cae5c939e1d394e3e81c9ecad518b5
+- Gate-runner build: 1cc96587fb92f436b32bac4e7e4e23703899ac7a5f76a60c36295daa8b0e2d32
+
+The following entries are byte-identical in both APKs (SHA-256 compared):
+- every classes*.dex entry (18 dex files);
+- resources.arsc;
+- AndroidManifest.xml.
+
+Therefore the compiled code and resources are identical; the APK file hashes
+differ because of signing/zip metadata and Android's non-reproducible build
+metadata, not because of a source difference. The installed Pixel APK matched
+the locally built file at installation time. Byte-for-byte APK reproducibility
+is not claimed without a dedicated reproducible-build configuration.

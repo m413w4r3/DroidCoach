@@ -22,7 +22,7 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 | T11 | WSS bout en bout Pixel | recette C | **PASS** — W1–W10 sur APK `66645143…` |
 | T12 | Calendrier C1–C5 Pixel | recette C | **PASS** — C1–C5 + nettoyage sur APK `66645143…` |
 | T13 | Backend routes connecteur | pytest + test réel lecture seule | **PARTIAL** — 187/1 ; route `/v1/sport/plan` présente et mappée ; lecture wger réelle NOT_RUN (token absent) |
-| T14 | Revue indépendante | lecture seule | PENDING |
+| T14 | Revue indépendante | lecture seule | **NO_GO INITIAL / CORRECTIONS APPLIQUÉES / DELTA EN COURS** — 1 P1 + 3 P2 + 1 P3 ; corrections et re-revue delta |
 | T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — inclus dans 94/668 sur `38fd4a0` |
 | T16 | Politique WSS du config checker | `node --test scripts/lib/config-policy.check.mjs` + smoke connecteur | **PASS** — 7/7 tests ; WSS remote accepté, ws remote refusé |
 
