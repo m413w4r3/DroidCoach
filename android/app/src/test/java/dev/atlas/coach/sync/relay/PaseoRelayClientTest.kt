@@ -7,6 +7,8 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import java.net.UnknownHostException
 
 class PaseoRelayClientTest {
     @Test
@@ -31,23 +33,60 @@ class PaseoRelayClientTest {
         val wrongResponder = NoiseKeyPair.generate()
         val sockets = FakeRelaySocketFactory(wrongResponder)
         val failures = CountDownLatch(1)
+        val classifiedFailure = AtomicReference<RelayFailure?>()
+        val classification = CountDownLatch(1)
         val client = PaseoRelayClient(
             config = RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 0),
             credentialsProvider = InMemoryRelayCredentialStore(credentials),
             listener = object : PaseoRelayClient.Listener {
                 override fun onProtocolFailure(error: Throwable) { failures.countDown() }
+                override fun onRelayFailure(failure: RelayFailure) {
+                    classifiedFailure.set(failure)
+                    classification.countDown()
+                }
             },
             socketFactory = sockets,
         )
         try {
             client.start()
             assertTrue(failures.await(1, TimeUnit.SECONDS))
+            assertTrue(classification.await(1, TimeUnit.SECONDS))
+            assertEquals(RelayFailureKind.NOISE_IDENTITY_MISMATCH, classifiedFailure.get()?.kind)
             assertEquals(4002, sockets.sockets.single().closedCode)
             assertFalse(client.state() == RelayConnectionState.RELAY_CONNECTED)
         } finally {
             client.stop()
             pinnedPair.privateKey.fill(0)
             wrongResponder.privateKey.fill(0)
+        }
+    }
+
+    @Test
+    fun reportsNetworkUnreachableFromSocketFailureWithoutExposingExceptionText() {
+        val (credentials, staticPair) = testCredentials()
+        val classifiedFailure = AtomicReference<RelayFailure?>()
+        val classification = CountDownLatch(1)
+        val client = PaseoRelayClient(
+            config = RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 0),
+            credentialsProvider = InMemoryRelayCredentialStore(credentials),
+            listener = object : PaseoRelayClient.Listener {
+                override fun onRelayFailure(failure: RelayFailure) {
+                    classifiedFailure.set(failure)
+                    classification.countDown()
+                }
+            },
+            socketFactory = RelaySocketFactory { _, callbacks ->
+                callbacks.onFailure(UnknownHostException("secret token; wss://user:password@relay.example.org"))
+            },
+        )
+        try {
+            client.start()
+            assertTrue(classification.await(1, TimeUnit.SECONDS))
+            assertEquals(RelayFailureKind.NETWORK_UNREACHABLE, classifiedFailure.get()?.kind)
+            assertFalse(classifiedFailure.get()?.message.orEmpty().contains("password"))
+        } finally {
+            client.stop()
+            staticPair.privateKey.fill(0)
         }
     }
 

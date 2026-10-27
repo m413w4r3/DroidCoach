@@ -28,6 +28,8 @@ internal class FakeRelaySocketFactory(
     private val staticPair: NoiseKeyPair,
     private val handshakeMode: TestHandshakeMode = TestHandshakeMode.PROTECTED,
     private val authError: Boolean = false,
+    private val revokedError: Boolean = false,
+    private val remoteErrorMessage: String = "device authentication required",
     private val dropRequestResponses: Boolean = false,
     private val mismatchResponseId: Boolean = false,
     private val result: JSONObject = JSONObject().put("accepted", true),
@@ -44,7 +46,18 @@ internal class FakeRelaySocketFactory(
     override fun connect(url: String, callbacks: RelaySocketCallbacks) {
         urls += url
         val index = connectCount.incrementAndGet()
-        val socket = FakeRelaySocket(callbacks, this, staticPair, handshakeMode, authError, dropRequestResponses, mismatchResponseId, result)
+        val socket = FakeRelaySocket(
+            callbacks,
+            this,
+            staticPair,
+            handshakeMode,
+            authError,
+            revokedError,
+            remoteErrorMessage,
+            dropRequestResponses,
+            mismatchResponseId,
+            result,
+        )
         sockets += socket
         callbacks.onOpen(socket)
         onConnected(socket, index)
@@ -61,6 +74,8 @@ internal class FakeRelaySocket(
     private val staticPair: NoiseKeyPair,
     private val handshakeMode: TestHandshakeMode,
     private val authError: Boolean,
+    private val revokedError: Boolean,
+    private val remoteErrorMessage: String,
     private val dropRequestResponses: Boolean,
     private val mismatchResponseId: Boolean,
     private val result: JSONObject,
@@ -103,11 +118,12 @@ internal class FakeRelaySocket(
         when (envelope.getString("kind")) {
             "hello" -> {
                 factory.recordHello(envelope)
-                if (authError) {
+                if (authError || revokedError) {
                     sendEnvelope(
                         JSONObject().put("protocol", AtlasRemoteProtocol.PROTOCOL).put("kind", "error")
                             .put("request_id", JSONObject.NULL).put("session_id", JSONObject.NULL)
-                            .put("error", JSONObject().put("code", "AUTH_REQUIRED").put("message", "device authentication required").put("retryable", false))
+                            .put("error", JSONObject().put("code", if (revokedError) "DEVICE_REVOKED" else "AUTH_REQUIRED")
+                                .put("message", remoteErrorMessage).put("retryable", false))
                             .put("completed_at", Instant.now().toString()),
                     )
                 } else {

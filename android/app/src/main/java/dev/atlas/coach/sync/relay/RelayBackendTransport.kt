@@ -42,6 +42,7 @@ class RelayBackendTransport internal constructor(
     private val maxQueue = config.maxQueuedRequests
     private val maxConcurrent = config.maxConcurrentRequests
     private val stateListeners = CopyOnWriteArrayList<(RelayConnectionState) -> Unit>()
+    private val failureListeners = CopyOnWriteArrayList<(RelayFailure) -> Unit>()
     private val stateNotifier = java.util.concurrent.Executors.newSingleThreadExecutor {
         Thread(it, "atlas-relay-state").apply { isDaemon = true }
     }
@@ -55,6 +56,8 @@ class RelayBackendTransport internal constructor(
     fun state(): RelayConnectionState = connectionState
     fun addStateListener(listener: (RelayConnectionState) -> Unit) { stateListeners.add(listener) }
     fun removeStateListener(listener: (RelayConnectionState) -> Unit) { stateListeners.remove(listener) }
+    fun addFailureListener(listener: (RelayFailure) -> Unit) { failureListeners.add(listener) }
+    fun removeFailureListener(listener: (RelayFailure) -> Unit) { failureListeners.remove(listener) }
 
     fun start() {
         synchronized(lock) {
@@ -90,10 +93,18 @@ class RelayBackendTransport internal constructor(
         synchronized(lock) {
             if (!started) return RelayCallResult.Failure(RelayCallResult.Failure.Reason.NOT_STARTED)
             if (connectionState == RelayConnectionState.AUTH_REQUIRED) {
-                return RelayCallResult.RemoteError("AUTH_REQUIRED", "device authentication required", false)
+                return RelayCallResult.RemoteError(
+                    "AUTH_REQUIRED",
+                    RelayFailure.fromRemoteCode("AUTH_REQUIRED").message,
+                    false,
+                )
             }
             if (connectionState == RelayConnectionState.REVOKED) {
-                return RelayCallResult.RemoteError("DEVICE_REVOKED", "device revoked", false)
+                return RelayCallResult.RemoteError(
+                    "DEVICE_REVOKED",
+                    RelayFailure.fromRemoteCode("DEVICE_REVOKED").message,
+                    false,
+                )
             }
             if (connectionState == RelayConnectionState.PAIRING_REQUIRED) {
                 return RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
@@ -156,6 +167,7 @@ class RelayBackendTransport internal constructor(
         val hello = try { AtlasRemoteProtocol.hello(credentials, CLIENT_VERSION).toString().toByteArray(Charsets.UTF_8) }
         catch (_: Exception) {
             setState(RelayConnectionState.AUTH_REQUIRED)
+            reportFailure(RelayFailure.fromRemoteCode("AUTH_FAILED"))
             return
         }
         if (!client.sendTextFrame(hello)) setState(RelayConnectionState.ERROR)
@@ -227,7 +239,7 @@ class RelayBackendTransport internal constructor(
     private fun handleError(envelope: JSONObject) {
         val error = envelope.getJSONObject("error")
         val code = error.getString("code")
-        val message = error.getString("message")
+        val message = RelayFailure.fromRemoteCode(code).message
         val retryable = error.getBoolean("retryable")
         val requestId = if (envelope.isNull("request_id")) null else envelope.getString("request_id")
         val sessionId = if (envelope.isNull("session_id")) null else envelope.getString("session_id")
@@ -242,6 +254,7 @@ class RelayBackendTransport internal constructor(
                     "DEVICE_REVOKED" -> setStateLocked(RelayConnectionState.REVOKED)
                     else -> setStateLocked(RelayConnectionState.ERROR)
                 }
+                reportRemoteFailure(code)
                 val waiting = queue.toList()
                 queue.clear()
                 waiting.forEach { completeLocked(it, RelayCallResult.RemoteError(code, message, retryable)) }
@@ -267,6 +280,7 @@ class RelayBackendTransport internal constructor(
             inFlight.remove(requestId)
             if (code == "DEVICE_REVOKED") setStateLocked(RelayConnectionState.REVOKED)
             if (code == "AUTH_REQUIRED" || code == "AUTH_FAILED") setStateLocked(RelayConnectionState.AUTH_REQUIRED)
+            reportRemoteFailure(code)
             completeLocked(pending, RelayCallResult.RemoteError(code, message, retryable))
         }
         pump()
@@ -375,7 +389,7 @@ class RelayBackendTransport internal constructor(
         pump()
     }
 
-    private fun recordClientProtocolFailure(@Suppress("UNUSED_PARAMETER") error: Throwable) {
+    private fun recordClientProtocolFailure() {
         synchronized(lock) {
             setStateLocked(RelayConnectionState.ERROR)
             appSessionId = null
@@ -417,13 +431,18 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun onSocketClosed(code: Int, @Suppress("UNUSED_PARAMETER") reason: String) {
+        if (code == 4001) reportRemoteFailure("AUTH_REQUIRED")
         synchronized(lock) {
             appSessionId = null
             appSessionExpiry = null
             val sent = inFlight.values.toList()
             inFlight.clear()
             sent.forEach {
-                val failure = if (code == 4001) RelayCallResult.RemoteError("AUTH_REQUIRED", "device authentication required", false)
+                val failure = if (code == 4001) RelayCallResult.RemoteError(
+                    "AUTH_REQUIRED",
+                    RelayFailure.fromRemoteCode("AUTH_REQUIRED").message,
+                    false,
+                )
                 else RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
                 completeLocked(it, failure)
             }
@@ -431,6 +450,18 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun setState(value: RelayConnectionState) = synchronized(lock) { setStateLocked(value) }
+
+    private fun reportRemoteFailure(code: String) {
+        val failure = RelayFailure.fromRemoteCode(code)
+        if (failure.kind != RelayFailureKind.UNKNOWN) reportFailure(failure)
+    }
+
+    private fun reportFailure(failure: RelayFailure) {
+        stateNotifier.execute {
+            failureListeners.forEach { listener -> runCatching { listener(failure) } }
+        }
+    }
+
     private fun setStateLocked(value: RelayConnectionState) {
         if (connectionState == value) return
         connectionState = value
@@ -455,7 +486,8 @@ class RelayBackendTransport internal constructor(
         override fun onSecureChannelReady() = this@RelayBackendTransport.onSecureChannelReady()
         override fun onApplicationFrame(frame: ByteArray) = handleApplicationFrame(frame)
         override fun onSocketClosed(code: Int, reason: String) = this@RelayBackendTransport.onSocketClosed(code, reason)
-        override fun onProtocolFailure(error: Throwable) { recordClientProtocolFailure(error) }
+        override fun onProtocolFailure(@Suppress("UNUSED_PARAMETER") error: Throwable) { recordClientProtocolFailure() }
+        override fun onRelayFailure(failure: RelayFailure) { reportFailure(failure) }
     }
 
     private data class Pending(

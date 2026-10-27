@@ -16,6 +16,8 @@ import dev.atlas.coach.sync.relay.RelayConfigurationValidator
 import dev.atlas.coach.sync.relay.RelayConnectionState
 import dev.atlas.coach.sync.relay.RelayCredentialStore
 import dev.atlas.coach.sync.relay.RelayCredentials
+import dev.atlas.coach.sync.relay.RelayFailure
+import dev.atlas.coach.sync.relay.RelayFailureKind
 import dev.atlas.coach.sync.relay.RelayPlanRevisionClient
 import dev.atlas.coach.sync.relay.RelaySettings
 import dev.atlas.coach.sync.relay.RelayTransportMode
@@ -40,6 +42,7 @@ class RelaySettingsController(
     @Volatile private var transport: RelayBackendTransport? = null
     @Volatile private var transportGeneration = 0L
     private var activeListener: ((RelayConnectionState) -> Unit)? = null
+    private var activeFailureListener: ((RelayFailure) -> Unit)? = null
     private var lastStartAttemptAt = 0L
 
     var mode by mutableStateOf(settings.mode)
@@ -202,6 +205,7 @@ class RelaySettingsController(
         if (!force && now - lastStartAttemptAt < MIN_START_INTERVAL_MILLIS) return
         lastStartAttemptAt = now
         stopTransport()
+        lastError = null
         val credentials = credentialStore.credentials()
         if (credentials == null) {
             state = RelayConnectionState.PAIRING_REQUIRED
@@ -244,17 +248,24 @@ class RelaySettingsController(
                 if (generation == transportGeneration) applyState(newState)
             }
         }
+        val failureListener: (RelayFailure) -> Unit = { failure ->
+            mainHandler.post {
+                if (generation == transportGeneration) lastError = failure.message
+            }
+        }
         val created = try {
             transportFactory(config, credentialStore).also { candidate ->
                 candidate.addStateListener(listener)
+                candidate.addFailureListener(failureListener)
                 candidate.start()
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             state = RelayConnectionState.ERROR
-            lastError = "Impossible de démarrer la connexion relayée"
+            lastError = RelayFailure.fromThrowable(error).message
             return
         }
         activeListener = listener
+        activeFailureListener = failureListener
         transport = created
         state = RelayConnectionState.RELAY_CONNECTING
         lastError = null
@@ -265,7 +276,11 @@ class RelaySettingsController(
         activeListener?.let { listener ->
             transport?.removeStateListener(listener)
         }
+        activeFailureListener?.let { listener ->
+            transport?.removeFailureListener(listener)
+        }
         activeListener = null
+        activeFailureListener = null
         val active = transport
         transport = null
         if (active != null) runCatching { active.close() }
@@ -280,11 +295,17 @@ class RelaySettingsController(
                 settingsStore.updateLastConnected(now)
                 lastError = null
             }
-            RelayConnectionState.OFFLINE -> lastError = "Relais indisponible"
-            RelayConnectionState.AUTH_REQUIRED -> lastError = "Authentification de l'appareil refusée"
-            RelayConnectionState.REVOKED -> lastError = "Appareil révoqué sur le PC"
-            RelayConnectionState.ERROR -> lastError = "Erreur de connexion relayée"
-            RelayConnectionState.PAIRING_REQUIRED -> lastError = "Appairage requis"
+            RelayConnectionState.OFFLINE -> if (lastError == null) lastError = "Relais indisponible"
+            RelayConnectionState.AUTH_REQUIRED -> if (lastError == null) {
+                lastError = RelayFailure.fromRemoteCode("AUTH_REQUIRED").message
+            }
+            RelayConnectionState.REVOKED -> if (lastError == null) {
+                lastError = RelayFailure.fromRemoteCode("DEVICE_REVOKED").message
+            }
+            RelayConnectionState.ERROR -> if (lastError == null) {
+                lastError = RelayFailure.of(RelayFailureKind.UNKNOWN).message
+            }
+            RelayConnectionState.PAIRING_REQUIRED -> if (lastError == null) lastError = "Appairage requis"
             RelayConnectionState.RELAY_CONNECTING, RelayConnectionState.LOCAL -> Unit
         }
     }

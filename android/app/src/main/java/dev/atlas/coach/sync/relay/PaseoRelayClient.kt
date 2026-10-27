@@ -36,6 +36,7 @@ class PaseoRelayClient internal constructor(
         fun onApplicationFrame(frame: ByteArray) {}
         fun onSocketClosed(code: Int, reason: String) {}
         fun onProtocolFailure(error: Throwable) {}
+        fun onRelayFailure(failure: RelayFailure) {}
     }
 
     private val lock = Any()
@@ -305,18 +306,28 @@ class PaseoRelayClient internal constructor(
     }
 
     private fun failHandshakeLocked(error: Throwable) {
-        listener.onProtocolFailure(error)
-        failChannelLocked(4002, "protected handshake failed", error)
+        val failure = if (error is NoiseProtocolException && error.message == NOISE_AUTHENTICATION_FAILURE) {
+            PinnedNoiseIdentityMismatchException(error)
+        } else {
+            error
+        }
+        notifyFailure(failure)
+        failChannelLocked(4002, "protected handshake failed", failure)
     }
 
     private fun failProtectedLocked(error: Throwable) {
-        listener.onProtocolFailure(error)
+        notifyFailure(error)
         failChannelLocked(4003, "protected record rejected", error)
     }
 
     private fun failChannel(code: Int, reason: String, error: Throwable) = synchronized(lock) {
-        listener.onProtocolFailure(error)
+        notifyFailure(error)
         failChannelLocked(code, reason, error)
+    }
+
+    private fun notifyFailure(error: Throwable) {
+        listener.onProtocolFailure(error)
+        listener.onRelayFailure(RelayFailure.fromThrowable(error))
     }
 
     private fun failChannelLocked(code: Int, reason: String, @Suppress("UNUSED_PARAMETER") error: Throwable) {
@@ -348,7 +359,7 @@ class PaseoRelayClient internal constructor(
             socket = null
             clearChannelLocked()
             cancelHandshakeRetryLocked()
-            listener.onProtocolFailure(error)
+            notifyFailure(error)
             scheduleReconnectLocked()
         }
     }
@@ -400,6 +411,7 @@ class PaseoRelayClient internal constructor(
 
     companion object {
         const val HANDSHAKE_RETRY_MILLIS = 1_000L
+        private const val NOISE_AUTHENTICATION_FAILURE = "authentication failed"
         private const val MAX_HANDSHAKE_ENVELOPE_CHARS = 4_096
         private val MAX_BASE64_RECORD_CHARS = 4 * ((ProtectedRecordCodec.wireByteLength(ProtectedRecordCodec.MAX_FRAME_BYTES) + 2) / 3)
         private fun newDaemonScheduler(name: String): ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->

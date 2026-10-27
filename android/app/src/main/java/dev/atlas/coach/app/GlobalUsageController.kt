@@ -65,6 +65,7 @@ class GlobalUsageController(
         }
         val configuredQuotas = quotas()
         val quotaRows = configuredQuotas.map { quota ->
+            if (!quota.enabled) return@map UsageQuotaEvaluator.evaluate(quota, null)
             val summaryMatchesQuotaWindow = visibleSummary?.let { summary ->
                 val expected = UsageWindowFactory.forQuota(quota.window, summary.generatedAt, ZoneId.of(summary.timezone))
                 summary.windowStart == expected.startUtc && summary.windowEnd == expected.endUtc
@@ -172,10 +173,10 @@ class GlobalUsageController(
 
         fun unknownQuota(quota: UsageQuota) = QuotaEvaluation(
             quotaId = quota.quotaId,
-            status = QuotaStatus.UNKNOWN,
+            status = if (quota.enabled) QuotaStatus.UNKNOWN else QuotaStatus.DISABLED,
             observedMinutes = null,
             limitMinutes = quota.limitMs / MILLIS_PER_MINUTE,
-            reliability = UsageReliability.LOW,
+            reliability = if (quota.enabled) UsageReliability.LOW else null,
         )
 
         const val MILLIS_PER_MINUTE = 60_000L

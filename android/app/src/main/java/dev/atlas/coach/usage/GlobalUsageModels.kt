@@ -199,6 +199,7 @@ enum class QuotaStatus {
     OK,
     WARNING,
     EXCEEDED,
+    DISABLED,
     UNKNOWN,
 }
 
