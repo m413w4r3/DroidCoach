@@ -96,7 +96,7 @@ export class DeviceRegistry {
    * A stale lock is only taken over when its recorded process is gone.
    */
   private async withLock<T>(action: () => Promise<T>): Promise<T> {
-    return withFileLock(`${this.path}.lock`, action, {
+    return withFileLock(`${this.path}.lock.d`, action, {
       ...this.lockOptions,
       busyMessage: this.lockOptions.busyMessage ?? "device registry is busy",
     });

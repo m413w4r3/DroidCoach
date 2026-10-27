@@ -18,7 +18,7 @@ await withFileLock(lockPath, async () => {
     };
     if (holdMs > 0) timer = setTimeout(release, holdMs);
   });
-}, { timeoutMs: 5000, staleMs: 60000 });
+}, { timeoutMs: 5000 });
 
 process.send?.({ type: "released", pid: process.pid });
 process.disconnect?.();

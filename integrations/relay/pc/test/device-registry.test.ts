@@ -35,9 +35,9 @@ describe("device registry locking", () => {
   it("serializes a revocation and a pairing while another process holds the lock", async () => {
     directory = await mkdtemp(join(tmpdir(), "atlas-device-registry-"));
     const path = join(directory, "devices.json");
-    const registry = new DeviceRegistry(path, { timeoutMs: 3_000, staleMs: 50, retryMs: 10 });
+    const registry = new DeviceRegistry(path, { timeoutMs: 3_000, retryMs: 10 });
     const revoked = await registry.pair("revoked device", ["sync.status"]);
-    const holder = await startLockHolder(`${path}.lock`);
+    const holder = await startLockHolder(`${path}.lock.d`);
     try {
       const revocation = registry.revoke(revoked.device.device_id);
       const pairing = registry.pair("new device", ["sync.status"]);
@@ -57,9 +57,9 @@ describe("device registry locking", () => {
   it("revokes after taking over the lock of a killed process", async () => {
     directory = await mkdtemp(join(tmpdir(), "atlas-device-registry-"));
     const path = join(directory, "devices.json");
-    const registry = new DeviceRegistry(path, { timeoutMs: 3_000, staleMs: 50, retryMs: 10 });
+    const registry = new DeviceRegistry(path, { timeoutMs: 3_000, retryMs: 10 });
     const device = await registry.pair("stale-lock device", ["sync.status"]);
-    const holder = await startLockHolder(`${path}.lock`);
+    const holder = await startLockHolder(`${path}.lock.d`);
     await killLockHolder(holder);
 
     const revoked = await registry.revoke(device.device.device_id);

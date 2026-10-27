@@ -1,35 +1,36 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, open, readFile, stat, unlink } from "node:fs/promises";
+import { link, mkdir, open, readFile, readdir, rename, unlink } from "node:fs/promises";
+import { join } from "node:path";
 
 export interface LockRecord {
   pid: number;
   pid_start: string | null;
   nonce: string;
+  ticket: number;
+  choosing: boolean;
   created_at: string;
 }
 
 export interface FileLockOptions {
   timeoutMs?: number;
-  staleMs?: number;
   retryMs?: number;
   busyMessage?: string;
   now?: () => number;
   isOwnerAlive?: (record: LockRecord) => boolean | Promise<boolean>;
 }
 
-const DEFAULT_TIMEOUT_MS = 5_000;
-const DEFAULT_STALE_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_RETRY_MS = 20;
 
 /**
- * Cross-process exclusive lock.
+ * Cross-process bakery-style ticket lock.
  *
- * A lock file is published atomically with `link(2)` after its record is fully
- * written, so a waiter never observes a half-written owner record. A stale lock
- * is taken over only when its recorded process is demonstrably gone; a suspended
- * but live owner keeps ownership and waiters time out instead of stealing it.
- * Release removes the file only when its nonce is still the one this caller
- * published.
+ * A contender first publishes a `choosing` record, reads the current maximum
+ * ticket, publishes its immutable final record, then removes the choosing
+ * record. It enters only when no live choosing record exists and no live final
+ * record precedes its own (ticket, nonce) pair. Dead records are ignored and
+ * can be removed safely because every filename contains a unique nonce, so no
+ * process ever deletes a live contender's record or reuses another's name.
  */
 export async function withFileLock<T>(
   lockPath: string,
@@ -37,60 +38,103 @@ export async function withFileLock<T>(
   options: FileLockOptions = {},
 ): Promise<T> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
   const retryMs = options.retryMs ?? DEFAULT_RETRY_MS;
   const busyMessage = options.busyMessage ?? "file lock is busy";
   const now = options.now ?? Date.now;
-  if (!(timeoutMs > 0) || !(staleMs > 0) || !(retryMs > 0)) {
-    throw new Error("invalid file lock timing");
-  }
+  if (!(timeoutMs > 0) || !(retryMs > 0)) throw new Error("invalid file lock timing");
 
+  await mkdir(lockPath, { recursive: true, mode: 0o700 });
   const nonce = randomUUID();
-  const owner: LockRecord = {
+  const identity = {
     pid: process.pid,
     pid_start: await processStartToken(process.pid),
     nonce,
     created_at: new Date(now()).toISOString(),
   };
-  const candidatePath = `${lockPath}.${process.pid}.${nonce}.tmp`;
+  const recordPath = join(lockPath, `${nonce}.json`);
+  try {
+    await publishNew(lockPath, recordPath, { ...identity, ticket: 0, choosing: true });
+    const entries = await readEntries(lockPath);
+    const ticket = entries.reduce(
+      (maximum, entry) => Math.max(maximum, entry.record.choosing ? 0 : entry.record.ticket),
+      0,
+    ) + 1;
+    const owner: LockRecord = { ...identity, ticket, choosing: false };
+    await replace(lockPath, recordPath, owner);
+
+    const deadline = now() + timeoutMs;
+    while (true) {
+      const contenders = await readEntries(lockPath);
+      let blocked = false;
+      for (const entry of contenders) {
+        if (entry.record.nonce === nonce) continue;
+        if (await isOwnerAlive(entry.record, options.isOwnerAlive)) {
+          if (entry.record.choosing || precedes(entry.record, owner)) blocked = true;
+        } else {
+          await unlink(entry.path).catch(() => {});
+        }
+      }
+      if (!blocked) return await action();
+      if (now() >= deadline) throw new Error(busyMessage);
+      await new Promise((resolve) => setTimeout(resolve, retryMs));
+    }
+  } finally {
+    await unlink(recordPath).catch(() => {});
+  }
+}
+
+interface LockEntry {
+  path: string;
+  record: LockRecord;
+}
+
+async function publishNew(lockPath: string, finalPath: string, record: LockRecord): Promise<void> {
+  const candidatePath = await writeCandidate(lockPath, record);
+  try {
+    await link(candidatePath, finalPath);
+  } finally {
+    await unlink(candidatePath).catch(() => {});
+  }
+}
+
+async function replace(lockPath: string, finalPath: string, record: LockRecord): Promise<void> {
+  const candidatePath = await writeCandidate(lockPath, record);
+  try {
+    // Rename over the contender's own stable filename: readers observe either
+    // the choosing record or the final record, never a missing file.
+    await rename(candidatePath, finalPath);
+  } catch (error) {
+    await unlink(candidatePath).catch(() => {});
+    throw error;
+  }
+}
+
+async function writeCandidate(lockPath: string, record: LockRecord): Promise<string> {
+  const candidatePath = join(lockPath, `.candidate-${record.nonce}-${randomUUID()}.tmp`);
   const candidate = await open(candidatePath, "wx", 0o600);
   try {
-    await candidate.writeFile(`${JSON.stringify(owner)}\n`);
+    await candidate.writeFile(`${JSON.stringify(record)}\n`);
   } finally {
     await candidate.close().catch(() => {});
   }
+  return candidatePath;
+}
 
-  const deadline = now() + timeoutMs;
-  let acquired = false;
-  try {
-    while (!acquired) {
-      try {
-        await link(candidatePath, lockPath);
-        acquired = true;
-        await unlink(candidatePath).catch(() => {});
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        const info = await stat(lockPath).catch(() => null);
-        const record = parseLockRecord(await readFile(lockPath, "utf8").catch(() => null));
-        const stale = info !== null && now() - info.mtimeMs > staleMs;
-        if (stale && (record === null || !(await isOwnerAlive(record, options.isOwnerAlive)))) {
-          // A corrupt/empty stale file can only be left by a process that died
-          // while publishing, because publication is otherwise atomic.
-          await unlink(lockPath).catch(() => {});
-          continue;
-        }
-        if (now() >= deadline) throw new Error(busyMessage);
-        await new Promise((resolve) => setTimeout(resolve, retryMs));
-      }
-    }
-    return await action();
-  } finally {
-    await unlink(candidatePath).catch(() => {});
-    if (acquired) {
-      const current = parseLockRecord(await readFile(lockPath, "utf8").catch(() => null));
-      if (current?.nonce === nonce) await unlink(lockPath).catch(() => {});
-    }
+async function readEntries(lockPath: string): Promise<LockEntry[]> {
+  const names = await readdir(lockPath).catch(() => [] as string[]);
+  const entries: LockEntry[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".json") || name.startsWith(".")) continue;
+    const path = join(lockPath, name);
+    const record = parseLockRecord(await readFile(path, "utf8").catch(() => null));
+    if (record !== null) entries.push({ path, record });
   }
+  return entries;
+}
+
+function precedes(left: LockRecord, right: LockRecord): boolean {
+  if (left.ticket !== right.ticket) return left.ticket < right.ticket;
+  return left.nonce < right.nonce;
 }
 
 async function isOwnerAlive(
@@ -129,12 +173,17 @@ function parseLockRecord(text: string | null): LockRecord | null {
     const value = JSON.parse(text) as Partial<LockRecord>;
     if (!Number.isInteger(value.pid) || (value.pid ?? 0) <= 0) return null;
     if (typeof value.nonce !== "string" || value.nonce.length < 8) return null;
+    if (typeof value.choosing !== "boolean") return null;
+    if (!Number.isInteger(value.ticket) || (value.ticket ?? -1) < 0) return null;
+    if (!value.choosing && (value.ticket ?? 0) <= 0) return null;
     if (typeof value.created_at !== "string") return null;
     if (value.pid_start !== null && typeof value.pid_start !== "string") return null;
     return {
       pid: value.pid as number,
       pid_start: value.pid_start ?? null,
       nonce: value.nonce,
+      ticket: value.ticket as number,
+      choosing: value.choosing,
       created_at: value.created_at,
     };
   } catch {

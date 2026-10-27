@@ -49,6 +49,8 @@ internal fun GlobalUsageScreen(
     var quotaEnabled by remember(state.dailyQuota?.enabled) {
         mutableStateOf(state.dailyQuota?.enabled ?: true)
     }
+    val quotaValue = quotaMinutes.toIntOrNull()
+    val quotaValid = quotaValue != null && quotaValue in 1..GlobalUsageController.MAX_DAILY_QUOTA_MINUTES
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -135,6 +137,12 @@ internal fun GlobalUsageScreen(
             },
             label = { Text("Limite en minutes") },
             singleLine = true,
+            isError = quotaMinutes.isNotEmpty() && !quotaValid,
+            supportingText = {
+                if (quotaMinutes.isNotEmpty() && !quotaValid) {
+                    Text("La limite doit être comprise entre 1 et ${GlobalUsageController.MAX_DAILY_QUOTA_MINUTES} minutes.")
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -151,7 +159,8 @@ internal fun GlobalUsageScreen(
         }
         Button(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
-            onClick = { quotaMinutes.toIntOrNull()?.let { onSaveQuota(it, quotaEnabled) } },
+            enabled = quotaValid,
+            onClick = { quotaValue?.let { onSaveQuota(it, quotaEnabled) } },
         ) { Text("Enregistrer le quota") }
         if (state.quotas.isEmpty()) {
             Text("Aucun quota enregistré.", style = MaterialTheme.typography.bodySmall)
