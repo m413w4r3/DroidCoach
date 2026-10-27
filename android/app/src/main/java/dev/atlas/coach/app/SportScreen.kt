@@ -38,6 +38,10 @@ import dev.atlas.coach.training.SyncState
 internal fun SportScreen(
     state: SportPlanUiState? = null,
     demoMode: Boolean = false,
+    busy: Boolean = false,
+    message: String? = null,
+    onRefresh: (() -> Unit)? = null,
+    onToggleDemoMode: (() -> Unit)? = null,
 ) {
     val screenState = when {
         demoMode -> demoSportPlanState()
@@ -52,6 +56,25 @@ internal fun SportScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                dev.atlas.coach.app.ui.AtlasSecondaryButton(
+                    label = if (busy) "Chargement…" else "Actualiser",
+                    enabled = !busy && onRefresh != null,
+                    onClick = { onRefresh?.invoke() },
+                )
+                androidx.compose.material3.FilterChip(
+                    selected = demoMode,
+                    onClick = { onToggleDemoMode?.invoke() },
+                    enabled = onToggleDemoMode != null,
+                    label = { Text("Démo") },
+                )
+            }
+            message?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
         }
 
         SportSourceAndSync(screenState)

@@ -83,6 +83,12 @@ fun AtlasApp(
         controller.onMobilitySessionCompletion(mobilityStatus.lastCompletion)
     }
 
+    LaunchedEffect(controller.navigationState.current) {
+        if (controller.navigationState.current == AtlasScreenId.SPORT) {
+            controller.refreshSportPlan()
+        }
+    }
+
     LaunchedEffect(activityStarted, controller.capabilities[AtlasController.CAP_APP_TRACKING]) {
         if (!activityStarted) return@LaunchedEffect
         controller.onHostResumed()
@@ -142,7 +148,14 @@ fun AtlasApp(
         when (controller.navigationState.current) {
             AtlasScreenId.HOME -> HomeScreen(controller, revision)
             AtlasScreenId.PLAN -> PlanScreen(planController, controller)
-            AtlasScreenId.SPORT -> SportScreen()
+            AtlasScreenId.SPORT -> SportScreen(
+                state = controller.sportPlanState,
+                demoMode = controller.sportDemoMode,
+                busy = controller.sportBusy,
+                message = controller.sportMessage,
+                onRefresh = controller::refreshSportPlan,
+                onToggleDemoMode = { controller.selectSportDemoMode(!controller.sportDemoMode) },
+            )
             AtlasScreenId.FOCUS -> FocusScreen(controller, revision, onChooseHabit = { showLinkChoices = true })
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)

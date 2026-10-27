@@ -50,7 +50,7 @@ class SharedPreferencesBearerTokenStore(context: Context) : BearerTokenProvider 
                         Base64.encodeToString(encrypted, Base64.NO_WRAP),
                 )
             }
-        }.apply()
+        }.commit()
     }
 
     @Synchronized
@@ -109,7 +109,7 @@ class AndroidSyncSettingsStore(context: Context) {
     )
 
     fun write(baseUrl: String, selectedCategories: Set<SyncDataCategory>) {
-        preferences.edit {
+        preferences.edit(commit = true) {
             putString(BASE_URL_KEY, baseUrl.trim())
             putStringSet(CATEGORIES_KEY, selectedCategories.mapTo(mutableSetOf(), SyncDataCategory::wireValue))
         }
