@@ -60,7 +60,11 @@ class SharedPreferencesGlobalUsageStores(context: Context) :
     override fun currentCursor(): GlobalUsageCursor? {
         return try {
             val raw = preferences.getString(KEY_CURSOR, null) ?: return null
-            GlobalUsageCursor(JSONObject(raw).getLong("baselineUtc"))
+            val json = JSONObject(raw)
+            GlobalUsageCursor(
+                baselineUtc = json.getLong("baselineUtc"),
+                lastCollectionAttemptUtc = json.longOrNull("lastCollectionAttemptUtc"),
+            )
         } catch (_: Exception) {
             null
         }
@@ -68,7 +72,9 @@ class SharedPreferencesGlobalUsageStores(context: Context) :
 
     @Synchronized
     override fun saveCursor(cursor: GlobalUsageCursor) {
-        commit { putString(KEY_CURSOR, JSONObject().put("baselineUtc", cursor.baselineUtc).toString()) }
+        val json = JSONObject().put("baselineUtc", cursor.baselineUtc)
+        cursor.lastCollectionAttemptUtc?.let { json.put("lastCollectionAttemptUtc", it) }
+        commit { putString(KEY_CURSOR, json.toString()) }
     }
 
     @Synchronized

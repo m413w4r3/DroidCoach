@@ -11,10 +11,12 @@ class GlobalUsageObserver(
     private val displayNameProvider: UsageDisplayNameProvider = UsageDisplayNameProvider { null },
     private val maxRawEvents: Int = UsageSummaryLimits.MAX_EVENTS_PER_QUERY,
     private val maxWindowMillis: Long = UsageSummaryLimits.MAX_DEFAULT_WINDOW_MILLIS,
+    private val minCollectionIntervalMillis: Long = UsageSummaryLimits.MIN_COLLECTION_INTERVAL_MILLIS,
 ) {
     init {
         require(maxRawEvents in 1..UsageSummaryLimits.MAX_EVENTS_PER_QUERY)
         require(maxWindowMillis in 1L..UsageSummaryLimits.MAX_AGGREGATE_WINDOW_MILLIS)
+        require(minCollectionIntervalMillis in 1L..UsageSummaryLimits.MAX_AGGREGATE_WINDOW_MILLIS)
     }
 
     @Synchronized
@@ -62,12 +64,23 @@ class GlobalUsageObserver(
             return GlobalUsageObservationResult(GlobalUsageObservationStatus.BASELINE_ESTABLISHED)
         }
 
+        val lastCollection = cursor.lastCollectionAttemptUtc
+        if (lastCollection != null && (nowUtc < lastCollection || nowUtc - lastCollection < minCollectionIntervalMillis)) {
+            return GlobalUsageObservationResult(
+                status = GlobalUsageObservationStatus.RATE_LIMITED,
+                summary = summaryStore.currentSummary(),
+            )
+        }
+
         val boundedStart = maxOf(window.startUtc, window.endUtc - maxWindowMillis)
         val queryFrom = maxOf(boundedStart, cursor.baselineUtc).coerceAtMost(window.endUtc)
         val queryThrough = minOf(window.endUtc, nowUtc)
         val batch = if (queryThrough < queryFrom) {
             GlobalUsageEventBatch(emptyList(), truncated = false)
         } else {
+            // Persist the attempt first so a slow or failing source cannot be hammered by repeated
+            // screen resumes. The synchronized method keeps one in-flight collection per observer.
+            cursorStore.saveCursor(cursor.copy(lastCollectionAttemptUtc = nowUtc))
             try {
                 eventSource.query(queryFrom, queryThrough, maxRawEvents)
             } catch (_: SecurityException) {
