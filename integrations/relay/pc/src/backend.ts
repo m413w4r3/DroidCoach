@@ -84,7 +84,8 @@ function routeFor(operation: Operation, payload: Record<string, unknown>): Route
       return { method: "POST", path: "/v3/agent/plan-revision", auth: true, body: payload };
     case "sport.plan.read": {
       const date = encodeURIComponent(String(payload.local_date));
-      return { method: "GET", path: `/v1/sport/plan?local_date=${date}`, auth: true };
+      const timezone = encodeURIComponent(String(payload.timezone));
+      return { method: "GET", path: `/v1/sport/plan?local_date=${date}&timezone=${timezone}`, auth: true };
     }
     case "plan.revision.result":
     case "sync.status":

@@ -201,7 +201,7 @@ Codes fermés : `INVALID_REQUEST`, `UNKNOWN_OPERATION`, `PAYLOAD_TOO_LARGE`,
 | `plan.today.read` | `GET /v1/plan/today` | `{}` | réponse backend bornée |
 | `plan.revision.request` | `POST /v3/agent/plan-revision` | corps `PlanRevisionRequestV3` | proposition V3 |
 | `plan.revision.result` | cache local du connecteur | `{"request_id":"<uuid>"}` | réponse mémorisée |
-| `sport.plan.read` | `GET /v1/sport/plan` | `{"local_date":"YYYY-MM-DD"}` | projection sportive |
+| `sport.plan.read` | `GET /v1/sport/plan?local_date=…&timezone=…` | `{"local_date":"YYYY-MM-DD","timezone":"IANA"}` | projection sportive |
 | `sync.status` | état local connecteur | `{}` | état backend/relais, sans donnée personnelle |
 
 Toute autre valeur est refusée `UNKNOWN_OPERATION`. Il n'existe **aucune** route

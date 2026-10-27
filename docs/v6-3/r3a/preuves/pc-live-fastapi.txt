@@ -1,12 +1,13 @@
 {
   "status": "PASS",
   "scope": "Node client -> real relay -> protected connector -> real FastAPI",
-  "server_id": "atlas-r3a-live-58215591",
+  "server_id": "atlas-r3a-live-83a6008e",
   "steps": [
     "relay_control",
     "noise_protected",
     "device_auth",
     "fastapi_health",
+    "fastapi_sport_plan",
     "fastapi_plan_revision",
     "idempotent_replay",
     "cached_result"

@@ -167,7 +167,14 @@ export function validatePayload(operation: Operation, payload: Record<string, un
     return;
   }
   if (operation === "sport.plan.read") {
-    if (!hasExactKeys(payload, ["local_date"]) || typeof payload.local_date !== "string" || !isValidDate(payload.local_date)) invalid();
+    if (!hasExactKeys(payload, ["local_date", "timezone"]) ||
+      typeof payload.local_date !== "string" || !isValidDate(payload.local_date) ||
+      typeof payload.timezone !== "string" || payload.timezone.length < 1 || payload.timezone.length > 100) invalid();
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: payload.timezone }).format(0);
+    } catch {
+      invalid();
+    }
     return;
   }
   if (operation === "plan.revision.result") {

@@ -147,7 +147,7 @@ function hello(deviceId, token) {
     device_id: deviceId,
     client_nonce: randomBytes(16).toString("base64"),
     client_version: "0.1.0-r3a-live-check",
-    capabilities: ["plan.revision", "coach.status", "sync.status"],
+    capabilities: ["plan.revision", "coach.status", "sync.status", "sport.plan"],
     auth: { scheme: "device-token-v1", token },
     timestamp: new Date().toISOString(),
   };
@@ -211,7 +211,7 @@ async function main() {
     });
     const identity = await loadOrCreateIdentity(runtime.identityPath);
     const device = await runtime.registry.pair("synthetic live-check device", [
-      "plan.revision", "coach.status", "sync.status",
+      "plan.revision", "coach.status", "sync.status", "sport.plan",
     ]);
     await runtime.start();
     await runtime.relay.waitForControl(8_000);
@@ -233,6 +233,17 @@ async function main() {
     );
     if (healthResponse.result?.status !== "ok") throw new Error("backend.health was not ok");
     steps.push("fastapi_health");
+
+    const sport = request(sessionId, "sport.plan.read", { local_date: "2026-10-27", timezone: "Europe/Paris" });
+    await client.send(sport);
+    const sportResponse = await client.waitFor(
+      (message) => message.kind === "response" && message.request_id === sport.request_id,
+      "sport.plan response",
+    );
+    if (sportResponse.result?.schema_version !== 1 || sportResponse.result?.planned !== false) {
+      throw new Error("sport plan contract mismatch");
+    }
+    steps.push("fastapi_sport_plan");
 
     const revision = request(sessionId, "plan.revision.request", planPayload());
     await client.send(revision);

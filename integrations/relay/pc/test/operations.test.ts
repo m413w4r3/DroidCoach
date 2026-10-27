@@ -26,8 +26,20 @@ describe("closed operations and backend adapter", () => {
   it("refuses non-loopback backend URLs and generic route inputs", async () => {
     expect(() => assertLoopbackHttpUrl("http://example.com:8000")).toThrow();
     expect(() => assertLoopbackHttpUrl("http://127.0.0.1:8100/private?x=1")).toThrow();
-    const backend = new BackendClient({ baseUrl: "http://127.0.0.1:8100", serviceToken: "synthetic" });
-    await expect(backend.execute("sport.plan.read", { local_date: "2026-01-01" })).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+    const calls: string[] = [];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      serviceToken: "synthetic",
+      fetcher: async (input) => {
+        calls.push(String(input));
+        return new Response(JSON.stringify({ schema_version: 1 }), { status: 200 });
+      },
+    });
+    await backend.execute("sport.plan.read", { local_date: "2026-01-01", timezone: "Europe/Paris" });
+    expect(calls[0]).toBe("http://127.0.0.1:8100/v1/sport/plan?local_date=2026-01-01&timezone=Europe%2FParis");
+    const executor = new OperationExecutor(backend, STATE);
+    const bad = request("2d6f4701-21df-4f4f-a109-1028300572c9", "sport.plan.read", { local_date: "2026-01-01" });
+    await expect(executor.execute("device-a", bad.session_id, bad)).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   });
 
   it("replays an identical request from the ten-minute cache and rejects conflicts", async () => {
