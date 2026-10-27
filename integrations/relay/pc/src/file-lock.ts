@@ -17,6 +17,8 @@ export interface FileLockOptions {
   busyMessage?: string;
   now?: () => number;
   isOwnerAlive?: (record: LockRecord) => boolean | Promise<boolean>;
+  /** Called after this contender's choosing record is visible to other processes. */
+  onAttempt?: () => void | Promise<void>;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -54,6 +56,7 @@ export async function withFileLock<T>(
   const recordPath = join(lockPath, `${nonce}.json`);
   try {
     await publishNew(lockPath, recordPath, { ...identity, ticket: 0, choosing: true });
+    await options.onAttempt?.();
     const entries = await readEntries(lockPath);
     const ticket = entries.reduce(
       (maximum, entry) => Math.max(maximum, entry.record.choosing ? 0 : entry.record.ticket),

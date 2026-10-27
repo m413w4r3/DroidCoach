@@ -1,0 +1,75 @@
+ATLAS V6.3 — R3-A+ — Pairing / registry / file-lock proof
+Date: 2026-10-27
+Branch: feat/r3a-plus-pairing
+Base SHA: 51ad6fafd56a4ad41e0fba818be4a4c720481345
+Environment: Node v24.18.0, npm 11.16.0, Linux; relay PC package
+
+Invariant
+---------
+`pair-device` creates the one-time token file exclusively with mode 0600,
+syncs and closes it, then commits the authorized device under the existing
+cross-process registry lock. A failed token-file write cannot authorize a
+device. A failed registry commit compensates by removing the token file when
+it is still the file created by that attempt. A crash before registry commit
+may leave an orphan token file; it cannot leave an authorized device with an
+undelivered token. The registry writer does not perform fallible work after
+the atomic rename that commits the new document. An unreadable or invalid
+registry fails closed and is never replaced with an empty document.
+
+The CLI reports device ID, label, capabilities, and token-file path only. The
+token is present once in the 0600 JSON token file and is not printed to stdout
+or stderr.
+
+Commands and results
+--------------------
+All commands ran from `integrations/relay/pc` unless stated otherwise.
+
+PASS — `npm ci`
+Added 57 packages; audited 59 packages. npm reported 3 advisories (1 moderate,
+2 critical); dependency changes are outside this ticket.
+
+PASS — `npm run build`
+TypeScript production build completed.
+
+FAIL (expected pre-fix reproduction) —
+`npm run build && npx vitest run test/pairing.test.ts`
+1 test failed: a pre-existing token-file target was refused, but the old CLI
+had already committed an authorized device. The test was retained and passes
+after the fix.
+
+PASS — targeted regression suite:
+`npx vitest run test/pairing.test.ts test/device-registry.test.ts test/file-lock.test.ts test/lock-stress.test.ts`
+4 test files, 20 tests passed, 0 failed.
+
+FAIL (loopback opt-in required) — `npm test`
+Build passed. 11 files ran; 46 tests passed and 2 loopback tests failed before
+connecting because the explicit `ATLAS_ALLOW_LOOPBACK_WS=1` test flag was not
+set. This is the documented local-relay policy.
+
+PASS — `ATLAS_ALLOW_LOOPBACK_WS=1 npm test`
+Build passed. 11 test files, 48 tests passed, 0 failed. The protected relay
+interoperability test used the already-running local relay at
+`ws://127.0.0.1:4400`; no relay service was started or stopped by this work.
+
+PASS — `git diff --check`
+No whitespace errors.
+
+Coverage and limits
+-------------------
+- CLI tests verify stdout/stderr do not contain the generated token, the token
+  file is mode 0600, and the token occurs exactly once in its JSON contents.
+- Regressions cover an existing token file (`wx` refusal), a missing parent
+  directory, EACCES from a non-privileged CLI process, a refused directory
+  target, an unreadable registry path (EISDIR with a preserved sentinel), a
+  process killed after its token file and lock attempt but before registry
+  commit, and concurrent pairing/revocation.
+- The deterministic late-lock tests wait for an `onAttempt` signal emitted
+  only after the worker's choosing record is visible, then assert that no
+  contender overlaps the first owner. Existing timeout and fail-closed tests
+  passed.
+- Pixel / Android / ADB: NOT_RUN, as required by the ticket. No new dependency
+  or external service was introduced.
+- Test outputs and this proof contain no token or personal data.
+
+The checks above ran on this worktree from the recorded base SHA; the final
+commit SHA is reported with the delivery notification.
