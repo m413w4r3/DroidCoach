@@ -1,6 +1,6 @@
 --- final APK calendar instrumentation ---
 source_commit=eaad9078f4a742af0a36e4f134eab952e5e653d7 (pre-Wave-C APK)
-provenance=historical; final instrumented rerun is instrumented.txt on source_sha=d89a626
+provenance=historical; final instrumented rerun is instrumented.txt on source_sha=3811ea5
 apk_sha256=af5ac60300463835c99889a4a6bdf45e85137bd153540bd683480ff130e9e8c6
 OK (4 tests)
 INSTRUMENTATION_CODE: -1

@@ -34,20 +34,36 @@
 
 ## 3. Troisième revue (lecture seule)
 
-- Périmètre demandé : SHA `d89a626a3b879b9ddce7486ec8f1b76b61845a37`,
-  APK `fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90`.
+- Session : `ebb8d049-65a3-4bf8-bbfd-6e863e7e1cf4`, modèle `codex/gpt-6-luna`,
+  effort `xhigh`, worktree `review-r3a-final-7b3dc31`.
+- Périmètre : docs `7b3dc31f531fed94a6c1ef617c553a56e2f2d16d`, code
+  `d89a626a3b879b9ddce7486ec8f1b76b61845a37`, APK
+  `fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90`.
+- Verdict : **NO_GO** (1 P1, 2 P2, 1 P3).
+
+| Sévérité | Constat | Correction sur `3811ea5` | Statut |
+|---|---|---|---|
+| P1 | deux récupérateurs pouvaient supprimer le nouveau verrou et entrer ensemble | verrou bakery : record stable par nonce, `choosing`, ticket total, reprise ignorée si le propriétaire est mort ; stress inter-processus 10 rounds × 6 workers | **CORRIGÉ** |
+| P2 | délai 5 s < seuil de péremption 10 s | remplacé par un timeout de 15 s et une reprise immédiate d'un propriétaire mort | **CORRIGÉ** |
+| P2 | quota `1441` provoquait une exception au clic | validation UI 1–1440, message d'erreur, bouton désactivé, test réel sur l'APK final | **CORRIGÉ** |
+| P3 | matrice à 6 événements contre preuve à 148 | matrice synchronisée avec le rejeu final (6 événements sur l'APK final) | **CORRIGÉ** |
+
+## 4. Quatrième revue (lecture seule)
+
+- Périmètre demandé : SHA `3811ea51c8c4bffeb7b70d1197c3c4003e16c948`,
+  APK `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
 - Session : à lancer.
 - Verdict : **EN ATTENTE**.
 
-La troisième revue doit vérifier au minimum :
+La quatrième revue doit vérifier au minimum :
 
 1. Absence de token ou de secret dans stdout, logs, preuves et captures.
-2. Verrou : reprise d'un verrou périmé sans perte d'exclusivité, test
-   inter-processus, révocation non écrasée.
+2. Verrou bakery : records stables, reprise sans perte d'exclusivité, stress
+   concurrent, révocation non écrasée.
 3. Re-création calendrier, parcours UI final et absence de doublon.
-4. Provenance : chaque PASS final lié à `d89a626` et à l'APK `fb19180…`.
-5. Quota : configuration et persistance dans le parcours de production,
-   sémantique `UNKNOWN` sur couverture partielle, fenêtre hebdomadaire.
+4. Provenance : chaque PASS final lié à `3811ea5` et à l'APK `8ad8d2d…`.
+5. Quota : validation 1–1440, persistance, sémantique `UNKNOWN` sur couverture
+   partielle, fenêtre hebdomadaire.
 6. Authenticator : permission de liaison et AccountManager fonctionnel.
 7. Mémoire et Usage Access : consentement, purge, persistance, aucune lecture de
    contenu d'écran.

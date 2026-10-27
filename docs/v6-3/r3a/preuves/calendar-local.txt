@@ -1,6 +1,6 @@
 # Local calendar + Etar qualification (after emulator reboot)
 source_commit=f0b4cb9acdb73215aedf0e699dd88c3153fbb1d7 (feature commit; APK built during this development step)
-provenance=historical; final instrumented rerun is instrumented.txt on source_sha=d89a626
+provenance=historical; final instrumented rerun is instrumented.txt on source_sha=3811ea5
 date_utc=2026-10-26T22:33:04Z
 apk_sha256=3be84fd90632a65b0faf1c688dfff74c8a6bfe0e06e9f3f037724203657ab296
 device=37 / 17

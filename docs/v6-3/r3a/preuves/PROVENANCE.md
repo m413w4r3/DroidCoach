@@ -1,7 +1,7 @@
 # R3-A evidence provenance
 
-Le code final de la campagne est `d89a626a3b879b9ddce7486ec8f1b76b61845a37`,
-installé sous l'APK `fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90`.
+Le code final de la campagne est `3811ea51c8c4bffeb7b70d1197c3c4003e16c948`,
+installé sous l'APK `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
 Les preuves historiques produits pendant les vagues antérieures conservent leur
 propre commit/APK ; elles ne servent pas à revendiquer un PASS sur l'APK final.
 
@@ -16,16 +16,16 @@ propre commit/APK ; elles ne servent pas à revendiquer un PASS sur l'APK final.
 | `calendar-final-instrumented.txt` | `eaad907` | `af5ac60` | instrumentation pré-Wave-C | historique |
 | `calendar-ui-flow.txt` | `eaad907` | non enregistré | parcours UI création/déplacement/suppression | historique ; remplacé par `calendar-ui-final.txt` |
 | `e2e-emulator.txt` | `fa4d290` | `e7dd637` | E2E Android relayé, 5 phases | historique ; rejoué sur l'APK final |
-| `sport-ui.txt` | `4d6a875` | non enregistré | UI sport indisponible + démo | historique ; code et tests rejoués sur `d89a626` |
-| `relay-build.txt` | `d89a626` | n/a | image relais et santé loopback | **final** |
-| `relay-tests.txt` | `d89a626` | n/a | Node 29 + module relay Android 31 | **final** |
-| `pc-live-fastapi.txt` | `d89a626` | n/a | Node → relais → connecteur → FastAPI | **final** |
-| `gates-final.txt` | `d89a626` | `fb19180` | backend, JVM, lint, builds, Node, Bridge | **final** |
-| `instrumented.txt` | `d89a626` | `fb19180` | 17 R2 + 4 calendrier + E2E relais + offline + app controller + lifecycle + authenticator | **final** |
-| `calendar-lifecycle-final.txt` | `d89a626` | `fb19180` | restore/move/delete/restore | **final** |
-| `calendar-ui-final.txt` | `d89a626` | `fb19180` | parcours UI v2→v3→v4 + idempotence | **final** |
-| `memory-ui.txt` | `d89a626` | `fb19180` | parcours mémoire + persistance après force-stop | **final** |
-| `usage-global-ui.txt` | `d89a626` | `fb19180` | Usage Access réel, quota persisté, révocation | **final** |
+| `sport-ui.txt` | `4d6a875` | non enregistré | UI sport indisponible + démo | historique ; code et tests rejoués sur `3811ea5` |
+| `relay-build.txt` | `3811ea5` | n/a | image relais et santé loopback | **final** |
+| `relay-tests.txt` | `3811ea5` | n/a | Node 30 + module relay Android 31 | **final** |
+| `pc-live-fastapi.txt` | `3811ea5` | n/a | Node → relais → connecteur → FastAPI | **final** |
+| `gates-final.txt` | `3811ea5` | `8ad8d2d` | backend, JVM, lint, builds, Node, Bridge | **final** |
+| `instrumented.txt` | `3811ea5` | `8ad8d2d` | 17 R2 + 4 calendrier + E2E relais + offline + app controller + lifecycle + authenticator | **final** |
+| `calendar-lifecycle-final.txt` | `3811ea5` | `8ad8d2d` | restore/move/delete/restore | **final** |
+| `calendar-ui-final.txt` | `3811ea5` | `8ad8d2d` | parcours UI v2→v3→v4 + idempotence | **final** |
+| `memory-ui.txt` | `3811ea5` | `8ad8d2d` | parcours mémoire + persistance après force-stop | **final** |
+| `usage-global-ui.txt` | `3811ea5` | `8ad8d2d` | Usage Access réel, quota persisté, révocation | **final** |
 
 ## Règles de lecture
 

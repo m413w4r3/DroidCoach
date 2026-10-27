@@ -1,6 +1,6 @@
 # Android E2E: real relay, protected Noise, connector, FastAPI
 source_commit=fa4d290573e64888070dc64f2f088c6480f02c21 (wave-B state; APK e7dd6373)
-provenance=historical; final relay E2E rerun is instrumented.txt on source_sha=d89a626
+provenance=historical; final relay E2E rerun is instrumented.txt on source_sha=3811ea5
 date_utc=2026-10-26T23:16:29Z
 device=emulator-5554 Android 17/API 37
 relay_url=ws://10.0.2.2:4400 (no adb reverse)

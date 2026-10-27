@@ -1,18 +1,18 @@
 # Calendar UI flow on final APK (Plan -> grouped confirmation -> provider -> Etar)
-source_sha=d89a626a3b879b9ddce7486ec8f1b76b61845a37
-date_utc=2026-10-27T08:10:00Z
-apk_sha256=fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90
+source_sha=3811ea51c8c4bffeb7b70d1197c3c4003e16c948
+date_utc=2026-10-27T08:12:58Z
+apk_sha256=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
 device=emulator-5554 Android 17 / API 37
 calendar=ATLAS R3A TEST _id=1 account_type=dev.atlas.coach.calendar
 commands=CalendarUiSeedInstrumentedTest#{seedApprovedPlanConsentAndCalendarSelection,moveApprovedPlanActivity,removeApprovedPlanActivity}; UI taps through adb input on the production Plan screen
 plan_seed=approved version 2 via production PlanController
-create: dialog='Programme v2 · 1 effet(s)' 'Création : ATLAS TEST calendar sync' -> provider event _id=24
+create: dialog='Programme v2 · 1 effet(s)' 'Création : ATLAS TEST calendar sync' -> provider event _id=28
 create_ui=Synchronisation confirmée; capture calendar-final-create.png
 idempotent_resync: UI='Le calendrier correspond déjà à la version 2.', one provider row only
-move: dialog='Programme v3 · 1 effet(s)' 'Mise à jour : ATLAS TEST calendar sync' 11:00–11:45 -> same _id=24, dtstart=1793095200000
+move: dialog='Programme v3 · 1 effet(s)' 'Mise à jour : ATLAS TEST calendar sync' 11:00–11:45 -> same _id=28, dtstart=1793095200000
 move_ui=Synchronisation confirmée; capture calendar-final-move.png
 delete: dialog='Programme v4 · 1 effet(s)' 'Suppression : ATLAS TEST calendar sync' -> provider event removed
 delete_ui=Synchronisation confirmée; capture calendar-final-delete.png
-fixture_remaining=ATLAS TEST Etar visibility _id=23, visible in Etar
+fixture_remaining=ATLAS TEST Etar visibility _id=27, visible in Etar
 adb_reverse_count=0
 status=PASS
