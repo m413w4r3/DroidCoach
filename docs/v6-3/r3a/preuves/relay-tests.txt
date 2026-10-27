@@ -1,0 +1,18 @@
+# Relay and transport test inventory
+source_sha=02a5040283d087c4d401fd0f6e8f95f9cda752c3
+date_utc=2026-10-27T09:08:59Z
+--- Node connector ---
+command=npm test (integrations/relay/pc)
+result=PASS — 9 files, 35 tests
+files=protocol, operations, secure-channel, session, relay.integration, relay-reconnect, device-registry, file-lock, lock-stress
+lock_tests=live-owner-not-stolen, dead-owner-takeover, release-own-record, cross-process revocation/pairing, 10-round concurrent-recoverer stress
+additional_stress=100 rounds × 6 processes with production options: 0 concurrent entry, 0 failure (external harness, 2026-10-27)
+--- Android relay module (JVM) ---
+source=android/app/build/test-results/testDebugUnitTest/TEST-dev.atlas.coach.sync.relay.*.xml
+result=PASS — 6 classes, 31 tests, 0 failure
+classes=AtlasRemoteProtocolTest(5), NoiseProtocolTest(5), PaseoRelayClientTest(5), ProtectedRecordCodecTest(4), RelayBackendTransportTest(6), RelayConfigurationValidatorTest(6)
+noise_vectors=matchesUpstreamNoiseNkCacophonyVector, matchesPaseoPrologueFixedKeyNodeCrossVectorAndTransportCiphertext, consumesUpstreamFixedResponseAndMatchesHandshakeHash, rejectsReservedNegotiationFlagsAndWrongMessageOrder, encodesNoiseNonceAndDoesNotAdvanceReceiveCounterOnAuthenticationFailure
+protocol_bounds=request expiry/byte limit, UTF-8 frame bound, canonical device token, unknown fields/enums, negotiated limits
+codec_bounds=malformed lengths/truncation/trailing bytes, oversized frame before allocation, tampering/replay/reordering
+--- Final instrumented relay proof ---
+see=instrumented.txt (round trip 1/1, offline 1/1, app controller 1/1) and e2e-emulator.txt (historical 5 phases)

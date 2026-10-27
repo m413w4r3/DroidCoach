@@ -1,0 +1,38 @@
+# Android E2E: real relay, protected Noise, connector, FastAPI
+source_commit=fa4d290573e64888070dc64f2f088c6480f02c21 (wave-B state; APK e7dd6373)
+provenance=historical; final relay E2E rerun is instrumented.txt on source_sha=02a5040
+date_utc=2026-10-26T23:16:29Z
+device=emulator-5554 Android 17/API 37
+relay_url=ws://10.0.2.2:4400 (no adb reverse)
+adb_reverse_list_empty_initially=true
+--- phase 1: connected round trip ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- stop relay ---
+--- phase 2: relay absent ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- restart relay ---
+relay ready: 127.0.0.1:4400
+--- phase 3: reconnect and round trip ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- connector metrics ---
+{"relay_connected":true,"connections_opened_total":5,"sessions_opened_total":5,"active_sessions":1,"requests_total":12,"errors_total":2,"latency_average_ms":46,"latency_max_ms":116,"memory_rss_bytes":47640576,"memory_heap_used_bytes":13726480}
+--- connector restart ---
+old_pid=3153782
+new_metrics={"relay_connected":true,"connections_opened_total":0,"sessions_opened_total":0,"active_sessions":0,"requests_total":0,"errors_total":0,"latency_average_ms":0,"latency_max_ms":0,"memory_rss_bytes":5039
+--- phase 4: Android after connector restart ---
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- final metrics after connector restart ---
+{"relay_connected":true,"connections_opened_total":1,"sessions_opened_total":1,"active_sessions":0,"requests_total":3,"errors_total":0,"latency_average_ms":52,"latency_max_ms":97,"memory_rss_bytes":24539136,"memory_heap_used_bytes":11999296}
+--- installed APK ---
+    versionName=0.1.0
+    lastUpdateTime=2026-10-27 00:12:54
+apk_sha256=e7dd6373ee4d25b820cf178d88c92ef14dbf18813356613aabfdf867d449f862
+adb_reverse_list_empty=true (previous `wc -l` counted a blank line; `reverse --list` printed nothing)
+--- phase 5: explicit no-reverse recheck ---
+adb_reverse_count=0
+OK (1 test)
+INSTRUMENTATION_CODE: -1

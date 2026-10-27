@@ -1,0 +1,24 @@
+{
+  "name": "@atlas/relay-pc",
+  "version": "0.1.0-r3a",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && vitest run",
+    "start": "node dist/main.js start"
+  },
+  "dependencies": {
+    "@getpaseo/relay": "file:../../../references/repos/paseo/packages/relay",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

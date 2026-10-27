@@ -4,11 +4,16 @@ import dev.atlas.coach.calendar.CALENDAR_ACCESS_CONTRIBUTOR
 import dev.atlas.coach.calendar.CalendarDescriptor
 import dev.atlas.coach.calendar.CalendarPermissionState
 import java.nio.charset.StandardCharsets
+import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local-only CalendarContract write engine. It requires an explicit local calendar for each new
  * create and never chooses an event when provenance or URI uniqueness is uncertain.
+ *
+ * Legacy callers may omit [linkStore] for the read-only diagnostic path. Calendar-writing callers
+ * must use [durable] or inject file-backed journal and link stores.
  *
  * [beforeProviderEffect] is a deterministic fault seam for JVM crash-window tests. It runs after
  * write-ahead journaling and immediately before the first mutation request. Production callers should
@@ -19,7 +24,25 @@ class CalendarWriteService(
     private val journal: CalendarWriteJournal,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val beforeProviderEffect: (CalendarWriteOperation) -> Unit = {},
+    private val linkStore: CalendarWriteLinkStore = InMemoryCalendarWriteLinkStore(),
+    private val afterProviderEffect: (CalendarWriteOperation) -> Unit = {},
 ) {
+    companion object {
+        private val activityLocks = ConcurrentHashMap<String, Any>()
+
+        /** Production factory: journal and links live in independent versioned app-private files. */
+        fun durable(
+            provider: CalendarWriteProvider,
+            storageDirectory: File,
+            nowMillis: () -> Long = System::currentTimeMillis,
+        ): CalendarWriteService = CalendarWriteService(
+            provider = provider,
+            journal = FileCalendarWriteJournal(File(storageDirectory, "operations")),
+            nowMillis = nowMillis,
+            linkStore = FileCalendarWriteLinkStore(File(storageDirectory, "links")),
+        )
+    }
+
     fun inspectCatalog(): CalendarWriteCatalog {
         val permissions = try {
             provider.permissions()
@@ -45,7 +68,7 @@ class CalendarWriteService(
         if (!catalog.providerAvailable) return CalendarSelectionResult(error = CalendarWriteError.PROVIDER_UNAVAILABLE)
         if (explicitCalendarId == null) {
             val hasSelectableLocal = catalog.calendars.any {
-                it.accountType == LOCAL_ACCOUNT_TYPE && it.visible &&
+                isWritableLocalAccountType(it.accountType) && it.visible &&
                     it.accessLevel >= CALENDAR_ACCESS_CONTRIBUTOR
             }
             return CalendarSelectionResult(
@@ -55,7 +78,7 @@ class CalendarWriteService(
         }
         val calendar = catalog.calendars.firstOrNull { it.id == explicitCalendarId }
             ?: return CalendarSelectionResult(error = CalendarWriteError.CALENDAR_NOT_LOCAL)
-        if (calendar.accountType != LOCAL_ACCOUNT_TYPE || !calendar.visible ||
+        if (!isWritableLocalAccountType(calendar.accountType) || !calendar.visible ||
             calendar.accessLevel < CALENDAR_ACCESS_CONTRIBUTOR
         ) {
             return CalendarSelectionResult(error = CalendarWriteError.CALENDAR_NOT_LOCAL)
@@ -69,7 +92,7 @@ class CalendarWriteService(
         draft: CalendarEventDraft,
         idempotencyKey: String,
         operationId: String = UUID.randomUUID().toString(),
-    ): CalendarWriteResult {
+    ): CalendarWriteResult = synchronized(activityLock(draft.activityId)) {
         val catalog = inspectCatalog()
         val selection = selectCalendar(catalog, explicitCalendarId)
         val calendar = selection.calendar ?: return failure(selection.error!!)
@@ -93,7 +116,9 @@ class CalendarWriteService(
             idempotencyKey = idempotencyKey,
             state = CalendarWriteOperationState.PREPARED,
         )
-        if (!record(operation)) return failure(CalendarWriteError.IDEMPOTENCY_CONFLICT)
+        record(operation)?.let { return failure(it) }
+        persistPendingLink(operation, buildLink(operation, CalendarEventLinkState.PENDING))
+            ?.let { return failure(it, buildLink(operation, CalendarEventLinkState.PENDING)) }
 
         // Simulates process death after write-ahead journaling but before the first provider call.
         beforeProviderEffect(operation)
@@ -114,13 +139,19 @@ class CalendarWriteService(
 
         val current = revalidateCalendar(calendar.id)
         if (current.error != null) return finishWithoutEffect(operation, current.error)
-        return try {
-            val eventId = provider.insert(calendar.id, draft, draft.provenanceUri)
-            journal.updateState(operation.operationId, CalendarWriteOperationState.APPLIED, eventId)
-            verifyAfterEffect(requireNotNull(journal.findByOperation(operation.operationId)), draft, eventId)
+        val permissionError = permissionsBeforeEffect()
+        if (permissionError != null) return finishWithoutEffect(operation, permissionError)
+        val eventId = try {
+            provider.insert(calendar.id, draft, draft.provenanceUri)
         } catch (_: Exception) {
-            finishUnknown(operation)
+            return finishUnknown(operation)
         }
+        // This seam models process death after CalendarContract committed but before journal commit.
+        afterProviderEffect(operation)
+        if (!updateJournalState(operation, CalendarWriteOperationState.APPLIED, eventId)) {
+            return finishUnknown(operation, eventId = eventId)
+        }
+        return verifyAfterEffect(requireNotNull(journal.findByOperation(operation.operationId)), draft, eventId)
     }
 
     @Synchronized
@@ -129,7 +160,7 @@ class CalendarWriteService(
         draft: CalendarEventDraft,
         idempotencyKey: String,
         operationId: String = UUID.randomUUID().toString(),
-    ): CalendarWriteResult {
+    ): CalendarWriteResult = synchronized(activityLock(draft.activityId)) {
         val linkError = validateConfirmedLink(link, draft.activityId, draft.planId)
         if (linkError != null) return failure(linkError, link)
         val eventId = link.eventId ?: return failure(CalendarWriteError.MISSING_EVENT, link)
@@ -157,8 +188,11 @@ class CalendarWriteService(
             payloadHash = payloadHash,
             idempotencyKey = idempotencyKey,
             state = CalendarWriteOperationState.PREPARED,
+            previousContentHash = link.contentHash,
         )
-        if (!record(operation)) return failure(CalendarWriteError.IDEMPOTENCY_CONFLICT, link)
+        record(operation)?.let { return failure(it, link) }
+        persistPendingLink(operation, link.copy(state = CalendarEventLinkState.PENDING, lastError = null))
+            ?.let { return failure(it, link) }
         beforeProviderEffect(operation)
 
         val currentTarget = revalidateTarget(link, eventId)
@@ -168,13 +202,18 @@ class CalendarWriteService(
             currentTarget.link?.state ?: CalendarEventLinkState.MISSING,
             link,
         )
-        return try {
+        val permissionError = permissionsBeforeEffect()
+        if (permissionError != null) return finishWithoutEffect(operation, permissionError, previousLink = link)
+        try {
             provider.update(eventId, link.calendarId, draft, draft.provenanceUri)
-            journal.updateState(operation.operationId, CalendarWriteOperationState.APPLIED, eventId)
-            verifyAfterEffect(requireNotNull(journal.findByOperation(operation.operationId)), draft, eventId)
         } catch (_: Exception) {
-            finishUnknown(operation, link)
+            return finishUnknown(operation, link)
         }
+        afterProviderEffect(operation)
+        if (!updateJournalState(operation, CalendarWriteOperationState.APPLIED, eventId)) {
+            return finishUnknown(operation, link, eventId)
+        }
+        return verifyAfterEffect(requireNotNull(journal.findByOperation(operation.operationId)), draft, eventId)
     }
 
     @Synchronized
@@ -182,7 +221,7 @@ class CalendarWriteService(
         link: CalendarEventLink,
         idempotencyKey: String,
         operationId: String = UUID.randomUUID().toString(),
-    ): CalendarWriteResult {
+    ): CalendarWriteResult = synchronized(activityLock(link.activityId)) {
         val linkError = validateConfirmedLink(link, link.activityId, link.planId)
         if (linkError != null) return failure(linkError, link)
         val eventId = link.eventId ?: return failure(CalendarWriteError.MISSING_EVENT, link)
@@ -210,7 +249,9 @@ class CalendarWriteService(
             idempotencyKey = idempotencyKey,
             state = CalendarWriteOperationState.PREPARED,
         )
-        if (!record(operation)) return failure(CalendarWriteError.IDEMPOTENCY_CONFLICT, link)
+        record(operation)?.let { return failure(it, link) }
+        persistPendingLink(operation, link.copy(state = CalendarEventLinkState.PENDING, lastError = null))
+            ?.let { return failure(it, link) }
         beforeProviderEffect(operation)
 
         val currentTarget = revalidateTarget(link, eventId)
@@ -220,108 +261,124 @@ class CalendarWriteService(
             currentTarget.link?.state ?: CalendarEventLinkState.MISSING,
             link,
         )
-        try {
+        val permissionError = permissionsBeforeEffect()
+        if (permissionError != null) return finishWithoutEffect(operation, permissionError, previousLink = link)
+        val affectedRows = try {
             provider.delete(eventId, link.calendarId, link.provenanceUri)
         } catch (_: Exception) {
             return finishUnknown(operation, link)
         }
-        journal.updateState(operation.operationId, CalendarWriteOperationState.APPLIED, eventId)
+        afterProviderEffect(operation)
         val readBack = try {
             provider.getEvent(eventId)
         } catch (_: Exception) {
-            return finishUnknown(operation, link)
+            return finishUnknown(operation, link, eventId)
         }
-        if (readBack == null || readBack.deleted) {
+        if (affectedRows == 1 && (readBack == null || readBack.deleted)) {
+            if (!updateJournalState(operation, CalendarWriteOperationState.APPLIED, eventId)) {
+                return finishUnknown(operation, link, eventId)
+            }
             val stored = requireNotNull(journal.findByOperation(operation.operationId))
             return result(stored, buildLink(stored, CalendarEventLinkState.MISSING), null)
         }
-        journal.updateState(
-            operation.operationId,
-            CalendarWriteOperationState.APPLIED,
-            eventId,
-            CalendarWriteError.READ_BACK_MISMATCH,
-        )
+        val absentWithoutAffectedRow = affectedRows == 0 && (readBack == null || readBack.deleted)
+        val unchangedWithoutAffectedRow = affectedRows == 0 && readBack != null && !readBack.deleted &&
+            markerFor(readBack, link.provenanceUri) == CalendarWriteMarker.OWNED &&
+            readBack.calendarId == link.calendarId && eventContentHash(readBack) == link.contentHash
+        val error = when {
+            absentWithoutAffectedRow -> CalendarWriteError.MISSING_EVENT
+            else -> CalendarWriteError.READ_BACK_MISMATCH
+        }
+        val operationState = if (affectedRows == 0) CalendarWriteOperationState.NOT_APPLIED
+        else CalendarWriteOperationState.APPLIED
+        if (!updateJournalState(operation, operationState, eventId, error)) {
+            return finishUnknown(operation, link, eventId)
+        }
         val stored = requireNotNull(journal.findByOperation(operation.operationId))
         return result(
             stored,
-            buildLink(stored, CalendarEventLinkState.DIVERGED, CalendarWriteError.READ_BACK_MISMATCH),
-            CalendarWriteError.READ_BACK_MISMATCH,
+            buildLink(
+                stored,
+                when {
+                    error == CalendarWriteError.MISSING_EVENT -> CalendarEventLinkState.MISSING
+                    unchangedWithoutAffectedRow -> CalendarEventLinkState.CONFIRMED
+                    else -> CalendarEventLinkState.DIVERGED
+                },
+                error,
+            ),
+            error,
         )
     }
 
-    /** Reconciles a saved link by URI only; it never creates or mutates an event. */
+    /** Verifies a durable link by provenance URI only and never creates or mutates a provider row. */
+    @Synchronized
+    fun verify(link: CalendarEventLink): CalendarWriteResult {
+        val verified = verifyByUri(link)
+        return result(null, verified.link, verified.error)
+    }
+
+    /** Reconciles a saved link by URI only and updates its matching journal operation when known. */
     @Synchronized
     fun reconcile(link: CalendarEventLink): CalendarWriteResult {
-        val permissions = try {
-            provider.permissions()
-        } catch (_: SecurityException) {
-            return failure(CalendarWriteError.PERMISSION_DENIED, link)
+        val verified = verifyByUri(link)
+        val matching = try {
+            journal.findByActivity(link.activityId)
         } catch (_: Exception) {
-            return failure(CalendarWriteError.PROVIDER_UNAVAILABLE, link)
+            return result(
+                null,
+                verified.link.copy(state = CalendarEventLinkState.UNKNOWN, lastError = CalendarWriteError.STORAGE_UNAVAILABLE.name),
+                CalendarWriteError.STORAGE_UNAVAILABLE,
+            )
         }
-        if (permissions.read != CalendarPermissionState.GRANTED) {
-            return failure(CalendarWriteError.PERMISSION_DENIED, link)
-        }
-        val matches = try {
-            provider.findByCustomAppUri(link.provenanceUri)
-        } catch (_: SecurityException) {
-            return failure(CalendarWriteError.PERMISSION_DENIED, link)
-        } catch (_: Exception) {
-            return failure(CalendarWriteError.PROVIDER_UNAVAILABLE, link)
-        }
-        val latest = journal.findByActivity(link.activityId)
             .lastOrNull { it.calendarId == link.calendarId && it.payloadHash == link.contentHash }
-        if (matches.isEmpty()) {
-            latest?.let {
-                journal.updateState(
-                    it.operationId,
-                    CalendarWriteOperationState.RECONCILED,
-                    errorCode = CalendarWriteError.MISSING_EVENT,
+        val deleteAlreadyConfirmed = matching?.type == CalendarWriteOperationType.DELETE &&
+            matching.state in setOf(CalendarWriteOperationState.APPLIED, CalendarWriteOperationState.RECONCILED) &&
+            matching.errorCode == null && verified.link.state == CalendarEventLinkState.MISSING
+        val resultError = if (deleteAlreadyConfirmed) null else verified.error
+        val resultLink = if (deleteAlreadyConfirmed) verified.link.copy(lastError = null) else verified.link
+        val stored = if (matching != null && verified.link.state != CalendarEventLinkState.UNKNOWN) {
+            if (!updateJournalState(
+                matching,
+                CalendarWriteOperationState.RECONCILED,
+                eventId = resultLink.eventId,
+                errorCode = resultError,
+            )) {
+                return result(
+                    matching,
+                    resultLink.copy(state = CalendarEventLinkState.UNKNOWN, lastError = CalendarWriteError.STORAGE_UNAVAILABLE.name),
+                    CalendarWriteError.STORAGE_UNAVAILABLE,
                 )
             }
-            val updated = link.copy(state = CalendarEventLinkState.MISSING, eventId = null, lastVerifiedAt = timestamp(), lastError = null)
-            return result(latest?.let { journal.findByOperation(it.operationId) }, updated, null)
+            runCatching { journal.findByOperation(matching.operationId) }.getOrNull() ?: matching
+        } else {
+            matching
         }
-        if (matches.size > 1) {
-            latest?.let {
-                journal.updateState(it.operationId, CalendarWriteOperationState.RECONCILED, errorCode = CalendarWriteError.DUPLICATE_URI)
-            }
-            val updated = link.copy(
-                eventId = null,
-                state = CalendarEventLinkState.ORPHANED,
-                lastVerifiedAt = timestamp(),
-                lastError = CalendarWriteError.DUPLICATE_URI.name,
-            )
-            return result(latest?.let { journal.findByOperation(it.operationId) }, updated, CalendarWriteError.DUPLICATE_URI)
-        }
+        return result(stored, resultLink, resultError)
+    }
 
-        val event = matches.single()
-        val marker = markerFor(event, link.provenanceUri)
-        val error = when {
-            marker == CalendarWriteMarker.AMBIGUOUS -> CalendarWriteError.PROVENANCE_AMBIGUOUS
-            marker == CalendarWriteMarker.FOREIGN -> CalendarWriteError.FOREIGN_EVENT
-            event.calendarId != link.calendarId -> CalendarWriteError.WRONG_CALENDAR
-            event.rrule != null -> CalendarWriteError.RECURRING_NOT_SUPPORTED
-            event.deleted -> CalendarWriteError.MISSING_EVENT
-            eventContentHash(event) != link.contentHash -> CalendarWriteError.READ_BACK_MISMATCH
-            else -> null
+    /**
+     * Rechecks PREPARED and UNKNOWN operations after process restart. It queries only each operation's
+     * provenance URI and never retries an insert, update, or delete.
+     */
+    @Synchronized
+    fun recoverPending(): List<CalendarWriteResult> {
+        val snapshot = try {
+            (journal as? CalendarWriteJournalSnapshot)?.allOperations().orEmpty()
+        } catch (_: Exception) {
+            return listOf(failure(CalendarWriteError.STORAGE_UNAVAILABLE))
         }
-        val state = when (error) {
-            null -> CalendarEventLinkState.CONFIRMED
-            CalendarWriteError.READ_BACK_MISMATCH -> CalendarEventLinkState.DIVERGED
-            CalendarWriteError.MISSING_EVENT -> CalendarEventLinkState.MISSING
-            else -> CalendarEventLinkState.ORPHANED
-        }
-        latest?.let {
-            journal.updateState(it.operationId, CalendarWriteOperationState.RECONCILED, event.eventId, error)
-        }
-        val updated = link.copy(
-            eventId = event.eventId,
-            state = state,
-            lastVerifiedAt = timestamp(),
-            lastError = error?.name,
-        )
-        return result(latest?.let { journal.findByOperation(it.operationId) }, updated, error)
+        return snapshot
+            .filter { operation ->
+                operation.state == CalendarWriteOperationState.PREPARED ||
+                    operation.state == CalendarWriteOperationState.UNKNOWN ||
+                    (operation.state == CalendarWriteOperationState.APPLIED &&
+                        linkStore.findByActivity(operation.activityId)?.state in setOf(
+                            null,
+                            CalendarEventLinkState.PENDING,
+                            CalendarEventLinkState.UNKNOWN,
+                        ))
+            }
+            .map { operation -> synchronized(activityLock(operation.activityId)) { resolveOperation(operation) } }
     }
 
     /** Resolve a plan-local time with the same gap/overlap policy as PlanRevisionEngine. */
@@ -378,30 +435,46 @@ class CalendarWriteService(
         planId: String = draft?.planId ?: "",
         eventId: Long? = null,
     ): CalendarWriteResult? {
-        val existing = journal.findByIdempotencyKey(idempotencyKey) ?: return null
+        val existing = try {
+            journal.findByIdempotencyKey(idempotencyKey)
+        } catch (_: Exception) {
+            return failure(CalendarWriteError.STORAGE_UNAVAILABLE)
+        } ?: return null
         val same = existing.type == type && existing.calendarId == calendarId &&
             existing.payloadHash == payloadHash &&
             (activityId.isEmpty() || existing.activityId == activityId) &&
             (planId.isEmpty() || existing.planId == planId) &&
             (eventId == null || existing.eventId == eventId)
         if (!same) return failure(CalendarWriteError.IDEMPOTENCY_CONFLICT, buildLink(existing))
-        if (existing.state == CalendarWriteOperationState.UNKNOWN || existing.state == CalendarWriteOperationState.PREPARED) {
-            val link = buildLink(existing, CalendarEventLinkState.UNKNOWN, CalendarWriteError.UNKNOWN_RESULT)
-            return reconcile(link)
-        }
-        if (type == CalendarWriteOperationType.DELETE &&
-            existing.state in setOf(CalendarWriteOperationState.APPLIED, CalendarWriteOperationState.RECONCILED)
+        if (existing.state in setOf(
+                CalendarWriteOperationState.PREPARED,
+                CalendarWriteOperationState.UNKNOWN,
+                CalendarWriteOperationState.APPLIED,
+                CalendarWriteOperationState.RECONCILED,
+            )
         ) {
-            return reconcile(buildLink(existing))
+            return resolveOperation(existing)
         }
         return result(existing, buildLink(existing), existing.errorCode)
     }
 
-    private fun record(operation: CalendarWriteOperation): Boolean = try {
+    private fun record(operation: CalendarWriteOperation): CalendarWriteError? = try {
         journal.record(operation)
-        true
+        null
     } catch (_: IllegalArgumentException) {
-        false
+        CalendarWriteError.IDEMPOTENCY_CONFLICT
+    } catch (_: Exception) {
+        CalendarWriteError.STORAGE_UNAVAILABLE
+    }
+
+    private fun persistPendingLink(
+        operation: CalendarWriteOperation,
+        link: CalendarEventLink,
+    ): CalendarWriteError? = try {
+        linkStore.upsert(link)
+        null
+    } catch (_: Exception) {
+        CalendarWriteError.STORAGE_UNAVAILABLE
     }
 
     private fun reuseExisting(
@@ -426,8 +499,14 @@ class CalendarWriteService(
             else -> CalendarEventLinkState.ORPHANED
         }
         val operationState = if (error == null) CalendarWriteOperationState.RECONCILED else CalendarWriteOperationState.NOT_APPLIED
-        journal.updateState(operation.operationId, operationState, event.eventId, error)
-        val stored = requireNotNull(journal.findByOperation(operation.operationId))
+        if (!updateJournalState(operation, operationState, event.eventId, error)) {
+            return finishUnknown(operation, eventId = event.eventId)
+        }
+        val stored = journal.findByOperation(operation.operationId) ?: operation.copy(
+            state = operationState,
+            eventId = event.eventId,
+            errorCode = error,
+        )
         val safeEventId = if (error in setOf(
                 CalendarWriteError.FOREIGN_EVENT,
                 CalendarWriteError.PROVENANCE_AMBIGUOUS,
@@ -442,29 +521,250 @@ class CalendarWriteService(
         draft: CalendarEventDraft,
         eventId: Long,
     ): CalendarWriteResult {
-        val event = try {
-            provider.getEvent(eventId)
-        } catch (_: SecurityException) {
-            return finishUnknown(operation)
-        } catch (_: Exception) {
-            return finishUnknown(operation)
+        val verified = verifyByUri(buildLink(operation, CalendarEventLinkState.CONFIRMED))
+        if (verified.error in setOf(CalendarWriteError.PERMISSION_DENIED, CalendarWriteError.PROVIDER_UNAVAILABLE)) {
+            return finishUnknown(operation, eventId = eventId)
         }
-        val valid = event != null && markerFor(event, draft.provenanceUri) == CalendarWriteMarker.OWNED &&
-            event.eventId == eventId && event.calendarId == operation.calendarId && !event.deleted &&
-            event.rrule == null && eventContentHash(event) == operation.payloadHash
-        if (!valid) {
-            journal.updateState(operation.operationId, CalendarWriteOperationState.APPLIED, eventId,
-                CalendarWriteError.READ_BACK_MISMATCH)
-            val stored = requireNotNull(journal.findByOperation(operation.operationId))
+        if (!updateJournalState(operation, CalendarWriteOperationState.APPLIED, eventId, verified.error)) {
+            return finishUnknown(operation, eventId = eventId)
+        }
+        val stored = journal.findByOperation(operation.operationId) ?: operation.copy(
+            state = CalendarWriteOperationState.APPLIED,
+            eventId = eventId,
+            errorCode = verified.error,
+        )
+        val link = verified.link.copy(eventId = verified.link.eventId ?: eventId)
+        return result(stored, link, verified.error)
+    }
+
+    private fun verifyByUri(link: CalendarEventLink): Verification {
+        val query = queryByUri(link.provenanceUri)
+        if (query.error != null) {
+            return Verification(
+                link.copy(
+                    state = CalendarEventLinkState.UNKNOWN,
+                    lastVerifiedAt = null,
+                    lastError = query.error.name,
+                ),
+                query.error,
+            )
+        }
+        val matches = query.events.orEmpty().filterNot { it.deleted }
+        if (matches.isEmpty()) {
+            return Verification(
+                link.copy(
+                    eventId = null,
+                    state = CalendarEventLinkState.MISSING,
+                    lastVerifiedAt = timestamp(),
+                    lastError = CalendarWriteError.MISSING_EVENT.name,
+                ),
+                CalendarWriteError.MISSING_EVENT,
+            )
+        }
+        if (matches.size > 1) {
+            return Verification(
+                link.copy(
+                    eventId = null,
+                    state = CalendarEventLinkState.ORPHANED,
+                    lastVerifiedAt = timestamp(),
+                    lastError = CalendarWriteError.DUPLICATE_URI.name,
+                ),
+                CalendarWriteError.DUPLICATE_URI,
+            )
+        }
+
+        val event = matches.single()
+        val error = when {
+            markerFor(event, link.provenanceUri) == CalendarWriteMarker.AMBIGUOUS ->
+                CalendarWriteError.PROVENANCE_AMBIGUOUS
+            markerFor(event, link.provenanceUri) == CalendarWriteMarker.FOREIGN -> CalendarWriteError.FOREIGN_EVENT
+            event.calendarId != link.calendarId -> CalendarWriteError.WRONG_CALENDAR
+            event.rrule != null -> CalendarWriteError.RECURRING_NOT_SUPPORTED
+            eventContentHash(event) != link.contentHash -> CalendarWriteError.READ_BACK_MISMATCH
+            else -> null
+        }
+        val state = when (error) {
+            null -> CalendarEventLinkState.CONFIRMED
+            CalendarWriteError.READ_BACK_MISMATCH,
+            CalendarWriteError.RECURRING_NOT_SUPPORTED -> CalendarEventLinkState.DIVERGED
+            else -> CalendarEventLinkState.ORPHANED
+        }
+        return Verification(
+            link.copy(
+                eventId = event.eventId,
+                state = state,
+                lastVerifiedAt = timestamp(),
+                lastError = error?.name,
+            ),
+            error,
+        )
+    }
+
+    private fun resolveOperation(operation: CalendarWriteOperation): CalendarWriteResult {
+        val query = queryByUri(provenanceUri(operation.planId, operation.activityId))
+        if (query.error != null) {
             return result(
-                stored,
-                buildLink(stored, CalendarEventLinkState.DIVERGED, CalendarWriteError.READ_BACK_MISMATCH),
+                operation,
+                buildLink(operation, CalendarEventLinkState.UNKNOWN, query.error),
+                query.error,
+            )
+        }
+
+        val matches = query.events.orEmpty().filterNot { it.deleted }
+        if (matches.size > 1) {
+            return completeResolution(
+                operation,
+                CalendarWriteOperationState.RECONCILED,
+                buildLink(operation, CalendarEventLinkState.ORPHANED, CalendarWriteError.DUPLICATE_URI)
+                    .copy(eventId = null, lastVerifiedAt = timestamp()),
+                CalendarWriteError.DUPLICATE_URI,
+            )
+        }
+        if (matches.isEmpty()) {
+            val deletionConfirmed = operation.type == CalendarWriteOperationType.DELETE &&
+                operation.state in setOf(CalendarWriteOperationState.APPLIED, CalendarWriteOperationState.RECONCILED) &&
+                operation.errorCode == null
+            val operationState = when {
+                deletionConfirmed -> CalendarWriteOperationState.RECONCILED
+                operation.state in setOf(CalendarWriteOperationState.PREPARED, CalendarWriteOperationState.UNKNOWN) ->
+                    CalendarWriteOperationState.NOT_APPLIED
+                else -> CalendarWriteOperationState.RECONCILED
+            }
+            val error = if (deletionConfirmed) null else CalendarWriteError.MISSING_EVENT
+            return completeResolution(
+                operation,
+                operationState,
+                buildLink(operation, CalendarEventLinkState.MISSING, error)
+                    .copy(eventId = null, lastVerifiedAt = timestamp()),
+                error,
+            )
+        }
+
+        val event = matches.single()
+        val baseLink = buildLink(operation, CalendarEventLinkState.CONFIRMED)
+        val marker = markerFor(event, baseLink.provenanceUri)
+        val ownershipError = when {
+            marker == CalendarWriteMarker.AMBIGUOUS -> CalendarWriteError.PROVENANCE_AMBIGUOUS
+            marker == CalendarWriteMarker.FOREIGN -> CalendarWriteError.FOREIGN_EVENT
+            event.calendarId != operation.calendarId -> CalendarWriteError.WRONG_CALENDAR
+            event.rrule != null -> CalendarWriteError.RECURRING_NOT_SUPPORTED
+            else -> null
+        }
+        if (ownershipError != null) {
+            val state = if (ownershipError == CalendarWriteError.RECURRING_NOT_SUPPORTED) {
+                CalendarEventLinkState.DIVERGED
+            } else {
+                CalendarEventLinkState.ORPHANED
+            }
+            return completeResolution(
+                operation,
+                CalendarWriteOperationState.RECONCILED,
+                baseLink.copy(
+                    eventId = if (state == CalendarEventLinkState.ORPHANED) null else event.eventId,
+                    state = state,
+                    lastVerifiedAt = timestamp(),
+                    lastError = ownershipError.name,
+                ),
+                ownershipError,
+            )
+        }
+
+        val observedHash = eventContentHash(event)
+        if (operation.type == CalendarWriteOperationType.DELETE && observedHash == operation.payloadHash) {
+            val unchanged = baseLink.copy(
+                eventId = event.eventId,
+                state = CalendarEventLinkState.CONFIRMED,
+                lastVerifiedAt = timestamp(),
+                lastError = null,
+            )
+            return completeResolution(
+                operation,
+                CalendarWriteOperationState.NOT_APPLIED,
+                unchanged,
                 CalendarWriteError.READ_BACK_MISMATCH,
             )
         }
-        journal.updateState(operation.operationId, CalendarWriteOperationState.APPLIED, eventId, errorCode = null)
-        val stored = requireNotNull(journal.findByOperation(operation.operationId))
-        return result(stored, buildLink(stored, CalendarEventLinkState.CONFIRMED), null)
+        if (operation.type != CalendarWriteOperationType.DELETE && observedHash == operation.payloadHash) {
+            return completeResolution(
+                operation,
+                CalendarWriteOperationState.RECONCILED,
+                baseLink.copy(eventId = event.eventId, state = CalendarEventLinkState.CONFIRMED, lastVerifiedAt = timestamp()),
+                null,
+            )
+        }
+
+        if (operation.type == CalendarWriteOperationType.UPDATE &&
+            operation.previousContentHash != null && observedHash == operation.previousContentHash
+        ) {
+            val oldLink = baseLink.copy(
+                eventId = event.eventId,
+                contentHash = operation.previousContentHash,
+                state = CalendarEventLinkState.CONFIRMED,
+                lastVerifiedAt = timestamp(),
+                lastError = null,
+            )
+            return completeResolution(
+                operation,
+                CalendarWriteOperationState.NOT_APPLIED,
+                oldLink,
+                CalendarWriteError.READ_BACK_MISMATCH,
+            )
+        }
+
+        val diverged = baseLink.copy(
+            eventId = event.eventId,
+            state = CalendarEventLinkState.DIVERGED,
+            lastVerifiedAt = timestamp(),
+            lastError = CalendarWriteError.READ_BACK_MISMATCH.name,
+        )
+        return completeResolution(
+            operation,
+            CalendarWriteOperationState.RECONCILED,
+            diverged,
+            CalendarWriteError.READ_BACK_MISMATCH,
+        )
+    }
+
+    private fun completeResolution(
+        operation: CalendarWriteOperation,
+        operationState: CalendarWriteOperationState,
+        link: CalendarEventLink,
+        error: CalendarWriteError?,
+    ): CalendarWriteResult {
+        if (!persistLink(link)) {
+            val unknown = link.copy(state = CalendarEventLinkState.UNKNOWN, lastError = CalendarWriteError.STORAGE_UNAVAILABLE.name)
+            return result(operation, unknown, CalendarWriteError.STORAGE_UNAVAILABLE)
+        }
+        if (!updateJournalState(operation, operationState, link.eventId, error)) {
+            val unknown = link.copy(state = CalendarEventLinkState.UNKNOWN, lastError = CalendarWriteError.STORAGE_UNAVAILABLE.name)
+            return result(operation, unknown, CalendarWriteError.STORAGE_UNAVAILABLE)
+        }
+        val stored = journal.findByOperation(operation.operationId) ?: operation.copy(
+            state = operationState,
+            eventId = link.eventId ?: operation.eventId,
+            errorCode = error,
+        )
+        return result(stored, link, error)
+    }
+
+    private fun queryByUri(uri: String): UriQuery {
+        val permissions = try {
+            provider.permissions()
+        } catch (_: SecurityException) {
+            return UriQuery(error = CalendarWriteError.PERMISSION_DENIED)
+        } catch (_: Exception) {
+            return UriQuery(error = CalendarWriteError.PROVIDER_UNAVAILABLE)
+        }
+        if (permissions.read != CalendarPermissionState.GRANTED) {
+            return UriQuery(error = CalendarWriteError.PERMISSION_DENIED)
+        }
+        return try {
+            UriQuery(events = provider.findByCustomAppUri(uri))
+        } catch (_: SecurityException) {
+            UriQuery(error = CalendarWriteError.PERMISSION_DENIED)
+        } catch (_: Exception) {
+            UriQuery(error = CalendarWriteError.PROVIDER_UNAVAILABLE)
+        }
     }
 
     private fun inspectTarget(link: CalendarEventLink, eventId: Long): TargetCheck {
@@ -502,6 +802,7 @@ class CalendarWriteService(
             markerFor(event, link.provenanceUri) == CalendarWriteMarker.FOREIGN -> CalendarWriteError.FOREIGN_EVENT
             event.deleted -> CalendarWriteError.MISSING_EVENT
             event.rrule != null -> CalendarWriteError.RECURRING_NOT_SUPPORTED
+            eventContentHash(event) != link.contentHash -> CalendarWriteError.READ_BACK_MISMATCH
             else -> null
         }
         val state = when (error) {
@@ -524,28 +825,77 @@ class CalendarWriteService(
         linkState: CalendarEventLinkState = CalendarEventLinkState.PENDING,
         previousLink: CalendarEventLink? = null,
     ): CalendarWriteResult {
-        journal.updateState(operation.operationId, CalendarWriteOperationState.NOT_APPLIED, errorCode = error)
+        val persisted = updateJournalState(operation, CalendarWriteOperationState.NOT_APPLIED, errorCode = error)
+        val effectiveError = if (persisted) error else CalendarWriteError.STORAGE_UNAVAILABLE
         val stored = journal.findByOperation(operation.operationId) ?: operation.copy(
             state = CalendarWriteOperationState.NOT_APPLIED,
-            errorCode = error,
+            errorCode = effectiveError,
         )
-        val link = previousLink?.copy(state = linkState, lastError = error.name)
-            ?: buildLink(stored, linkState, error)
-        return result(stored, link, error)
+        val link = previousLink?.copy(state = linkState, lastError = effectiveError.name)
+            ?: buildLink(stored, linkState, effectiveError)
+        return result(stored, link, effectiveError)
     }
 
     private fun finishUnknown(
         operation: CalendarWriteOperation,
         previousLink: CalendarEventLink? = null,
+        eventId: Long? = null,
     ): CalendarWriteResult {
-        journal.updateState(operation.operationId, CalendarWriteOperationState.UNKNOWN, errorCode = CalendarWriteError.UNKNOWN_RESULT)
-        val stored = requireNotNull(journal.findByOperation(operation.operationId))
+        val persisted = updateJournalState(
+            operation,
+            CalendarWriteOperationState.UNKNOWN,
+            eventId,
+            CalendarWriteError.UNKNOWN_RESULT,
+        )
+        val stored = journal.findByOperation(operation.operationId) ?: operation.copy(
+            state = CalendarWriteOperationState.UNKNOWN,
+            eventId = eventId ?: operation.eventId,
+            errorCode = if (persisted) CalendarWriteError.UNKNOWN_RESULT else CalendarWriteError.STORAGE_UNAVAILABLE,
+        )
         val link = previousLink?.copy(
             state = CalendarEventLinkState.UNKNOWN,
             lastVerifiedAt = null,
-            lastError = CalendarWriteError.UNKNOWN_RESULT.name,
-        ) ?: buildLink(stored, CalendarEventLinkState.UNKNOWN, CalendarWriteError.UNKNOWN_RESULT)
-        return result(stored, link, CalendarWriteError.UNKNOWN_RESULT)
+            lastError = if (persisted) CalendarWriteError.UNKNOWN_RESULT.name else CalendarWriteError.STORAGE_UNAVAILABLE.name,
+        ) ?: buildLink(
+            stored,
+            CalendarEventLinkState.UNKNOWN,
+            if (persisted) CalendarWriteError.UNKNOWN_RESULT else CalendarWriteError.STORAGE_UNAVAILABLE,
+        )
+        return result(
+            stored,
+            link,
+            if (persisted) CalendarWriteError.UNKNOWN_RESULT else CalendarWriteError.STORAGE_UNAVAILABLE,
+        )
+    }
+
+    private fun updateJournalState(
+        operation: CalendarWriteOperation,
+        state: CalendarWriteOperationState,
+        eventId: Long? = null,
+        errorCode: CalendarWriteError? = null,
+    ): Boolean = try {
+        journal.updateState(operation.operationId, state, eventId, errorCode)
+        journal.findByOperation(operation.operationId) != null
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun persistLink(link: CalendarEventLink): Boolean = try {
+        linkStore.upsert(link)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun permissionsBeforeEffect(): CalendarWriteError? {
+        val permissions = try {
+            provider.permissions()
+        } catch (_: SecurityException) {
+            return CalendarWriteError.PERMISSION_DENIED
+        } catch (_: Exception) {
+            return CalendarWriteError.PROVIDER_UNAVAILABLE
+        }
+        return if (permissions.granted) null else CalendarWriteError.PERMISSION_DENIED
     }
 
     private fun buildLink(
@@ -596,13 +946,25 @@ class CalendarWriteService(
     private fun failure(
         error: CalendarWriteError,
         link: CalendarEventLink? = null,
-    ): CalendarWriteResult = CalendarWriteResult(null, link?.copy(lastError = error.name), error)
+    ): CalendarWriteResult = result(null, link?.copy(lastError = error.name), error)
 
     private fun result(
         operation: CalendarWriteOperation?,
         link: CalendarEventLink?,
         error: CalendarWriteError?,
-    ): CalendarWriteResult = CalendarWriteResult(operation, link, error)
+    ): CalendarWriteResult {
+        if (link == null) return CalendarWriteResult(operation, null, error)
+        if (!persistLink(link)) {
+            return CalendarWriteResult(
+                operation,
+                link.copy(state = CalendarEventLinkState.UNKNOWN, lastError = CalendarWriteError.STORAGE_UNAVAILABLE.name),
+                CalendarWriteError.STORAGE_UNAVAILABLE,
+            )
+        }
+        return CalendarWriteResult(operation, link, error)
+    }
+
+    private fun activityLock(activityId: String): Any = activityLocks.computeIfAbsent(activityId) { Any() }
 
     private fun timestamp(): Long = nowMillis().coerceAtLeast(0L)
 
@@ -620,4 +982,15 @@ class CalendarWriteService(
         val error: CalendarWriteError? = null,
         val link: CalendarEventLink? = null,
     )
+
+    private data class Verification(
+        val link: CalendarEventLink,
+        val error: CalendarWriteError?,
+    )
+
+    private data class UriQuery(
+        val events: List<CalendarWriteEvent>? = null,
+        val error: CalendarWriteError? = null,
+    )
+
 }

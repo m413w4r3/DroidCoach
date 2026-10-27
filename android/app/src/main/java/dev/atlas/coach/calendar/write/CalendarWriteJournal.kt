@@ -24,8 +24,13 @@ interface CalendarWriteJournal {
     )
 }
 
+/** Optional capability for journals that can enumerate operations for process restart recovery. */
+interface CalendarWriteJournalSnapshot {
+    fun allOperations(): List<CalendarWriteOperation>
+}
+
 /** Thread-safe in-memory implementation for JVM tests and local demonstrations. */
-class InMemoryCalendarWriteJournal : CalendarWriteJournal {
+class InMemoryCalendarWriteJournal : CalendarWriteJournal, CalendarWriteJournalSnapshot {
     private val operations = linkedMapOf<String, CalendarWriteOperation>()
 
     @Synchronized
@@ -49,6 +54,9 @@ class InMemoryCalendarWriteJournal : CalendarWriteJournal {
     @Synchronized
     override fun findByIdempotencyKey(idempotencyKey: String): CalendarWriteOperation? =
         operations.values.firstOrNull { it.idempotencyKey == idempotencyKey }
+
+    @Synchronized
+    override fun allOperations(): List<CalendarWriteOperation> = operations.values.toList()
 
     @Synchronized
     override fun updateState(

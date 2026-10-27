@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/contracts/atlas-remote-v1.schema.json",
+  "title": "ATLAS remote protocol v1 envelope",
+  "description": "Enveloppes applicatives transportées dans le canal Noise protégé du relais Paseo. Une frame = un objet JSON UTF-8, 65536 octets maximum.",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/helloOk" },
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/error" },
+    { "$ref": "#/$defs/cancel" },
+    { "$ref": "#/$defs/ping" },
+    { "$ref": "#/$defs/pong" }
+  ],
+  "$defs": {
+    "protocol": { "const": "atlas.remote.v1" },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "operation": {
+      "enum": [
+        "backend.health",
+        "coach.status",
+        "plan.today.read",
+        "plan.revision.request",
+        "plan.revision.result",
+        "sport.plan.read",
+        "sync.status"
+      ]
+    },
+    "errorCode": {
+      "enum": [
+        "INVALID_REQUEST",
+        "UNKNOWN_OPERATION",
+        "PAYLOAD_TOO_LARGE",
+        "EXPIRED",
+        "AUTH_REQUIRED",
+        "AUTH_FAILED",
+        "DEVICE_REVOKED",
+        "RATE_LIMITED",
+        "IDEMPOTENCY_CONFLICT",
+        "BACKEND_UNAVAILABLE",
+        "BACKEND_REJECTED",
+        "OPERATION_UNAVAILABLE",
+        "CANCELLED",
+        "INTERNAL"
+      ]
+    },
+    "hello": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "device_id", "client_nonce", "client_version", "capabilities", "auth", "timestamp"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "hello" },
+        "device_id": { "$ref": "#/$defs/uuid" },
+        "client_nonce": { "type": "string", "pattern": "^[A-Za-z0-9+/]{22}==$" },
+        "client_version": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "capabilities": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "enum": ["plan.revision", "coach.status", "plan.today", "sport.plan", "sync.status"] }
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scheme", "token"],
+          "properties": {
+            "scheme": { "const": "device-token-v1" },
+            "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          }
+        },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "helloOk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "session_id", "server_time", "expires_in_seconds", "capabilities", "max_request_bytes", "max_response_bytes"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "hello_ok" },
+        "session_id": { "$ref": "#/$defs/uuid" },
+        "server_time": { "$ref": "#/$defs/timestamp" },
+        "expires_in_seconds": { "type": "integer", "minimum": 60, "maximum": 3600 },
+        "capabilities": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "maxLength": 40 }
+        },
+        "max_request_bytes": { "type": "integer", "minimum": 1024, "maximum": 32768 },
+        "max_response_bytes": { "type": "integer", "minimum": 1024, "maximum": 262144 }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "request_id", "session_id", "operation", "idempotency_key", "created_at", "expires_at", "payload"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "request" },
+        "request_id": { "$ref": "#/$defs/uuid" },
+        "session_id": { "$ref": "#/$defs/uuid" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,160}$" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "payload": { "type": "object", "maxProperties": 40 }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "request_id", "session_id", "operation", "status", "result", "completed_at", "replayed"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "response" },
+        "request_id": { "$ref": "#/$defs/uuid" },
+        "session_id": { "$ref": "#/$defs/uuid" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "status": { "const": "OK" },
+        "result": { "type": "object" },
+        "completed_at": { "$ref": "#/$defs/timestamp" },
+        "replayed": { "type": "boolean" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "request_id", "session_id", "error", "completed_at"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "error" },
+        "request_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "session_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "retryable"],
+          "properties": {
+            "code": { "$ref": "#/$defs/errorCode" },
+            "message": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "retryable": { "type": "boolean" }
+          }
+        },
+        "completed_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "cancel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "request_id", "target_request_id"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "cancel" },
+        "request_id": { "$ref": "#/$defs/uuid" },
+        "target_request_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "ping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "nonce"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "ping" },
+        "nonce": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "pong": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "kind", "nonce"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "kind": { "const": "pong" },
+        "nonce": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    }
+  }
+}

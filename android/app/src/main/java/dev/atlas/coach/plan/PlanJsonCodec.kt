@@ -154,6 +154,7 @@ private fun PlanActivity.toJsonObject(): JSONObject = JSONObject().apply {
     put("created_revision_id", createdRevisionId)
     put("last_revision_id", lastRevisionId)
     notes?.let { put("notes", it) }
+    trainingRef?.let { put("training_ref", it.toJsonObject()) }
 }
 
 private fun JSONObject.toPlanActivity(): PlanActivity {
@@ -162,7 +163,7 @@ private fun JSONObject.toPlanActivity(): PlanActivity {
             "activity_id", "plan_id", "kind", "title", "status", "scheduled_local", "priority",
             "created_revision_id", "last_revision_id",
         ),
-        optional = setOf("goal_id", "sub_goal_id", "estimate_minutes", "actual_minutes", "notes"),
+        optional = setOf("goal_id", "sub_goal_id", "estimate_minutes", "actual_minutes", "notes", "training_ref"),
     )
     return PlanActivity(
         activityId = requiredString("activity_id"),
@@ -179,6 +180,41 @@ private fun JSONObject.toPlanActivity(): PlanActivity {
         createdRevisionId = requiredString("created_revision_id"),
         lastRevisionId = requiredString("last_revision_id"),
         notes = optionalString("notes"),
+        trainingRef = optionalObject("training_ref")?.toTrainingPlanReference(),
+    )
+}
+
+private fun TrainingPlanReference.toJsonObject(): JSONObject = JSONObject().apply {
+    put("provider", provider)
+    put("base_url", baseUrl)
+    put("routine_id", routineId)
+    dayId?.let { put("day_id", it) }
+    slotId?.let { put("slot_id", it) }
+    put("plan_id", planId)
+    activityId?.let { put("activity_id", it) }
+    put("fetched_at", fetchedAt)
+    sourceUpdatedAt?.let { put("source_updated_at", it) }
+    etag?.let { put("etag", it) }
+    put("sync_state", syncState.name)
+}
+
+private fun JSONObject.toTrainingPlanReference(): TrainingPlanReference {
+    requireKeys(
+        required = setOf("provider", "base_url", "routine_id", "plan_id", "fetched_at", "sync_state"),
+        optional = setOf("day_id", "slot_id", "activity_id", "source_updated_at", "etag"),
+    )
+    return TrainingPlanReference(
+        provider = requiredString("provider"),
+        baseUrl = requiredString("base_url"),
+        routineId = requiredInt("routine_id"),
+        dayId = optionalNullableInt("day_id"),
+        slotId = optionalNullableInt("slot_id"),
+        planId = requiredString("plan_id"),
+        activityId = optionalNullableString("activity_id"),
+        fetchedAt = requiredString("fetched_at"),
+        sourceUpdatedAt = optionalNullableString("source_updated_at"),
+        etag = optionalNullableString("etag"),
+        syncState = requiredEnum("sync_state"),
     )
 }
 
@@ -341,6 +377,9 @@ private fun JSONObject.requireKeys(required: Set<String>, optional: Set<String> 
 private fun JSONObject.requiredObject(key: String): JSONObject =
     opt(key) as? JSONObject ?: throw IllegalArgumentException("$key must be an object")
 
+private fun JSONObject.optionalObject(key: String): JSONObject? =
+    if (!has(key) || isNull(key)) null else requiredObject(key)
+
 private fun JSONObject.requiredArray(key: String): JSONArray =
     opt(key) as? JSONArray ?: throw IllegalArgumentException("$key must be an array")
 
@@ -349,6 +388,9 @@ private fun JSONObject.requiredString(key: String): String =
 
 private fun JSONObject.optionalString(key: String): String? = if (has(key)) requiredString(key) else null
 
+private fun JSONObject.optionalNullableString(key: String): String? =
+    if (!has(key) || isNull(key)) null else requiredString(key)
+
 private fun JSONObject.requiredInt(key: String): Int {
     val value = opt(key)
     require(value is Int) { "$key must be an integer" }
@@ -356,6 +398,9 @@ private fun JSONObject.requiredInt(key: String): Int {
 }
 
 private fun JSONObject.optionalInt(key: String): Int? = if (has(key)) requiredInt(key) else null
+
+private fun JSONObject.optionalNullableInt(key: String): Int? =
+    if (!has(key) || isNull(key)) null else requiredInt(key)
 
 private fun JSONObject.requiredLong(key: String): Long {
     val value = opt(key)

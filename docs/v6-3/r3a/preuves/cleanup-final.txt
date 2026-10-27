@@ -1,0 +1,31 @@
+# R3-A emulator and service cleanup
+source_sha=02a5040283d087c4d401fd0f6e8f95f9cda752c3
+date_utc=2026-10-27T09:09:30Z
+device=emulator-5554 API 37
+installed_apk=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
+installed_lastUpdateTime=2026-10-27 08:53:57
+app_data_restored_from=~/.local/share/atlas-v63-r3a/backups/atlas-app-data-pre-r3a.tar
+app_data_backup_sha256=41c1ad85700fdd57f8f0a8a9ba602a9ef443b6b89c117c1afb786e8521380eb1
+--- steps ---
+1. Deleted ATLAS calendar events with a quoted provider predicate; no rows remain.
+2. pm clear dev.atlas.coach.
+3. Restored shared_prefs/atlas_local_state.xml and files/profileInstalled from the pre-R3A backup.
+4. Revoked READ_CALENDAR and WRITE_CALENDAR; reset GET_USAGE_STATS to default.
+5. Uninstalled dev.atlas.coach.test; removed adb reverse entries.
+--- final state ---
+packages=dev.atlas.coach only (test package removed)
+files=profileInstalled
+shared_prefs=atlas_local_state.xml, atlas_launcher_exit.xml, atlas_location_consent.xml, atlas_global_usage_identity_v1.xml (startup-created salt)
+memory=no files/memory directory (restored backup has no facts); UI shows 'Aucune donnée en mémoire.'
+usage=no observation/consent/quota preferences; appops GET_USAGE_STATS default
+calendar_events=No result found
+calendar=ATLAS R3A TEST _id=1, account_type=dev.atlas.coach.calendar, retained as an empty product calendar
+account=atlas-r3a-test / dev.atlas.coach.calendar retained
+calendar_permissions=READ_CALENDAR=false, WRITE_CALENDAR=false
+adb_reverse_entries=0
+services=connector, FastAPI 8100 and relay were restarted for the final PC live check, then stopped and the container removed at 2026-10-27T09:09Z
+ports=4400, 4401, 8100 closed
+emulator=stopped after a post-cleanup crash; AVD userdata retains the final APK and the restored pre-R3A app data; no ADB device attached at the end
+pixel_physical=untouched
+--- limitations ---
+The pre-R3A APK was not stored, so the final R3-A APK remains installed. The empty local calendar and its synthetic local account are retained; removing the account has no supported product/CLI path and the campaign safety rule only requires deleting ATLAS events.

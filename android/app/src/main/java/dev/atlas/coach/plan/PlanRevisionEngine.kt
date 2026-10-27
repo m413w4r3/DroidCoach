@@ -148,6 +148,21 @@ class PlanRevisionEngine {
         activity.createdRevisionId,
         activity.lastRevisionId,
         activity.notes,
+        activity.trainingRef?.let(::canonicalTrainingReference),
+    ).joinToString(separator = "|") { encodeField(it) }
+
+    private fun canonicalTrainingReference(reference: TrainingPlanReference): String = listOf(
+        reference.provider,
+        reference.baseUrl,
+        reference.routineId.toString(),
+        reference.dayId?.toString(),
+        reference.slotId?.toString(),
+        reference.planId,
+        reference.activityId,
+        reference.fetchedAt,
+        reference.sourceUpdatedAt,
+        reference.etag,
+        reference.syncState.name,
     ).joinToString(separator = "|") { encodeField(it) }
 
     private fun canonicalSchedule(schedule: LocalSchedule): String = listOf(
@@ -252,6 +267,7 @@ class PlanRevisionEngine {
                 estimateMinutes = edit?.after?.estimateMinutes ?: if (edit != null) edit.after.estimateMinutes else existing.estimateMinutes,
                 actualMinutes = edit?.after?.actualMinutes ?: if (edit != null) edit.after.actualMinutes else existing.actualMinutes,
                 notes = edit?.after?.notes ?: if (edit != null) edit.after.notes else existing.notes,
+                trainingRef = if (edit != null) edit.after.trainingRef else existing.trainingRef,
                 scheduledLocal = move?.to ?: existing.scheduledLocal,
                 status = status?.to ?: existing.status,
                 lastRevisionId = revision.revisionId,

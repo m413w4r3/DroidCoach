@@ -8,6 +8,9 @@ import dev.atlas.coach.usage.GlobalUsageCursor
 import dev.atlas.coach.usage.GlobalUsageCursorStore
 import dev.atlas.coach.usage.UsageAppSummary
 import dev.atlas.coach.usage.UsageReliability
+import dev.atlas.coach.usage.UsageQuota
+import dev.atlas.coach.usage.UsageQuotaStore
+import dev.atlas.coach.usage.UsageQuotaWindow
 import dev.atlas.coach.usage.UsageSummary
 import dev.atlas.coach.usage.UsageSummaryCoverage
 import dev.atlas.coach.usage.UsageSummaryJson
@@ -60,7 +63,11 @@ class SharedPreferencesGlobalUsageStores(context: Context) :
     override fun currentCursor(): GlobalUsageCursor? {
         return try {
             val raw = preferences.getString(KEY_CURSOR, null) ?: return null
-            GlobalUsageCursor(JSONObject(raw).getLong("baselineUtc"))
+            val json = JSONObject(raw)
+            GlobalUsageCursor(
+                baselineUtc = json.getLong("baselineUtc"),
+                lastCollectionAttemptUtc = json.longOrNull("lastCollectionAttemptUtc"),
+            )
         } catch (_: Exception) {
             null
         }
@@ -68,7 +75,9 @@ class SharedPreferencesGlobalUsageStores(context: Context) :
 
     @Synchronized
     override fun saveCursor(cursor: GlobalUsageCursor) {
-        commit { putString(KEY_CURSOR, JSONObject().put("baselineUtc", cursor.baselineUtc).toString()) }
+        val json = JSONObject().put("baselineUtc", cursor.baselineUtc)
+        cursor.lastCollectionAttemptUtc?.let { json.put("lastCollectionAttemptUtc", it) }
+        commit { putString(KEY_CURSOR, json.toString()) }
     }
 
     @Synchronized
@@ -145,5 +154,68 @@ class SharedPreferencesGlobalUsageStores(context: Context) :
         const val KEY_CONSENT = "consent"
         const val KEY_CURSOR = "cursor"
         const val KEY_SUMMARY = "summary"
+    }
+}
+
+/** Persists only local quota definitions; no usage observation is stored here. */
+class SharedPreferencesUsageQuotaStore(context: Context) : UsageQuotaStore {
+    private val preferences: SharedPreferences = context.getSharedPreferences(
+        "atlas_global_usage_quotas_v1",
+        Context.MODE_PRIVATE,
+    )
+
+    @Synchronized
+    override fun currentQuotas(): List<UsageQuota> {
+        val raw = preferences.getString(KEY_QUOTAS, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { index ->
+                val row = array.optJSONObject(index) ?: return@mapNotNull null
+                val window = runCatching { UsageQuotaWindow.valueOf(row.getString("window")) }.getOrNull()
+                    ?: return@mapNotNull null
+                val limitMinutes = row.optLong("limit_minutes", -1L)
+                if (limitMinutes !in 1..MAX_QUOTA_MINUTES) return@mapNotNull null
+                runCatching {
+                    UsageQuota(
+                        quotaId = row.getString("quota_id"),
+                        appRef = row.stringOrNull("app_ref"),
+                        window = window,
+                        limitMs = limitMinutes * MILLIS_PER_MINUTE,
+                        warningRatio = row.optDouble("warning_ratio", 0.8),
+                        enabled = row.optBoolean("enabled", true),
+                    )
+                }.getOrNull()
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    @Synchronized
+    override fun saveQuotas(quotas: List<UsageQuota>) {
+        val array = JSONArray()
+        quotas.forEach { quota ->
+            array.put(
+                JSONObject()
+                    .put("quota_id", quota.quotaId)
+                    .put("app_ref", quota.appRef ?: JSONObject.NULL)
+                    .put("window", quota.window.name)
+                    .put("limit_minutes", quota.limitMs / MILLIS_PER_MINUTE)
+                    .put("warning_ratio", quota.warningRatio)
+                    .put("enabled", quota.enabled),
+            )
+        }
+        check(preferences.edit().putString(KEY_QUOTAS, array.toString()).commit()) {
+            "Could not commit global usage quotas"
+        }
+    }
+
+    private fun JSONObject.stringOrNull(key: String): String? =
+        if (!has(key) || isNull(key)) null else getString(key)
+
+    private companion object {
+        const val KEY_QUOTAS = "quotas"
+        const val MILLIS_PER_MINUTE = 60_000L
+        const val MAX_QUOTA_MINUTES = 31L * 24L * 60L
     }
 }

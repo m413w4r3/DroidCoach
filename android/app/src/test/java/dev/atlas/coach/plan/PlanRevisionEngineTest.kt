@@ -94,6 +94,42 @@ class PlanRevisionEngineTest {
     }
 
     @Test
+    fun revisionAppliesChangedTrainingReference() {
+        val original = activity().copy(kind = ActivityKind.TRAINING, trainingRef = trainingReference())
+        val updatedReference = trainingReference(slotId = 32, etag = "\"updated\"")
+        val proposed = original.copy(notes = "Séance ajustée", trainingRef = updatedReference)
+        val current = dayPlan(activities = listOf(original))
+        val revision = revisionFor(current, listOf(proposed))
+
+        assertTrue(revision.changes.any { it is PlanChange.SlotEdited })
+        val applied = engine.applyChanges(current, revision) as ChangeApplicationResult.Applied
+
+        assertEquals(updatedReference, applied.activities.single().trainingRef)
+    }
+
+    @Test
+    fun moveRevisionPreservesExistingTrainingReferenceAndNullRemainsNull() {
+        val reference = trainingReference()
+        val original = activity().copy(kind = ActivityKind.TRAINING, trainingRef = reference)
+        val current = dayPlan(activities = listOf(original))
+        val move = revisionFor(current, listOf(original.copy(scheduledLocal = schedule(10 * 60))))
+        val moved = engine.applyChanges(current, move) as ChangeApplicationResult.Applied
+
+        assertEquals(reference, moved.activities.single().trainingRef)
+
+        val activityWithoutReference = activity().copy(trainingRef = null)
+        val unreferencedPlan = dayPlan(activities = listOf(activityWithoutReference))
+        val editWithoutReference = revisionFor(
+            unreferencedPlan,
+            listOf(activityWithoutReference.copy(title = "Titre modifié")),
+        )
+        val unreferencedApplied = engine.applyChanges(unreferencedPlan, editWithoutReference)
+            as ChangeApplicationResult.Applied
+
+        assertEquals(null, unreferencedApplied.activities.single().trainingRef)
+    }
+
+    @Test
     fun springDstGapUsesTheFirstValidLocalTime() {
         val missingLocalHour = LocalSchedule("2025-03-30", 2 * 60 + 15, 30, "Europe/Paris")
 

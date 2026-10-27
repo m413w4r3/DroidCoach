@@ -83,6 +83,12 @@ fun AtlasApp(
         controller.onMobilitySessionCompletion(mobilityStatus.lastCompletion)
     }
 
+    LaunchedEffect(controller.navigationState.current) {
+        if (controller.navigationState.current == AtlasScreenId.SPORT) {
+            controller.refreshSportPlan()
+        }
+    }
+
     LaunchedEffect(activityStarted, controller.capabilities[AtlasController.CAP_APP_TRACKING]) {
         if (!activityStarted) return@LaunchedEffect
         controller.onHostResumed()
@@ -118,6 +124,9 @@ fun AtlasApp(
         AtlasScreenId.AGENT_EFFECTS -> "Journal des effets"
         AtlasScreenId.DIAGNOSTICS -> "Diagnostic avancé"
         AtlasScreenId.SYNC_SETTINGS -> "Partage backend"
+        AtlasScreenId.RELAY_SETTINGS -> "Connexion relayée"
+        AtlasScreenId.MEMORY -> "Mémoire locale"
+        AtlasScreenId.GLOBAL_USAGE -> "Usage global"
         AtlasScreenId.CALENDAR_DIAGNOSTIC -> "Diagnostic calendrier"
         else -> controller.navigationState.current
     }
@@ -141,7 +150,14 @@ fun AtlasApp(
         when (controller.navigationState.current) {
             AtlasScreenId.HOME -> HomeScreen(controller, revision)
             AtlasScreenId.PLAN -> PlanScreen(planController, controller)
-            AtlasScreenId.SPORT -> SportScreen()
+            AtlasScreenId.SPORT -> SportScreen(
+                state = controller.sportPlanState,
+                demoMode = controller.sportDemoMode,
+                busy = controller.sportBusy,
+                message = controller.sportMessage,
+                onRefresh = controller::refreshSportPlan,
+                onToggleDemoMode = { controller.selectSportDemoMode(!controller.sportDemoMode) },
+            )
             AtlasScreenId.FOCUS -> FocusScreen(controller, revision, onChooseHabit = { showLinkChoices = true })
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)
@@ -160,6 +176,14 @@ fun AtlasApp(
             AtlasScreenId.SIMULATOR -> SimulatorScreen(controller, revision)
             AtlasScreenId.DIAGNOSTICS -> DiagnosticsScreen(controller)
             AtlasScreenId.SYNC_SETTINGS -> SyncSettingsScreen(controller, revision)
+            AtlasScreenId.RELAY_SETTINGS -> RelaySettingsScreen(controller.relaySettings)
+            AtlasScreenId.MEMORY -> MemoryScreen(controller.memoryController)
+            AtlasScreenId.GLOBAL_USAGE -> GlobalUsageRoute(
+                controller = controller.globalUsageController,
+                openUsageAccessSettings = {
+                    runCatching { context.startActivity(controller.usageAccessSettingsIntent()) }
+                },
+            )
             AtlasScreenId.CALENDAR_DIAGNOSTIC -> CalendarPermissionScreen()
             AtlasScreenId.OBSERVATION -> ObservationScreen(controller, context, requestNotifications)
             AtlasScreenId.FOCUS_STATS -> FocusStatsScreen(controller)

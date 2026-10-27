@@ -1,0 +1,18 @@
+# R3-A preflight
+date_utc=2026-10-26T22:30:08Z
+branch=feat/atlas-v6-3-r3a-relay-calendar
+base_sha=4f7b9263c76986c0a410f87a22268993568b3646
+main_remote=6a22c12bc5a2c63c3d3ab56253679c897fadb75d
+jdk=openjdk version "21.0.12.1" 2026-08-18
+python=Python 3.12.3
+node=v24.18.0
+npm=11.16.0
+docker=Docker version 27.1.1, build 6312585
+paseo_sha=902b0c7a1637cc7a6c2ee268dca8161965a35def
+paseo_relay_sha=3fc41c96c8c63f3a7109e832899cc57d473c4531
+emulator=37
+etar=versionName=1.0.56
+avd_snapshot=atlas-r3a-pre
+app_backup_sha256=41c1ad85700fdd57f8f0a8a9ba602a9ef443b6b89c117c1afb786e8521380eb1
+calendars_before=No result found
+relay_health={"status":"ok"}

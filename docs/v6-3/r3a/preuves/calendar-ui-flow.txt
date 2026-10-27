@@ -1,0 +1,16 @@
+# Calendar UI flow on emulator-5554 (Plan -> grouped confirmation -> provider -> Etar)
+source_commit=eaad9078f4a742af0a36e4f134eab952e5e653d7 (captures before bfbb9db scroll/fail-closed fixes)
+apk_sha256=not_recorded
+provenance=historical UI capture; provider lifecycle rerun on final APK is calendar-lifecycle-final.txt
+date_utc=2026-10-26T23:41:48Z
+device=emulator-5554 Android 17/API 37
+calendar=ATLAS R3A TEST _id=1 account_type=dev.atlas.coach.calendar
+plan_seed=approved version 2 via production PlanController
+create: dialog='Programme v2 · 1 effet(s)' 'Création : ATLAS TEST calendar sync' -> provider event _id=11
+etar_create: capture etar-atlas-ui-sync.png, event visible 27 Oct 10:00-10:45
+idempotent_resync: UI='Le calendrier correspond déjà à la version 2.', one provider row only
+move: dialog='Programme v3 · 1 effet(s)' 11:00-11:45 -> same event _id=11, dtstart 11:00
+etar_move: capture etar-ui-moved.png, event visible at 11:00
+delete: dialog='Programme v4 · 1 effet(s)' 'Suppression : ATLAS TEST calendar sync' -> provider event removed
+etar_delete: capture etar-ui-deleted.png, no ATLAS TEST calendar sync event
+fixture_remaining=ATLAS TEST Etar visibility _id=4

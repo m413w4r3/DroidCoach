@@ -1,7 +1,9 @@
 package dev.atlas.coach.plan
 
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.net.URI
 import java.util.UUID
 
 enum class ActivityKind {
@@ -13,6 +15,52 @@ enum class ActivityKind {
     REST,
     BUFFER,
     OTHER,
+}
+
+enum class TrainingReferenceSyncState {
+    FRESH,
+    STALE,
+    UNAVAILABLE,
+    MISMATCH,
+}
+
+data class TrainingPlanReference(
+    val provider: String = "wger",
+    val baseUrl: String,
+    val routineId: Int,
+    val dayId: Int? = null,
+    val slotId: Int? = null,
+    val planId: String,
+    val activityId: String? = null,
+    val fetchedAt: String,
+    val sourceUpdatedAt: String? = null,
+    val etag: String? = null,
+    val syncState: TrainingReferenceSyncState,
+) {
+    init {
+        require(provider == "wger") { "provider must be wger" }
+        val url = try {
+            URI(baseUrl)
+        } catch (_: Exception) {
+            throw IllegalArgumentException("baseUrl must be an HTTPS URL")
+        }
+        require(
+            url.scheme == "https" && !url.host.isNullOrBlank() &&
+                url.rawUserInfo == null && url.rawQuery == null && url.rawFragment == null,
+        ) { "baseUrl must be an HTTPS URL without credentials or query" }
+        require(routineId > 0) { "routineId must be positive" }
+        dayId?.let { require(it > 0) { "dayId must be positive" } }
+        slotId?.let { require(it > 0) { "slotId must be positive" } }
+        requireCanonicalUuid(planId, "planId")
+        activityId?.let { requireCanonicalUuid(it, "activityId") }
+        requireTimestamp(fetchedAt, "fetchedAt")
+        sourceUpdatedAt?.let { requireTimestamp(it, "sourceUpdatedAt") }
+        etag?.let {
+            require(it.length <= 256 && it.none { character -> character.code < 32 || character.code == 127 }) {
+                "etag must be plain text up to 256 characters"
+            }
+        }
+    }
 }
 
 enum class ActivityStatus {
@@ -110,6 +158,7 @@ data class PlanActivity(
     val createdRevisionId: String,
     val lastRevisionId: String,
     val notes: String? = null,
+    val trainingRef: TrainingPlanReference? = null,
 ) {
     init {
         requireCanonicalUuid(activityId, "activityId")
@@ -122,6 +171,21 @@ data class PlanActivity(
         requireCanonicalUuid(createdRevisionId, "createdRevisionId")
         requireCanonicalUuid(lastRevisionId, "lastRevisionId")
         notes?.let { require(it.length <= 280) { "notes must be at most 280 characters" } }
+        trainingRef?.let { reference ->
+            require(reference.planId == planId) { "trainingRef belongs to a different plan" }
+            require(reference.activityId == null || reference.activityId == activityId) {
+                "trainingRef belongs to a different activity"
+            }
+        }
+    }
+}
+
+private fun requireTimestamp(value: String, field: String) {
+    require(value.isNotBlank() && value.length <= 40) { "$field must be an ISO-8601 timestamp" }
+    try {
+        OffsetDateTime.parse(value)
+    } catch (_: Exception) {
+        throw IllegalArgumentException("$field must include a timezone offset")
     }
 }
 

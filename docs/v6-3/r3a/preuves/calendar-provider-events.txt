@@ -1,0 +1,1 @@
+Row: 0 _id=2, calendar_id=1, title=ATLAS TEST Etar visibility, dtstart=1793136600000, dtend=1793139300000, eventTimezone=Europe/Paris, customAppPackage=dev.atlas.coach, customAppUri=atlas://plan/00000000-0000-4000-8000-000000000001/activity/00000000-0000-4000-8000-000000000002, deleted=0

@@ -114,6 +114,11 @@ import dev.atlas.coach.sync.SyncGateway
 import dev.atlas.coach.sync.SyncResult
 import dev.atlas.coach.sync.SyncStatus
 import dev.atlas.coach.plan.PlanRevisionApiClient
+import dev.atlas.coach.plan.PlanRevisionProposalClient
+import dev.atlas.coach.sync.relay.RelayTransportMode
+import dev.atlas.coach.training.SportPlanClient
+import dev.atlas.coach.training.SportPlanUiState
+import dev.atlas.coach.training.SyncState
 import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.sync.agent.AgentActionType
 import dev.atlas.coach.sync.agent.AgentMode
@@ -225,6 +230,20 @@ class AtlasController @JvmOverloads constructor(
     private val syncOutbox: EventOutbox = syncOutboxOverride ?: AndroidSyncStorage.outbox(appContext)
     private val syncTokenStore = SharedPreferencesBearerTokenStore(appContext)
     private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
+    /** Optional relayed transport; it never opens a socket in DIRECT or OFFLINE mode. */
+    val relaySettings = RelaySettingsController(appContext, clock = { clock.nowMillis() })
+    /** Local, durable memory facts and their user-facing controller. */
+    val memoryController = MemoryController(File(appContext.filesDir, "memory"))
+    /** Independent global UsageStats path; no collection happens until the user consents and refreshes. */
+    val globalUsageController = GlobalUsageController.fromContext(appContext)
+    var sportPlanState by mutableStateOf<SportPlanUiState?>(null)
+        private set
+    var sportBusy by mutableStateOf(false)
+        private set
+    var sportMessage by mutableStateOf<String?>(null)
+        private set
+    var sportDemoMode by mutableStateOf(false)
+        private set
     private val persistedSyncSettings = syncSettingsStore.read()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val syncWorker: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { task ->
@@ -2650,20 +2669,70 @@ class AtlasController @JvmOverloads constructor(
      * Plan-revision client for the explicit coach flow. Proposal-only: the
      * capability and a live mandate are rechecked on every request.
      */
-    fun planRevisionClient(): PlanRevisionApiClient? {
+    /** Read-only sport projection; fixtures are used only when the user explicitly asks for demo mode. */
+    fun selectSportDemoMode(enabled: Boolean) {
+        sportDemoMode = enabled
+        sportMessage = null
+        if (enabled) sportPlanState = null else refreshSportPlan()
+    }
+
+    fun refreshSportPlan() {
+        if (sportDemoMode || sportBusy) return
+        val base = syncBaseUrl.trim().trimEnd('/')
+        if (base.isBlank() || !isAllowedAgentBackendUrl(base)) {
+            sportPlanState = SportPlanUiState(plan = null, syncState = SyncState.UNAVAILABLE)
+            sportMessage = "Backend non configuré; la séance sportive reste indisponible."
+            return
+        }
+        val token = try {
+            syncTokenStore.token()?.trim()?.takeIf(String::isNotEmpty)
+        } catch (_: Exception) {
+            null
+        }
+        if (token == null) {
+            sportPlanState = SportPlanUiState(plan = null, syncState = SyncState.UNAVAILABLE)
+            sportMessage = "Jeton backend requis; aucune séance n'est inventée."
+            return
+        }
+        val zone = ZoneId.systemDefault()
+        val localDate = LocalDate.now(zone).toString()
+        sportBusy = true
+        sportMessage = null
+        syncWorker.execute {
+            val state = SportPlanClient().fetch(base, token, localDate, zone.id)
+            mainHandler.post {
+                sportPlanState = state
+                sportBusy = false
+                sportMessage = when (state.syncState) {
+                    SyncState.FRESH -> null
+                    SyncState.STALE -> "Données sportives périmées; aucune performance n'est inventée."
+                    SyncState.UNAVAILABLE -> "Sport indisponible; la dernière projection connue peut manquer."
+                    SyncState.MISMATCH -> "Réponse sportive incohérente; elle est refusée."
+                }
+            }
+        }
+    }
+
+    fun planRevisionClient(): PlanRevisionProposalClient? {
+        val requestAllowed = {
+            capabilities[CAP_PLAN_REVISION] == true &&
+                capabilities[CAP_AGENT] == true &&
+                !revocationBarrier.isAgentBlocked() &&
+                !agentMandateStore.current().let { mandate ->
+                    mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis
+                }
+        }
+        when (relaySettings.mode) {
+            RelayTransportMode.RELAY -> return relaySettings.relayPlanRevisionClient(requestAllowed)
+            RelayTransportMode.OFFLINE -> return null
+            RelayTransportMode.DIRECT -> Unit
+        }
         if (syncTokenStore.token() == null) return null
         if (syncBaseUrl.isBlank() || !isAllowedAgentBackendUrl(syncBaseUrl)) return null
         return PlanRevisionApiClient(
             baseUrl = syncBaseUrl,
             tokenProvider = syncTokenStore,
-            requestAllowed = {
-                capabilities[CAP_PLAN_REVISION] == true &&
-                    capabilities[CAP_AGENT] == true &&
-                    !revocationBarrier.isAgentBlocked() &&
-                    !agentMandateStore.current().let { mandate ->
-                        mandate.revoked || mandate.suspended || clock.nowMillis() >= mandate.expiresAtUtcMillis
-                    }
-            },
+            requestAllowed = requestAllowed,
         )
     }
 
@@ -3727,6 +3796,7 @@ class AtlasController @JvmOverloads constructor(
         recordDailyPlanDue()
         queueProactiveRun()
         refreshProactiveCoachWork()
+        relaySettings.onAppResumed()
     }
 
     fun usageAccessSettingsIntent(): Intent = systemUsageAccessSettingsIntent()

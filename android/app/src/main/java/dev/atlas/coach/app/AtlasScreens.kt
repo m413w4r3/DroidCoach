@@ -507,12 +507,14 @@ internal fun MoreScreen(controller: AtlasController) {
             AtlasSecondaryButton("Mandat du Coach", onClick = { controller.navigationState.navigate(AtlasScreenId.AGENT_SETTINGS) })
             AtlasSecondaryButton("Données partagées", onClick = { controller.navigationState.navigate(AtlasScreenId.AGENT_SHARING) })
             AtlasSecondaryButton("Journal des effets", onClick = { controller.navigationState.navigate(AtlasScreenId.AGENT_EFFECTS) })
+            AtlasSecondaryButton("Mémoire locale", onClick = { controller.navigationState.navigate(AtlasScreenId.MEMORY) })
             if (controller.capabilities[AtlasController.CAP_FOCUS_ROUTINES] == true) {
                 AtlasSecondaryButton("Routines de focus", onClick = { controller.navigationState.navigate(AtlasScreenId.ROUTINES) })
             }
         }
         AtlasSection("Réglages") {
             AtlasSecondaryButton("Usage quotidien", onClick = { controller.navigationState.navigate(AtlasScreenId.SETTINGS) })
+            AtlasSecondaryButton("Usage global", onClick = { controller.navigationState.navigate(AtlasScreenId.GLOBAL_USAGE) })
             AtlasSecondaryButton("Diagnostic avancé", onClick = { controller.navigationState.navigate(AtlasScreenId.DIAGNOSTICS) })
             AtlasTertiaryButton("À propos et licences", onClick = { controller.navigationState.navigate(AtlasScreenId.ABOUT) })
         }

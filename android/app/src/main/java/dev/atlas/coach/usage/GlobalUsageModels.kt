@@ -82,9 +82,14 @@ data class GlobalUsageConsent(
     }
 }
 
-data class GlobalUsageCursor(val baselineUtc: Long) {
+data class GlobalUsageCursor(
+    val baselineUtc: Long,
+    val lastCollectionAttemptUtc: Long? = null,
+) {
     init {
         require(baselineUtc >= 0L)
+        require(lastCollectionAttemptUtc == null || lastCollectionAttemptUtc >= 0L)
+        require(lastCollectionAttemptUtc == null || lastCollectionAttemptUtc >= baselineUtc)
     }
 }
 
@@ -210,6 +215,7 @@ enum class GlobalUsageObservationStatus {
     DISABLED,
     PERMISSION_REQUIRED,
     BASELINE_ESTABLISHED,
+    RATE_LIMITED,
 }
 
 data class GlobalUsageObservationResult(
@@ -240,6 +246,11 @@ interface UsageSummaryStore {
     fun currentSummary(): UsageSummary?
     fun saveSummary(summary: UsageSummary)
     fun clearSummary()
+}
+
+interface UsageQuotaStore {
+    fun currentQuotas(): List<UsageQuota>
+    fun saveQuotas(quotas: List<UsageQuota>)
 }
 
 class FakeGlobalUsageConsentStore(initial: GlobalUsageConsent = GlobalUsageConsent.REVOKED) : GlobalUsageConsentStore {
@@ -288,9 +299,23 @@ class FakeUsageSummaryStore : UsageSummaryStore {
     }
 }
 
+class FakeUsageQuotaStore(initial: List<UsageQuota> = emptyList()) : UsageQuotaStore {
+    private var value = initial.toList()
+
+    @Synchronized
+    override fun currentQuotas(): List<UsageQuota> = value
+
+    @Synchronized
+    override fun saveQuotas(quotas: List<UsageQuota>) {
+        value = quotas.toList()
+    }
+}
+
 object UsageSummaryLimits {
     const val MAX_APPS = 100
     const val MAX_EVENTS_PER_QUERY = 20_000
+    const val MIN_COLLECTION_INTERVAL_MILLIS = 15L * 60L * 1_000L
     const val MAX_DEFAULT_WINDOW_MILLIS = 24L * 60L * 60L * 1_000L
+    const val MAX_SUPPORTED_WINDOW_MILLIS = 7L * 24L * 60L * 60L * 1_000L
     const val MAX_AGGREGATE_WINDOW_MILLIS = 31L * 24L * 60L * 60L * 1_000L
 }

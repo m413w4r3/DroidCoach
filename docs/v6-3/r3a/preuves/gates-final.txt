@@ -1,0 +1,43 @@
+# Final technical gates
+source_sha=02a5040283d087c4d401fd0f6e8f95f9cda752c3
+date_utc=2026-10-27T09:08:59Z
+device_for_instrumented=emulator-5554 API 37
+--- T1 backend ---
+command=backend/.venv/bin/python -m pytest -q
+result=PASS — 187 passed, 1 skipped, 1 warning in 7.63s
+--- T2 Android JVM ---
+command=android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1
+result=PASS — 91 suites, 651 tests, 0 failures, 0 errors, 0 skipped
+--- T3 lint ---
+command=android/gradlew :app:lintDebug
+result=PASS — 0 errors, 70 warnings
+--- T4 debug build ---
+command=android/gradlew :app:assembleDebug
+result=PASS
+--- T5 androidTest build ---
+command=android/gradlew :app:assembleDebugAndroidTest
+result=PASS
+--- T7 Node transport ---
+command=npm test (integrations/relay/pc)
+result=PASS — 9 files, 35 tests; includes inter-process recovery stress
+--- B1 Bridge plugin tests (not activated) ---
+command=npm test (integrations/openclaw/atlas_chatgpt_research)
+result=PASS — 3 files, 50 tests; plugin not installed or activated
+--- APK identity ---
+app-debug.apk=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
+app-debug-androidTest.apk=8c9ae1308b297ec2a229389e382918bb49005eac6fa88580d66664fb0f061c60
+installed_lastUpdateTime=2026-10-27 08:53:57
+adb_reverse_entries=0
+--- T6 instrumented (emulator-5554) ---
+R2 reference suite=OK (17 tests)
+calendar provider/engine=OK (4 tests)
+relay round trip=OK (1 test)
+relay offline=OK (1 test)
+app controller relay=OK (1 test)
+Etar lifecycle=OK (4 tests: restore, move/edit, delete, restore)
+authenticator binding=OK (1 test)
+detail=instrumented.txt, calendar-lifecycle-final.txt
+--- T10/T12 PC live ---
+see=pc-live-fastapi.txt (PASS, rerun on 02a5040 with the restarted connector)
+--- T8 relay image ---
+see=relay-build.txt (image 75d68fd8…, loopback health ok)
