@@ -1,0 +1,8 @@
+
+dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest:.
+
+Time: 0.731
+
+OK (1 test)
+
+

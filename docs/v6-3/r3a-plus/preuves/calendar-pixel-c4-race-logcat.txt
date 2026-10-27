@@ -1,0 +1,2 @@
+--------- beginning of main
+10-27 21:42:51.542 15359 15375 I AtlasR3aPlusCalendar: FINAL_PERMISSION_RECHECK_BLOCKED operation=a24258d4-9cc2-4d4b-aefd-cebe89d53cfd

@@ -9,23 +9,22 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 
 | ID | Gate | Commande | Statut |
 |---|---|---|---|
-| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 187 passed, 1 skipped sur `012b101` |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 654 tests, 0 échec sur `fe54e20` (après merge calendrier) |
-| T3 | Lint | `android/gradlew :app:lintDebug` | PENDING |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | PENDING |
-| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | PENDING |
-| T6 | Tests instrumentés API 37 | `am instrument` ciblé sur Pixel | PENDING |
-| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — `733cd78` (merge WSS) |
-| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 10 fichiers / 40 tests sur le merge packaging, dépendance vendorée, relais réel ; `ATLAS_ALLOW_LOOPBACK_WS=1` encore requis par le test de reconnexion (correction B1 en cours) |
+| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 187 passed, 1 skipped sur `38fd4a0` |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 94 suites, 668 tests, 0 échec sur `38fd4a0` |
+| T3 | Lint | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 62 avertissements sur `38fd4a0` (le worktree B3 en comptait 70 ; aucune erreur) |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — source `38fd4a0` |
+| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — source `38fd4a0` |
+| T6 | Tests instrumentés API 37 | `am instrument` ciblé sur Pixel | **PASS** — WSS W1–W10 + calendrier C1–C5 + nettoyage, sur APK `66645143…` ; suite UI R3-A historique NOT_RUN (risque données personnelles) |
+| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 14 fichiers / 62 tests sur `38fd4a0`, sans variable d'env, relais réel |
 | T8 | Build relais local | `docker run ... atlas-paseo-relay:r3a` | **PASS** — image épinglée, `/health` 200 sur `127.0.0.1:4400` |
-| T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 36 tests, 6 suites sur `733cd78` |
-| T9 | Installation propre connecteur | répertoire vierge, sans clone Paseo | **PASS** — copie hors dépôt sans `references/` sur `89f881e`, `npm ci --offline`, build, config 7/7, artefact `cc1102a…`, 40/40 tests |
+| T9 | Installation propre connecteur | répertoire vierge, sans clone Paseo | **PASS** — copie hors dépôt sans `references/` sur `38fd4a0`, `npm ci --offline`, build, config 7/7, artefact `cc1102a…`, 14 fichiers / 62 tests |
 | T10 | Unité systemd utilisateur | `systemd-analyze verify` + test isolé | **PARTIAL** — `systemd-analyze --user verify` PASS ; test transitoire isolé NOT_RUN (pas de gestionnaire utilisateur jetable) |
-| T16 | Politique WSS du config checker | `node --test scripts/lib/config-policy.check.mjs` + smoke connecteur | **PASS** — 7/7 tests ; WSS remote accepté au démarrage, ws remote refusé |
-| T11 | WSS bout en bout Pixel | recette C | PENDING |
-| T12 | Calendrier C1–C5 Pixel | recette C | PENDING |
-| T13 | Backend routes connecteur | pytest + test réel lecture seule | PENDING |
+| T11 | WSS bout en bout Pixel | recette C | **PASS** — W1–W10 sur APK `66645143…` |
+| T12 | Calendrier C1–C5 Pixel | recette C | **PASS** — C1–C5 + nettoyage sur APK `66645143…` |
+| T13 | Backend routes connecteur | pytest + test réel lecture seule | **PARTIAL** — 187/1 ; route `/v1/sport/plan` présente et mappée ; lecture wger réelle NOT_RUN (token absent) |
 | T14 | Revue indépendante | lecture seule | PENDING |
+| T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — inclus dans 94/668 sur `38fd4a0` |
+| T16 | Politique WSS du config checker | `node --test scripts/lib/config-policy.check.mjs` + smoke connecteur | **PASS** — 7/7 tests ; WSS remote accepté, ws remote refusé |
 
 ## 2. Transport WSS
 
@@ -76,21 +75,21 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 
 | ID | Cas | Statut |
 |---|---|---|
-| C1 | Mort réelle du processus puis réconciliation | PENDING |
-| C2 | Événement étranger → `FOREIGN_EVENT`, provider inchangé | PENDING |
-| C3 | Calendrier synthétique indisponible → fail-closed | PENDING |
-| C4 | Permissions READ/WRITE refusées, retirées, restaurées | PENDING |
-| C5 | Fuseau/DST, redémarrage, édition/suppression externe, doublons, parallélisme | PENDING |
+| C1 | Mort réelle du processus puis réconciliation | **PASS** — Pixel, phase 1 SIGKILL (`Process crashed`), phase 2 RECONCILED, un seul événement |
+| C2 | Événement étranger → `FOREIGN_EVENT`, provider inchangé | **PASS** — Pixel, ligne CalendarContract inchangée |
+| C3 | Calendrier synthétique indisponible → fail-closed | **PASS** — Pixel, calendrier jetable vide supprimé, `CALENDAR_NOT_LOCAL` |
+| C4 | Permissions READ/WRITE refusées, retirées, restaurées | **PASS** — READ refusé, WRITE refusé, restauration, révocation pendant l'opération → processus tué, aucune écriture |
+| C5 | Fuseau/DST, redémarrage, édition/suppression externe, doublons, parallélisme | **PASS** — fuseaux explicites, édition/suppression externe, replay/parallèle, force-stop phase 1/2 |
 
 ## 6. Persistance Android
 
 | ID | Cas | Statut |
 |---|---|---|
 | A1 | Données ATLAS préexistantes préservées après mise à jour APK | **PASS** — 4 hashes identiques après installs intermédiaire et finale |
-| A2 | Plan/habitudes/mémoire/consentements après force-stop | PENDING (recette calendrier/persistance) |
-| A3 | Identité relayée après redémarrage | PENDING (identité key-store, vague C) |
-| A4 | Credentials supprimés après révocation explicite | PARTIAL — révocation PC testée ; suppression locale UI à rejouer |
-| A5 | Aucun secret dans les sauvegardes ordinaires | PASS (doc) — backup app-only hors repo, valeur du token non affichée |
+| A2 | Plan/habitudes/mémoire/consentements après force-stop | **PASS** — 4 hashes identiques après tous les tests et force-stop |
+| A3 | Identité relayée après redémarrage | **NOT_RUN** — les tests WSS utilisent le transport direct, pas le keystore de l'app |
+| A4 | Credentials supprimés après révocation explicite | **PARTIAL** — révocation PC et état REVOKED testés ; suppression locale via l'UI à rejouer |
+| A5 | Aucun secret dans les sauvegardes ordinaires | **PASS (doc)** — backup app-only hors repo, valeur du token non affichée |
 
 ## 7. Verdict
 

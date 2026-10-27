@@ -1,0 +1,80 @@
+ATLAS V6.3 R3-A+ — PIXEL CALENDAR C1–C5 SUMMARY
+Date: 2026-10-27
+Device: Pixel 9 Pro XL physique, Android 17 / API 37
+Main APK: 66645143b0e6d861b90bbad4acfcc8fe85cae5c939e1d394e3e81c9ecad518b5
+Calendar test APK: 6ae90e170fbf12af13814c941af5de0c79428cc95ae66d75b62c1e910e42ccfb
+Test class: dev.atlas.coach.calendar.local.AtlasR3aPlusCalendarInstrumentedTest
+Cleanup class: dev.atlas.coach.calendar.local.AtlasCampaignCleanupInstrumentedTest
+
+INITIAL STATE
+- READ_CALENDAR denied, WRITE_CALENDAR denied (restored to this state at the end).
+- 12 personal calendars, 91 personal events (counts only; no personal title read).
+- 0 ATLAS calendars, 0 ATLAS events, no ATLAS account before the run.
+- Etar installed; no Etar data was modified directly.
+
+RESULTS
+C1 real process death and reconciliation
+- Phase 1: process crash observed (Process.killProcess / SIGKILL) after the
+  provider insert and durable UNKNOWN journal/link writes. The instrumentation
+  reported "Process crashed"; this is the expected phase-1 outcome.
+- Phase 2 (new process): PASS. The durable UNKNOWN record was recovered,
+  reconciled to CONFIRMED, one provider event remained, the idempotent replay
+  returned the same event and the fixture was deleted. No duplicate.
+C2 foreign event
+- PASS. A synthetic row without ATLAS markers was refused FOREIGN_EVENT and
+  the full CalendarContract row was unchanged before/after.
+C3 unavailable synthetic calendar
+- PASS. A disposable empty ATLAS calendar was deleted; the engine failed closed
+  with CALENDAR_NOT_LOCAL and wrote no event. Only that empty disposable
+  calendar was targeted.
+C4 permissions
+- READ_CALENDAR denied: PASS; no calendar enumeration, providerAvailable=false.
+- WRITE_CALENDAR denied: PASS; PERMISSION_DENIED, no event.
+- READ+WRITE restored: PASS; synthetic create/read-back/delete.
+- Permission revoked during the operation: the parent observed
+  FINAL_PERMISSION_RECHECK_BLOCKED in logcat, revoked WRITE_CALENDAR, and
+  Android killed the target process. This is the accepted fail-closed
+  observation: no provider write occurred before the final permission gate.
+  WRITE_CALENDAR was granted again afterwards.
+C5 robustness
+- Explicit timezone/DST fixtures: PASS (America/New_York spring gap and fall
+  overlap, Pacific/Auckland update). The phone global timezone was not changed.
+- External edit/delete: PASS (DIVERGED/READ_BACK_MISMATCH then MISSING; fixtures
+  restored/removed).
+- New plan replay and parallel same-activity operations: PASS (one event ID,
+  one provider row, no duplicate).
+- Force-stop phase 1/2: PASS (durable event survived am force-stop; a new
+  process verified and cleaned it; no duplicate).
+
+FINAL CLEANUP
+- AtlasCampaignCleanupInstrumentedTest: PASS.
+- The ATLAS synthetic account/calendar and its ATLAS events were removed.
+- Final counts: 12 personal calendars, 91 personal events, 0 ATLAS account
+  lines, 0 ATLAS calendars/events. Personal counts are unchanged.
+- Final permissions: READ_CALENDAR denied, WRITE_CALENDAR denied (initial
+  state restored).
+- No pm clear, no uninstall, no account deletion other than the ATLAS synthetic
+  account created by this campaign.
+
+APP DATA PRESERVATION AFTER ALL TESTS
+- files/plans/day-plan-2026-10-26.json
+  fc003a7f8734de958a8aa97d6d0c204d404d39b22c420e75192ba2800863af3d
+- shared_prefs/atlas_local_state.xml
+  6e72d8b2d8462d72310db02a505f5051b16e097e9aa53ecfa56e1d1f7724b9a5
+- shared_prefs/atlas_sync_configuration.xml
+  745038187c38bbc4907268bf002d8d7fd24d357fd46613f1d643005506508742
+- files/atlas_agent_inbox_v2.json
+  c5a1f5ed484e57d8470fae0c02e420591230ac451a17d625198e26a6d9bf7c5d
+These are identical to the pre-campaign manifest.
+
+LIMITS
+- C4 race: Android killed the process on permission revocation; fail-closed is
+  proven by the absence of any ATLAS event and by the provider constraints, not
+  by an in-process assertion after the kill.
+- The phone global timezone was not changed; DST/timezone behavior is proven
+  with explicit test zones and provider read-back.
+- No device reboot was performed; process durability is proven with a real
+  SIGKILL and am force-stop.
+- No TalkBack, no global usage quota, and no personal calendar/event were used.
+- Evidence files contain only test results and counts, no personal titles or
+  account names.

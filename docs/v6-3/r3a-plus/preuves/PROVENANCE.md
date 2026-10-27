@@ -34,6 +34,9 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `pixel-apk-migration.txt` | `3c6aef1` + correctifs | `6ab95fac…→66645143…` | migration APK et données préservées | **final (Pixel)** |
 | `stale-client-timeout.txt` | `3c6aef1` + correctifs | n/a | timeout handshake du connecteur | **final (Node)** |
 | `heartbeat-jvm.txt` | `3c6aef1` + correctifs | n/a | tests JVM heartbeat | **final (JVM)** |
+| `calendar-pixel-summary.txt` | `38fd4a0` | `66645143…` | synthèse C1–C5 et nettoyage Pixel | **final (Pixel)** |
+| `calendar-pixel-c1-phase1.txt` … `calendar-pixel-cleanup.txt` | `38fd4a0` | `66645143…` | preuves C1–C5, permissions, force-stop, nettoyage | **final (Pixel)** |
+| `gates-agent-run.txt` | `38fd4a0` | build agent `1cc96587…` | gates non-device déléguées | **final (agent)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles
