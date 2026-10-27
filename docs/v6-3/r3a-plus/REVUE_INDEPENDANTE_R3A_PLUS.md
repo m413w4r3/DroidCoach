@@ -47,8 +47,10 @@
 
 ## 3. Corrections parent et re-revue delta
 
-Les corrections sont détaillées dans `preuves/review-fixes.txt` et liées au
-commit de clôture. La re-revue delta doit vérifier :
+Cible delta : `f6c11d07c8c6764f60ef93eeb2a82ffe538b19c2` (`f6c11d0`), diff
+`8f38f2a..f6c11d0`. Les corrections sont détaillées dans
+`preuves/review-fixes.txt` et liées au commit de clôture. La re-revue delta doit
+vérifier :
 
 - le runbook utilise `ATLAS_SERVICE_TOKEN` dans l'environnement 0600, sans
   variable inexistante ;

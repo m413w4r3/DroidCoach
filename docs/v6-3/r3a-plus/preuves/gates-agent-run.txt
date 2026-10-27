@@ -1,9 +1,9 @@
 TASK_ID: R3AP-GATES-01
-BASE_SHA: 38fd4a09fcb0d151632389bf220644de3529b598
-HEAD: 38fd4a09fcb0d151632389bf220644de3529b598
+BASE_SHA: f6c11d07c8c6764f60ef93eeb2a82ffe538b19c2
+HEAD: f6c11d07c8c6764f60ef93eeb2a82ffe538b19c2
 BRANCH: test/r3a-plus-gates
 WORKTREE: /home/nill/.paseo/worktrees/073527gm/test-r3a-plus-gates
-RUN_FINISHED: 2026-10-27 20:44:33 UTC
+RUN_FINISHED: 2026-10-27 21:03:40 UTC
 SESSION: provider=codex, model=gpt-6-luna, effective effort=xhigh (confirmed by parent)
 
 ENVIRONMENT
@@ -11,7 +11,7 @@ ENVIRONMENT
 - Backend used the supplied `backend/.venv` symlink. `references/repos` was the supplied parent-clone symlink.
 - Parent Paseo relay preflight: `curl -fsS --max-time 3 http://127.0.0.1:4400/health` -> `{"status":"ok"}`.
 - No ADB, Pixel, emulator, or instrumented test execution was used.
-- No source, test, or documentation file other than this report was modified. No commit or push was made.
+- No source or test files were modified. No commit or push was made.
 
 GATE 1 — NODE PACKAGE: PASS
 Working directory: `integrations/relay/pc`
@@ -25,7 +25,7 @@ Commands, in order:
 Vendored artifact: `@getpaseo/relay` 0.13.1, SHA-256 `cc1102a64892dc6f9de5bacbc813b472758a6675be26ef65534d5bf7b5d70452`.
 
 GATE 2 — CLEAN-COPY INSTALLATION: PASS
-- Created `/tmp/r3ap-gates-LBHGG6`, copied `integrations/relay/pc/` with `rsync -a --exclude=node_modules --exclude=dist`; verified `references/` absent.
+- Created `/tmp/r3ap-gates-wjrPNE`, copied `integrations/relay/pc/` with `rsync -a --exclude=node_modules --exclude=dist`; verified `references/` absent.
 - `npm ci --offline` — PASS; no online fallback needed.
 - `npm run build` — PASS.
 - `node --test scripts/lib/config-policy.check.mjs` — 7 passed, 0 failed.
@@ -36,27 +36,26 @@ GATE 2 — CLEAN-COPY INSTALLATION: PASS
 GATE 3 — BACKEND: PASS
 Working directory: `backend`
 Command: `.venv/bin/python -m pytest -q`
-Result: 187 passed, 1 skipped, 0 failures; 1 deprecation warning (Starlette test client / anyio BlockingPortal); 5.26 s.
+Result: 187 passed, 1 skipped, 0 failures; 1 deprecation warning (Starlette test client / anyio BlockingPortal); 4.80 s.
 
 GATE 4 — ANDROID JVM: PASS
 Working directory: `android`
 Command: `./gradlew --offline :app:testDebugUnitTest --rerun-tasks --max-workers=1`
-Result: BUILD SUCCESSFUL. Parsed `app/build/test-results/testDebugUnitTest/TEST-*.xml`: 94 suites, 668 tests, 0 failures, 0 errors, 0 skipped.
+Result: BUILD SUCCESSFUL. Parsed `app/build/test-results/testDebugUnitTest/TEST-*.xml`: 94 suite XML files, 669 tests, 0 failures, 0 errors, 0 skipped. The new revocation-close test is included. The measured suite-file count is 94 (the expected count was 95).
 
 GATE 5 — ANDROID LINT / BUILDS: PASS
 Command: `./gradlew --offline :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest`
 Result: BUILD SUCCESSFUL. `app/build/reports/lint-results-debug.txt`: 0 errors, 62 warnings.
 APK SHA-256:
-- `app/build/outputs/apk/debug/app-debug.apk`: `1cc96587fb92f436b32bac4e7e4e23703899ac7a5f76a60c36295daa8b0e2d32`
+- `app/build/outputs/apk/debug/app-debug.apk`: `5dd79984fb1c0212d6b20bf955b15d4db3ef33566db2a1702660d0321c3d102d`
 - `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`: `2d0c2726e8d53b7a3a6e416ea6671aa96091b6fce520696c5bb2d279b787ec8e`
 
 GATE 6 — HYGIENE: PASS
 - `git diff --check` — exit 0, no output.
-- `git diff --name-only` — no tracked changes.
-- Initial `git status --porcelain` before writing this report contained only the supplied environment entries `?? backend/.venv` and `?? references/repos`.
-- No unexpected source changes; build outputs are ignored. This report is intentionally uncommitted.
+- Before updating this report, `git diff --name-only` was empty and `git status --porcelain` contained only the supplied environment entries `?? backend/.venv` and `?? references/repos`.
+- No unexpected source changes. Build outputs are ignored. This report update is intentionally uncommitted.
 
 LIMITS
 - `:app:assembleDebugAndroidTest` compiled and packaged the instrumentation APK; instrumentation was NOT_RUN by instruction. No Pixel/device qualification is claimed.
-- The online/default `npm ci` output reported 3 audit vulnerabilities; this task did not modify dependencies. The clean-copy `npm ci --offline` succeeded without fallback.
+- The default `npm ci` output reported 3 audit vulnerabilities; this task did not modify dependencies. The clean-copy `npm ci --offline` succeeded without fallback.
 - Relay availability was checked before Node tests; tests used the already-running parent relay, which was not stopped or replaced.

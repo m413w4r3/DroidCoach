@@ -18,17 +18,28 @@ jusqu’à la recette R3-B.
 |---|---|
 | Base de campagne | `9a05dcab71e2327c58c720d82623882fc4d1cfc1` |
 | Branche de campagne | `feat/atlas-v6-3-r3a-plus` |
-| Code final testé | `38fd4a09fcb0d151632389bf220644de3529b598` (`38fd4a0`) |
+| Code final de clôture | `f6c11d07c8c6764f60ef93eeb2a82ffe538b19c2` (`f6c11d0`) |
+| Code source de l’APK Pixel | `38fd4a09fcb0d151632389bf220644de3529b598` (`38fd4a0`) |
 | Branche de gates | `test/r3a-plus-gates` |
 | Branche de ce rapport | `docs/r3a-plus-final-report` |
 | SHA documentaire de référence | `8f38f2aa033266edf799da20a63a7eb39bef2bc1` (`8f38f2a`) |
-| SHA final après revue | PENDING (commit documentaire final) |
+| SHA final après revue | `f6c11d0` (sous réserve de la re-revue delta) |
+
+Note de version : l’APK Pixel `66645143…` a été construit depuis `38fd4a0`,
+avant le correctif P2 de message de révocation. Le code final `f6c11d0` contient
+ce correctif (couvert par le test JVM
+`revocationCloseDoesNotOverwriteRevokedFailureWithAuthentication`) ainsi que les
+corrections P1/P2 du runbook et du config checker. Les parcours WSS et
+calendrier ne sont pas affectés par ce correctif de message ; les preuves Pixel
+restent liées à `38fd4a0` / APK `66645143…`, et les gates finales ainsi que la
+re-revue delta sont liées à `f6c11d0`.
 
 Commits de tickets : A1 WSS `b2cbebc`, A2 packaging `d8a425d`, A3 calendrier
 `e66d2ef`, B1 résilience `d19a5e3`, B2 appairage `afa4615`, B3 corrections
 Android P3 `90739a6`. Les corrections d’intégration et de reprise parent sont
-dans `89f881e` et le code final `38fd4a0`. La preuve des gates non-device est
-liée au SHA complet `38fd4a09fcb0d151632389bf220644de3529b598`.
+dans `89f881e`, `38fd4a0` et `f6c11d0` (P1/P2 de revue). La preuve des gates
+non-device est liée au SHA complet `f6c11d0` ; les preuves Pixel sont liées à
+`38fd4a0` / APK `66645143…`.
 
 ## APK et environnement Pixel
 
@@ -49,14 +60,15 @@ Provenance des APK : code final `38fd4a0`,
 `preuves/pixel-apk-migration.txt`, `pixel-wss-summary.txt`,
 `calendar-pixel-summary.txt` et `gates-agent-run.txt`.
 
-Les deux builds indépendants du code `38fd4a0` ont des SHA d’APK différents
-(`66645143…` sur le Pixel, `1cc96587…` sur le runner). La construction Android
-n’est donc pas démontrée reproductible octet pour octet. La cause est établie :
-tous les `classes*.dex`, `resources.arsc` et `AndroidManifest.xml` sont
-byte-identiques entre les deux APK ; seules les métadonnées de signature/zip et
-les métadonnées de build diffèrent. Le code compilé et les ressources sont donc
-identiques, et l’APK installé sur le Pixel correspondait au build local au
-moment de l’installation. Détail : `preuves/pixel-apk-migration.txt`.
+Les deux builds de `38fd4a0` (Pixel `66645143…`, runner `1cc96587…`) ont tous
+leurs `classes*.dex`, `resources.arsc` et `AndroidManifest.xml` byte-identiques :
+la différence de SHA APK vient des métadonnées de signature/zip, pas du code.
+Le build runner final de `f6c11d0` est
+`5dd79984fb1c0212d6b20bf955b15d4db3ef33566db2a1702660d0321c3d102d` ; il inclut
+le correctif P2 de message de révocation, donc son dex diffère du Pixel par ce
+correctif. L’APK Pixel `66645143…` (source `38fd4a0`) ne contient pas ce
+correctif de message, couvert par le test JVM. Détail :
+`preuves/pixel-apk-migration.txt`.
 
 ## Tickets et gates
 
@@ -71,13 +83,13 @@ quand un appareil est concerné, et à la preuve correspondante.
 | B1 — résilience connecteur | **PARTIAL** — R1, R2, R4–R13 PASS ; R3 ne couvre pas un redémarrage réel de FastAPI | `38fd4a0`; ticket `d19a5e3` | `preuves/resilience-tests.txt`, `stale-client-timeout.txt`, `heartbeat-jvm.txt`, `MATRICE_RECETTE.md` |
 | B2 — appairage/révocation | **PASS** — P1–P7, token livré avant autorisation, tests Node finaux | `38fd4a0`; ticket `afa4615` | `preuves/pairing-tests.txt`, `gates-agent-run.txt` |
 | B3 — Android P3 | **PASS** — tests JVM et gates de build ; la suite UI historique reste NOT_RUN | `38fd4a0`; ticket `90739a6` | `preuves/android-p3-tests.txt`, `gates-agent-run.txt`, `instrumentation-smoke.txt` |
-| Backend | **PASS** — 187 réussis, 1 ignoré, 0 échec | `38fd4a0` | `preuves/gates-agent-run.txt` |
-| JVM Android | **PASS** — 94 suites, 668 tests, 0 échec/erreur/ignoré | `38fd4a0` | `preuves/gates-agent-run.txt` |
-| Node connecteur | **PASS** — 14 fichiers, 62 tests, 0 échec, sans variable d’environnement | `38fd4a0` | `preuves/gates-agent-run.txt` |
-| Lint et builds Android | **PASS** — 0 erreur, 62 avertissements ; APK debug et APK androidTest compilés | `38fd4a0`; APK runner `1cc96587…` | `preuves/gates-agent-run.txt`, `android-build-final.txt` |
-| Installation propre offline | **PASS** — `npm ci --offline`, build, politique 7/7, artefact vérifié, 62 tests | `38fd4a0` | `preuves/gates-agent-run.txt`, `packaging-clean-merged.txt` |
-| WSS Pixel W1–W10 | **PASS** — round-trip protégé, refus TLS/Noise, reprise et révocation | `38fd4a0`, APK `66645143…` | `preuves/pixel-wss-summary.txt`, `pixel-wss-roundtrip.txt`, `pixel-wss-negative.txt`, `pixel-wss-revocation.txt` |
-| Calendrier Pixel C1–C5 + nettoyage | **PASS** — scénarios synthétiques, permissions et nettoyage | `38fd4a0`, APK `66645143…`, test `6ae90e17…` | `preuves/calendar-pixel-summary.txt` et preuves C1–C5/nettoyage |
+| Backend | **PASS** — 187 réussis, 1 ignoré, 0 échec | `f6c11d0` | `preuves/gates-agent-run.txt` |
+| JVM Android | **PASS** — 94 suites, 669 tests, 0 échec/erreur/ignoré | `f6c11d0` | `preuves/gates-agent-run.txt` |
+| Node connecteur | **PASS** — 14 fichiers, 62 tests, 0 échec, sans variable d’environnement | `f6c11d0` | `preuves/gates-agent-run.txt` |
+| Lint et builds Android | **PASS** — 0 erreur, 62 avertissements ; APK debug et APK androidTest compilés | `f6c11d0`; APK runner `5dd79984…` | `preuves/gates-agent-run.txt`, `android-build-final.txt` |
+| Installation propre offline | **PASS** — `npm ci --offline`, build, politique 7/7, artefact vérifié, 62 tests | `f6c11d0` | `preuves/gates-agent-run.txt`, `packaging-clean-merged.txt` |
+| WSS Pixel W1–W10 | **PASS** — round-trip protégé, refus TLS/Noise, reprise et révocation | `38fd4a0`, APK `66645143…` ; code final `f6c11d0` (correctif P2 message JVM) | `preuves/pixel-wss-summary.txt`, `pixel-wss-roundtrip.txt`, `pixel-wss-negative.txt`, `pixel-wss-revocation.txt` |
+| Calendrier Pixel C1–C5 + nettoyage | **PASS** — scénarios synthétiques, permissions et nettoyage | `38fd4a0`, APK `66645143…`, test `6ae90e17…` ; code final `f6c11d0` | `preuves/calendar-pixel-summary.txt` et preuves C1–C5/nettoyage |
 | systemd utilisateur | **PARTIAL** — validation statique PASS ; service transitoire isolé NOT_RUN | ticket `d8a425d` | `preuves/packaging-systemd.txt` |
 | Lecture réelle wger | **NOT_RUN** — configuration d’accès absente ; seuls tests existants/fakes | baseline `012b101`, gate backend `38fd4a0` | `preuves/backend-baseline.txt`, `MATRICE_RECETTE.md` |
 | Persistance Android A3 — identité relayée après redémarrage | **NOT_RUN** — keystore/app non couvert par le transport direct des tests WSS | `38fd4a0`, APK `66645143…` | `MATRICE_RECETTE.md`, `preuves/pixel-wss-summary.txt` |
@@ -155,7 +167,12 @@ calendrier `6ae90e17…`).
   Aucune désinstallation ni remise à zéro n’a été faite.
 - R3 reste partiel pour le redémarrage réel de FastAPI ; lecture wger réelle
   non exécutée ; persistance Android A3 non exécutée ; A4 partielle ; suite UI
-  historique et revue indépendante non exécutées.
+  historique NOT_RUN. La revue indépendante initiale a rendu NO_GO sur un P1
+  de runbook, corrigé avec les P2 associés ; la re-revue delta est en attente.
+- L’APK Pixel `66645143…` a été construit depuis `38fd4a0`. Le correctif P2 de
+  message de révocation de `f6c11d0` est couvert par un test JVM mais n’a pas
+  été reconstruit dans l’APK Pixel ; les parcours WSS et calendrier ne sont pas
+  affectés par ce correctif de message.
 
 ## Préparation R3-B
 

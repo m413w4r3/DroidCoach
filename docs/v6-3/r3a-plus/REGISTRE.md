@@ -101,7 +101,7 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Intégration packaging | merge `722cdde` ; suite Node complète avec dépendance vendorée à rejouer, systemd transitoire NON_EXÉCUTÉ (PARTIAL) |
 | 2026-10-27 | Rejeu Node packaging | `npm ci` + `verify:artifact` + config policy 7/7 + `npm test` 10 fichiers / 40 tests PASS sur le merge ; tarball `cc1102a…` |
 | 2026-10-27 | Installation propre finale | copie hors dépôt sans `references/` sur `89f881e` : `npm ci --offline` PASS, build, config 7/7, artefact, 40/40 tests PASS |
-| 2026-10-27 | Test WSS Android préparé | `RelayWssE2eInstrumentedTest` (DNS debug injecté, CA test, mauvais hostname/CA/Noise, interruption TLS, FastAPI privé) compile ; exécution Pixel PENDING vague C |
+| 2026-10-27 | Test WSS Android préparé | `RelayWssE2eInstrumentedTest` (DNS debug injecté, CA test, mauvais hostname/CA/Noise, interruption TLS, FastAPI privé) compile ; exécution Pixel PASS (voir recette WSS finale) |
 | 2026-10-27 | `R3AP-RESILIENCE-01` livré | `d19a5e3` ; 14 fichiers, 26 ciblés / 52 Node sans env, SIGKILL réel, journal POST, registre fail-closed |
 | 2026-10-27 | `R3AP-PAIRING-01` livré | `afa4615` ; 9 fichiers, 20 ciblés / 48 Node, token livré avant autorisation, compensation, arrivée tardive déterministe |
 | 2026-10-27 | `R3AP-ANDROID-P3-01` livré | `90739a6` ; 18 fichiers, 25 ciblés / 666 JVM, lint 0/70, quota désactivé et erreurs relais typées |
@@ -122,6 +122,7 @@ avec `BASE_SHA=a514ea172578889f2fdbcaf8bec3d06159063a5c`.
 | 2026-10-27 | Suite UI R3-A de référence sur Pixel | NOT_RUN — risque de modification des données personnelles ; les changements B3 sont couverts par 666 tests JVM et les tests Pixel ciblés sûrs |
 | 2026-10-27 | Gates finales déléguées | session `e38897ac…` : Node 14/62, backend 187/1 skip, JVM 94/668, lint 0/62, builds PASS, clean-copy offline PASS sur `38fd4a0` |
 | 2026-10-27 | Rapport gates | `preuves/gates-agent-run.txt` ; APK de build agent `1cc96587…` (non-déterministe par rapport à l'APK Pixel `66645143…`, même source `38fd4a0`) |
+| 2026-10-27 | Gates après corrections revue | session `e38897ac…` sur `f6c11d0` : Node 14/62, backend 187/1 skip, JVM 94/669, lint 0/62, builds PASS, clean-copy offline PASS ; APK runner `5dd79984…` |
 | 2026-10-27 | Nettoyage final | services arrêtés, ports 4400/4402/4443/4444/4445/8100 fermés, aucun `adb reverse`, aucun conteneur atlas ; appareil à 12 calendriers / 91 événements / 0 ATLAS, permissions refusées |
 | 2026-10-27 | Rapport final délégué | session `7a0bc3e4…` ; `RAPPORT_FINAL.md` copié et ajusté par le parent, statut conditionné à la revue |
 | 2026-10-27 | Revue indépendante lancée | session `a5dc2140…`, plan mode, cible `8f38f2a` / code `38fd4a0` |
