@@ -1,6 +1,6 @@
 # Final technical gates
-source_sha=3811ea51c8c4bffeb7b70d1197c3c4003e16c948
-date_utc=2026-10-27T08:12:58Z
+source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
+date_utc=2026-10-27T08:42:17Z
 device_for_instrumented=emulator-5554 API 37
 --- T1 backend ---
 command=backend/.venv/bin/python -m pytest -q
@@ -19,7 +19,7 @@ command=android/gradlew :app:assembleDebugAndroidTest
 result=PASS
 --- T7 Node transport ---
 command=npm test (integrations/relay/pc)
-result=PASS — 9 files, 30 tests; includes inter-process recovery stress
+result=PASS — 9 files, 33 tests; includes inter-process recovery stress
 --- B1 Bridge plugin tests (not activated) ---
 command=npm test (integrations/openclaw/atlas_chatgpt_research)
 result=PASS — 3 files, 50 tests; plugin not installed or activated
@@ -38,6 +38,6 @@ Etar lifecycle=OK (4 tests: restore, move/edit, delete, restore)
 authenticator binding=OK (1 test)
 detail=instrumented.txt, calendar-lifecycle-final.txt
 --- T10/T12 PC live ---
-see=pc-live-fastapi.txt (PASS, rerun on 3811ea5 with the restarted connector)
+see=pc-live-fastapi.txt (PASS, rerun on c45b64f with the restarted connector)
 --- T8 relay image ---
 see=relay-build.txt (image 75d68fd8…, loopback health ok)

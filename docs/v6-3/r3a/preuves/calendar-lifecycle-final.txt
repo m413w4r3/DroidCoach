@@ -1,6 +1,6 @@
 # final APK lifecycle rerun
 date_utc=2026-10-27T08:12:58Z
-source_sha=3811ea51c8c4bffeb7b70d1197c3c4003e16c948
+source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
 apk_sha256=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
 command=am instrument -w -e class dev.atlas.coach.calendar.local.AtlasEtarLifecycleInstrumentedTest#<method> dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 --- restoresFixture ---

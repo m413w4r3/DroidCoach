@@ -1,6 +1,6 @@
 # ATLAS V6.3 — Campagne R3-A — Registre
 
-Statut : **CLOSING — quatrième revue indépendante en cours**. Ce registre est la
+Statut : **CLOSING — cinquième revue indépendante en cours**. Ce registre est la
 source de vérité R3-A.
 
 ## 1. Base et environnement
@@ -27,10 +27,11 @@ source de vérité R3-A.
 | Paseo Relay | `3fc41c96…` |
 | Sauvegarde AVD | snapshot `atlas-r3a-pre` |
 | Sauvegarde app ATLAS | `~/.local/share/atlas-v63-r3a/backups/atlas-app-data-pre-r3a.tar`, SHA-256 `41c1ad85700fdd57f8f0a8a9ba602a9ef443b6b89c117c1afb786e8521380eb1` |
-| SHA source final | `3811ea51c8c4bffeb7b70d1197c3c4003e16c948` |
+| SHA source final | `c45b64f3543453c0887eb00a5e29b0ad239e7c2a` |
 | APK final | `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c` |
 | SHA de la revue 2 | `e28b7a9bfc0d6405cd0d311eb87d4d2dd33f5832` (NO_GO : 3 P1, 4 P2) |
 | SHA de la revue 3 | `7b3dc31f531fed94a6c1ef617c553a56e2f2d16d` / code `d89a626` (NO_GO : 1 P1, 2 P2, 1 P3) |
+| SHA de la revue 4 | `bc6fb3ba028dc1ae3938b3dd4e2bff9fcf1691ea` / code `3811ea5` (NO_GO : 1 P1, 2 P2, 1 P3) |
 
 ## 2. Règles appliquées
 
@@ -59,8 +60,8 @@ source de vérité R3-A.
 | `R3-CALENDAR-ETAR-01` | DayPlan ↔ calendrier ↔ Etar | `PlanScreen.kt`, `CalendarPermissionScreen.kt`, nouveaux `Calendar*.kt` | 22 scénarios calendrier | **ACCEPTED_WITH_P1_FIXED / INTEGRATED** — `29b7439`, merge `eaad907` ; 18 ciblés, 589 JVM ; correctifs parent scroll imbriqué + init fail-closed |
 | `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f`, UI `4d6a875` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI vérifié (UNAVAILABLE + démo explicite) |
 | `R3-MEMORY-UI-01` | parcours mémoire complet | `memory/**`, `app/Memory*.kt` | tests JVM + UI réelle + persistance | **ACCEPTED (parent)** — `ee085a8`, merge `06c1e2e` ; tests JVM, ajout/consentement/affichage, force-stop/relance, capture |
-| `R3-USAGE-UI-01` | Usage Access réel sur émulateur | `usage/**`, `app/GlobalUsage*.kt` | permission + statistiques | **ACCEPTED (parent)** — `7e65b9f`, merge `b9ba1ef` ; `GET_USAGE_STATS: allow`, 6 événements réels, révocation/purge, persistance ; quota non configuré |
-| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTIONS_APPLIED / FOURTH_REVIEW_PENDING** — 1 P1 + 2 P2 + 1 P3 de `7b3dc31`/`d89a626` corrigés sur `3811ea5` ; quatrième revue à faire |
+| `R3-USAGE-UI-01` | Usage Access réel sur émulateur | `usage/**`, `app/GlobalUsage*.kt` | permission + statistiques | **ACCEPTED (parent)** — `7e65b9f`, merge `b9ba1ef` ; `GET_USAGE_STATS: allow`, 6 événements finaux, quota 90 min configuré et validé, révocation/purge, persistance |
+| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTIONS_APPLIED / FIFTH_REVIEW_PENDING** — 1 P1 + 2 P2 + 1 P3 de `bc6fb3b`/`3811ea5` corrigés sur `c45b64f` ; cinquième revue à faire |
 
 ## 4. Journal
 
@@ -121,8 +122,10 @@ source de vérité R3-A.
 | 2026-10-27 | Instrumentés finaux | **PASS** — 17 R2 + 4 calendrier + 1 relay + 1 offline + 1 app controller + 4 lifecycle + 1 authenticator |
 | 2026-10-27 | Troisième revue indépendante | **NO_GO** sur `d89a626` — P1 reprise concurrente du verrou ; P2 délais par défaut, P2 quota invalide ; P3 compte d'événements matrice |
 | 2026-10-27 | Correctifs revue 3 | verrou bakery à records stables par nonce + stress 10 rounds ; timeout 15 s ; validation UI 1–1440 ; matrice synchronisée |
-| 2026-10-27 | Gates finales `3811ea5` | backend 187/1 skip ; JVM 91/651 ; lint 0 erreur ; Node 30 ; Bridge 50 ; PC live PASS ; APK `8ad8d2d` ; voir `preuves/gates-final.txt` |
-| 2026-10-27 | Lifecycle calendrier final `3811ea5` | **PASS** — restore/move/delete/restore, fixture `_id=27`, capture `etar-final-restored.png` |
+| 2026-10-27 | Quatrième revue indépendante | **NO_GO** sur `3811ea5` — P1 lecture du verrou en échec traitée comme absence de contention ; P2 stress non déterministe, P2 PID recyclé hors Linux ; P3 capture mémoire avec doublon |
+| 2026-10-27 | Correctifs revue 4 | `readEntries` fail-closed (ENOENT par record seulement), tests EACCES/record invalide, barrière de course + arrivée après entrée, README Linux/liveness, capture mémoire expliquée |
+| 2026-10-27 | Gates finales `c45b64f` | backend 187/1 skip ; JVM 91/651 ; lint 0 erreur ; Node 33 ; Bridge 50 ; PC live PASS ; APK `8ad8d2d` ; voir `preuves/gates-final.txt` |
+| 2026-10-27 | Lifecycle calendrier final `c45b64f` | **PASS** — restore/move/delete/restore, fixture `_id=27`, capture `etar-final-restored.png` |
 
 ## 5. Preuves
 

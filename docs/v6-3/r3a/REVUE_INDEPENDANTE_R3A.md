@@ -50,18 +50,35 @@
 
 ## 4. Quatrième revue (lecture seule)
 
-- Périmètre demandé : SHA `3811ea51c8c4bffeb7b70d1197c3c4003e16c948`,
+- Session : `17a3189e-9e9a-4764-b35b-78c8b4b812d0`, modèle `codex/gpt-6-luna`,
+  effort `xhigh`, worktree `review-r3a-final-bc6fb3b`.
+- Périmètre : docs `bc6fb3ba028dc1ae3938b3dd4e2bff9fcf1691ea`, code
+  `3811ea51c8c4bffeb7b70d1197c3c4003e16c948`, APK
+  `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
+- Verdict : **NO_GO** (1 P1, 2 P2, 1 P3).
+
+| Sévérité | Constat | Correction sur `c45b64f` | Statut |
+|---|---|---|---|
+| P1 | une erreur de lecture du répertoire/record était traitée comme absence de contention | `readEntries` fail-closed : toute erreur `readdir`/`readFile`/parsing est propagée ; seul un `ENOENT` par record est toléré ; tests EACCES et record invalide | **CORRIGÉ** |
+| P2 | stress non déterministe sur les fenêtres choosing/ticket | barrière de départ pour 6 workers + test d'arrivée après entrée ; stress externe 50 rounds × 6 processus sans chevauchement | **CORRIGÉ** |
+| P2 | PID recyclé hors Linux | README : Linux qualifié, `/proc` pour le jeton de démarrage ; hors Linux, fallback `kill(0)` avec blocage borné au timeout, sans entrée concurrente | **CORRIGÉ** |
+| P3 | capture mémoire montrant un doublon | `memory-ui.txt` explique le doublon de `PrefereMatinsCalmes` (sauvegarde refaite hors écran) ; la restauration finale purge les données de test | **CORRIGÉ** |
+
+## 5. Cinquième revue (lecture seule)
+
+- Périmètre demandé : SHA `c45b64f3543453c0887eb00a5e29b0ad239e7c2a`,
   APK `8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c`.
 - Session : à lancer.
 - Verdict : **EN ATTENTE**.
 
-La quatrième revue doit vérifier au minimum :
+La cinquième revue doit vérifier au minimum :
 
 1. Absence de token ou de secret dans stdout, logs, preuves et captures.
-2. Verrou bakery : records stables, reprise sans perte d'exclusivité, stress
-   concurrent, révocation non écrasée.
+2. Verrou bakery fail-closed : énumération/lecture/parsing en erreur refusés,
+   reprise concurrente et arrivée après entrée testées, révocation non écrasée.
 3. Re-création calendrier, parcours UI final et absence de doublon.
-4. Provenance : chaque PASS final lié à `3811ea5` et à l'APK `8ad8d2d…`.
+4. Provenance : chaque PASS final lié à `c45b64f` et à l'APK `8ad8d2d…`, avec
+   note d'identité Android entre `3811ea5` et `c45b64f`.
 5. Quota : validation 1–1440, persistance, sémantique `UNKNOWN` sur couverture
    partielle, fenêtre hebdomadaire.
 6. Authenticator : permission de liaison et AccountManager fonctionnel.

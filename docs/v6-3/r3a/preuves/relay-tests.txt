@@ -1,11 +1,12 @@
 # Relay and transport test inventory
-source_sha=3811ea51c8c4bffeb7b70d1197c3c4003e16c948
-date_utc=2026-10-27T08:12:58Z
+source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
+date_utc=2026-10-27T08:42:17Z
 --- Node connector ---
 command=npm test (integrations/relay/pc)
-result=PASS — 9 files, 30 tests
+result=PASS — 9 files, 33 tests
 files=protocol, operations, secure-channel, session, relay.integration, relay-reconnect, device-registry, file-lock, lock-stress
 lock_tests=live-owner-not-stolen, dead-owner-takeover, release-own-record, cross-process revocation/pairing, 10-round concurrent-recoverer stress
+additional_stress=50 rounds × 6 processes with production options: 0 concurrent entry, 0 failure (external harness, 2026-10-27)
 --- Android relay module (JVM) ---
 source=android/app/build/test-results/testDebugUnitTest/TEST-dev.atlas.coach.sync.relay.*.xml
 result=PASS — 6 classes, 31 tests, 0 failure

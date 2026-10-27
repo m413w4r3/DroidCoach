@@ -1,7 +1,7 @@
 # Manual Etar edit -> durable divergence
 source_commit=fa4d290573e64888070dc64f2f088c6480f02c21
 apk_sha256=not_recorded
-provenance=historical wave-B run; divergence path covered by JVM tests at 3811ea5
+provenance=historical wave-B run; divergence path covered by JVM tests at c45b64f
 date_utc=2026-10-26T22:58:55Z
 device=emulator-5554 API 37 / Etar 1.0.56
 event_id=10 title_before='ATLAS TEST manual divergence original'

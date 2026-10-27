@@ -1,12 +1,13 @@
 # Durable local memory — final APK UI flow
-source_sha=3811ea51c8c4bffeb7b70d1197c3c4003e16c948
+source_sha=c45b64f3543453c0887eb00a5e29b0ad239e7c2a
 date_utc=2026-10-27T08:12:58Z
 apk_sha256=8ad8d2d53de6794894219b13ca62641c59e96ffd4966f52c69309f2f4cfb4c8c
 device=emulator-5554 API 37
 flow=Plus > Mémoire locale > Ajouter une préférence
 fixtures=PrefereDemarrageCalme, PrefereSoireesCalmes, PrefereMatinsCalmes (synthetic)
+capture_note=PrefereMatinsCalmes was saved twice during the smoke because the first save completed offscreen and the retry created a duplicate; the capture therefore shows four cards, including one duplicate with a later timestamp. This is test residue, not a product defect, and is removed by the final data restore.
 consent=explicit checkbox checked before each save; sensitivity normal; expiration none
-result=three preferences listed with category=préférence, provenance=user, observed timestamp, confidence 100 %, confirmed by user
+result=three distinct preferences listed with category=préférence, provenance=user, observed timestamp, confidence 100 %, confirmed by user
 correction_actions=Corriger / Révoquer / Supprimer visible
 durability=am force-stop dev.atlas.coach; relaunch; all three facts and metadata still listed
 capture=captures/memory-preference-final.png

@@ -1,7 +1,7 @@
 # Sport UI wiring
 source_commit=4d6a875844b7763eec998e4120f808e11cc84f0c
 apk_sha256=not_recorded
-provenance=historical UI capture; backend/client JVM tests rerun on 3811ea5
+provenance=historical UI capture; backend/client JVM tests rerun on c45b64f
 date_utc=2026-10-27T00:04:11Z
 backend_route=GET /v1/sport/plan (200, sport-plan-v1, sync_state=UNAVAILABLE without wger token)
 android_read=Source wger en lecture, synchronisation indisponible, no invented session
