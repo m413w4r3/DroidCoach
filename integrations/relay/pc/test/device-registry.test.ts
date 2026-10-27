@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +30,22 @@ describe("device registry locking", () => {
     expect(devices.find((item) => item.device_id === revoked.device.device_id)?.revoked_at).toBeTruthy();
     expect(devices.find((item) => item.device_id === kept.device.device_id)?.revoked_at).toBeNull();
     expect(devices.find((item) => item.device_id === created.device.device_id)?.label).toBe("new device");
+  });
+
+  it("does not create the registry from reads and keeps the first pairing", async () => {
+    directory = await mkdtemp(join(tmpdir(), "atlas-device-registry-"));
+    const path = join(directory, "devices.json");
+    const registry = new DeviceRegistry(path);
+
+    expect(await registry.get("missing")).toBeUndefined();
+    expect(await registry.list()).toEqual([]);
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const [paired] = await Promise.all([
+      registry.pair("first device", ["sync.status"]),
+      registry.get("missing"),
+    ]);
+    expect((await registry.list()).map((device) => device.device_id)).toContain(paired.device.device_id);
   });
 
   it("serializes a revocation and a pairing while another process holds the lock", async () => {

@@ -64,16 +64,19 @@ describe("ticket lock recovery stress", () => {
     directory = await mkdtemp(join(tmpdir(), "atlas-lock-arrival-"));
     const lockPath = join(directory, "arrival.lock.d");
     const logPath = join(directory, "arrival.log");
+    const readyPath = join(directory, "arrival.ready");
     await writeFile(logPath, "");
-    const first = fork(WORKER, [lockPath, logPath, "0", "", "", "200"], {
+    const first = fork(WORKER, [lockPath, logPath, "0", "", "", "500"], {
       stdio: ["ignore", "ignore", "inherit", "ipc"],
       execArgv: [],
     });
     await waitForText(logPath, "start 0");
-    const second = fork(WORKER, [lockPath, logPath, "1", "", "", "20"], {
+    const second = fork(WORKER, [lockPath, logPath, "1", readyPath, "", "20"], {
       stdio: ["ignore", "ignore", "inherit", "ipc"],
       execArgv: [],
     });
+    await waitForLines(readyPath, 1);
+    expect((await readFile(logPath, "utf8"))).not.toContain("start 1");
     const exits = await Promise.all([once(first, "exit"), once(second, "exit")]);
     expect(exits.every(([code]) => code === 0)).toBe(true);
     expect((await readFile(logPath, "utf8")).trim().split("\n")).toEqual([

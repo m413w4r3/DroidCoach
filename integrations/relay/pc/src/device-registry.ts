@@ -104,11 +104,10 @@ export class DeviceRegistry {
 
   private async load(): Promise<RegistryDocument> {
     const document = await readPrivateJson<Partial<RegistryDocument>>(this.path);
-    if (document === null) {
-      const initial: RegistryDocument = { schema_version: 1, devices: [] };
-      await writePrivateJson(this.path, initial);
-      return initial;
-    }
+    // Reads are side-effect free. The registry is created only by a locked
+    // read-modify-write, so a concurrent list/get cannot overwrite the first
+    // pairing with an empty document.
+    if (document === null) return { schema_version: 1, devices: [] };
     if (document.schema_version !== 1 || !Array.isArray(document.devices)) throw new Error("invalid device registry");
     for (const entry of document.devices) {
       if (!isDeviceRecord(entry)) throw new Error("invalid device registry");

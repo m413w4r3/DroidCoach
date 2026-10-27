@@ -81,6 +81,21 @@ describe("cross-process ticket lock", () => {
     expect(acquired).toBe(false);
   });
 
+  it("fails closed on an unreadable record", async () => {
+    if (typeof process.getuid === "function" && process.getuid() === 0) return;
+    directory = await mkdtemp(join(tmpdir(), "atlas-file-lock-"));
+    const lockPath = join(directory, "registry.lock.d");
+    await mkdir(lockPath, { mode: 0o700 });
+    const recordPath = join(lockPath, "unreadable.json");
+    await writeFile(recordPath, "{}\n");
+    await chmod(recordPath, 0o000);
+    let acquired = false;
+    await expect(
+      withFileLock(lockPath, async () => { acquired = true; }, { timeoutMs: 500 }),
+    ).rejects.toMatchObject({ code: "EACCES" });
+    expect(acquired).toBe(false);
+  });
+
   it("removes only its own record on release", async () => {
     directory = await mkdtemp(join(tmpdir(), "atlas-file-lock-"));
     const lockPath = join(directory, "registry.lock.d");
