@@ -1,6 +1,7 @@
 package dev.atlas.coach.sync.relay
 
 import okhttp3.OkHttpClient
+import okhttp3.Dns
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -25,6 +26,10 @@ class PaseoRelayClient internal constructor(
     private val jitter: (Long) -> Long = { bound -> if (bound <= 0) 0 else ThreadLocalRandom.current().nextLong(bound + 1) },
     private val noiseFactory: (ByteArray) -> NoiseNkInitiator = { remoteStatic -> NoiseNkInitiator(remoteStatic) },
 ) : AutoCloseable {
+    init {
+        config.requireUrlAllowedForCurrentBuild()
+    }
+
     interface Listener {
         fun onStateChanged(state: RelayConnectionState) {}
         fun onSecureChannelReady() {}
@@ -430,11 +435,12 @@ internal fun interface RelaySocketFactory {
     fun connect(url: String, callbacks: RelaySocketCallbacks)
 }
 
-internal class OkHttpRelaySocketFactory(config: RelayConfig) : RelaySocketFactory {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(config.connectTimeoutMillis, TimeUnit.MILLISECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .build()
+internal class OkHttpRelaySocketFactory(config: RelayConfig, debugDnsOverride: Dns? = null) : RelaySocketFactory {
+    private val client = OkHttpClient.Builder().apply {
+        connectTimeout(config.connectTimeoutMillis, TimeUnit.MILLISECONDS)
+        readTimeout(0, TimeUnit.MILLISECONDS)
+        if (RelayBuildPolicy.isDebugBuild() && debugDnsOverride != null) dns(debugDnsOverride)
+    }.build()
 
     override fun connect(url: String, callbacks: RelaySocketCallbacks) {
         val request = Request.Builder().url(url).build()

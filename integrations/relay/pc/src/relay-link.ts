@@ -1,4 +1,6 @@
-import WebSocket, { type RawData } from "ws";
+import WebSocket, { type ClientOptions, type RawData } from "ws";
+import { isIP } from "node:net";
+import type { ClientRequestArgs } from "node:http";
 import {
   openDaemonSecureChannel,
   SecureChannelRejectedError,
@@ -12,6 +14,14 @@ import type { ConnectorMetrics } from "./metrics.js";
 import { SessionManager, type PeerSession } from "./session.js";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+const LOOPBACK_WS_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+export interface RelayUrlPolicyOptions {
+  /** Explicit opt-in for an unencrypted local relay; otherwise the environment must equal "1". */
+  allowLoopbackWs?: boolean;
+}
+
+type TestOnlyTlsOptions = Pick<ClientOptions, "ca"> & Pick<ClientRequestArgs, "lookup">;
 
 export interface RelayLinkOptions {
   relayUrl: string;
@@ -20,6 +30,9 @@ export interface RelayLinkOptions {
   sessions: SessionManager;
   metrics: ConnectorMetrics;
   WebSocketClass?: typeof WebSocket;
+  allowLoopbackWs?: boolean;
+  /** Test harness only. Production configuration does not read TLS overrides from the environment. */
+  testOnlyTlsOptions?: TestOnlyTlsOptions;
   reconnectMinMs?: number;
   reconnectMaxMs?: number;
 }
@@ -33,6 +46,7 @@ interface DataConnection {
 export class RelayLink {
   private readonly baseUrl: URL;
   private readonly WebSocketClass: typeof WebSocket;
+  private readonly webSocketOptions: ClientOptions;
   private control: WebSocket | null = null;
   private readonly data = new Map<string, DataConnection>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -43,9 +57,16 @@ export class RelayLink {
   private readonly stateWaiters = new Set<{ connected: boolean; resolve: () => void }>();
 
   constructor(private readonly options: RelayLinkOptions) {
-    this.baseUrl = assertLoopbackRelayUrl(options.relayUrl);
+    this.baseUrl = parseRelayUrl(
+      options.relayUrl,
+      options.allowLoopbackWs === undefined ? {} : { allowLoopbackWs: options.allowLoopbackWs },
+    );
     if (!options.serverId || Buffer.byteLength(options.serverId, "utf8") > 200) throw new Error("invalid relay server id");
     this.WebSocketClass = options.WebSocketClass ?? WebSocket;
+    this.webSocketOptions = {
+      followRedirects: false,
+      ...(options.testOnlyTlsOptions ?? {}),
+    };
     this.reconnectDelay = options.reconnectMinMs ?? 500;
   }
 
@@ -104,7 +125,7 @@ export class RelayLink {
   private openControl(): void {
     if (this.stopping) return;
     const url = this.buildUrl("server");
-    const socket = new this.WebSocketClass(url);
+    const socket = new this.WebSocketClass(url, this.webSocketOptions);
     this.control = socket;
     socket.on("open", () => {
       if (this.control !== socket || this.stopping) return;
@@ -162,7 +183,7 @@ export class RelayLink {
 
   private openData(connectionId: string): void {
     if (this.stopping || this.data.has(connectionId)) return;
-    const socket = new this.WebSocketClass(this.buildUrl("server", connectionId));
+    const socket = new this.WebSocketClass(this.buildUrl("server", connectionId), this.webSocketOptions);
     const connection: DataConnection = { socket, peer: null, pending: [] };
     this.data.set(connectionId, connection);
     socket.on("open", () => {
@@ -246,6 +267,87 @@ export function assertLoopbackRelayUrl(value: string): URL {
     throw new Error("relay URL must be a loopback WebSocket URL");
   }
   return url;
+}
+
+/** Validates a production relay endpoint before Node's WebSocket client is created. */
+export function parseRelayUrl(value: string, options: RelayUrlPolicyOptions = {}): URL {
+  const parts = /^(?:[A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(?:\?[^#]*)?(?:#.*)?$/.exec(value);
+  if (!parts) throw new Error("relay URL is invalid");
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("relay URL is invalid");
+  }
+
+  const authority = parts[1] ?? "";
+  const path = parts[2] ?? "";
+  const scheme = url.protocol;
+  if (scheme !== "ws:" && scheme !== "wss:") throw new Error("relay URL must use ws:// or wss://");
+  if (authority.length === 0 || authority.includes("@") || url.username || url.password) {
+    throw new Error("relay URL must contain a host without userinfo");
+  }
+  if (value.includes("?") || value.includes("#") || url.search || url.hash) {
+    throw new Error("relay URL must not contain a query or fragment");
+  }
+  if (path !== "" && path !== "/ws") throw new Error("relay URL path must be empty or /ws");
+
+  const { host: rawHost, port: rawPort } = splitAuthority(authority);
+  if (rawHost.length === 0 || rawHost.includes("%")) throw new Error("relay URL host is invalid");
+  if (rawPort !== undefined && (!/^\d+$/.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65_535)) {
+    throw new Error("relay URL port is invalid");
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const addressHost = rawHost.startsWith("[") && rawHost.endsWith("]")
+    ? rawHost.slice(1, -1)
+    : rawHost;
+  const addressType = isIP(addressHost);
+  const normalizedHost = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+  if (rawHost.startsWith("[") && addressType !== 6) throw new Error("relay URL host is invalid");
+  if (addressType === 0) {
+    if (/^[0-9.]+$/.test(addressHost) || isIP(normalizedHost) !== 0 || !isValidDnsHostname(hostname)) {
+      throw new Error("relay URL host is invalid");
+    }
+  }
+
+  if (scheme === "ws:") {
+    const loopbackEnabled = options.allowLoopbackWs ?? process.env.ATLAS_ALLOW_LOOPBACK_WS === "1";
+    if (!loopbackEnabled || !LOOPBACK_WS_HOSTS.has(rawHost.toLowerCase())) {
+      throw new Error("ws:// is allowed only for an explicitly enabled loopback relay");
+    }
+  }
+  return url;
+}
+
+function splitAuthority(authority: string): { host: string; port?: string } {
+  if (authority.startsWith("[")) {
+    const closeBracket = authority.indexOf("]");
+    if (closeBracket < 0) throw new Error("relay URL host is invalid");
+    const host = authority.slice(0, closeBracket + 1);
+    const suffix = authority.slice(closeBracket + 1);
+    if (suffix.length === 0) return { host };
+    if (!suffix.startsWith(":")) throw new Error("relay URL port is invalid");
+    return { host, port: suffix.slice(1) };
+  }
+
+  const firstColon = authority.indexOf(":");
+  const lastColon = authority.lastIndexOf(":");
+  if (firstColon < 0) return { host: authority };
+  if (firstColon !== lastColon) throw new Error("IPv6 relay hosts must be bracketed");
+  return { host: authority.slice(0, firstColon), port: authority.slice(firstColon + 1) };
+}
+
+function isValidDnsHostname(hostname: string): boolean {
+  if (hostname.length === 0 || hostname.length > 254 || !/^[A-Za-z0-9.-]+$/.test(hostname)) return false;
+  const withoutTrailingDot = hostname.endsWith(".") ? hostname.slice(0, -1) : hostname;
+  if (withoutTrailingDot.length === 0 || withoutTrailingDot.length > 253) return false;
+  return withoutTrailingDot.split(".").every((label) =>
+    label.length >= 1 && label.length <= 63 && /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
+  );
 }
 
 function createTransport(socket: WebSocket): Transport {

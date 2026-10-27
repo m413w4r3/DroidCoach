@@ -10,6 +10,55 @@ import java.util.concurrent.TimeUnit
 
 class PaseoRelayClientTest {
     @Test
+    fun rejectsRemoteCleartextBeforeOpeningASocket() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(staticPair)
+        val error = runCatching {
+            PaseoRelayClient(
+                config = RelayConfig("ws://relay.example:4400", "atlas-test"),
+                credentialsProvider = InMemoryRelayCredentialStore(credentials),
+                listener = object : PaseoRelayClient.Listener {},
+                socketFactory = sockets,
+            )
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertEquals(0, sockets.connectCount.get())
+    }
+
+    @Test
+    fun rejectsNoiseResponderThatDoesNotMatchThePinnedStaticKey() {
+        val (credentials, pinnedPair) = testCredentials()
+        val wrongResponder = NoiseKeyPair.generate()
+        val sockets = FakeRelaySocketFactory(wrongResponder)
+        val failures = CountDownLatch(1)
+        val client = PaseoRelayClient(
+            config = RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 0),
+            credentialsProvider = InMemoryRelayCredentialStore(credentials),
+            listener = object : PaseoRelayClient.Listener {
+                override fun onProtocolFailure(error: Throwable) { failures.countDown() }
+            },
+            socketFactory = sockets,
+        )
+        try {
+            client.start()
+            assertTrue(failures.await(1, TimeUnit.SECONDS))
+            assertEquals(4002, sockets.sockets.single().closedCode)
+            assertFalse(client.state() == RelayConnectionState.RELAY_CONNECTED)
+        } finally {
+            client.stop()
+            pinnedPair.privateKey.fill(0)
+            wrongResponder.privateKey.fill(0)
+        }
+    }
+
+    @Test
+    fun debugDnsMapsTheTestRelayHostnameToLoopbackWithoutSystemDnsChanges() {
+        val address = RelayDebugDns.lookup("relay.atlas.test").single()
+        assertTrue(address.isLoopbackAddress)
+        assertEquals("127.0.0.1", address.hostAddress)
+    }
+
+    @Test
     fun constructsExactPaseoV2ClientUrl() {
         val config = RelayConfig("ws://127.0.0.1:4400", "atlas-test")
         assertEquals("ws://127.0.0.1:4400/ws?serverId=atlas-test&role=client&v=2", config.webSocketUrl())
