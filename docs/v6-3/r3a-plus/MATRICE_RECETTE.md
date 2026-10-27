@@ -15,8 +15,10 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 | T4 | Build debug | `android/gradlew :app:assembleDebug` | PENDING |
 | T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | PENDING |
 | T6 | Tests instrumentés API 37 | `am instrument` ciblé sur Pixel | PENDING |
-| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | PENDING |
-| T8 | Build relais local | `docker build` image épinglée | PENDING |
+| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — `733cd78` (merge WSS) |
+| T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 40 tests, 10 fichiers sur `733cd78`, avec `ATLAS_ALLOW_LOOPBACK_WS=1` et relais réel ; suivi B1 pour l'opt-in explicite du test de reconnexion |
+| T8 | Build relais local | `docker run ... atlas-paseo-relay:r3a` | **PASS** — image épinglée, `/health` 200 sur `127.0.0.1:4400` |
+| T15 | Module relay Android | `:app:testDebugUnitTest --tests 'dev.atlas.coach.sync.relay.*'` | **PASS** — 36 tests, 6 suites sur `733cd78` |
 | T9 | Installation propre connecteur | répertoire vierge, sans clone Paseo | PENDING |
 | T10 | Unité systemd utilisateur | `systemd-analyze verify` + test isolé | PENDING |
 | T11 | WSS bout en bout Pixel | recette C | PENDING |
@@ -28,16 +30,16 @@ preuve instrumentée ; une preuve Pixel ne vaut pas preuve Internet réelle.
 
 | ID | Cas | Statut |
 |---|---|---|
-| W1 | WSS CA de test approuvée | PENDING |
-| W2 | Mauvais hostname | PENDING |
-| W3 | Certificat non approuvé | PENDING |
-| W4 | TLS interrompu | PENDING |
-| W5 | `ws://` distant refusé | PENDING |
-| W6 | Mauvaise identité Noise | PENDING |
-| W7 | Reconnexion après coupure TLS | PENDING |
-| W8 | FastAPI inaccessible publiquement | PENDING |
-| W9 | Révocation | PENDING |
-| W10 | Redémarrage connecteur/relais | PENDING |
+| W1 | WSS CA de test approuvée | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
+| W2 | Mauvais hostname | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
+| W3 | Certificat non approuvé | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
+| W4 | TLS interrompu | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
+| W5 | `ws://` distant refusé | **PASS (Node/JVM)** sur `733cd78` |
+| W6 | Mauvaise identité Noise | **PASS (JVM)** sur `733cd78` ; WSS Android PENDING |
+| W7 | Reconnexion après coupure TLS | **PASS (Node/TLS)** sur `733cd78` ; Android runtime PENDING |
+| W8 | FastAPI inaccessible publiquement | **PASS (Node/TLS)** — sentinelle 8100 jamais atteinte via le proxy |
+| W9 | Révocation | PENDING (vague C) |
+| W10 | Redémarrage connecteur/relais | PENDING (vague C) |
 
 ## 3. Fiabilité connecteur
 

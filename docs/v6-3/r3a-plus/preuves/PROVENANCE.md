@@ -12,6 +12,11 @@ horodatage et statut. Les preuves R3-A historiques ne sont pas reclassées.
 | `calendar-androidtest-commands.txt` | `e66d2ef` | n/a | commandes Pixel C1–C5 | **à exécuter** |
 | `calendar-merged-targeted.txt` | `0f3426a` (merge) | n/a | 64 tests JVM ciblés rejoués par le parent | **final (JVM)** |
 | `jvm-merged-calendar.txt` | `fe54e20` | n/a | suite JVM complète 91/654, 0 échec | **final (JVM partiel)** |
+| `wss-policy.txt` | `b2cbebc` | n/a | politique PC/Android et tests JVM | **final (Node/JVM)** |
+| `wss-tls-harness.txt` | `b2cbebc` | n/a | harnais TLS/WSS de l'agent | **final (Node/TLS)** |
+| `node-merged-wss.txt` | `733cd78` | n/a | 40 tests Node rejoués par le parent | **final (Node)** |
+| `android-merged-wss.txt` | `733cd78` | n/a | 36 tests JVM relais + androidTest compilé | **final (JVM)** |
+| `wss-harness-merged.txt` | `733cd78` | n/a | 6 contrôles WSS/TLS rejoués par le parent | **final (Node/TLS)** |
 | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Règles

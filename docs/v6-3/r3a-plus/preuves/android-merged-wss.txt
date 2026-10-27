@@ -1,0 +1,83 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:generateDebugRFile
+
+> Task :app:compileDebugKotlin
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/main/java/dev/atlas/coach/app/PlanScreen.kt:336:47 Condition is always 'false'.
+
+> Task :app:javaPreCompileDebug
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:587:74 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:673:77 Unchecked cast of 'Any?' to 'ThreadLocal<String?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:712:68 Unchecked cast of 'Any?' to 'MutableState<AgentHomeState>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/app/V621ReviewFindingsTest.kt:82:78 Unchecked cast of 'Any?' to 'MutableState<AgentHomeState>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file:///home/nill/perso/AndroCoach/atlas-preparation/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:generateDebugAndroidTestResources
+> Task :app:packageDebugAndroidTestResources
+> Task :app:processDebugAndroidTestNavigationResources
+> Task :app:parseDebugAndroidTestLocalResources
+> Task :app:generateDebugAndroidTestRFile
+> Task :app:compileDebugAndroidTestKotlin
+> Task :app:javaPreCompileDebugAndroidTest
+> Task :app:compileDebugAndroidTestJavaWithJavac NO-SOURCE
+> Task :app:generateDebugAndroidTestAssets UP-TO-DATE
+> Task :app:mergeDebugAndroidTestAssets
+> Task :app:compressDebugAndroidTestAssets
+> Task :app:generateDebugAndroidTestGlobalSynthetics
+> Task :app:processDebugAndroidTestJavaRes
+> Task :app:mergeDebugAndroidTestJavaResource
+> Task :app:checkDebugAndroidTestDuplicateClasses
+> Task :app:desugarDebugAndroidTestFileDependencies
+> Task :app:mergeExtDexDebugAndroidTest
+> Task :app:mergeLibDexDebugAndroidTest
+> Task :app:checkDebugAndroidTestAarMetadata
+> Task :app:mapDebugAndroidTestSourceSetPaths
+> Task :app:compileDebugAndroidTestNavigationResources
+> Task :app:mergeDebugAndroidTestResources
+> Task :app:mergeDebugAndroidTestManifest
+> Task :app:processDebugAndroidTestManifest
+> Task :app:processDebugAndroidTestResources
+> Task :app:dexBuilderDebugAndroidTest
+> Task :app:mergeProjectDexDebugAndroidTest
+> Task :app:mergeDebugAndroidTestJniLibFolders
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugNativeLibs
+> Task :app:mergeDebugAndroidTestNativeLibs NO-SOURCE
+> Task :app:stripDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebugAndroidTest
+> Task :app:writeDebugAndroidTestSigningConfigVersions
+> Task :app:packageDebugAndroidTest
+> Task :app:createDebugAndroidTestApkListingFileRedirect
+> Task :app:assembleDebugAndroidTest
+
+BUILD SUCCESSFUL in 29s
+56 actionable tasks: 56 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.6.0/userguide/configuration_cache_enabling.html

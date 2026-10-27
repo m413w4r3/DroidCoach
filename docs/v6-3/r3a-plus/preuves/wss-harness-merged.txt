@@ -1,0 +1,7 @@
+PASS remote ws policy rejects cleartext and allows explicit loopback development opt-in
+PASS WSS accepts the explicitly trusted local CA and reaches Paseo Relay
+PASS WSS refuses a trusted certificate with the wrong hostname
+PASS WSS refuses a certificate outside the system and test trust stores
+PASS plain HTTP sent to the TLS proxy never reaches the 127.0.0.1:8100 sentinel
+PASS an interrupted TLS stream disconnects and reconnects over WSS
+PASS 6 WSS harness checks
