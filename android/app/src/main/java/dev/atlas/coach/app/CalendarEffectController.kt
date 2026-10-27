@@ -412,8 +412,17 @@ internal class CalendarEffectController(
             CalendarWriteOperationType.UPDATE -> "update"
             CalendarWriteOperationType.DELETE -> "delete"
         }
-        val idempotencyKey = "plan-${plan.planId}-v${plan.version}-${effect.activityId}-$operationKind"
         val link = runCatching { linkStore.findByActivity(effect.activityId) }.getOrNull()
+        val idempotencyKey = buildString {
+            append("plan-${plan.planId}-v${plan.version}-${effect.activityId}-$operationKind")
+            // A missing provider row after an external deletion must not resolve the
+            // old APPLIED operation. The URI lookup still prevents duplicates.
+            if (effect.type == CalendarWriteOperationType.CREATE &&
+                link?.state == CalendarEventLinkState.MISSING
+            ) {
+                append("-recreate-${link.lastVerifiedAt ?: 0L}")
+            }
+        }
         return when (effect.type) {
             CalendarWriteOperationType.CREATE -> {
                 val activity = plan.activities.firstOrNull { it.activityId == effect.activityId } ?: return null

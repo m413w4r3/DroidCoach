@@ -232,6 +232,10 @@ class AtlasController @JvmOverloads constructor(
     private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
     /** Optional relayed transport; it never opens a socket in DIRECT or OFFLINE mode. */
     val relaySettings = RelaySettingsController(appContext, clock = { clock.nowMillis() })
+    /** Local, durable memory facts and their user-facing controller. */
+    val memoryController = MemoryController(File(appContext.filesDir, "memory"))
+    /** Independent global UsageStats path; no collection happens until the user consents and refreshes. */
+    val globalUsageController = GlobalUsageController.fromContext(appContext)
     var sportPlanState by mutableStateOf<SportPlanUiState?>(null)
         private set
     var sportBusy by mutableStateOf(false)

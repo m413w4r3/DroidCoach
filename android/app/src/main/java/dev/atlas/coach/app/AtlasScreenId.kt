@@ -22,5 +22,7 @@ internal object AtlasScreenId {
     const val ROUTINES = "Routines de focus"
     const val SYNC_SETTINGS = "Partage backend"
     const val RELAY_SETTINGS = "Connexion relayée"
+    const val MEMORY = "Mémoire locale"
+    const val GLOBAL_USAGE = "Usage global"
     const val CALENDAR_DIAGNOSTIC = "Diagnostic calendrier"
 }

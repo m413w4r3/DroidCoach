@@ -55,7 +55,7 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI parent à faire |
 | `R3-MEMORY-UI-01` | parcours mémoire complet | selon ticket | JVM + UI | **PLANNED** |
 | `R3-USAGE-UI-01` | Usage Access réel sur émulateur | selon ticket | permission + statistiques | **PLANNED** |
-| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **PLANNED** |
+| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTION_REQUIRED** — 3 P1 + 2 P2 ; correctifs appliqués, re-revue à faire |
 
 ## 4. Journal
 
@@ -99,6 +99,9 @@ Statut : **RUNNING**. Ce registre est la source de vérité R3-A.
 | 2026-10-27 | Suite instrumentée de référence | **PASS** — 17/17 sur l'APK final |
 | 2026-10-27 | Écriture durable config relay | **FIX** — `apply()` → `commit()` ; préférences vérifiées après seed |
 | 2026-10-27 | APK final | SHA-256 `3ee62e6d10b7b6e91954f85b003ef66dfc05a85cd79079dd0514ec9a08aa0d0f` ; E2E + app controller + calendrier PASS |
+| 2026-10-27 | Revue indépendante | **NO_GO** — P1 token CLI imprimé, P1 registre sans verrou, P1 preuves non liées au SHA ; P2 compte local dans une preuve, P2 re-création calendrier bloquée, P2 doc crypto Tink/Bouncy Castle |
+| 2026-10-27 | Correctifs revue | token CLI écrit en 0600 sans stdout ; verrou registre inter-processus ; clé de re-création calendrier ; doc crypto corrigée ; preuve `nill` redactée ; provenance SHA à régénérer |
+| 2026-10-27 | Tests après correctifs | Node 24/24 ; `CalendarEffectControllerTest` 8/8 dont re-création après suppression externe |
 
 ## 5. Preuves
 

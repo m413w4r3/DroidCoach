@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { chmod, stat } from "node:fs/promises";
+import { chmod, open, stat, unlink } from "node:fs/promises";
 import { readPrivateJson, writePrivateJson } from "./secure-files.js";
 import { CAPABILITIES, type Capability } from "./protocol.js";
 
@@ -22,6 +22,10 @@ export interface PairedDevice {
   token: string;
 }
 
+const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_STALE_MS = 10_000;
+const LOCK_RETRY_MS = 20;
+
 export class DeviceRegistry {
   constructor(readonly path: string) {}
 
@@ -39,31 +43,35 @@ export class DeviceRegistry {
     if (capabilities.length === 0 || new Set(capabilities).size !== capabilities.length || !capabilities.every((capability) => CAPABILITIES.includes(capability))) {
       throw new Error("invalid device capabilities");
     }
-    const document = await this.load();
-    const rawToken = randomBytes(32);
-    const token = rawToken.toString("base64url");
-    const device: DeviceRecord = {
-      device_id: randomUUID(),
-      label,
-      token_sha256: createHash("sha256").update(rawToken).digest("hex"),
-      capabilities: [...capabilities],
-      created_at: new Date().toISOString(),
-      revoked_at: null,
-    };
-    document.devices.push(device);
-    await writePrivateJson(this.path, document);
-    await this.assertPrivateMode();
-    return { device, token };
+    return this.withLock(async () => {
+      const document = await this.load();
+      const rawToken = randomBytes(32);
+      const token = rawToken.toString("base64url");
+      const device: DeviceRecord = {
+        device_id: randomUUID(),
+        label,
+        token_sha256: createHash("sha256").update(rawToken).digest("hex"),
+        capabilities: [...capabilities],
+        created_at: new Date().toISOString(),
+        revoked_at: null,
+      };
+      document.devices.push(device);
+      await writePrivateJson(this.path, document);
+      await this.assertPrivateMode();
+      return { device, token };
+    });
   }
 
   async revoke(deviceId: string): Promise<DeviceRecord> {
-    const document = await this.load();
-    const device = document.devices.find((item) => item.device_id === deviceId);
-    if (!device) throw new Error("device not found");
-    if (!device.revoked_at) device.revoked_at = new Date().toISOString();
-    await writePrivateJson(this.path, document);
-    await this.assertPrivateMode();
-    return device;
+    return this.withLock(async () => {
+      const document = await this.load();
+      const device = document.devices.find((item) => item.device_id === deviceId);
+      if (!device) throw new Error("device not found");
+      if (!device.revoked_at) device.revoked_at = new Date().toISOString();
+      await writePrivateJson(this.path, document);
+      await this.assertPrivateMode();
+      return device;
+    });
   }
 
   async verifyToken(device: DeviceRecord, token: string): Promise<boolean> {
@@ -80,6 +88,37 @@ export class DeviceRegistry {
       if ((info.mode & 0o077) !== 0) await chmod(this.path, 0o600);
     } catch {
       // The next read or write reports the useful filesystem error.
+    }
+  }
+
+  /**
+   * Serializes read-modify-write operations across connector and CLI processes.
+   * The lock file is private; a stale lock is taken over after ten seconds.
+   */
+  private async withLock<T>(action: () => Promise<T>): Promise<T> {
+    const lockPath = `${this.path}.lock`;
+    const deadline = Date.now() + LOCK_TIMEOUT_MS;
+    let handle: Awaited<ReturnType<typeof open>> | null = null;
+    while (handle === null) {
+      try {
+        handle = await open(lockPath, "wx", 0o600);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        const info = await stat(lockPath).catch(() => null);
+        if (info !== null && Date.now() - info.mtimeMs > LOCK_STALE_MS) {
+          await unlink(lockPath).catch(() => {});
+          continue;
+        }
+        if (Date.now() >= deadline) throw new Error("device registry is busy");
+        await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+      }
+    }
+    try {
+      await handle.writeFile(`${process.pid}\n${Date.now()}\n`);
+      return await action();
+    } finally {
+      await handle.close().catch(() => {});
+      await unlink(lockPath).catch(() => {});
     }
   }
 

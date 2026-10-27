@@ -14,6 +14,13 @@ import dev.atlas.coach.usage.UsageReliability
 import dev.atlas.coach.usage.UsageSummary
 import dev.atlas.coach.usage.UsageSummaryStore
 import dev.atlas.coach.usage.UsageWindowFactory
+import dev.atlas.coach.usage.android.AndroidGlobalUsageEventSource
+import dev.atlas.coach.usage.android.AndroidUsageAccessStatus
+import dev.atlas.coach.usage.android.AndroidUsageAppRefProvider
+import dev.atlas.coach.usage.android.AndroidUsageDisplayNameProvider
+import dev.atlas.coach.usage.android.SharedPreferencesGlobalUsageStores
+import android.app.usage.UsageStatsManager
+import android.content.Context
 import java.time.ZoneId
 
 data class GlobalUsageScreenState(
@@ -110,7 +117,25 @@ class GlobalUsageController(
         return state()
     }
 
-    private companion object {
+    companion object {
+        fun fromContext(context: Context): GlobalUsageController {
+            val appContext = context.applicationContext
+            val stores = SharedPreferencesGlobalUsageStores(appContext)
+            val accessStatus = AndroidUsageAccessStatus(appContext)
+            val usageStats = appContext.getSystemService(UsageStatsManager::class.java)
+                ?: error("UsageStatsManager is unavailable")
+            val observer = GlobalUsageObserver(
+                eventSource = AndroidGlobalUsageEventSource(usageStats),
+                accessStatus = accessStatus,
+                consentStore = stores,
+                cursorStore = stores,
+                summaryStore = stores,
+                appRefProvider = AndroidUsageAppRefProvider(appContext),
+                displayNameProvider = AndroidUsageDisplayNameProvider(appContext),
+            )
+            return GlobalUsageController(observer, accessStatus, stores, stores)
+        }
+
         const val CONSENT_PURPOSE = "Local global app-usage summary and quota display"
 
         fun unknownQuota(quota: UsageQuota) = QuotaEvaluation(

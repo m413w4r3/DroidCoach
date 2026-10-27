@@ -8,12 +8,12 @@ SHA et à une commande. Une preuve émulateur ne vaut pas preuve Pixel.
 
 | ID | Gate | Commande | Statut |
 |---|---|---|---|
-| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | NOT_RUN |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | NOT_RUN |
-| T3 | Lint | `android/gradlew :app:lintDebug` | NOT_RUN |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | NOT_RUN |
-| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | NOT_RUN |
-| T6 | Tests instrumentés API 37 | `am instrument` ciblé | NOT_RUN |
+| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 187 passed, 1 skipped |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 91 suites, 648 tests, 0 échec (à rejouer après correctifs de revue) |
+| T3 | Lint | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** |
+| T5 | Compilation androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** |
+| T6 | Tests instrumentés API 37 | `am instrument` ciblé | **PASS** — 17/17 sur l'APK de recette ; à rejouer après correctifs de revue |
 | T7 | Tests Node transport | `npm test` dans `integrations/relay/pc` | **PASS** — 23 tests, 6 fichiers, sur SHA intégré |
 | T8 | Build relais local | `docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay` | **PASS** le 2026-10-26 |
 | T9 | Vecteurs Noise Kotlin = upstream | tests JVM ciblés | **PASS** — 25 tests, vecteurs Paseo + cross-vector Node à clés fixes |

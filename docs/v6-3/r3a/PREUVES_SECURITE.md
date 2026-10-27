@@ -33,8 +33,8 @@
 
 - Noise : `Noise_NK_25519_ChaChaPoly_SHA256`, prologue `paseo-relay-e2ee/1`.
 - Mode `protected` obligatoire ; `legacy` refusé des deux côtés.
-- X25519 : Tink (bibliothèque maintenue) côté Android, `@noble/curves` côté Node.
-- ChaCha20-Poly1305 : Tink côté Android, `@noble/ciphers` côté Node.
+- X25519 : Bouncy Castle 1.86 côté Android, `@noble/curves` côté Node.
+- ChaCha20-Poly1305 : Bouncy Castle 1.86 (nonce explicite) côté Android, `@noble/ciphers` côté Node.
 - SHA-256/HMAC : JCA côté Android, `@noble/hashes` côté Node.
 - Aucune primitive inventée. Les vecteurs upstream et les tests croisés Kotlin ↔
   Node sont la preuve d'équivalence.

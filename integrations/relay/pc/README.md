@@ -44,13 +44,14 @@ Do not place token values in command arguments, checked-in files, or logs.
 
 ```sh
 node dist/main.js show-identity
-node dist/main.js pair-device --label "synthetic-device" --capabilities sync.status,plan.revision
+node dist/main.js pair-device --label "synthetic-device" --token-file "$HOME/.local/state/atlas-relay/device.json" --capabilities sync.status,plan.revision
 node dist/main.js revoke-device DEVICE_UUID
 ```
 
 `show-identity` prints only the X25519 public key and SHA-256 fingerprint.
-`pair-device` prints a new 32-byte base64url device token once; the registry
-stores only its SHA-256 hash. The identity and registry files are mode `0600`
+`pair-device` writes the new 32-byte base64url device token once to the requested
+0600 token file; stdout contains only the device id, label, capabilities and
+file path. The registry stores only the token SHA-256 hash. The identity and registry files are mode `0600`
 inside a mode `0700` state directory. Revocation updates the registry; a
 running connector checks it every second and closes the device session with
 WebSocket code `4001`.

@@ -129,6 +129,27 @@ class CalendarEffectControllerTest {
     }
 
     @Test
+    fun recreatesEventAfterExternalDeletionAtTheSamePlanVersion() {
+        val fixture = fixture()
+        fixture.controller.selectCalendar(CALENDAR_ID)
+        val plan = plan(activities = listOf(activity("Restore me")))
+        val preview = fixture.controller.syncAppliedPlan(plan)
+        assertTrue(fixture.controller.syncAppliedPlan(plan, preview, plan).successful)
+        assertEquals(1, fixture.provider.insertCount)
+        assertEquals(1, fixture.provider.events.size)
+
+        fixture.provider.removeEvent(plan.activities.single().activityId)
+
+        val recoveryPreview = fixture.controller.syncAppliedPlan(plan)
+        assertTrue(recoveryPreview.ready)
+        assertEquals(1, recoveryPreview.effects.size)
+        assertEquals(CalendarWriteOperationType.CREATE, recoveryPreview.effects.single().type)
+        assertTrue(fixture.controller.syncAppliedPlan(plan, recoveryPreview, plan).successful)
+        assertEquals(2, fixture.provider.insertCount)
+        assertEquals(1, fixture.provider.events.size)
+    }
+
+    @Test
     fun crashAfterProviderInsertIsRecoveredByReconciliationWithoutRetry() {
         val storage = createTempDirectory()
         val provider = FakeCalendarWriteProvider(listOf(localCalendar()))
@@ -384,6 +405,11 @@ class CalendarEffectControllerTest {
         fun removeCalendar(calendarId: Long) {
             mutableCalendars.removeAll { it.id == calendarId }
             events.values.filter { it.calendarId == calendarId }.map { it.eventId }.forEach(events::remove)
+        }
+
+        fun removeEvent(activityId: String) {
+            val event = events.values.single { it.customAppUri?.endsWith("/activity/$activityId") == true }
+            events.remove(event.eventId)
         }
 
         private fun CalendarEventDraft.toEvent(eventId: Long, calendarId: Long, uri: String) = CalendarWriteEvent(

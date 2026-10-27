@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { ensurePrivateDirectory } from "./secure-files.js";
 import { DeviceRegistry } from "./device-registry.js";
 import { loadOrCreateIdentity } from "./identity.js";
@@ -20,12 +21,21 @@ async function main(args: string[]): Promise<void> {
   if (command === "pair-device") {
     const options = parseOptions(args.slice(1));
     const label = options.label;
+    const tokenFile = options["token-file"];
     if (!label) throw new Error("pair-device requires --label");
+    if (!tokenFile) throw new Error("pair-device requires --token-file");
     const capabilities = options.capabilities
       ? options.capabilities.split(",").filter(Boolean) as Capability[]
       : [...CAPABILITIES];
     const paired = await registry.pair(label, capabilities);
-    process.stdout.write(`${JSON.stringify({ device_id: paired.device.device_id, label: paired.device.label, capabilities: paired.device.capabilities, token: paired.token }, null, 2)}\n`);
+    const payload = JSON.stringify({
+      device_id: paired.device.device_id,
+      label: paired.device.label,
+      capabilities: paired.device.capabilities,
+      token: paired.token,
+    }, null, 2) + "\n";
+    await writeFile(tokenFile, payload, { mode: 0o600, flag: "wx" });
+    process.stdout.write(`${JSON.stringify({ device_id: paired.device.device_id, label: paired.device.label, capabilities: paired.device.capabilities, token_file: tokenFile }, null, 2)}\n`);
     return;
   }
   if (command === "revoke-device") {
