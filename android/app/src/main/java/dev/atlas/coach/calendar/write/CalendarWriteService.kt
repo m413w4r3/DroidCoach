@@ -17,15 +17,18 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * [beforeProviderEffect] is a deterministic fault seam for JVM crash-window tests. It runs after
  * write-ahead journaling and immediately before the first mutation request. Production callers should
- * leave it at its no-op default.
+ * leave it at its no-op default. [beforeFinalPermissionRecheck] is an internal test seam: after the
+ * operation's permission preflight it can pause while an external permission change occurs, then the
+ * engine performs one final permission check directly before the provider mutation.
  */
-class CalendarWriteService(
+class CalendarWriteService internal constructor(
     private val provider: CalendarWriteProvider,
     private val journal: CalendarWriteJournal,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val beforeProviderEffect: (CalendarWriteOperation) -> Unit = {},
     private val linkStore: CalendarWriteLinkStore = InMemoryCalendarWriteLinkStore(),
     private val afterProviderEffect: (CalendarWriteOperation) -> Unit = {},
+    private val beforeFinalPermissionRecheck: (CalendarWriteOperation) -> Unit = {},
 ) {
     companion object {
         private val activityLocks = ConcurrentHashMap<String, Any>()
@@ -141,6 +144,9 @@ class CalendarWriteService(
         if (current.error != null) return finishWithoutEffect(operation, current.error)
         val permissionError = permissionsBeforeEffect()
         if (permissionError != null) return finishWithoutEffect(operation, permissionError)
+        beforeFinalPermissionRecheck(operation)
+        val finalPermissionError = permissionsBeforeEffect()
+        if (finalPermissionError != null) return finishWithoutEffect(operation, finalPermissionError)
         val eventId = try {
             provider.insert(calendar.id, draft, draft.provenanceUri)
         } catch (_: Exception) {
@@ -204,6 +210,11 @@ class CalendarWriteService(
         )
         val permissionError = permissionsBeforeEffect()
         if (permissionError != null) return finishWithoutEffect(operation, permissionError, previousLink = link)
+        beforeFinalPermissionRecheck(operation)
+        val finalPermissionError = permissionsBeforeEffect()
+        if (finalPermissionError != null) {
+            return finishWithoutEffect(operation, finalPermissionError, previousLink = link)
+        }
         try {
             provider.update(eventId, link.calendarId, draft, draft.provenanceUri)
         } catch (_: Exception) {
@@ -263,6 +274,11 @@ class CalendarWriteService(
         )
         val permissionError = permissionsBeforeEffect()
         if (permissionError != null) return finishWithoutEffect(operation, permissionError, previousLink = link)
+        beforeFinalPermissionRecheck(operation)
+        val finalPermissionError = permissionsBeforeEffect()
+        if (finalPermissionError != null) {
+            return finishWithoutEffect(operation, finalPermissionError, previousLink = link)
+        }
         val affectedRows = try {
             provider.delete(eventId, link.calendarId, link.provenanceUri)
         } catch (_: Exception) {
