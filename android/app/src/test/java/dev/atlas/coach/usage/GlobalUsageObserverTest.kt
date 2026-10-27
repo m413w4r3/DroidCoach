@@ -165,6 +165,32 @@ class GlobalUsageObserverTest {
     }
 
     @Test
+    fun weeklyWindowIsCollectedUpToSevenDaysWhenConfigured() {
+        val week = 7L * 24L * HOUR
+        var observedRange: Pair<Long, Long>? = null
+        val source = GlobalUsageEventSource { fromUtc, throughUtc, _ ->
+            observedRange = fromUtc to throughUtc
+            GlobalUsageEventBatch(
+                listOf(
+                    event("resume", START + 2L * 24L * HOUR, GlobalUsageEventType.ACTIVITY_RESUMED),
+                    event("pause", START + 2L * 24L * HOUR + HOUR, GlobalUsageEventType.ACTIVITY_PAUSED),
+                ).filter { it.timestampUtc in fromUtc..throughUtc },
+                truncated = false,
+            )
+        }
+        val harness = harness(source = source, maxWindowMillis = UsageSummaryLimits.MAX_SUPPORTED_WINDOW_MILLIS)
+        harness.observer.acceptConsent(consent())
+
+        val result = harness.observer.poll(UsageWindow(START, START + week, ZoneId.of("UTC")), START + week)
+
+        assertEquals(GlobalUsageObservationStatus.PROCESSED, result.status)
+        assertEquals(START, observedRange?.first)
+        assertEquals(START + week, observedRange?.second)
+        assertEquals(week, result.summary?.coverage?.observedMs)
+        assertEquals(HOUR, result.summary?.totalForegroundMs)
+    }
+
+    @Test
     fun minimumIntervalAllowsCollectionAgainAtBoundary() {
         val harness = harness()
         harness.observer.acceptConsent(consent())
@@ -185,6 +211,7 @@ class GlobalUsageObserverTest {
         events: List<GlobalUsageEvent> = emptyList(),
         source: GlobalUsageEventSource = SyntheticSource(events),
         displayName: UsageDisplayNameProvider = UsageDisplayNameProvider { null },
+        maxWindowMillis: Long = UsageSummaryLimits.MAX_DEFAULT_WINDOW_MILLIS,
     ): Harness {
         val consentStore = FakeGlobalUsageConsentStore()
         val cursorStore = FakeGlobalUsageCursorStore()
@@ -198,6 +225,7 @@ class GlobalUsageObserverTest {
             summaryStore = summaryStore,
             appRefProvider = StableUsageAppRefProvider(ByteArray(32) { 9 }),
             displayNameProvider = displayName,
+            maxWindowMillis = maxWindowMillis,
         )
         return Harness(observer, source as? SyntheticSource ?: SyntheticSource(emptyList()).also {
             it.delegateForCounting = source

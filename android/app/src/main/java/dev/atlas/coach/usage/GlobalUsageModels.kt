@@ -248,6 +248,11 @@ interface UsageSummaryStore {
     fun clearSummary()
 }
 
+interface UsageQuotaStore {
+    fun currentQuotas(): List<UsageQuota>
+    fun saveQuotas(quotas: List<UsageQuota>)
+}
+
 class FakeGlobalUsageConsentStore(initial: GlobalUsageConsent = GlobalUsageConsent.REVOKED) : GlobalUsageConsentStore {
     private var value = initial
 
@@ -294,10 +299,23 @@ class FakeUsageSummaryStore : UsageSummaryStore {
     }
 }
 
+class FakeUsageQuotaStore(initial: List<UsageQuota> = emptyList()) : UsageQuotaStore {
+    private var value = initial.toList()
+
+    @Synchronized
+    override fun currentQuotas(): List<UsageQuota> = value
+
+    @Synchronized
+    override fun saveQuotas(quotas: List<UsageQuota>) {
+        value = quotas.toList()
+    }
+}
+
 object UsageSummaryLimits {
     const val MAX_APPS = 100
     const val MAX_EVENTS_PER_QUERY = 20_000
     const val MIN_COLLECTION_INTERVAL_MILLIS = 15L * 60L * 1_000L
     const val MAX_DEFAULT_WINDOW_MILLIS = 24L * 60L * 60L * 1_000L
+    const val MAX_SUPPORTED_WINDOW_MILLIS = 7L * 24L * 60L * 60L * 1_000L
     const val MAX_AGGREGATE_WINDOW_MILLIS = 31L * 24L * 60L * 60L * 1_000L
 }

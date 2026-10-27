@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.app.ui.AtlasRule
 import dev.atlas.coach.usage.UsageReliability
@@ -33,9 +36,18 @@ internal fun GlobalUsageScreen(
     onOpenUsageAccessSettings: () -> Unit,
     onRefresh: () -> Unit,
     onRevokeConsent: () -> Unit,
+    onSaveQuota: (limitMinutes: Int, enabled: Boolean) -> Unit,
 ) {
     var includePackageNames by remember(state.packageNamesConsented) {
         mutableStateOf(state.packageNamesConsented)
+    }
+    var quotaMinutes by remember(state.dailyQuota?.limitMs) {
+        mutableStateOf(
+            ((state.dailyQuota?.limitMs ?: DEFAULT_DAILY_QUOTA_MINUTES * 60_000L) / 60_000L).toString(),
+        )
+    }
+    var quotaEnabled by remember(state.dailyQuota?.enabled) {
+        mutableStateOf(state.dailyQuota?.enabled ?: true)
     }
 
     Column(
@@ -111,8 +123,38 @@ internal fun GlobalUsageScreen(
 
         AtlasRule()
         Text("Quotas", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Quota quotidien global (minutes). Il est local, désactivable et évalué uniquement sur une fenêtre pleinement observée.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = quotaMinutes,
+            onValueChange = { value ->
+                if (value.length <= 4 && value.all(Char::isDigit)) quotaMinutes = value
+            },
+            label = { Text("Limite en minutes") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Checkbox(checked = quotaEnabled, onCheckedChange = { quotaEnabled = it })
+            Column(modifier = Modifier.weight(1f).padding(top = 10.dp)) {
+                Text("Activer ce quota")
+                Text(
+                    "Un quota désactivé n’est pas évalué et n’influence pas la fenêtre de collecte.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Button(
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+            onClick = { quotaMinutes.toIntOrNull()?.let { onSaveQuota(it, quotaEnabled) } },
+        ) { Text("Enregistrer le quota") }
         if (state.quotas.isEmpty()) {
-            Text("UNKNOWN · Aucun quota n’est configuré.", style = MaterialTheme.typography.bodySmall)
+            Text("Aucun quota enregistré.", style = MaterialTheme.typography.bodySmall)
         } else {
             state.quotas.forEach { evaluation ->
                 Text(
@@ -174,6 +216,8 @@ private fun formatDate(timestampUtc: Long, timezone: String): String = runCatchi
         .withZone(ZoneId.of(timezone))
     formatter.format(Instant.ofEpochMilli(timestampUtc))
 }.getOrElse { "—" }
+
+private const val DEFAULT_DAILY_QUOTA_MINUTES = 120
 
 private fun formatDuration(durationMs: Long): String {
     val minutes = (durationMs.coerceAtLeast(0L) / 60_000L)

@@ -38,5 +38,9 @@ internal fun GlobalUsageRoute(
             controller.revokeConsent()
             state = controller.state()
         },
+        onSaveQuota = { minutes, enabled ->
+            controller.saveDailyQuota(minutes, enabled)
+            state = controller.state()
+        },
     )
 }

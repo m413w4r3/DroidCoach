@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { chmod, open, stat, unlink } from "node:fs/promises";
+import { chmod, stat } from "node:fs/promises";
+import { withFileLock, type FileLockOptions } from "./file-lock.js";
 import { readPrivateJson, writePrivateJson } from "./secure-files.js";
 import { CAPABILITIES, type Capability } from "./protocol.js";
 
@@ -22,12 +23,11 @@ export interface PairedDevice {
   token: string;
 }
 
-const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_STALE_MS = 10_000;
-const LOCK_RETRY_MS = 20;
-
 export class DeviceRegistry {
-  constructor(readonly path: string) {}
+  constructor(
+    readonly path: string,
+    private readonly lockOptions: FileLockOptions = {},
+  ) {}
 
   async list(): Promise<DeviceRecord[]> {
     const document = await this.load();
@@ -93,33 +93,13 @@ export class DeviceRegistry {
 
   /**
    * Serializes read-modify-write operations across connector and CLI processes.
-   * The lock file is private; a stale lock is taken over after ten seconds.
+   * A stale lock is only taken over when its recorded process is gone.
    */
   private async withLock<T>(action: () => Promise<T>): Promise<T> {
-    const lockPath = `${this.path}.lock`;
-    const deadline = Date.now() + LOCK_TIMEOUT_MS;
-    let handle: Awaited<ReturnType<typeof open>> | null = null;
-    while (handle === null) {
-      try {
-        handle = await open(lockPath, "wx", 0o600);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        const info = await stat(lockPath).catch(() => null);
-        if (info !== null && Date.now() - info.mtimeMs > LOCK_STALE_MS) {
-          await unlink(lockPath).catch(() => {});
-          continue;
-        }
-        if (Date.now() >= deadline) throw new Error("device registry is busy");
-        await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
-      }
-    }
-    try {
-      await handle.writeFile(`${process.pid}\n${Date.now()}\n`);
-      return await action();
-    } finally {
-      await handle.close().catch(() => {});
-      await unlink(lockPath).catch(() => {});
-    }
+    return withFileLock(`${this.path}.lock`, action, {
+      ...this.lockOptions,
+      busyMessage: this.lockOptions.busyMessage ?? "device registry is busy",
+    });
   }
 
   private async load(): Promise<RegistryDocument> {

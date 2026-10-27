@@ -2,6 +2,7 @@ package dev.atlas.coach.app
 
 import dev.atlas.coach.usage.FakeGlobalUsageConsentStore
 import dev.atlas.coach.usage.FakeGlobalUsageCursorStore
+import dev.atlas.coach.usage.FakeUsageQuotaStore
 import dev.atlas.coach.usage.FakeUsageSummaryStore
 import dev.atlas.coach.usage.GlobalUsageConsent
 import dev.atlas.coach.usage.GlobalUsageEvent
@@ -99,6 +100,25 @@ class GlobalUsageControllerTest {
     }
 
     @Test
+    fun dailyQuotaIsPersistedAndExposedWithoutAnotherDataSource() {
+        val store = FakeUsageQuotaStore()
+        val harness = harness(quotaStore = store)
+        assertNull(harness.controller.state().dailyQuota)
+
+        harness.controller.saveDailyQuota(limitMinutes = 90, enabled = true)
+        val saved = harness.controller.state().dailyQuota
+        assertEquals("quota-jour", saved?.quotaId)
+        assertEquals(UsageQuotaWindow.ROLLING_24H, saved?.window)
+        assertEquals(90L * MINUTE, saved?.limitMs)
+        assertTrue(saved?.enabled == true)
+
+        harness.controller.saveDailyQuota(limitMinutes = 45, enabled = false)
+        assertEquals(45L * MINUTE, harness.controller.state().dailyQuota?.limitMs)
+        assertFalse(harness.controller.state().dailyQuota?.enabled == true)
+        assertEquals(1, store.currentQuotas().size)
+    }
+
+    @Test
     fun permissionDeniedIsReflectedWithoutQueryingTheSyntheticSource() {
         val harness = harness(allowed = false)
         harness.controller.grantConsent(includePackageNames = false)
@@ -110,7 +130,7 @@ class GlobalUsageControllerTest {
         assertEquals(0, harness.source.queryCount)
     }
 
-    private fun harness(allowed: Boolean = true): Harness {
+    private fun harness(allowed: Boolean = true, quotaStore: FakeUsageQuotaStore? = null): Harness {
         val source = SyntheticSource(
             listOf(
                 event("resume", START + 10L * MINUTE, GlobalUsageEventType.ACTIVITY_RESUMED),
@@ -138,7 +158,7 @@ class GlobalUsageControllerTest {
                 consentStore = consents,
                 summaryStore = summaries,
                 quotas = {
-                    listOf(
+                    quotaStore?.currentQuotas() ?: listOf(
                         UsageQuota(
                             quotaId = "daily",
                             window = UsageQuotaWindow.ROLLING_24H,
@@ -147,6 +167,7 @@ class GlobalUsageControllerTest {
                         ),
                     )
                 },
+                quotaStore = quotaStore,
                 clockUtc = { clock.now },
                 zone = { ZoneId.of("UTC") },
             ),

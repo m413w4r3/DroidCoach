@@ -114,7 +114,8 @@
         <service
             android:name=".calendar.local.AtlasAccountAuthenticatorService"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            android:permission="android.permission.ACCOUNT_MANAGER">
             <intent-filter>
                 <action android:name="android.accounts.AccountAuthenticator" />
             </intent-filter>

@@ -9,9 +9,11 @@ import dev.atlas.coach.usage.QuotaStatus
 import dev.atlas.coach.usage.UsageAccessStatus
 import dev.atlas.coach.usage.UsageQuota
 import dev.atlas.coach.usage.UsageQuotaEvaluator
+import dev.atlas.coach.usage.UsageQuotaStore
 import dev.atlas.coach.usage.UsageQuotaWindow
 import dev.atlas.coach.usage.UsageReliability
 import dev.atlas.coach.usage.UsageSummary
+import dev.atlas.coach.usage.UsageSummaryLimits
 import dev.atlas.coach.usage.UsageSummaryStore
 import dev.atlas.coach.usage.UsageWindowFactory
 import dev.atlas.coach.usage.android.AndroidGlobalUsageEventSource
@@ -19,6 +21,7 @@ import dev.atlas.coach.usage.android.AndroidUsageAccessStatus
 import dev.atlas.coach.usage.android.AndroidUsageAppRefProvider
 import dev.atlas.coach.usage.android.AndroidUsageDisplayNameProvider
 import dev.atlas.coach.usage.android.SharedPreferencesGlobalUsageStores
+import dev.atlas.coach.usage.android.SharedPreferencesUsageQuotaStore
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import java.time.ZoneId
@@ -30,6 +33,7 @@ data class GlobalUsageScreenState(
     val summary: UsageSummary?,
     val quotas: List<QuotaEvaluation>,
     val observationStatus: GlobalUsageObservationStatus?,
+    val dailyQuota: UsageQuota? = null,
 )
 
 /** User-triggered coordinator for the independent global summary path. */
@@ -39,6 +43,7 @@ class GlobalUsageController(
     private val consentStore: GlobalUsageConsentStore,
     private val summaryStore: UsageSummaryStore,
     private val quotas: () -> List<UsageQuota> = { emptyList() },
+    private val quotaStore: UsageQuotaStore? = null,
     private val clockUtc: () -> Long = System::currentTimeMillis,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) {
@@ -58,7 +63,8 @@ class GlobalUsageController(
                 summary.copy(apps = summary.apps.map { it.copy(displayName = null) })
             }
         }
-        val quotaRows = quotas().map { quota ->
+        val configuredQuotas = quotas()
+        val quotaRows = configuredQuotas.map { quota ->
             val summaryMatchesQuotaWindow = visibleSummary?.let { summary ->
                 val expected = UsageWindowFactory.forQuota(quota.window, summary.generatedAt, ZoneId.of(summary.timezone))
                 summary.windowStart == expected.startUtc && summary.windowEnd == expected.endUtc
@@ -76,7 +82,22 @@ class GlobalUsageController(
             summary = visibleSummary,
             quotas = quotaRows,
             observationStatus = lastObservationStatus,
+            dailyQuota = configuredQuotas.firstOrNull { it.quotaId == DAILY_QUOTA_ID },
         )
+    }
+
+    /** Persists the single user-facing daily quota; the observer stays manual and bounded. */
+    @Synchronized
+    fun saveDailyQuota(limitMinutes: Int, enabled: Boolean) {
+        require(limitMinutes in 1..MAX_DAILY_QUOTA_MINUTES) { "quota must be between 1 and $MAX_DAILY_QUOTA_MINUTES minutes" }
+        val store = quotaStore ?: error("quota store is unavailable")
+        val quota = UsageQuota(
+            quotaId = DAILY_QUOTA_ID,
+            window = UsageQuotaWindow.ROLLING_24H,
+            limitMs = limitMinutes.toLong() * MILLIS_PER_MINUTE,
+            enabled = enabled,
+        )
+        store.saveQuotas(store.currentQuotas().filterNot { it.quotaId == DAILY_QUOTA_ID } + quota)
     }
 
     @Synchronized
@@ -121,6 +142,7 @@ class GlobalUsageController(
         fun fromContext(context: Context): GlobalUsageController {
             val appContext = context.applicationContext
             val stores = SharedPreferencesGlobalUsageStores(appContext)
+            val quotaStore = SharedPreferencesUsageQuotaStore(appContext)
             val accessStatus = AndroidUsageAccessStatus(appContext)
             val usageStats = appContext.getSystemService(UsageStatsManager::class.java)
                 ?: error("UsageStatsManager is unavailable")
@@ -132,11 +154,21 @@ class GlobalUsageController(
                 summaryStore = stores,
                 appRefProvider = AndroidUsageAppRefProvider(appContext),
                 displayNameProvider = AndroidUsageDisplayNameProvider(appContext),
+                maxWindowMillis = UsageSummaryLimits.MAX_SUPPORTED_WINDOW_MILLIS,
             )
-            return GlobalUsageController(observer, accessStatus, stores, stores)
+            return GlobalUsageController(
+                observer = observer,
+                accessStatus = accessStatus,
+                consentStore = stores,
+                summaryStore = stores,
+                quotas = { quotaStore.currentQuotas() },
+                quotaStore = quotaStore,
+            )
         }
 
         const val CONSENT_PURPOSE = "Local global app-usage summary and quota display"
+        const val DAILY_QUOTA_ID = "quota-jour"
+        const val MAX_DAILY_QUOTA_MINUTES = 1_440
 
         fun unknownQuota(quota: UsageQuota) = QuotaEvaluation(
             quotaId = quota.quotaId,
