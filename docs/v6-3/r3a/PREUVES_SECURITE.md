@@ -60,12 +60,13 @@
 |---|---|
 | Pré-vol et backups | `preuves/preflight.txt` |
 | Build relais | `preuves/relay-build.txt` |
-| Tests Node transport | `preuves/relay-pc-tests.txt` |
-| Vecteurs Noise Kotlin | `preuves/noise-vectors.txt` |
-| Interop Kotlin ↔ Node | `preuves/interop.txt` |
-| E2E émulateur | `preuves/e2e-emulator.txt` |
+| Tests Node transport | `preuves/relay-tests.txt`, `preuves/gates-final.txt` |
+| Vecteurs Noise Kotlin | `preuves/relay-tests.txt` (cas `NoiseProtocolTest`) |
+| Interop Kotlin ↔ Node | `preuves/instrumented.txt`, `preuves/e2e-emulator.txt` |
+| E2E émulateur | `preuves/e2e-emulator.txt`, `preuves/instrumented.txt` |
 | Calendrier provider/Etar | `preuves/calendar-*.txt`, captures |
-| Gates finales | `preuves/gates-finales.txt` |
+| Gates finales | `preuves/gates-final.txt` |
+| Provenance | `preuves/PROVENANCE.md` |
 | Revue indépendante | `REVUE_INDEPENDANTE_R3A.md` |
 
 Chaque preuve mentionne le SHA exact, la commande, l'environnement et le statut.

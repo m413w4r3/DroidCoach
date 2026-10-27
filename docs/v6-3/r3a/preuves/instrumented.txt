@@ -1,18 +1,36 @@
 # ATLAS V6.3 R3-A — final instrumented evidence
-source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
-date_utc=2026-10-27T00:31:07Z
-apk_sha256=e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd
+source_sha=d89a626a3b879b9ddce7486ec8f1b76b61845a37
+date_utc=2026-10-27T07:19:50Z
+apk_sha256=fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90
+test_apk_sha256=ba5104749fc8a2fd2a6388fdfe4d3ecb731f49e7469ed587626e8ffea73b629b
 device=emulator-5554 API 37
 adb_reverse_count=0
 --- R2 reference suite (17 tests) ---
+command=am instrument -w -e class PlanScreenInstrumentationTest,PlanCalendarScrollInstrumentationTest,HabitsScreenInstrumentationTest,HomeNextActionAccessibilityInstrumentationTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 OK (17 tests)
 INSTRUMENTATION_CODE: -1
---- calendar provider/engine ---
+--- calendar provider/engine (4 tests) ---
+command=am instrument -w -e class AtlasLocalCalendarInstrumentedTest,AtlasEtarFixtureInstrumentedTest,AtlasCalendarEngineInstrumentedTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 OK (4 tests)
 INSTRUMENTATION_CODE: -1
---- relay E2E ---
+--- relay protected round trip (1 test) ---
+command=am instrument -w -e class RelayE2eInstrumentedTest#protectedRelayPlanRevisionRoundTrip -e serverId … -e serverPublicKey <0600 state> -e deviceId … -e deviceToken <0600 state> dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 OK (1 test)
 INSTRUMENTATION_CODE: -1
---- app controller relay plan revision ---
+--- relay offline (1 test, relay container stopped then restored) ---
+command=am instrument -w -e class RelayE2eInstrumentedTest#relayUnavailableIsReportedAsOffline … dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+relay_restored=true (health ok, connector relay_connected=true, no adb reverse)
+--- app controller relay plan revision (1 test) ---
+command=am instrument -w -e class RelayAppPlanRevisionInstrumentedTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+OK (1 test)
+INSTRUMENTATION_CODE: -1
+--- Etar lifecycle (4 methods, provider real) ---
+commands=AtlasEtarLifecycleInstrumentedTest#{restoresFixture,movesAndEditsFixture,deletesFixture,restoresFixture}
+OK (1 test) × 4
+INSTRUMENTATION_CODE: -1 each
+--- authenticator binding through ACCOUNT_MANAGER (1 test) ---
+command=am instrument -w -e class AtlasAccountAuthenticatorServiceInstrumentedTest dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 OK (1 test)
 INSTRUMENTATION_CODE: -1

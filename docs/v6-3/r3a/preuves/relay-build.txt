@@ -1,0 +1,13 @@
+# Paseo Relay local image and loopback health
+source_sha=d89a626a3b879b9ddce7486ec8f1b76b61845a37
+date_utc=2026-10-27T07:19:50Z
+upstream_sha=3fc41c96c8c63f3a7109e832899cc57d473c4531
+image=atlas-paseo-relay:r3a
+image_id=sha256:75d68fd8bdb9d60a26203cd7c49c07c035f1f400c47740770056814e76846889
+image_created=2026-10-26T23:18:53.730000528+01:00
+build_command=docker build -t atlas-paseo-relay:r3a references/repos/paseo-relay (run 2026-10-26)
+run_command=docker run -d --name atlas-r3a-relay -p 127.0.0.1:4400:4000 -e PASEO_RELAY_HOST=0.0.0.0 -e PASEO_RELAY_PORT=4000 atlas-paseo-relay:r3a
+container=7d51347f2c5b
+ports=127.0.0.1:4400->4000/tcp
+health=GET http://127.0.0.1:4400/health -> {"status":"ok"}
+scope=loopback only; no public port, no TLS termination, no adb reverse

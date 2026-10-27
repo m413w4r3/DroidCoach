@@ -1,14 +1,15 @@
-# Global Usage Access — real UI flow
-source_sha=ad42b1c515074e563699c599ce2f4ca52f6bd58c
-date_utc=2026-10-27T00:37:48Z
-apk_sha256=e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd
+# Global Usage Access — final APK UI flow
+source_sha=d89a626a3b879b9ddce7486ec8f1b76b61845a37
+date_utc=2026-10-27T08:18:00Z
+apk_sha256=fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90
 device=emulator-5554 API 37
 android_access=appops GET_USAGE_STATS: allow; UI shows 'Accès Usage Access Android : autorisé'
 flow=Plus > Usage global > consent (package_names category included) > Actualiser le résumé
-observation=PASS — 6 events; window 26 Oct 01:37–27 Oct 01:37; observed coverage <1 min from consent; apps ATLAS, Etar, Pixel Launcher; reliability LOW because the first interval is still open
+observation=PASS — 148 events; 6 h 40 min observed, 1 min blind; total 12 h 19 min; apps ATLAS and Etar with real display names; reliability reflects the still-open interval
 privacy=no screen content, notification, URL or message read; local pseudonym salt; bounded 24 h window; 15 min minimum collection interval
-revocation=PASS — 'Révoquer et purger le résumé' displayed 'Consentement désactivé ; les données locales ont été purgées.'; a new explicit consent was then granted
-durability=am force-stop dev.atlas.coach; relaunch; consent and summary persisted
-quota=UNKNOWN — no quota configured in this build; evaluator covered by JVM tests only
-capture=captures/usage-global-summary.png
-status=PASS (observation and revocation); quota path PARTIAL
+quota_config=PASS — user entered 90 minutes in the production editor and saved; value persisted after force-stop/relaunch
+quota_display=quota-jour · UNKNOWN · donnée indisponible / 90 min — no pre-consent data is used, so a full 24 h window is not yet observed; the UI states this explicitly
+week_window=supported by the observer up to 7 days (JVM test weeklyWindowIsCollectedUpToSevenDaysWhenConfigured); the production editor exposes the daily window
+revocation=PASS — 'Révoquer et purger le résumé' displayed 'Consentement désactivé ; les données locales ont été purgées.'; summary/cursor removed
+captures=captures/usage-global-summary-final.png, captures/usage-quota-90-final.png, captures/usage-revoked-final.png
+status=PASS (observation, quota configuration, revocation); effective quota evaluation PARTIAL until a full window is observed

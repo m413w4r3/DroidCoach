@@ -1,7 +1,7 @@
 # ATLAS V6.3 — Campagne R3-A — Registre
 
-Statut : **CLOSING — re-revue indépendante en cours**. Ce registre est la source
-de vérité R3-A.
+Statut : **CLOSING — troisième revue indépendante en cours**. Ce registre est la
+source de vérité R3-A.
 
 ## 1. Base et environnement
 
@@ -27,8 +27,9 @@ de vérité R3-A.
 | Paseo Relay | `3fc41c96…` |
 | Sauvegarde AVD | snapshot `atlas-r3a-pre` |
 | Sauvegarde app ATLAS | `~/.local/share/atlas-v63-r3a/backups/atlas-app-data-pre-r3a.tar`, SHA-256 `41c1ad85700fdd57f8f0a8a9ba602a9ef443b6b89c117c1afb786e8521380eb1` |
-| SHA source final | `ad42b1c515074e563699c599ce2f4ca52f6bd58c` |
-| APK final | `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` |
+| SHA source final | `d89a626a3b879b9ddce7486ec8f1b76b61845a37` |
+| APK final | `fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90` |
+| SHA de la revue précédente | `e28b7a9bfc0d6405cd0d311eb87d4d2dd33f5832` (NO_GO : 3 P1, 4 P2) |
 
 ## 2. Règles appliquées
 
@@ -58,7 +59,7 @@ de vérité R3-A.
 | `R3-SPORT-WIRE-01` | wger lecture → FastAPI → Android, `trainingRef` | `backend/...`, `training/**`, `plan/{Models,Codec,Engine}`, `SportScreen.kt` | backend + JVM + UI | **ACCEPTED / INTEGRATED** — `235faff`, merge `50fde6f`, UI `4d6a875` ; 7 backend ciblés, 187 backend, 41 Android ciblés, 588 JVM ; câblage UI vérifié (UNAVAILABLE + démo explicite) |
 | `R3-MEMORY-UI-01` | parcours mémoire complet | `memory/**`, `app/Memory*.kt` | tests JVM + UI réelle + persistance | **ACCEPTED (parent)** — `ee085a8`, merge `06c1e2e` ; tests JVM, ajout/consentement/affichage, force-stop/relance, capture |
 | `R3-USAGE-UI-01` | Usage Access réel sur émulateur | `usage/**`, `app/GlobalUsage*.kt` | permission + statistiques | **ACCEPTED (parent)** — `7e65b9f`, merge `b9ba1ef` ; `GET_USAGE_STATS: allow`, 6 événements réels, révocation/purge, persistance ; quota non configuré |
-| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTIONS_APPLIED / RE-REVIEW_PENDING** — 3 P1 + 2 P2 corrigés sur `ad42b1c` ; provenance renforcée ; seconde revue à faire |
+| `R3-REVIEW-01` | revue indépendante lecture seule | aucun | grille de revue | **CORRECTIONS_APPLIED / THIRD_REVIEW_PENDING** — 3 P1 + 4 P2 de `e28b7a9` corrigés sur `d89a626` ; troisième revue à faire |
 
 ## 4. Journal
 
@@ -99,18 +100,26 @@ de vérité R3-A.
 | 2026-10-27 | `R3-CALENDAR-ETAR-01` livré | `29b7439` ; 18 tests ciblés, 589 JVM, lint sans alerte sur les fichiers modifiés |
 | 2026-10-27 | Intégration calendrier UI | merge `eaad907` ; régression P1 détectée par la suite R2 (double scroll) puis corrigée ; init fail-closed si stockage test indisponible |
 | 2026-10-27 | Recette UI calendrier | **PASS** — plan v2→v3→v4, confirmations groupées, provider réel, Etar création/déplacement/suppression |
-| 2026-10-27 | Suite instrumentée de référence | **PASS** — 17/17 sur l'APK final |
+| 2026-10-27 | Suite instrumentée de référence (avant revue 2) | **PASS** — 17/17 sur l'APK intermédiaire |
 | 2026-10-27 | Écriture durable config relay | **FIX** — `apply()` → `commit()` ; préférences vérifiées après seed |
 | 2026-10-27 | APK intermédiaire | SHA-256 `3ee62e6d10b7b6e91954f85b003ef66dfc05a85cd79079dd0514ec9a08aa0d0f` ; E2E + app controller + calendrier PASS |
-| 2026-10-27 | APK final après correctifs | SHA-256 `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` ; 17/17 + 4/4 + E2E relay + app controller + lifecycle 4/4 PASS |
+| 2026-10-27 | APK après correctifs revue 1 (remplacé) | SHA-256 `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` ; 17/17 + 4/4 + E2E relay + app controller + lifecycle 4/4 PASS |
 | 2026-10-27 | Revue indépendante | **NO_GO** — P1 token CLI imprimé, P1 registre sans verrou, P1 preuves non liées au SHA ; P2 compte local dans une preuve, P2 re-création calendrier bloquée, P2 doc crypto Tink/Bouncy Castle |
 | 2026-10-27 | Correctifs revue | token CLI écrit en 0600 sans stdout ; verrou registre inter-processus ; clé de re-création calendrier ; doc crypto corrigée ; preuve nominative redactée ; provenance SHA à régénérer |
 | 2026-10-27 | Tests après correctifs | Node 24/24 ; `CalendarEffectControllerTest` 8/8 dont re-création après suppression externe |
 | 2026-10-27 | Parcours mémoire réel | **PASS** — préférence synthétique ajoutée avec consentement, métadonnées affichées, persistée après `force-stop` ; captures `memory-preference.png`, `memory-persistence.png` |
 | 2026-10-27 | Usage Access réel | **PASS** — appops allow, consentement + catégorie package_names, résumé 6 événements (ATLAS/Etar/Pixel Launcher), révocation et purge ; capture `usage-global-summary.png` |
-| 2026-10-27 | Lifecycle calendrier final | **PASS** — restore/move/delete/restore sur APK `e8937c62`, fixture `_id=18`, capture `etar-final-restored.png` |
-| 2026-10-27 | Gates finales | **PASS** — backend 187/1 skip ; JVM 91 suites/649 tests ; lint 0 erreur ; builds ; Node 24 ; Bridge 50 ; voir `preuves/gates-final.txt` |
-| 2026-10-27 | Provenance des preuves | `preuves/PROVENANCE.md` distingue preuves finales `ad42b1c` et captures historiques |
+| 2026-10-27 | Lifecycle calendrier (avant revue 2) | **PASS** — restore/move/delete/restore sur APK `e8937c62`, fixture `_id=18`, capture `etar-final-restored.png` |
+| 2026-10-27 | Gates intermédiaires (avant revue 2) | **PASS** — backend 187/1 skip ; JVM 91 suites/649 tests ; lint 0 erreur ; builds ; Node 24 ; Bridge 50 |
+| 2026-10-27 | Provenance des preuves | `preuves/PROVENANCE.md` distingue preuves finales et captures historiques |
+| 2026-10-27 | Seconde revue indépendante | **NO_GO** sur `e28b7a9` — P1 verrou périmé, P1 UI calendrier non rejouée sur APK final, P1 aucun quota réel ; P2 semaine, Tink, authenticator exporté, index de preuves |
+| 2026-10-27 | Correctifs de la seconde revue | verrou atomique avec vérification de vivacité et test inter-processus ; quota quotidien persisté + fenêtre 7 jours ; authenticator protégé par `ACCOUNT_MANAGER` + test réel ; Tink corrigé ; index synchronisé |
+| 2026-10-27 | Rejeu UI calendrier final | **PASS** — création `_id=24`, idempotence, déplacement v3 même id, suppression v4 ; captures `calendar-final-*.png` |
+| 2026-10-27 | Parcours mémoire final | **PASS** — seconde préférence ajoutée sur l'APK final, persistance après force-stop |
+| 2026-10-27 | Usage final | **PASS observation** — 148 événements, quota 90 min persisté, révocation/purge ; quota `UNKNOWN` tant que la fenêtre 24 h n'est pas pleine |
+| 2026-10-27 | Instrumentés finaux | **PASS** — 17 R2 + 4 calendrier + 1 relay + 1 offline + 1 app controller + 4 lifecycle + 1 authenticator |
+| 2026-10-27 | Gates finales `d89a626` | backend 187/1 skip ; JVM 91/651 ; lint 0 erreur ; Node 29 ; Bridge 50 ; PC live PASS ; APK `fb19180` ; voir `preuves/gates-final.txt` |
+| 2026-10-27 | Lifecycle calendrier final `d89a626` | **PASS** — restore/move/delete/restore, fixture `_id=23`, capture `etar-final-restored.png` |
 
 ## 5. Preuves
 

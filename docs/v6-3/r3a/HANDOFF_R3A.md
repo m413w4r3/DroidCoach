@@ -1,8 +1,8 @@
 # ATLAS V6.3 R3-A — Handoff
 
-Statut : **campagne locale, GO_WITH_LIMITATIONS sous réserve de la re-revue
-indépendante**. Aucun push, PR, merge distant ni déploiement public n'a été
-effectué.
+Statut : **campagne locale, GO_WITH_LIMITATIONS sous réserve de la troisième
+revue indépendante**. Aucun push, PR, merge distant ni déploiement public n'a
+été effectué.
 
 ## 1. Reprise immédiate
 
@@ -11,8 +11,8 @@ effectué.
 | Branche de campagne | `feat/atlas-v6-3-r3a-relay-calendar` |
 | Base `main` vérifiée | `6a22c12bc5a2c63c3d3ab56253679c897fadb75d` |
 | SHA des contrats | `4f7b9263c76986c0a410f87a22268993568b3646` |
-| Dernier SHA de référence | `ad42b1c515074e563699c599ce2f4ca52f6bd58c` (commits R3-A locaux) |
-| APK final | `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` |
+| Dernier SHA de référence | `d89a626a3b879b9ddce7486ec8f1b76b61845a37` (commits R3-A locaux) |
+| APK final | `fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90` |
 | Registre | `docs/v6-3/r3a/REGISTRE_R3A.md` |
 | Décisions | `docs/v6-3/r3a/DECISIONS_ARCHITECTURE.md` |
 | Transport | `docs/v6-3/r3a/TRANSPORT_PASEO.md` |
@@ -82,10 +82,12 @@ effectué.
   explicite, affichage des métadonnées, persistance après `force-stop` et
   relance. Capture `memory-preference.png`.
 - Usage Access réel sur `emulator-5554` : `GET_USAGE_STATS: allow`, consentement
-  séparé avec catégorie `package_names`, résumé de 6 événements réels
-  (ATLAS, Etar, Pixel Launcher), révocation et purge, persistance après
-  redémarrage. Capture `usage-global-summary.png`. Quotas non configurés :
-  évaluation JVM seulement.
+  séparé avec catégorie `package_names`, résumé de 148 événements réels
+  (ATLAS, Etar), révocation et purge, persistance après redémarrage.
+- Quota quotidien configurable et persisté (90 min dans la recette) ; affiché
+  `UNKNOWN` tant que la fenêtre 24 h n'est pas pleinement observée. La fenêtre
+  hebdomadaire est prise en charge par l'observateur jusqu'à 7 jours et couverte
+  en JVM.
 - Preuves : `preuves/memory-ui.txt`, `preuves/usage-global-ui.txt`.
 
 ### Intégrations C
@@ -115,15 +117,14 @@ effectué.
 | Gate | Résultat |
 |---|---|
 | Backend `pytest -q` | **187 passed, 1 skipped** |
-| Android JVM | **91 suites, 649 tests, 0 échec** |
+| Android JVM | **91 suites, 651 tests, 0 échec** |
 | Lint | **PASS** (0 erreur, 70 avertissements) |
 | `assembleDebug` / `assembleDebugAndroidTest` | **PASS** |
-| Instrumentés de référence | **17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 app controller** |
-| Lifecycle calendrier final | **4/4 PASS** (restore/move/delete/restore) |
-| Relay Node | **24 tests PASS** + relais réel + live FastAPI |
+| Instrumentés de référence | **17/17 R2 + 4/4 calendrier + 1/1 E2E relais + 1/1 offline + 1/1 app controller + 4/4 lifecycle + 1/1 authenticator = 29** |
+| Relay Node | **29 tests PASS** + relais réel + live FastAPI |
 | Bridge plugin (non activé) | **50 tests PASS** |
-| Parcours mémoire / usage | **PASS** (usage : quotas PARTIAL) |
-| APK final | SHA-256 `e8937c62f9096fbb01d5667a4eacba213140368119b32292d3bb2804355caebd` |
+| Parcours mémoire / usage | **PASS** (quota configuré et persisté ; évaluation effective PARTIAL) |
+| APK final | SHA-256 `fb191804571595a478f89e007f6c30cc4d6d83373b2e8005baa6fdd61dbb4d90` |
 
 Détail : `preuves/gates-final.txt`, `preuves/PROVENANCE.md`.
 
@@ -149,12 +150,13 @@ Détail : `preuves/gates-final.txt`, `preuves/PROVENANCE.md`.
 | R3-MEMORY-UI-01 | `89bbab64…` | `codex/gpt-6-luna/xhigh` |
 | R3-USAGE-UI-01 | `33b6c3b3…` | `codex/gpt-6-luna/xhigh` |
 | Revue indépendante (1) | `c3f97221…` | `codex/gpt-6-luna/xhigh` |
-| Re-revue indépendante (2) | à lancer sur `ad42b1c` | `codex/gpt-6-luna/xhigh` |
+| Re-revue indépendante (2) | `d87dec39…` (NO_GO sur `e28b7a9`) | `codex/gpt-6-luna/xhigh` |
+| Re-revue indépendante (3) | à lancer sur `d89a626` | `codex/gpt-6-luna/xhigh` |
 
 ## 8. Verdict
 
 Verdict local proposé : **GO_WITH_LIMITATIONS** pour la portée R3-A sur
-émulateur, sous réserve de la seconde revue indépendante sur `ad42b1c`.
+émulateur, sous réserve de la troisième revue indépendante sur `d89a626`.
 V6.3 reste **NO_GO** globalement tant que Pixel physique, accès Internet réel,
-TLS/WSS public, recette LTE/5G et veille/Doze ne sont pas qualifiés. Les quotas
-d'usage et la supervision 24 h/24 restent partiels.
+TLS/WSS public, recette LTE/5G et veille/Doze ne sont pas qualifiés. L'évaluation
+effective des quotas et la supervision 24 h/24 restent partielles.

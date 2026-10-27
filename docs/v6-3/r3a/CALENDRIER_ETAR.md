@@ -76,7 +76,7 @@ content insert`, aucune donnée système fabriquée ne sert de preuve.
 | C1 | Calendrier local sélectionné | catalogue + sélection explicite | **PASS** — écran de diagnostic : consentements lecture/écriture, provisionnement et sélection `ATLAS R3A TEST` |
 | C2 | Création d'activité | `DayPlan` versionné | **PASS** — plan approuvé v2 avec activité, via `PlanController` de production |
 | C3 | Validation de la révision | confirmation groupée | **PASS** — dialogue « Programme v2 · 1 effet(s) », confirmation explicite |
-| C4 | Création événement CalendarContract | `event_id` relu | **PASS** — `event_id=11` via le parcours UI ; fixture directe `event_id=2` également |
+| C4 | Création événement CalendarContract | `event_id` relu | **PASS** — `event_id=24` via le parcours UI rejoué sur l'APK final ; `event_id=11` et fixture `_id=2` en historique |
 | C5 | Relecture provider | hash et marqueurs conformes | **PASS** — titre, fenêtre, `customAppPackage`, `customAppUri` relus |
 | C6 | Affichage réel dans Etar | capture + requête provider | **PASS** — `ATLAS TEST Etar visibility` visible, capture `preuves/captures/etar-month-view.png` |
 | C7 | Déplacement | `dtstart`/`dtend` relus | **PASS** — déplacement 22:30→23:00 via provider, capture `etar-moved.png` |
@@ -94,7 +94,7 @@ content insert`, aucune donnée système fabriquée ne sert de preuve.
 | C19 | Calendrier supprimé/indisponible | `PROVIDER_UNAVAILABLE`/`CALENDAR_NOT_LOCAL` | **PASS (JVM)** — mapping testé ; suppression réelle du calendrier non rejouée |
 | C20 | READ_CALENDAR refusé | aucune lecture | **PARTIAL (JVM)** — fail-closed testé ; parcours UI externe non rejoué |
 | C21 | WRITE_CALENDAR refusé | aucune écriture | **PASS** — révocation externe, `PERMISSION_DENIED`, provider inchangé |
-| C22 | Restauration des fixtures | état initial restauré | **PASS** — `restoresFixture` final, `_id=18`, capture `etar-final-restored.png` |
+| C22 | Restauration des fixtures | état initial restauré | **PASS** — `restoresFixture` final, `_id=23`, capture `etar-final-restored.png` |
 
 ## 5. Règles de sûreté
 

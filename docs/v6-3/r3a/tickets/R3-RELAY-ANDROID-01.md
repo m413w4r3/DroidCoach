@@ -17,8 +17,10 @@
 
 ## Détail
 
-1. Ajouter les dépendances minimales nécessaires (OkHttp pour WebSocket, Tink pour
-   X25519/ChaCha20-Poly1305) avec version épinglée et notice tierce.
+1. Ajouter les dépendances minimales nécessaires (OkHttp pour WebSocket, Bouncy
+   Castle 1.86 pour X25519/ChaCha20-Poly1305) avec version épinglée et notice tierce.
+   Note historique : cette première version du ticket mentionnait Tink ; le code
+   livré utilise Bouncy Castle.
 2. Implémenter `NoiseCipherState`, `SymmetricState`, `NoiseNkInitiator` selon le
    spec Paseo : prologue, HKDF, mixHash/mixKey, nonces.
 3. Implémenter `ProtectedRecordCodec` (chunking, FIRST/FINAL, longueurs, kind).

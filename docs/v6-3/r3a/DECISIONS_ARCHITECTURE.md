@@ -32,8 +32,8 @@ non bloquante est tranchée ici, pas dans une question à l'utilisateur.
   `@getpaseo/relay/e2ee` avec `minimumMode: "protected"`.
 - **Android** : port Kotlin minimal et isolé de NK + framing, validé octet par
   octet contre les vecteurs upstream et contre le répondant Node. Primitives :
-  bibliothèque maintenue compatible Android (Tink pour X25519 et ChaCha20-Poly1305,
-  JCA pour SHA-256/HMAC), pas de runtime Node ni de WebView cryptographique.
+  Bouncy Castle 1.86 pour X25519 et ChaCha20-Poly1305 à nonce explicite, JCA pour
+  SHA-256/HMAC), pas de runtime Node ni de WebView cryptographique.
 - **Identité serveur** : paire X25519 propre à ATLAS, privée uniquement sur le PC,
   publique épinglée côté Android. Aucune clé privée dans l'APK.
 - **Conséquence** : un `e2ee_ready` sans `protected` est une erreur fatale, jamais
