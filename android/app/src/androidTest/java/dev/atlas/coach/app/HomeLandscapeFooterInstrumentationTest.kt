@@ -67,6 +67,7 @@ class HomeLandscapeFooterInstrumentationTest {
                         isHomeRoleHeld = true,
                         onRequestHomeRole = {},
                         openCoach = {},
+                        openPlan = {},
                         openPreviousLauncher = {},
                         openHomeSettings = {},
                     )
@@ -96,6 +97,7 @@ class HomeLandscapeFooterInstrumentationTest {
         )
 
         composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_plan").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_more").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)

@@ -72,6 +72,7 @@ class HabitsScreenInstrumentationTest {
         show(controller)
 
         composeRule.onNodeWithText("Aucune habitude pour le moment.").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Ajouter une habitude").assertCountEquals(1)
         composeRule.onNodeWithTag("habits_add").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     }
 

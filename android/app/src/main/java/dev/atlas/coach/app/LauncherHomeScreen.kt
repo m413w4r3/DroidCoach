@@ -99,6 +99,7 @@ internal fun LauncherHomeScreen(
     openCoach: () -> Unit,
     openFocus: () -> Unit = openCoach,
     openLibrary: () -> Unit = openCoach,
+    openPlan: () -> Unit = openCoach,
     openPreviousLauncher: () -> Unit,
     openHomeSettings: () -> Unit,
     agentState: HomeAgentState = HomeAgentState.localDefault(controller),
@@ -111,6 +112,7 @@ internal fun LauncherHomeScreen(
             openCoach = openCoach,
             openFocus = openFocus,
             openLibrary = openLibrary,
+            openPlan = openPlan,
             openPreviousLauncher = openPreviousLauncher,
             openHomeSettings = openHomeSettings,
             agentState = agentState,
@@ -147,6 +149,7 @@ private fun LauncherHomeContent(
     openCoach: () -> Unit,
     openFocus: () -> Unit,
     openLibrary: () -> Unit,
+    openPlan: () -> Unit,
     openPreviousLauncher: () -> Unit,
     openHomeSettings: () -> Unit,
     agentState: HomeAgentState,
@@ -279,7 +282,7 @@ private fun LauncherHomeContent(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text("Applications", style = MaterialTheme.typography.headlineMedium)
-                                Text("Glissez vers le bas pour revenir à l'accueil.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Glissez vers le bas pour fermer.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         item(key = "drawer_search") {
@@ -375,6 +378,7 @@ private fun LauncherHomeContent(
                         }
 
                         HomeNextActionCard(nextAction, nextActionGoalTitle)
+                        LauncherNextActionPlanButton(nextAction, openPlan)
 
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("AUJOURD'HUI", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -445,12 +449,19 @@ private fun LauncherHomeContent(
                     ) {
                         Text("APPLICATIONS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (pinnedApps.isEmpty()) {
-                            Text(
-                                "Aucun favori.",
-                                modifier = Modifier.testTag("launcher_favorites_empty"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    "Aucun favori pour le moment.",
+                                    modifier = Modifier.testTag("launcher_favorites_empty"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
+                                        .testTag("launcher_choose_apps"),
+                                    onClick = onToggleDrawer,
+                                ) { Text("Choisir mes applications") }
+                            }
                         } else {
                             pinnedApps.take(favoriteLimit).forEach { app ->
                                 TextButton(
@@ -519,6 +530,7 @@ private fun LauncherHomeContent(
                     }
 
                     HomeNextActionCard(nextAction, nextActionGoalTitle)
+                    LauncherNextActionPlanButton(nextAction, openPlan)
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("AUJOURD'HUI", modifier = Modifier.testTag("launcher_next_step_heading"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -584,12 +596,19 @@ private fun LauncherHomeContent(
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text("APPLICATIONS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (pinnedApps.isEmpty()) {
-                            Text(
-                                "Aucun favori.",
-                                modifier = Modifier.testTag("launcher_favorites_empty"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    "Aucun favori pour le moment.",
+                                    modifier = Modifier.testTag("launcher_favorites_empty"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(
+                                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
+                                        .testTag("launcher_choose_apps"),
+                                    onClick = onToggleDrawer,
+                                ) { Text("Choisir mes applications") }
+                            }
                         } else {
                             pinnedApps.take(favoriteLimit).forEach { app ->
                                 TextButton(
@@ -629,6 +648,13 @@ private fun LauncherHomeContent(
                     tag = "launcher_open_drawer",
                     modifier = Modifier.weight(1f),
                     onClick = onToggleDrawer,
+                )
+                HomeFooterAction(
+                    label = "Plan",
+                    description = "Ouvrir le planning",
+                    tag = "launcher_open_plan",
+                    modifier = Modifier.weight(1f),
+                    onClick = openPlan,
                 )
                 HomeFooterAction(
                     label = "Coach",
@@ -680,6 +706,24 @@ private fun LauncherHomeContent(
                 TextButton(onClick = { showDirectiveDetails = false }) { Text("Fermer") }
             },
         )
+    }
+}
+
+@Composable
+private fun LauncherNextActionPlanButton(
+    state: HomeNextActionState,
+    openPlan: () -> Unit,
+) {
+    val label = when (state) {
+        HomeNextActionState.Neutral -> return
+        HomeNextActionState.NonePlanned -> "Planifier ma journée"
+        is HomeNextActionState.Selected -> "Voir le planning"
+    }
+    TextButton(
+        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("launcher_next_action_plan"),
+        onClick = openPlan,
+    ) {
+        Text(label)
     }
 }
 

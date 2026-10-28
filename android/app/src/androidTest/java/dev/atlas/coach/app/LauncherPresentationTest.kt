@@ -15,7 +15,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.CompositionLocalProvider
@@ -25,6 +24,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.ui.AtlasTheme
 import dev.atlas.coach.launcher.AndroidLauncherCatalog
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
@@ -49,6 +50,7 @@ class LauncherPresentationTest {
         val settingsApp = AndroidLauncherCatalog(context).list().firstOrNull { it.appPackage == "com.android.settings" }
         assertNotNull("Android Settings should be discoverable through MAIN/LAUNCHER", settingsApp)
         val appLabel = requireNotNull(settingsApp).appLabel
+        val planOpens = AtomicInteger(0)
         lateinit var controller: AtlasController
         composeRule.runOnUiThread {
             stateContext.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
@@ -62,6 +64,7 @@ class LauncherPresentationTest {
                     isHomeRoleHeld = true,
                     onRequestHomeRole = {},
                     openCoach = {},
+                    openPlan = { planOpens.incrementAndGet() },
                     openPreviousLauncher = {},
                     openHomeSettings = {},
                 )
@@ -72,9 +75,13 @@ class LauncherPresentationTest {
         composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed()
         composeRule.onNodeWithTag("launcher_open_drawer").assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_coach").assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_plan").assertHeightIsAtLeast(48.dp).performClick()
+        assertEquals(1, planOpens.get())
         composeRule.onNodeWithTag("launcher_more").assertHeightIsAtLeast(48.dp)
         composeRule.onAllNodesWithContentDescription("Ouvrir Tableau").assertCountEquals(0)
-        composeRule.onNodeWithTag("launcher_swipe_header").performTouchInput { swipeUp() }
+        composeRule.onNodeWithTag("launcher_favorites_empty").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_choose_apps").performScrollTo().performClick()
+        composeRule.onNodeWithText("Glissez vers le bas pour fermer.").assertIsDisplayed()
         composeRule.onNodeWithTag("launcher_search").performScrollTo().assertIsDisplayed().performTextInput(appLabel)
         composeRule.onNodeWithContentDescription("Épingler $appLabel parmi les favoris").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Retirer $appLabel des favoris").performScrollTo().assertIsDisplayed()
@@ -111,6 +118,7 @@ class LauncherPresentationTest {
         }
         composeRule.onNodeWithTag("launcher_emergency_pause").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_open_drawer").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("launcher_open_plan").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_more").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         composeRule.onNodeWithTag("launcher_previous_launcher").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("launcher_home_settings").assertIsDisplayed().assertHeightIsAtLeast(48.dp)

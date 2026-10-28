@@ -10,17 +10,21 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.app.ui.AtlasSection
 import dev.atlas.coach.app.ui.AtlasSpacing
-import dev.atlas.coach.app.ui.AtlasStatus
-import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.app.ui.LocalAtlasSemanticColors
 import dev.atlas.coach.training.PlannedExercise
 import dev.atlas.coach.training.SportPlan
@@ -43,6 +47,7 @@ internal fun SportScreen(
     onRefresh: (() -> Unit)? = null,
     onToggleDemoMode: (() -> Unit)? = null,
 ) {
+    var detailsExpanded by rememberSaveable { mutableStateOf(false) }
     val screenState = when {
         demoMode -> demoSportPlanState()
         state != null -> state
@@ -52,7 +57,7 @@ internal fun SportScreen(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Sport", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Text(
-                "Séance prévue et résultats déclarés restent séparés. Aucune écriture wger n'est effectuée.",
+                "Séances prévues et résultats déclarés restent distincts.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -75,26 +80,59 @@ internal fun SportScreen(
             message?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
+            val statusColor = when {
+                screenState.syncState == SyncState.STALE -> LocalAtlasSemanticColors.current.warning.onContainer
+                screenState.syncState == SyncState.MISMATCH -> MaterialTheme.colorScheme.error
+                screenState.syncState == SyncState.FRESH && screenState.hasPlannedSession() -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Text(
+                sportStatusLabel(screenState),
+                style = MaterialTheme.typography.titleSmall,
+                color = statusColor,
+            )
         }
-
-        SportSourceAndSync(screenState)
-        SportSyncBanner(screenState.syncState)
 
         val plan = screenState.plan
-        if (plan == null) {
-            SportErrorCard(availabilityMessage(screenState.syncState))
-            return@Column
+        if (plan != null) {
+            SportPlannedSection(plan)
+            SportPerformedSection(plan)
         }
 
-        SportPlannedSection(plan)
-        SportPerformedSection(plan)
+        SportDetails(
+            state = screenState,
+            expanded = detailsExpanded,
+            onToggle = { detailsExpanded = !detailsExpanded },
+        )
+    }
+}
 
+@Composable
+private fun SportDetails(
+    state: SportPlanUiState,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    TextButton(
+        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("sport_details_toggle"),
+        onClick = onToggle,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Details", style = MaterialTheme.typography.titleSmall)
+            Text(if (expanded) "Masquer" else "Afficher", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    if (expanded) {
         Text(
-            "Source : ${sourceLabel(screenState.source)} · ${syncLabel(screenState.syncState)}. " +
-                "Une séance planifiée n'est marquée effectuée qu'avec un résultat déclaré.",
+            "Aucune écriture wger n'est effectuée.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        SportSourceAndSync(state)
     }
 }
 
@@ -102,7 +140,12 @@ internal fun SportScreen(
 private fun SportSourceAndSync(state: SportPlanUiState) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            "Source : ${sourceLabel(state.source)} · synchronisation ${syncLabel(state.syncState)}",
+            "Source : ${sourceLabel(state.source)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "Synchronisation : ${syncLabel(state.syncState)}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -111,32 +154,6 @@ private fun SportSourceAndSync(state: SportPlanUiState) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun SportSyncBanner(syncState: SyncState) {
-    if (syncState == SyncState.FRESH) return
-    val semantic = LocalAtlasSemanticColors.current
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = semantic.warning.container),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                "Synchronisation sportive : ${syncLabel(syncState)}",
-                style = MaterialTheme.typography.titleSmall,
-                color = semantic.warning.onContainer,
-            )
-            Text(
-                "La séance affichée peut être incomplète ou périmée. Aucun résultat n'est inventé.",
-                style = MaterialTheme.typography.bodySmall,
-                color = semantic.warning.onContainer,
-            )
-        }
     }
 }
 
@@ -236,20 +253,6 @@ private fun SportPerformedSection(plan: SportPlan) {
     }
 }
 
-@Composable
-private fun SportErrorCard(message: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-    ) {
-        Text(
-            message,
-            modifier = Modifier.padding(AtlasSpacing.medium),
-            color = MaterialTheme.colorScheme.onErrorContainer,
-        )
-    }
-}
-
 internal fun formatPrescription(exercise: PlannedExercise): String = buildString {
     append(exercise.sets).append(" séries × ").append(exercise.reps).append(" répétitions")
     exercise.weightKg?.let { append(" · ").append(formatWeight(it)).append(" kg") }
@@ -273,11 +276,14 @@ internal fun sourceLabel(source: SportPlanSource): String = when (source) {
 
 internal fun sourceLabel(plan: SportPlan): String = sourceLabel(plan.source)
 
-private fun availabilityMessage(state: SyncState): String = when (state) {
-    SyncState.FRESH -> "Aucune séance prévue pour cette date."
-    SyncState.STALE -> "Les données sportives sont périmées. Réessayez plus tard."
-    SyncState.UNAVAILABLE -> "Les données sportives sont indisponibles. Réessayez plus tard."
-    SyncState.MISMATCH -> "La réponse sportive ne correspond pas au contrat attendu."
+private fun SportPlanUiState.hasPlannedSession(): Boolean =
+    plan?.let { it.planned && it.exercises.isNotEmpty() } == true
+
+private fun sportStatusLabel(state: SportPlanUiState): String = when (state.syncState) {
+    SyncState.STALE -> "Données peut-être périmées"
+    SyncState.MISMATCH -> "Format inattendu"
+    SyncState.UNAVAILABLE -> "Aucune séance disponible"
+    SyncState.FRESH -> if (state.hasPlannedSession()) "À jour" else "Aucune séance disponible"
 }
 
 private fun demoSportPlanState(): SportPlanUiState = when (val result = SportPlanJson.parse(SportPlanFixture.json)) {

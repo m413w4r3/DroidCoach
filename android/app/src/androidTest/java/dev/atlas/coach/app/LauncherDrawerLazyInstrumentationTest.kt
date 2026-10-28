@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasContentDescription
@@ -55,6 +56,7 @@ class LauncherDrawerLazyInstrumentationTest {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         }
         val coachClicks = AtomicInteger(0)
+        val planClicks = AtomicInteger(0)
         val fontScale = mutableStateOf(1f)
         val viewportWidthDp = mutableStateOf(320)
         val appCountState = mutableStateOf(100)
@@ -77,6 +79,7 @@ class LauncherDrawerLazyInstrumentationTest {
                             isHomeRoleHeld = true,
                             onRequestHomeRole = {},
                             openCoach = { coachClicks.incrementAndGet() },
+                            openPlan = { planClicks.incrementAndGet() },
                             openPreviousLauncher = {},
                             openHomeSettings = {},
                             drawerAppsOverrideForTests = syntheticApps(appCountState.value),
@@ -99,6 +102,13 @@ class LauncherDrawerLazyInstrumentationTest {
                     scrollToLastApp(appCount)
                     composeRule.onNodeWithContentDescription("Ouvrir ${syntheticAppLabel(appCount)}").assertIsDisplayed()
                     composeRule.onNodeWithTag("launcher_fixed_footer").assertIsDisplayed()
+                    composeRule.onNodeWithTag("launcher_open_plan").assertIsDisplayed()
+                        .assertHeightIsAtLeast(48.dp).performClick()
+                    assertEquals(
+                        "Plan footer click should work with $appCount apps at ${widthDp}dp and fontScale $scale",
+                        1,
+                        planClicks.getAndSet(0),
+                    )
                     composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().performClick()
                     composeRule.runOnIdle { }
                     assertEquals(
@@ -127,6 +137,7 @@ class LauncherDrawerLazyInstrumentationTest {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         }
         val coachClicks = AtomicInteger(0)
+        val planClicks = AtomicInteger(0)
         val appCount = 250
         val lastAppLabel = syntheticAppLabel(appCount)
 
@@ -141,6 +152,7 @@ class LauncherDrawerLazyInstrumentationTest {
                             isHomeRoleHeld = true,
                             onRequestHomeRole = {},
                             openCoach = { coachClicks.incrementAndGet() },
+                            openPlan = { planClicks.incrementAndGet() },
                             openPreviousLauncher = {},
                             openHomeSettings = {},
                             drawerAppsOverrideForTests = syntheticApps(appCount),
@@ -154,6 +166,10 @@ class LauncherDrawerLazyInstrumentationTest {
         scrollToLastApp(appCount)
         composeRule.onNodeWithContentDescription("Ouvrir $lastAppLabel").assertIsDisplayed()
         composeRule.onNodeWithTag("launcher_fixed_footer").assertIsDisplayed()
+        composeRule.onNodeWithTag("launcher_open_plan").assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp).performClick()
+        composeRule.runOnIdle { }
+        assertEquals("Plan footer click should work in landscape at fontScale 2 with 250 apps", 1, planClicks.get())
         composeRule.onNodeWithTag("launcher_open_coach").assertIsDisplayed().performClick()
         composeRule.runOnIdle { }
         assertEquals("Coach footer click should work in landscape at fontScale 2 with 250 apps", 1, coachClicks.get())

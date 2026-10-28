@@ -157,14 +157,6 @@ internal fun HabitsScreen(
 
                 if (habitListState(orderedHabits) == HabitListState.EMPTY) {
                     Text("Aucune habitude pour le moment.")
-                    Button(
-                        modifier = Modifier.sizeIn(minHeight = 48.dp),
-                        onClick = {
-                            editingHabit = null
-                            editorReturnsToDetail = false
-                            space = HabitSpace.EDITOR
-                        },
-                    ) { Text("Ajouter une habitude") }
                 } else {
                     orderedHabits.forEach { habit ->
                         val history = requireNotNull(histories[habit.id])

@@ -48,8 +48,7 @@ fun MemoryScreen(controller: MemoryController, modifier: Modifier = Modifier) {
     ) {
         Text("Mémoire", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Relisez, corrigez ou effacez les informations conservées localement. " +
-                "Une hypothèse reste en attente jusqu'à votre confirmation.",
+            "Relisez, corrigez ou effacez les informations locales ; chaque hypothèse attend votre confirmation.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
