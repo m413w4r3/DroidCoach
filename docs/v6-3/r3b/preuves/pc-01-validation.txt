@@ -12,7 +12,7 @@ SHA ET ENVIRONNEMENT
 - Base obligatoire : 5795d378d38b3e86ce99f1551c41d5044cd4a81c
 - HEAD au démarrage : b4b164658f9858c10fae258075daab1f39e2ac26
   (commit d'ouverture de campagne, descendant de la base)
-- SHA source testé : a661551357cfd65f72f1bb35083851d85a9c5059
+- SHA source testé : 91b892bbadfc24fb545e7aec910dc18c5ac7a5cc
 - Arbre propre pendant le rejeu final : oui
 - Branche : feat/r3b-pc-01
 - Node : v24.18.0 ; npm : 11.16.0 ; systemd : 255
@@ -36,39 +36,47 @@ COMMANDES ET RÉSULTATS
 3. npm run build
    PASS — tsc -p tsconfig.json, code 0.
 
-4. node --check test/r3b-resilience.test.mjs
+4. node --check test/r3b-resilience.mjs
    PASS — code 0.
 
-5. git diff --check
-   PASS — aucune erreur d'espacement.
-
-6. Depuis integrations/relay/pc :
+5. Depuis integrations/relay/pc :
    env ATLAS_TEST_RELAY_URL=ws://127.0.0.1:4402 \
        ATLAS_ALLOW_LOOPBACK_WS=1 \
        ATLAS_R3B_BACKEND_COMMAND_JSON= \
        ATLAS_R3B_BACKEND_URL= \
        ATLAS_R3B_BACKEND_ENV_FILE= \
        ATLAS_R3B_SERVICE_TOKEN= \
-       node --test test/r3b-resilience.test.mjs
-   PASS — 3 tests, 0 échec, 0 skip ; durée totale 3426 ms.
+       node --test test/r3b-resilience.mjs
+   PASS — 3 tests, 0 échec, 0 skip ; durée totale 3476 ms.
    La sortie R3B_RESULT_JSON lie chaque scénario à sa durée et à son statut.
 
-SCÉNARIOS DYNAMIQUES (SHA source a661551)
+6. ATLAS_TEST_RELAY_URL=ws://127.0.0.1:4402 ATLAS_ALLOW_LOOPBACK_WS=1 npm test
+   Build PASS ; Vitest : 13 fichiers PASS, 1 fichier FAIL ; 61 tests PASS,
+   1 test FAIL (14 fichiers, 62 tests), durée Vitest 3.52 s. L'unique échec
+   est l'existant test/relay.integration.test.ts : fetch du health codé en dur
+   sur http://127.0.0.1:4400, ECONNREFUSED 127.0.0.1:4400. La variable
+   ATLAS_TEST_RELAY_URL=...4402 ne change pas cette URL health. Le parent
+   rejouera cette suite avec son relais temporaire sur 4400.
+
+7. git diff --check
+   PASS — aucune erreur d'espacement.
+
+SCÉNARIOS DYNAMIQUES (SHA source 91b892b)
 Nom                                              Résultat   Durée
-connector_startup_clean                         PASS       162 ms
-relay_initial_connection                        PASS         5 ms
-sigterm_exit_code_and_port_release               PASS         7 ms
-sigkill_restart_identity_registry_and_relay_reconnect PASS 356 ms
-backend_unavailable_explicit_error               PASS        18 ms
-backend_restored_success                         PASS        28 ms
-backend_http_500_explicit_error                  PASS         4 ms
-completed_post_replay_without_second_backend_call PASS  43 ms
-completed_post_replay_after_restart              PASS       177 ms
-uncertain_post_is_not_retried_and_is_durable     PASS      1526 ms
-confirmed_rollback_and_state_integrity           PASS       366 ms
+connector_startup_clean                         PASS       107 ms
+relay_initial_connection                        PASS         4 ms
+sigterm_exit_code_and_port_release               PASS         8 ms
+sigkill_restart_identity_registry_and_relay_reconnect PASS 363 ms
+backend_unavailable_explicit_error               PASS        19 ms
+backend_restored_success                         PASS        32 ms
+backend_http_500_explicit_error                  PASS        13 ms
+completed_post_replay_without_second_backend_call PASS  63 ms
+completed_post_replay_after_restart_without_second_call PASS 264 ms
+uncertain_post_is_not_retried_and_is_durable     PASS      1416 ms
+confirmed_rollback_and_state_integrity           PASS       382 ms
 token_payload_absent_from_captured_logs          PASS         0 ms
-systemd_analyze_user_verify                      PASS        33 ms
-linger_not_enabled_by_test                       PASS         6 ms
+systemd_analyze_user_verify                      PASS        32 ms
+linger_not_enabled_by_test                       PASS         7 ms
 
 DÉTAILS DE PREUVE
 - Démarrage supervisé par le harnais : métriques HTTP 200 ; répertoire 0700,
@@ -78,9 +86,9 @@ DÉTAILS DE PREUVE
   d'identité, même hash du registre, un seul appareil enregistré ; échange
   Noise protégé réussi après reconnexion au relais réel.
 - Empreinte d'identité synthétique conservée :
-  ebbc892b3f6052e7bf4702433483b107f73f039846f881f671ae6323c3accdf3
+  b53d97905317e78331759f8bd854239d64fb170ee4e2f39323efa3b2ddbbb639
 - SHA-256 du registre synthétique conservé :
-  0c1fb8f37a3d163950bbca638a595d37cc2e368da20907b2c13337492d94f399
+  f5e5709d1f93d4d4a252ea8223be1f65f3d2d7fdc448a544f1d38aa419d091e1
 - Backend arrêté : erreur explicite BACKEND_UNAVAILABLE, sans réponse inventée.
   Après redémarrage : coach.status réussit. Réponse HTTP 500 :
   BACKEND_REJECTED explicite.
@@ -114,8 +122,9 @@ LIMITES
 - Les logs scannés sont stdout/stderr des processus enfants. Aucun service
   systemd n'ayant été lancé, la journalisation journald n'a pas été exercée.
 - Le postinstall esbuild non autorisé par la configuration npm n'a pas été
-  exécuté ; la suite Vitest existante n'a pas été lancée. Build TypeScript et
-  oracle Node R3B passent.
+  exécuté. Vitest a toutefois démarré : ses 13 autres fichiers passent. Seul
+  test/relay.integration.test.ts échoue faute de health sur 127.0.0.1:4400 ;
+  il faut le relais temporaire prévu par le parent pour compléter ce test.
 - Aucun ADB, push, service personnel, état ~/.local/state/atlas-relay ou
   configuration Tailscale n'a été utilisé ou modifié. Le relais épinglé n'a
   pas été redémarré ni modifié.
