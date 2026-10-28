@@ -21,6 +21,8 @@ désinstallation et sans perte de données.
 - `android/app/src/androidTest/java/dev/atlas/coach/sync/relay/R3bA3*.kt`
 - `android/app/src/androidTest/java/dev/atlas/coach/sync/relay/R3bA4*.kt`
 - `android/app/src/androidTest/java/dev/atlas/coach/app/R3bA4RevocationUi*.kt`
+- `android/app/src/androidTest/java/dev/atlas/coach/sync/relay/R3bRelayChatInstrumentedTest.kt`
+- `android/app/src/androidTest/java/dev/atlas/coach/sync/relay/R3bRelayTestSupport.kt`
 - `docs/v6-3/r3b/preuves/android-01*.txt`
 
 Si un hook de production est indispensable (par exemple marqueur de phase), il
