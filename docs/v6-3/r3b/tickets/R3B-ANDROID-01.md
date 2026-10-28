@@ -201,3 +201,10 @@ artefact. Preuves : `preuves/pixel-instrumentation-final.txt`,
 - L'annulation des opérations en vol précède l'envoi de l'erreur sur le
   chemin `receive()` `DEVICE_REVOKED`.
 - L'APK final `05756094` reste non installé/testé sur le Pixel (R-20/R-21).
+
+## Revue 4 (4be991d)
+
+Revue 4 `APPROUVE_AVEC_RESERVES` : aucun P0/P1. Les écarts documentaires
+APK/SHA ont été corrigés ; la réserve de couverture des tests de concurrence
+est en R-22, et le binaire final reste non installé/testé sur Pixel
+(R-20/R-21).

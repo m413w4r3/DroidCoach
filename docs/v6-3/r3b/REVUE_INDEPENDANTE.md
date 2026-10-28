@@ -157,7 +157,7 @@ capacités ne vérifiait pas une opération existante.
 
 ### Limite Pixel du binaire final
 
-L'APK final `20672e07…` et l'APK androidTest `5aef1321…` sont construits, mais
+L'APK de cette étape `20672e07…` et l'APK androidTest `5aef1321…` sont construits, mais
 le Pixel physique s'est déconnecté de l'USB avant l'installation ; l'APK
 installé reste `1a877422…` (correctif de consentement, sans la barrière de
 dispatch), et l'APK antérieur `b55776a9…` reste la dernière version testée sur
@@ -216,3 +216,57 @@ revendiqué pour ce binaire ; les parcours Pixel documentés portent sur
 ## Session de revue 4
 
 À exécuter sur le SHA documentaire final incluant `738ef93`.
+
+## Session de revue 4
+
+| Élément | Valeur |
+|---|---|
+| Agent Paseo | `53a84822-d2e7-4747-9613-758b0dcad273` |
+| Provider / modèle | `codex` / `gpt-6-luna` |
+| Effort effectif | `xhigh` |
+| Mode | `auto-review`, worktree isolé |
+| SHA relu | `4be991de8adc58e27e20beebef816c4728b2b0c3` |
+| Code final relu | `738ef93` |
+| État du worktree | propre, aucun fichier modifié |
+| Limites | lecture seule ; aucun test/build/ADB/réseau exécuté |
+
+### Verdict de la revue 4 : APPROUVE_AVEC_RESERVES
+
+Aucun P0/P1 confirmé. La revue valide :
+- le partage effectif d'`AgentConsentGate` entre `revokeUsageObservation()`,
+  `pump()`, le coordinateur et la barrière ;
+- l'absence de cycle de verrous observée (les callbacks de dispatch ne
+  reprennent pas le verrou proactif ; les mutations de catégorie relâchent le
+  verrou du coordinateur avant les mises à jour proactives) ;
+- l'annulation des opérations en vol avant `sendError()` sur `receive()`,
+  suivie de la grâce 200 ms et du close 4001 ;
+- le test `coach.chat.request` refusé puis `sync.status` réussi pour l'ancien
+  appairage ;
+- les assertions A4 4001/alias Keystore et les statuts PARTIAL du binaire
+  final, sans PASS Pixel revendiqué pour `05756094`.
+
+### P2 documentaires corrigés
+
+- `DECISIONS.md` appelait encore `20672e07` « APK final » ; corrigé en
+  `05756094` (final), `1a877422` (installé), `b55776a9` (testé Pixel).
+- La matrice et l'index des preuves rattachaient les derniers résultats à
+  `7754005`/`dc8f55e`/`91e7aa6` ; ils sont désormais rattachés à `738ef93`
+  pour les vérifications finales. Les commits `7754005`/`91e7aa6` restent
+  cités comme historique des correctifs.
+- Les deux commits de correction documentaire n'ont pas été rejoués par la
+  revue 4 ; ils ne modifient ni le code ni les hashes d'APK.
+
+### Réserve de couverture des courses
+
+La revue 4 note que les tests ne combinent pas entièrement deux scénarios :
+la mutation de consentement et l'écriture socket sont testées par le verrou
+partagé mais pas avec une synchronisation séparée de l'écriture ; l'annulation
+en vol couvre le chemin de polling, tandis que le test `receive()` vérifie
+l'erreur et la fermeture 4001 séparément. Le code source respecte les ordres
+demandés ; cette réserve est reportée en R-22 et dans le rapport final.
+
+### Conclusion de la revue 4
+
+`APPROUVE_AVEC_RESERVES`. Les réserves portent sur la couverture de tests de
+concurrence et sur le binaire final non installé/testé sur Pixel (R-20/R-21),
+pas sur un défaut P0/P1 identifié.

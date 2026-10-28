@@ -25,6 +25,7 @@
 | R-19 | Les journaux horodatés de certains tests Pixel (A3 persistence, A4 after-clear/repair, chat) n'ont pas tous survécu à la compaction de session | Preuve moins directe pour ces lignes | résultats recoupés par les preuves JVM/Node, les fichiers de restauration et l'observation parentale ; aucun PASS inventé |
 | R-20 | Le re-test Pixel de l'APK final (correctifs P1, close 4001, alias Keystore, verrou de dispatch) n'a pas pu être exécuté : l'ingress public Funnel est indisponible depuis Wi-Fi et LTE | Les correctifs ne sont prouvés que par JVM/static sur le binaire final | JVM 691/691, Node 77/77 ; parcours Pixel antérieur PASS sur `b55776a9` ; rejouer A3/A4/chat dès le retour de l'ingress |
 | R-21 | Le Pixel physique s'est déconnecté de l'USB avant l'installation de l'APK final `05756094` | Le binaire final n'est pas installé ni exécuté sur le Pixel ; l'APK `1a877422` reste installé | APK final `05756094` et androidTest `5aef1321` conservés dans `android/app/build/outputs/apk/` ; réinstaller et rejouer dès reconnexion |
+| R-22 | Les tests de concurrence ne combinent pas entièrement la mutation de consentement avec l'écriture socket et l'annulation `receive()` en vol | Couverture de test plus étroite que le raisonnement de verrouillage | code revu statiquement, tests JVM/Node ciblés, verrou partagé ; ajouter un test de canal bloquant et un test d'écriture synchronisée lors d'une prochaine campagne |
 
 ## Limitations connues à ce stade
 
@@ -42,6 +43,8 @@
   pour la même raison ; les parcours antérieurs restent PASS.
 - Le consentement d'usage est désormais muté sous le verrou de dispatch
   (`738ef93`), mais le binaire final n'a pas été exécuté sur le Pixel.
+- La couverture des tests de concurrence est partielle (R-22), même si le
+  code et les ordres de verrous ont été revus.
 - L'expiration de session (1 h) et de token n'a pas été rejouée sur Pixel ;
   NET-13 reste PARTIAL.
 - Mandat révoqué/expiré et déconnexion pendant un chat en vol : couverture

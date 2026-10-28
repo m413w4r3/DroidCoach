@@ -3,7 +3,7 @@
 Mise à jour finale: **2026-10-28**. Statuts : `PASS`, `FAIL`, `PARTIAL`,
 `BLOCKED`, `NOT_RUN`.
 
-Code intégré de référence : `7754005` (branche de campagne). L'APK final
+Code intégré de référence : `738ef93` (branche de campagne). L'APK final
 `05756094…` contient le verrou de consentement au dispatch et les preuves A4
 renforcées ; l'APK `1a877422…` est installé sur le Pixel mais n'a pas été
 re-testé. L'APK `b55776a9…` a servi aux tests Pixel A3/A4/chat/réseau
@@ -14,8 +14,8 @@ d'ingress public Funnel (R-18/R-20).
 
 | ID | Gate | Commande / environnement | Statut final |
 |---|---|---|---|
-| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped, 1 warning (arbre final `dc8f55e`) |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 691 tests, 0 échec/erreur/ignoré (arbre final `7754005`) |
+| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped, 1 warning (arbre final `738ef93`) |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 691 tests, 0 échec/erreur/ignoré (arbre final `738ef93`) |
 | T3 | Lint Android | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 71 avertissements (arbre final) |
 | T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `05756094…` (final construit) ; APK `1a877422…` installé ; APK Pixel testé `b55776a9…`, signature debug |
 | T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `5aef1321…` (arbre final, assertions A4 4001/alias incluses) |
@@ -30,7 +30,7 @@ d'ingress public Funnel (R-18/R-20).
 | T14 | A3 Keystore | Pairing + force-stop + redémarrage Android | **PASS (réserve R-19)** — `R3bA3PairingInstrumentedTest` et `R3bA3PersistenceInstrumentedTest` sur Pixel/APK antérieur ; journaux horodatés partiels ; re-test final bloqué par l'ingress |
 | T15 | A4 révocation | Session active + révocation PC + effacement local | **PARTIAL** — parcours A4 PASS sur l'APK antérieur ; assertions renforcées close 4001 et alias Keystore non rejouées sur l'APK final à cause de l'ingress public. Voir A4-4/A4-8 |
 | T16 | Données Pixel | Hashes ATLAS et compteurs calendrier | **PASS** — 5/5 hashes, calendriers 12, événements 91 après restauration finale |
-| T17 | Revue indépendante | Lecture seule sur SHA final | **RUNNING** — revue 1 `BLOQUÉ` (P1 corrigé en `7754005`) ; re-revue du SHA final à exécuter ; voir `REVUE_INDEPENDANTE.md` |
+| T17 | Revue indépendante | Lecture seule sur SHA final | **PASS** — quatre revues indépendantes (`codex/gpt-6-luna`, `xhigh`) ; revue 4 `APPROUVE_AVEC_RESERVES`, aucun P0/P1 ; voir `REVUE_INDEPENDANTE.md` |
 
 ## 2. Réseau public et Funnel
 
@@ -139,5 +139,5 @@ d'ingress public Funnel (R-18/R-20).
   `tailscaled` ne joignait plus le plan de contrôle Tailscale (réseau
   injoignable); aucune configuration Tailscale n'a été modifiée. Voir R-18.
 - La revue indépendante 1 a rendu `BLOQUÉ` sur un P1 de consentement périmé.
-  Le correctif `7754005` est couvert par 691 tests JVM et 76 tests Node ; le
+  Les correctifs `7754005`, `91e7aa6` et `738ef93` sont couverts par 691 tests JVM et 77 tests Node ; le
   re-test Pixel de l'APK final est bloqué par l'ingress public (R-20).

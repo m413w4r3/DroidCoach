@@ -146,3 +146,10 @@ le même verrou que le contrôle et l'écriture relayés. Le chemin `receive()`
 test d'ancien appairage envoie une requête `coach.chat.request` valide (refus
 `OPERATION_UNAVAILABLE`) puis `sync.status` (succès). Node 77/77, JVM 691/691.
 Le binaire final `05756094` n'est pas installé/testé sur le Pixel (R-20/R-21).
+
+## Revue 4 (4be991d)
+
+Revue 4 `APPROUVE_AVEC_RESERVES` : aucun P0/P1. Les écarts documentaires
+APK/SHA ont été corrigés ; la réserve de couverture des tests de concurrence
+est en R-22, et le binaire final reste non installé/testé sur Pixel
+(R-20/R-21).

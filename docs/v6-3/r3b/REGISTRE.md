@@ -26,7 +26,7 @@ actifs, dont trois implémentations.
 | `R3B-CHAT-WIRE-01` | B | INTEGRATED | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
 | `R3B-ANDROID-01` | B | INTEGRATED | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
 | `R3B-QA-C` | C | ACCEPTED (limites documentées) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
-| `R3B-REVIEW-01` | D | RUNNING | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final |
+| `R3B-REVIEW-01` | D | ACCEPTED | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final ; revue 4 `APPROUVE_AVEC_RESERVES` (réserve R-22) |
 
 États : `READY -> RUNNING -> REVIEW_REQUIRED -> ACCEPTED -> INTEGRATED`, ou
 `CORRECTION_REQUIRED / BLOCKED`. Une notification de fin n'est pas une
@@ -126,7 +126,7 @@ finale. Voir `preuves/pixel-instrumentation-final.txt` et
 | Redémarrage connecteur avec session Pixel | PASS — 39,852 s ; ERROR 19 s puis RELAY_CONNECTED 1 s |
 | Restauration finale des données | PASS — 5/5 hashes, calendriers 12/91, aucun artefact |
 
-## Vérifications finales du code intégré `dc8f55e`
+## Vérifications finales du code intégré `738ef93`
 
 | Gate | Résultat |
 |---|---|
@@ -148,7 +148,7 @@ opérations en vol. La revue 3 a maintenu BLOQUÉ sur le consentement d'usage
 non sérialisé ; `738ef93` le mute sous le même verrou, annule avant l'erreur
 sur `receive()` et teste exactement `coach.chat.request`. Tests Node 77/77 et
 JVM 691/691. Le re-test Pixel de l'APK final est bloqué par la déconnexion USB
-du Pixel et l'ingress public Funnel (R-20/R-21) ; la revue 4 est en cours.
+du Pixel et l'ingress public Funnel (R-20/R-21) ; la revue 4 a rendu `APPROUVE_AVEC_RESERVES`, sans P0/P1 ; la réserve de couverture des courses est en R-22.
 
 ## Limite de recontrôle public final
 

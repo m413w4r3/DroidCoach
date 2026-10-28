@@ -21,15 +21,16 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | [`preuves/pixel-network.txt`](preuves/pixel-network.txt) | Coupure/reprise, handover LTE/5G, redémarrage connecteur | Pixel API 37, Funnel, code `dc8f55e` | PASS sauf NET-07 PARTIAL |
 | [`preuves/pixel-restore-final.txt`](preuves/pixel-restore-final.txt) | Restauration finale des données, 5 hashes, calendrier | Pixel API 37, sauvegarde `fbca987a…` | PASS |
 | [`preuves/fastapi-restart-public.txt`](preuves/fastapi-restart-public.txt) | Arrêt/relance FastAPI réel via Funnel | `dfe6da3` | PASS (`BACKEND_UNAVAILABLE` puis `ok`) |
+| [`preuves/cleanup-final.txt`](preuves/cleanup-final.txt) | Arrêt des services, révocation des appareils, suppression des tokens/bases de test, Funnel inchangé | 2026-10-28 | PASS (avec limite Pixel déconnecté) |
 
-## Vérifications finales sur le code intégré `dc8f55e`
+## Vérifications finales sur le code intégré `738ef93`
 
 | Vérification | Commande | Résultat |
 |---|---|---|
 | Backend | `backend/.venv/bin/python -m pytest -q` | 196 passed, 1 skipped, 1 warning |
-| Node connecteur | `integrations/relay/pc: npm test` (proxy 4400, relais 4402) | 15 fichiers, 77 tests, 0 échec (`91e7aa6`) |
+| Node connecteur | `integrations/relay/pc: npm test` (proxy 4400, relais 4402) | 15 fichiers, 77 tests, 0 échec (`738ef93`) |
 | Proxy filtrant | `node --test integrations/relay/proxy/test` | 18/18 |
-| JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 691 tests, 0 échec (`91e7aa6`) |
+| JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 691 tests, 0 échec (`738ef93`) |
 | Lint | `./gradlew :app:lintDebug` | 0 erreur, 71 avertissements |
 | Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK final `05756094…`, androidTest `5aef1321…` ; APK installé `1a877422…` ; APK Pixel testé `b55776a9…` |
 | Proxy/relais redémarrés | arrêt/relance proxy, `docker restart atlas-relay-r3b-probe` | `/health` 200, `/ready` 200, `/metrics` 404 en local et via MagicDNS |
@@ -94,14 +95,12 @@ final `agent_status=connected`.
 
 ## Revue indépendante
 
-Voir [`REVUE_INDEPENDANTE.md`](REVUE_INDEPENDANTE.md). La revue 1
-(`codex/gpt-6-luna`, `xhigh`, SHA `beb8f33`) a rendu **BLOQUÉ** sur un P1 de
-consentement périmé, sans P0. Le correctif `7754005` ajoute la revalidation du
-snapshot au dispatch, la grâce de révocation sur le chemin `receive()`,
-l'intersection des capacités pour les anciens appairages, l'assertion du close
-4001 et la suppression de l'alias Keystore. Tests : Node 76/76, JVM 690/690.
-Le re-test Pixel de l'APK final est bloqué par la panne d'ingress public ; la
-re-revue du SHA final est en cours.
+Voir [`REVUE_INDEPENDANTE.md`](REVUE_INDEPENDANTE.md). Quatre revues
+indépendantes `codex/gpt-6-luna` `xhigh` : revues 1 à 3 `BLOQUÉ` sur des
+P1 de consentement/dispatch, corrigés par `7754005`, `91e7aa6` et `738ef93` ;
+revue 4 **APPROUVE_AVEC_RESERVES**, aucun P0/P1. Tests finaux : Node 77/77,
+JVM 691/691. Le re-test Pixel de l'APK final reste bloqué par la déconnexion
+de l'appareil et la panne d'ingress public (R-20/R-21).
 
 ## Corrections parentales documentées
 
