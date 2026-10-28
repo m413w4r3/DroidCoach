@@ -99,13 +99,16 @@ internal fun awaitRelayState(
 ): Boolean {
     val deadline = SystemClock.uptimeMillis() + timeoutMillis
     val instrumentation = InstrumentationRegistry.getInstrumentation()
+    var observedState: RelayConnectionState? = null
     while (SystemClock.uptimeMillis() < deadline) {
         instrumentation.waitForIdleSync()
-        if (relay.state == expected) return true
+        instrumentation.runOnMainSync { observedState = relay.state }
+        if (observedState == expected) return true
         SystemClock.sleep(100)
     }
     instrumentation.waitForIdleSync()
-    return relay.state == expected
+    instrumentation.runOnMainSync { observedState = relay.state }
+    return observedState == expected
 }
 
 internal fun connectR3bRelay(relay: RelaySettingsController, timeoutMillis: Long = 25_000L) {
