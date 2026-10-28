@@ -33,6 +33,7 @@ Tous les enfants sont `provider=codex`, `model=gpt-6-luna`,
 | `R3C-ANDROID-NET-01` | `6a1b8d43-8c2a-4eed-807e-03142cf7f1e6` | `<worktree Paseo>/r3c-net-01` | `feat/r3c-net-01` | BLOCKED_SANDBOX → patch intégré |
 | `R3C-COMPAT-01` | `6093964c-7ce5-4f6e-9424-ea59b08f1761` | `<worktree Paseo>/r3c-compat-01` | `feat/r3c-compat-01` | BLOCKED_SANDBOX → patch intégré |
 | `R3C-RACE-01` | `be46e357-2cc0-4fd4-b367-3d036d5e7df3` | `<worktree Paseo>/r3c-race-01` | `feat/r3c-race-01` | BLOCKED_SANDBOX → patch intégré |
+| `R3C-REVIEW-01` | `88c30a0b-573b-4cbb-941d-1ef9b1effd2d` | `<worktree Paseo>/review-r3c-final-c5ec1f4` | `review/r3c-final-c5ec1f4` | lecture seule, **APPROUVE** après corrections P2 |
 
 Le bac à sable Codex refuse l'écriture dans `.git/worktrees`, `~/.gradle` et
 l'exécution de certains binaires `node_modules` (`Read-only file system`,
@@ -54,6 +55,7 @@ un échec logiciel : statut `BLOCKED_SANDBOX` documenté.
 | `R3C-REGRESSION-01` | C | PARTIAL | parent + Pixel | NET-07/13, CHAT-05/06, UI-04/06/07/08, R-22 |
 | `R3C-PC-DEPLOY-01` | B | PARTIAL | parent, services de test isolés | ordre, SIGKILL, réseau, logs, ports, rollback |
 | `R3C-CI-01` | B | INTEGRATED `cd6e751` | `.github/workflows/ci.yml`, harnais relais isolé | Android + backend + Node + proxy |
+| `R3C-REVIEW-01` | D | **ACCEPTED** — APPROUVE | relecteur indépendant lecture seule | Aucun P0/P1 ; P2 identifiants/image/conteneur/placeholder corrigés |
 
 ## 4. Intégration
 
@@ -66,6 +68,20 @@ un échec logiciel : statut `BLOCKED_SANDBOX` documenté.
 
 Une notification de fin n'est **pas** une acceptation. Chaque intégration
 ci-dessus a été rejouée sur le SHA intégré.
+
+### Gel final
+
+| Élément | Valeur |
+|---|---|
+| Dernier commit de code Android | `d2419b3` |
+| Dernier commit d'infrastructure (CI/harnais) | `e3a9867` |
+| Dernier commit de documentation | `2796dad` |
+| Gates finales | Android 712 tests / 0 échec, lint 0/71, backend 196/1, Node 81/81, proxy 18/18 |
+| APK principal (build propre) | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
+| APK androidTest (build propre) | `143aae62cba4eef4eca1579be36a8ca40be57a98a97fe1388b271e3546b8df43` |
+| Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
+| État Pixel | `BLOCKED_DEVICE` — aucun appareil ADB |
+| État CI distante | `NOT_RUN` — aucun push autorisé |
 
 ## 5. Autorisations
 

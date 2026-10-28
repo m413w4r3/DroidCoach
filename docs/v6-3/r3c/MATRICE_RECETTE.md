@@ -16,8 +16,8 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | T1 | Backend pytest | PASS | **PASS** — 196 passed, 1 skipped | `d2419b3` |
 | T2 | JVM Android | PASS 691 | **PASS** — 100 suites, 712 tests, 0 échec | `d2419b3` |
 | T3 | Lint Android | PASS 0/71 | **PASS** — 0 erreur, 71 avertissements | `d2419b3` |
-| T4 | Build APK principal | PASS | **PASS** — `8332afd9…` | `d2419b3`, non installé |
-| T5 | Build APK androidTest | PASS | **PASS** — `5aef1321…` (identique, sources instrumentation inchangées) | Rebuild `clean` prévu au gel |
+| T4 | Build APK principal | PASS | **PASS** — `365bd84a…` (build propre) | code `d2419b3`, non installé |
+| T5 | Build APK androidTest | PASS | **PASS** — `143aae62…` (build propre) | reconstruit après `clean` |
 | T6 | Instrumentation API 37 | PARTIAL | **BLOCKED_DEVICE** | Aucun Pixel ADB au pré-vol |
 | T7 | Node connecteur | PASS 77 | **PASS** — 17 fichiers, 81 tests | `d2419b3` |
 | T8 | Relais épinglé | PASS | **PASS** — image `atlas-paseo-relay:r3a`, 4402 | |
@@ -29,7 +29,7 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | T14 | A3 Keystore | PASS ancien APK | **BLOCKED_DEVICE** | Pas de Pixel ; pas de nouveau binaire installé |
 | T15 | A4 révocation | PARTIAL ancien APK | **BLOCKED_DEVICE** | Assertions 4001/Keystore non rejouées sur binaire R3-C |
 | T16 | Données Pixel | PASS 5/5 | **BLOCKED_DEVICE** | Pas de comparaison possible sans appareil |
-| T17 | Revue indépendante | PASS avec réserves | **PENDING** | À exécuter sur le SHA final |
+| T17 | Revue indépendante | PASS avec réserves | **PASS** — `APPROUVE`, aucun P0/P1 ; 4 P2 corrigés et confirmés | `REVUE_INDEPENDANTE.md` |
 
 ## 2. Réseau et Funnel
 

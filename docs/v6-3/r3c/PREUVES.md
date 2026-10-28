@@ -187,6 +187,17 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Statut | **PASS (PC public, OpenClaw réel)** |
 | Limites | Message synthétique uniquement ; OpenClaw personnel non modifié ; une conversation synthétique a été créée côté gateway ; aucun test Pixel ni UI de provenance |
 
+## P-CLEANUP-01 — Nettoyage des fixtures synthétiques
+
+| Champ | Valeur |
+|---|---|
+| Environnement | connecteur réel, registre `~/.local/state/atlas-relay/devices.json` |
+| Commande | `scripts/revoke-device.sh … <device>` pour `49f67626-…` et `95a472e3-…` ; `rm -f /tmp/atlas-r3c/device-r3c-*.json` |
+| Horodatage | 2026-10-28T17:47+01:00 |
+| Observé | 10 appareils au total, **0 actif, 10 révoqués** ; les deux appareils de test sont révoqués ; tokens temporaires supprimés ; `relay_connected=true`, `active_sessions=0` |
+| Statut | **PASS** |
+| Limites | L'identité X25519 et le registre historique sont conservés ; aucun appareil utilisateur n'a été touché |
+
 ## P-COMPAT-01 — Ancien appairage sans `coach.chat`
 
 | Champ | Valeur |
