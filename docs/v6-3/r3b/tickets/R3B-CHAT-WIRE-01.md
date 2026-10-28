@@ -127,3 +127,13 @@ sont appelés dans `beforeDispatch` ; un retrait de catégorie après préparati
 bloque l'envoi (`POLICY_DENIED`, zéro payload). Tests JVM 690/690, dont deux
 tests dédiés. Le re-test Pixel de l'APK final est bloqué par l'indisponibilité
 de l'ingress public Funnel (R-20).
+
+## Correctif de revue 2 (91e7aa6)
+
+La revue 2 a maintenu un P1 de course entre le contrôle de consentement et
+l'écriture WebSocket. `RelayBackendTransport.pump()` tient désormais un
+`AgentConsentGate` partagé du `beforeDispatch` jusqu'à l'écriture ; les
+mutations de consentement/objectifs/barrière prennent le même verrou. Test de
+concurrence ajouté dans `RelayBackendTransportTest`. Node 77/77, JVM 691/691.
+Le binaire final `20672e07` n'a pas pu être installé/testé sur le Pixel
+(appareil déconnecté, ingress public indisponible) ; voir R-20/R-21.

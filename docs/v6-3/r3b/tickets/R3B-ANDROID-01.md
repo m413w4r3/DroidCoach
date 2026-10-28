@@ -183,3 +183,13 @@ artefact. Preuves : `preuves/pixel-instrumentation-final.txt`,
 - Le re-test Pixel de l'APK final `1a877422` est bloqué par l'indisponibilité de
   l'ingress public Funnel (R-20) ; les parcours A3/A4 antérieurs restent PASS
   sur l'APK `b55776a9`.
+
+## Correctif de revue 2 (91e7aa6)
+
+- Le verrou de consentement partagé est tenu jusqu'à l'écriture relayée ; les
+  opérations en vol sont annulées dès le début de la révocation.
+- Test Node : une requête backend en vol est interrompue avant la fermeture
+  4001 ; la grâce ne retarde que la socket.
+- L'APK final `20672e07` et l'androidTest `5aef1321` sont construits, mais le
+  Pixel s'est déconnecté avant l'installation ; l'APK installé reste
+  `1a877422`. Aucun PASS Pixel du binaire final n'est revendiqué (R-21).

@@ -112,3 +112,59 @@ disponibles, avec cette réserve.
 À compléter après la re-revue du SHA `7754005` (code) et du SHA documentaire
 final. La re-revue doit vérifier les correctifs P1/P2 ci-dessus et l'absence de
 régression.
+
+## Session de revue 2
+
+| Élément | Valeur |
+|---|---|
+| Agent Paseo | `b8a95ba6-5b00-4b5b-a256-acf6d77a9799` |
+| Provider / modèle | `codex` / `gpt-6-luna` |
+| Effort effectif | `xhigh` |
+| Mode | `auto-review`, worktree isolé |
+| SHA relu | `8af78c574f29bb47b1c8f555941421b16a914efc` |
+| État du worktree | propre, aucun fichier modifié |
+| Limites | lecture seule ; aucun test/build/ADB/réseau exécuté |
+
+### Verdict de la revue 2 : BLOQUÉ
+
+Aucun P0. La revue a confirmé que le correctif précédent fermait le retrait
+**avant** `beforeDispatch`, mais a identifié une fenêtre résiduelle : `pump()`
+relâchait le verrou du coordinateur avant de construire le payload et
+d'envoyer la trame. Un retrait pouvait s'intercaler entre le contrôle et
+l'écriture. Elle a aussi relevé que le consentement de domaine était capturé
+avant l'appel au coordinateur, qu'une opération déjà en vol n'était pas
+annulée au début de la grâce de révocation, et que le test d'intersection de
+capacités ne vérifiait pas une opération existante.
+
+### Correctif `91e7aa6`
+
+- `AgentConsentGate` (ReentrantLock) partagé entre le coordinateur, la
+  barrière de révocation et le transport. `RelayBackendTransport.pump()` tient
+  ce verrou du contrôle `beforeDispatch` jusqu'à l'écriture WebSocket
+  (`pumpUnderConsentGate`) ; les mutations de consentement, d'objectifs et de
+  barrière prennent le même verrou. Un retrait ne peut plus s'intercaler.
+- Le consentement de domaine est fourni par un provider évalué **à
+  l'intérieur** du verrou, dans `consentStillAllows`.
+- `revoke()` et `closeForRevocation()` annulent immédiatement les opérations
+  en vol (`AbortController`) ; la grâce de 200 ms ne retarde plus que la
+  fermeture de la socket.
+- Le test d'ancien appairage vérifie désormais qu'une opération existante
+  (`sync.status`) réussit après `hello_ok`, en plus du refus `OPERATION_UNAVAILABLE`
+  pour `coach.chat`.
+- Test de concurrence ajouté : une mutation de consentement attend que le
+  payload et l'écriture WebSocket soient terminés.
+- Résultats : Node 77/77, JVM 691/691, lint 0 erreur/71 avertissements.
+
+### Limite Pixel du binaire final
+
+L'APK final `20672e07…` et l'APK androidTest `5aef1321…` sont construits, mais
+le Pixel physique s'est déconnecté de l'USB avant l'installation ; l'APK
+installé reste `1a877422…` (correctif de consentement, sans la barrière de
+dispatch), et l'APK antérieur `b55776a9…` reste la dernière version testée sur
+Pixel. Le re-test Pixel est donc bloqué à la fois par la déconnexion de
+l'appareil et par l'ingress public Funnel indisponible (R-20/R-21). Aucun
+PASS Pixel du binaire final n'est revendiqué.
+
+## Session de revue 3
+
+À exécuter sur le SHA documentaire final incluant `91e7aa6`.

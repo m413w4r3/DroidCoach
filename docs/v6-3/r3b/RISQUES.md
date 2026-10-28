@@ -23,7 +23,8 @@
 | R-17 | Derrière le Funnel, toutes les connexions apparaissent en loopback : le proxy ne peut pas faire de rate-limit par source | Épuisement des 64 connexions ou du budget relais par un tiers | limites de connexions, budget du relais, redémarrage supervisé ; DoS générique non éliminable au niveau du proxy |
 | R-18 | Au recontrôle final (2026-10-28 15:15), `tailscaled` ne joignait plus le plan de contrôle Tailscale (`network is unreachable`) ; l'ingress public fermait le TLS | Accès distant public indisponible tant que la connectivité Tailscale du PC n'est pas rétablie | aucune configuration modifiée ; qualification publique antérieure PASS ; rejeu final via MagicDNS PASS ; vérifier `tailscale status`/connectivité avant usage distant |
 | R-19 | Les journaux horodatés de certains tests Pixel (A3 persistence, A4 after-clear/repair, chat) n'ont pas tous survécu à la compaction de session | Preuve moins directe pour ces lignes | résultats recoupés par les preuves JVM/Node, les fichiers de restauration et l'observation parentale ; aucun PASS inventé |
-| R-20 | Le re-test Pixel de l'APK final `1a877422` (correctif P1, close 4001, alias Keystore) n'a pas pu être exécuté : l'ingress public Funnel est indisponible depuis Wi-Fi et LTE | Le correctif de consentement et les assertions A4 renforcées ne sont prouvés que par JVM/static sur le binaire final | JVM 690/690, Node 76/76 ; parcours Pixel antérieur PASS sur `b55776a9` ; rejouer A3/A4/chat sur le Pixel dès que l'ingress public revient |
+| R-20 | Le re-test Pixel de l'APK final (correctifs P1, close 4001, alias Keystore, verrou de dispatch) n'a pas pu être exécuté : l'ingress public Funnel est indisponible depuis Wi-Fi et LTE | Les correctifs ne sont prouvés que par JVM/static sur le binaire final | JVM 691/691, Node 77/77 ; parcours Pixel antérieur PASS sur `b55776a9` ; rejouer A3/A4/chat dès le retour de l'ingress |
+| R-21 | Le Pixel physique s'est déconnecté de l'USB avant l'installation de l'APK final `20672e07` | Le binaire final n'est pas installé ni exécuté sur le Pixel ; l'APK `1a877422` reste installé | APK final et androidTest conservés dans `android/app/build/outputs/apk/` ; réinstaller et rejouer dès reconnexion |
 
 ## Limitations connues à ce stade
 
@@ -35,7 +36,8 @@
 - L'état applicatif observé pendant une coupure est `ERROR`, pas `OFFLINE` ;
   NET-07 reste PARTIAL sur le libellé exact.
 - Le P1 de consentement périmé est corrigé et couvert JVM, mais le re-test
-  Pixel de l'APK final n'a pas pu être exécuté (R-20).
+  Pixel de l'APK final n'a pas pu être exécuté (R-20), et l'APK final n'a pas
+  pu être installé avant la déconnexion USB du Pixel (R-21).
 - A4-4 (close 4001) et A4-8 (alias Keystore) sont PARTIAL sur le binaire final
   pour la même raison ; les parcours antérieurs restent PASS.
 - L'expiration de session (1 h) et de token n'a pas été rejouée sur Pixel ;

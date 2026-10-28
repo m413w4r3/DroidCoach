@@ -4,8 +4,9 @@ Mise à jour finale: **2026-10-28**. Statuts : `PASS`, `FAIL`, `PARTIAL`,
 `BLOCKED`, `NOT_RUN`.
 
 Code intégré de référence : `7754005` (branche de campagne). L'APK final
-`1a877422…` contient le correctif de consentement au dispatch et les preuves
-A4 renforcées. L'APK `b55776a9…` a servi aux tests Pixel A3/A4/chat/réseau
+`20672e07…` contient le verrou de consentement au dispatch et les preuves A4
+renforcées ; l'APK `1a877422…` est installé sur le Pixel mais n'a pas été
+re-testé. L'APK `b55776a9…` a servi aux tests Pixel A3/A4/chat/réseau
 avant ce correctif; les tests du nouvel APK sont bloqués par la panne
 d'ingress public Funnel (R-18/R-20).
 
@@ -14,12 +15,12 @@ d'ingress public Funnel (R-18/R-20).
 | ID | Gate | Commande / environnement | Statut final |
 |---|---|---|---|
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped, 1 warning (arbre final `dc8f55e`) |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 690 tests, 0 échec/erreur/ignoré (arbre final `7754005`) |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 691 tests, 0 échec/erreur/ignoré (arbre final `7754005`) |
 | T3 | Lint Android | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 71 avertissements (arbre final) |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `1a877422…` (final) ; APK Pixel antérieur `b55776a9…`, signature debug |
-| T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `d9213e63…` (arbre final, assertions A4 4001/alias incluses) |
-| T6 | Instrumentation API 37 | Pixel physique `45301FDAS001QT`, Android 17 / API 37 | **PARTIAL** — tests ciblés PASS sur l'APK `b55776a9`, avant le correctif de consentement ; re-test de l'APK final `1a877422` bloqué par l'indisponibilité de l'ingress public Funnel. Suite complète non lancée d'un bloc |
-| T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 76 tests (arbre final `7754005`, proxy 4400 actif) |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `20672e07…` (final construit) ; APK `1a877422…` installé ; APK Pixel testé `b55776a9…`, signature debug |
+| T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `5aef1321…` (arbre final, assertions A4 4001/alias incluses) |
+| T6 | Instrumentation API 37 | Pixel physique `45301FDAS001QT`, Android 17 / API 37 | **PARTIAL** — tests ciblés PASS sur l'APK `b55776a9`, avant le correctif de consentement ; re-test de l'APK final bloqué par la déconnexion USB du Pixel et l'indisponibilité de l'ingress public Funnel ; aucun PASS Pixel du binaire final. Suite complète non lancée d'un bloc |
+| T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 77 tests (arbre final `7754005`, proxy 4400 actif) |
 | T8 | Image relais épinglée | `atlas-paseo-relay:r3a`, `/health` loopback | **PASS** — image locale vérifiée, `/health` 200 sur 127.0.0.1:4402 |
 | T9 | Tests proxy filtrant | `node --test integrations/relay/proxy/test` | **PASS** — 18/18 (arbre final, relais réel 4402) |
 | T10 | Unités systemd | `systemd-analyze --user verify` (sans installation) | **PARTIAL** — vérification statique PASS ; aucun service installé ni lancé |
@@ -138,5 +139,5 @@ d'ingress public Funnel (R-18/R-20).
   `tailscaled` ne joignait plus le plan de contrôle Tailscale (réseau
   injoignable); aucune configuration Tailscale n'a été modifiée. Voir R-18.
 - La revue indépendante 1 a rendu `BLOQUÉ` sur un P1 de consentement périmé.
-  Le correctif `7754005` est couvert par 690 tests JVM et 76 tests Node ; le
+  Le correctif `7754005` est couvert par 691 tests JVM et 76 tests Node ; le
   re-test Pixel de l'APK final est bloqué par l'ingress public (R-20).

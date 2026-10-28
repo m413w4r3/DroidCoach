@@ -84,7 +84,7 @@ changer de modèle.
 | Implémentation / hooks de test | commits `c916ab8`, `7be0599` ; correctif produit A4 `c5e1bea` (`RelaySettingsErrorPolicy`) |
 | Correctif connecteur de révocation | `dc8f55e` — délai borné 200 ms avant fermeture 4001, étendu au chemin `receive()` en `7754005` |
 | Corrections test-only | `f266416`, `937b95a`, `790b476` (sélecteurs Compose, historique long, état `RELAY_CONNECTING`) |
-| APK principal | `1a877422…` final (`7754005`) ; `b55776a9…` pour les tests Pixel antérieurs |
+| APK principal | `20672e07…` final construit (`91e7aa6`) ; `1a877422…` installé ; `b55776a9…` pour les tests Pixel antérieurs |
 | Opérateur ADB | parent unique ; aucun autre opérateur Pixel/ADB simultané |
 | Modèle des sous-agents | `codex/gpt-6-luna`, `xhigh` effectif pour les sessions enfants de la vague A/B ; les corrections d'intégration et les tests Pixel ont été opérés par le parent |
 
@@ -131,23 +131,24 @@ finale. Voir `preuves/pixel-instrumentation-final.txt` et
 | Gate | Résultat |
 |---|---|
 | Backend pytest | 196 passed, 1 skipped |
-| Node connecteur | 76/76, 15 fichiers (`7754005`) |
+| Node connecteur | 77/77, 15 fichiers (`91e7aa6`) |
 | Proxy filtrant | 18/18 |
-| JVM Android | 690 tests, 97 suites, 0 échec (`7754005`) |
+| JVM Android | 691 tests, 97 suites, 0 échec (`91e7aa6`) |
 | Lint | 0 erreur, 71 avertissements |
-| Builds | APK final `1a877422…`, androidTest `d9213e63…` ; APK Pixel antérieur `b55776a9…` |
+| Builds | APK final `20672e07…`, androidTest `5aef1321…` ; APK installé `1a877422…` ; APK Pixel testé `b55776a9…` |
 | E2E final via Funnel/MagicDNS | 7/7 PASS, `agent_status=connected` |
 | Proxy + relais redémarrés | `/health`/`/ready` 200, `/metrics` 404 |
 
 ## Revue indépendante et correctif P1
 
 La revue 1 (`codex/gpt-6-luna`, `xhigh`, SHA `beb8f33`) a rendu **BLOQUÉ** :
-consentement périmé entre préparation et dispatch. Aucun P0. Le correctif
-`7754005` revalide le snapshot au dispatch, partage la grâce de révocation avec
-le chemin `receive()`, accorde l'intersection des capacités aux anciens
-appairages, expose/asserte le close 4001 et supprime l'alias Keystore. Tests
-Node 76/76 et JVM 690/690. Le re-test Pixel de l'APK final est bloqué par
-l'ingress public Funnel ; la re-revue du SHA final est en cours.
+consentement périmé entre préparation et dispatch. Aucun P0. La revue 2 a maintenu le verdict BLOQUÉ sur une course résiduelle entre le
+contrôle de consentement et l'écriture WebSocket. Le correctif `91e7aa6` tient
+un verrou partagé du contrôle jusqu'à l'écriture, annule les opérations en vol
+dès la révocation et renforce le test d'ancien appairage. Tests Node 77/77 et
+JVM 691/691. Le re-test Pixel de l'APK final est bloqué par la déconnexion USB
+du Pixel et l'ingress public Funnel (R-20/R-21) ; la revue 3 du SHA final est
+en cours.
 
 ## Limite de recontrôle public final
 

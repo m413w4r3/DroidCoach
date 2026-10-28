@@ -27,11 +27,11 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | Vérification | Commande | Résultat |
 |---|---|---|
 | Backend | `backend/.venv/bin/python -m pytest -q` | 196 passed, 1 skipped, 1 warning |
-| Node connecteur | `integrations/relay/pc: npm test` (proxy 4400, relais 4402) | 15 fichiers, 76 tests, 0 échec (`7754005`) |
+| Node connecteur | `integrations/relay/pc: npm test` (proxy 4400, relais 4402) | 15 fichiers, 77 tests, 0 échec (`91e7aa6`) |
 | Proxy filtrant | `node --test integrations/relay/proxy/test` | 18/18 |
-| JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 690 tests, 0 échec (`7754005`) |
+| JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 691 tests, 0 échec (`91e7aa6`) |
 | Lint | `./gradlew :app:lintDebug` | 0 erreur, 71 avertissements |
-| Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK final `1a877422…`, androidTest `d9213e63…` ; APK Pixel antérieur `b55776a9…` |
+| Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK final `20672e07…`, androidTest `5aef1321…` ; APK installé `1a877422…` ; APK Pixel testé `b55776a9…` |
 | Proxy/relais redémarrés | arrêt/relance proxy, `docker restart atlas-relay-r3b-probe` | `/health` 200, `/ready` 200, `/metrics` 404 en local et via MagicDNS |
 
 ## Preuves publiques complémentaires (PC)
@@ -110,6 +110,7 @@ re-revue du SHA final est en cours.
 | `dc8f55e` | Délai borné de 200 ms avant fermeture 4001, pour laisser le relais router `DEVICE_REVOKED` | A4 Pixel PASS ; Node 74/74 ; code revu |
 | `f266416`, `937b95a`, `790b476` | Corrections test-only : sélecteurs Compose, historique long, état `RELAY_CONNECTING` pendant l'arrêt du connecteur | Tests Pixel rejoués ; APK principal inchangé |
 | `7754005` | Consentement revalidé au dispatch, grâce sur `receive()`, intersection de capacités, close 4001/alias Keystore | Node 76/76 ; JVM 690/690 ; lint 0 erreur ; Pixel final bloqué par l'ingress |
+| `91e7aa6` | Verrou de consentement tenu jusqu'à l'écriture WebSocket, annulation des opérations en vol, test d'ancien appairage renforcé | Node 77/77 ; JVM 691/691 ; lint 0 erreur ; Pixel final non installé/testé (appareil déconnecté) |
 
 ## Règles
 
