@@ -18,7 +18,7 @@ class R3bA4AfterClearInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val controller = (context.applicationContext as AtlasApplication).controller
-        var previousConnectionTimestamp = 0L
+        var previousConnectionTimestamp: Long? = null
         instrumentation.runOnMainSync {
             previousConnectionTimestamp = controller.relaySettings.lastConnectedAtUtcMillis
         }
@@ -35,7 +35,7 @@ class R3bA4AfterClearInstrumentedTest {
         var credentialsConfigured = true
         var deviceId = "not-cleared"
         var serverPublicKey = "not-cleared"
-        var observedConnectionTimestamp = -1L
+        var observedConnectionTimestamp: Long? = null
         var lastError: String? = null
         instrumentation.runOnMainSync {
             observedMode = controller.relaySettings.mode
