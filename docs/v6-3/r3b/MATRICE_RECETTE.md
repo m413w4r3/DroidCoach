@@ -4,7 +4,7 @@ Mise à jour finale: **2026-10-28**. Statuts : `PASS`, `FAIL`, `PARTIAL`,
 `BLOCKED`, `NOT_RUN`.
 
 Code intégré de référence : `7754005` (branche de campagne). L'APK final
-`20672e07…` contient le verrou de consentement au dispatch et les preuves A4
+`05756094…` contient le verrou de consentement au dispatch et les preuves A4
 renforcées ; l'APK `1a877422…` est installé sur le Pixel mais n'a pas été
 re-testé. L'APK `b55776a9…` a servi aux tests Pixel A3/A4/chat/réseau
 avant ce correctif; les tests du nouvel APK sont bloqués par la panne
@@ -17,7 +17,7 @@ d'ingress public Funnel (R-18/R-20).
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped, 1 warning (arbre final `dc8f55e`) |
 | T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 691 tests, 0 échec/erreur/ignoré (arbre final `7754005`) |
 | T3 | Lint Android | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 71 avertissements (arbre final) |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `20672e07…` (final construit) ; APK `1a877422…` installé ; APK Pixel testé `b55776a9…`, signature debug |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `05756094…` (final construit) ; APK `1a877422…` installé ; APK Pixel testé `b55776a9…`, signature debug |
 | T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `5aef1321…` (arbre final, assertions A4 4001/alias incluses) |
 | T6 | Instrumentation API 37 | Pixel physique `45301FDAS001QT`, Android 17 / API 37 | **PARTIAL** — tests ciblés PASS sur l'APK `b55776a9`, avant le correctif de consentement ; re-test de l'APK final bloqué par la déconnexion USB du Pixel et l'indisponibilité de l'ingress public Funnel ; aucun PASS Pixel du binaire final. Suite complète non lancée d'un bloc |
 | T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 77 tests (arbre final `7754005`, proxy 4400 actif) |

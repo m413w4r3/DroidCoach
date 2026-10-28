@@ -137,3 +137,12 @@ mutations de consentement/objectifs/barrière prennent le même verrou. Test de
 concurrence ajouté dans `RelayBackendTransportTest`. Node 77/77, JVM 691/691.
 Le binaire final `20672e07` n'a pas pu être installé/testé sur le Pixel
 (appareil déconnecté, ingress public indisponible) ; voir R-20/R-21.
+
+## Correctif de revue 3 (738ef93)
+
+La révocation du consentement d'usage passe désormais sous `AgentConsentGate`,
+le même verrou que le contrôle et l'écriture relayés. Le chemin `receive()`
+`DEVICE_REVOKED` annule les opérations en vol avant l'attente de l'erreur. Le
+test d'ancien appairage envoie une requête `coach.chat.request` valide (refus
+`OPERATION_UNAVAILABLE`) puis `sync.status` (succès). Node 77/77, JVM 691/691.
+Le binaire final `05756094` n'est pas installé/testé sur le Pixel (R-20/R-21).

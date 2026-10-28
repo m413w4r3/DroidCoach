@@ -17,7 +17,7 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | [`preuves/chat-wire-01-android.txt`](preuves/chat-wire-01-android.txt) | Intégration Android relayée, JVM, timeout 55 s, audit/verrou | `a437b17` / `c5e1bea`, 688 tests JVM | PASS (JVM) + Pixel dans `pixel-instrumentation-final.txt` |
 | [`preuves/android-01-implementation.txt`](preuves/android-01-implementation.txt) | Implémentation A3/A4 et corrections de tests | `c916ab8` / `7be0599` | PASS (implémentation) |
 | [`preuves/pixel-install-r3b.txt`](preuves/pixel-install-r3b.txt) | Installation APK R3-B, sauvegarde, SHA | Pixel, APK `b55776a9…` | PASS |
-| [`preuves/pixel-instrumentation-final.txt`](preuves/pixel-instrumentation-final.txt) | A3, A4, chat relayé, réseau, résultats Pixel | Pixel API 37, APK `b55776a9…` (avant correctif P1) | PASS (ciblé) ; re-test de l'APK final `1a877422…` bloqué par l'ingress public |
+| [`preuves/pixel-instrumentation-final.txt`](preuves/pixel-instrumentation-final.txt) | A3, A4, chat relayé, réseau, résultats Pixel | Pixel API 37, APK `b55776a9…` (avant correctif P1) | PASS (ciblé) ; re-test de l'APK installé `1a877422…` et du binaire final bloqué par l'ingress public |
 | [`preuves/pixel-network.txt`](preuves/pixel-network.txt) | Coupure/reprise, handover LTE/5G, redémarrage connecteur | Pixel API 37, Funnel, code `dc8f55e` | PASS sauf NET-07 PARTIAL |
 | [`preuves/pixel-restore-final.txt`](preuves/pixel-restore-final.txt) | Restauration finale des données, 5 hashes, calendrier | Pixel API 37, sauvegarde `fbca987a…` | PASS |
 | [`preuves/fastapi-restart-public.txt`](preuves/fastapi-restart-public.txt) | Arrêt/relance FastAPI réel via Funnel | `dfe6da3` | PASS (`BACKEND_UNAVAILABLE` puis `ok`) |
@@ -31,7 +31,7 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | Proxy filtrant | `node --test integrations/relay/proxy/test` | 18/18 |
 | JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 691 tests, 0 échec (`91e7aa6`) |
 | Lint | `./gradlew :app:lintDebug` | 0 erreur, 71 avertissements |
-| Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK final `20672e07…`, androidTest `5aef1321…` ; APK installé `1a877422…` ; APK Pixel testé `b55776a9…` |
+| Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK final `05756094…`, androidTest `5aef1321…` ; APK installé `1a877422…` ; APK Pixel testé `b55776a9…` |
 | Proxy/relais redémarrés | arrêt/relance proxy, `docker restart atlas-relay-r3b-probe` | `/health` 200, `/ready` 200, `/metrics` 404 en local et via MagicDNS |
 
 ## Preuves publiques complémentaires (PC)
@@ -111,6 +111,7 @@ re-revue du SHA final est en cours.
 | `f266416`, `937b95a`, `790b476` | Corrections test-only : sélecteurs Compose, historique long, état `RELAY_CONNECTING` pendant l'arrêt du connecteur | Tests Pixel rejoués ; APK principal inchangé |
 | `7754005` | Consentement revalidé au dispatch, grâce sur `receive()`, intersection de capacités, close 4001/alias Keystore | Node 76/76 ; JVM 690/690 ; lint 0 erreur ; Pixel final bloqué par l'ingress |
 | `91e7aa6` | Verrou de consentement tenu jusqu'à l'écriture WebSocket, annulation des opérations en vol, test d'ancien appairage renforcé | Node 77/77 ; JVM 691/691 ; lint 0 erreur ; Pixel final non installé/testé (appareil déconnecté) |
+| `738ef93` | Consentement d'usage sous le verrou, annulation avant erreur sur `receive()`, test `coach.chat.request` exact | Node 77/77 ; JVM 691/691 ; lint 0 erreur ; Pixel final non installé/testé |
 
 ## Règles
 

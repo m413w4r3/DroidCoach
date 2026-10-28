@@ -193,3 +193,11 @@ artefact. Preuves : `preuves/pixel-instrumentation-final.txt`,
 - L'APK final `20672e07` et l'androidTest `5aef1321` sont construits, mais le
   Pixel s'est déconnecté avant l'installation ; l'APK installé reste
   `1a877422`. Aucun PASS Pixel du binaire final n'est revendiqué (R-21).
+
+## Correctif de revue 3 (738ef93)
+
+- `revokeUsageObservation()` mute le consentement d'usage et les capacités
+  sous le verrou de dispatch partagé.
+- L'annulation des opérations en vol précède l'envoi de l'erreur sur le
+  chemin `receive()` `DEVICE_REVOKED`.
+- L'APK final `05756094` reste non installé/testé sur le Pixel (R-20/R-21).

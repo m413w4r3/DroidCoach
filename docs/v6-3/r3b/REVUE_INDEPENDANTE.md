@@ -168,3 +168,51 @@ PASS Pixel du binaire final n'est revendiqué.
 ## Session de revue 3
 
 À exécuter sur le SHA documentaire final incluant `91e7aa6`.
+
+## Session de revue 3
+
+| Élément | Valeur |
+|---|---|
+| Agent Paseo | `cf3df1c2-0006-4039-80ff-f01f98fd5e0f` |
+| Provider / modèle | `codex` / `gpt-6-luna` |
+| Effort effectif | `xhigh` |
+| Mode | `auto-review`, worktree isolé |
+| SHA relu | `caf92e44603ba38294522524b04e9a83428fefa3` |
+| État du worktree | propre, aucun fichier modifié |
+| Limites | lecture seule ; aucun test/build/ADB/réseau exécuté |
+
+### Verdict de la revue 3 : BLOQUÉ
+
+Aucun P0. Le verrou de dispatch a été reconnu correct, mais la révocation du
+**consentement d'usage** (`revokeUsageObservation`) ne prenait pas ce verrou :
+un snapshot d'usage pouvait encore partir si le retrait intervenait après le
+dernier contrôle. La revue a aussi relevé que le test de capacité utilisait
+`coach.status` au lieu de `coach.chat.request`, que le chemin `receive()`
+attendait l'envoi de l'erreur avant d'annuler les opérations en vol, et que
+l'index des preuves appelait `1a877422` « APK final » alors que la matrice
+désigne `20672e07` puis `05756094`.
+
+### Correctif `738ef93`
+
+- `revokeUsageObservation()` mute le consentement d'usage et les capacités
+  sous `agentConsentGate`, le même verrou que le dispatch relayé.
+- Le chemin `receive()` `DEVICE_REVOKED` annule les opérations en vol **avant**
+  d'attendre `sendError()`.
+- Le test d'ancien appairage envoie une requête `coach.chat.request` valide et
+  vérifie `OPERATION_UNAVAILABLE`, puis une requête `sync.status` réussie.
+- Le test de concurrence du transport est nommé et commenté comme scénario de
+  révocation du consentement d'usage.
+- Index des preuves corrigé : `1a877422` est l'APK installé, le binaire final
+  est `05756094` (après `20672e07`).
+- Résultats : Node 77/77, JVM 691/691, lint 0 erreur/71 avertissements.
+
+### Limite Pixel du binaire final
+
+L'APK final `05756094…` n'a pas été installé : le Pixel est déconnecté de
+l'USB et l'ingress public Funnel reste indisponible. Aucun PASS Pixel n'est
+revendiqué pour ce binaire ; les parcours Pixel documentés portent sur
+`b55776a9…`, avant les correctifs de consentement.
+
+## Session de revue 4
+
+À exécuter sur le SHA documentaire final incluant `738ef93`.

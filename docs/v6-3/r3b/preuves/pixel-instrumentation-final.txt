@@ -2,7 +2,7 @@ ATLAS V6.3 R3-B — Preuve d'instrumentation Pixel (appareil physique)
 Date: 2026-10-28
 Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
 APK principal ayant servi aux tests ci-dessous: b55776a91d523e9752594abe9de11b2d1ff53e304cbc94020892837948704fcc
-APK final après correctifs de revue: 20672e0734472bf611b6b5485b21a34aad9cb7456969898c93461cad417626cf
+APK final après correctifs de revue: 057560940cf078bb90b19bb32a8d288fe3f294c8d2cbf5f256ada5e907033e8c
 APK installé au moment de la déconnexion: 1a8774220d1ff72568c5262199b3875b6086c1b581aff097f9eac1e2427399b2
 Code Android principal: 8eb4845 (les commits f266416, 937b95a et 790b476 ne
 modifient que androidTest; dc8f55e ne modifie que le connecteur PC).
@@ -59,7 +59,7 @@ Tentative de re-test de l'APK final (2026-10-28 15:39), puis déconnexion USB :
   l'ingress public Funnel était indisponible (TLS public en échec, contrôle
   Tailscale injoignable). Aucun PASS Pixel du binaire final n'est revendiqué ;
   données restaurées ensuite (5/5 hashes, calendrier 12/91).
-  L'APK final 20672e07 n'a pas pu être installé après la déconnexion USB du
+  L'APK final 05756094 n'a pas pu être installé après la déconnexion USB du
   Pixel ; l'APK 1a877422 reste installé. Aucun PASS Pixel du binaire final.
 
 A4-4/A4-8 sur le binaire final:
