@@ -76,6 +76,32 @@ vrai store Keystore et le vrai contrôleur.
 8. Nouvel appairage explicite avec un second appareil synthétique : succès.
 9. Les autres données ATLAS et comptes restent intacts.
 
+## Contexte d'exécution fourni par le parent
+
+- Appareils synthétiques déjà appairés dans le registre PC :
+  - `pixel-r3b` : deviceId `9cbe6da6-07d0-41a3-9b47-938b79b3db43`
+  - `pixel-r3b-2` : deviceId `f2167261-37d4-4960-bae4-79ec0b15fb08`
+  - capacités : `sync.status,coach.status,plan.today,plan.revision,sport.plan,coach.chat`
+- Jetons : fichiers 0600 hors dépôt
+  `~/.local/state/atlas-r3b/device-pixel-r3b.json` et
+  `device-pixel-r3b-2.json`. Le parent les pousse dans le `filesDir` privé de
+  l'app sous les noms `r3b-pixel-device.json` et `r3b-pixel-device-2.json`
+  (0600) ; le test les lit puis les supprime après stockage Keystore.
+- `relayUrl` = `wss://all.taildc7886.ts.net:8443`
+- `serverId` = valeur dérivée de l'identité PC, fournie en argument
+  d'instrumentation (non secret)
+- clé publique X25519 du PC fournie en argument d'instrumentation (publique)
+- Le test ne doit jamais écrire le jeton dans un argument, un log, une preuve
+  ou un fichier non privé ; il peut comparer son SHA-256.
+- Phases A3 : le parent exécute la phase 1, `am force-stop`, la phase 2,
+  `adb reboot`, puis la phase 2 à nouveau.
+- A4 : le parent attend `active_sessions >= 1` sur
+  `http://127.0.0.1:4401/metrics`, puis exécute
+  `scripts/revoke-device.sh ... 9cbe6da6-...` pendant que le test attend
+  `DEVICE_REVOKED`/`4001`/`REVOKED`. Le réappairage utilise le second fichier
+  de jeton.
+- L'agent ne lance aucun ADB ; il fournit les classes et les commandes exactes.
+
 ## Oracle
 
 L'agent produit les classes instrumentées et documente les commandes exactes.
