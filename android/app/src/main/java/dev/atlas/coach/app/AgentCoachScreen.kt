@@ -165,7 +165,6 @@ internal fun AgentCoachScreen(
             controller.agentStatusMessage.contains("connexion", ignoreCase = true) -> "Connexion en cours…"
             else -> "Hors ligne"
         }
-        humanConnection.label == "Connexion requise" -> "Appairage nécessaire"
         humanConnection.label == "Relais inactif" -> "Hors ligne"
         else -> humanConnection.label
     }

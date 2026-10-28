@@ -256,7 +256,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             TextButton(
                 onClick = { optionsExpanded = !optionsExpanded },
                 modifier = Modifier.sizeIn(minHeight = 48.dp),
-            ) { Text("Options du planning") }
+            ) { Text(if (optionsExpanded) "Masquer les options" else "Options du planning") }
             if (optionsExpanded) {
                 PlanAgentSection(controller, atlasController, configurationMessage)
                 if (plan.version >= 2) {
