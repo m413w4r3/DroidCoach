@@ -6,7 +6,7 @@ import { BackendRequestError, BackendClient } from "./backend.js";
 import { RemoteError } from "./errors.js";
 import { CACHE_TTL_MS, type Operation, type RequestEnvelope, type ResponseEnvelope, PROTOCOL, isRecord, validatePayload } from "./protocol.js";
 
-const EFFECTFUL_OPERATIONS = new Set<Operation>(["plan.revision.request"]);
+const EFFECTFUL_OPERATIONS = new Set<Operation>(["plan.revision.request", "coach.chat.request"]);
 const OUTCOME_UNCERTAIN_MESSAGE = "backend outcome is uncertain; retry is blocked until the 10-minute idempotency window expires";
 
 interface CacheEntry {
@@ -203,6 +203,12 @@ export class OperationExecutor {
           : !(error instanceof RemoteError);
         if (mayHaveOccurred) {
           await this.rememberUncertain(idempotencyKey, journalEntry);
+          if (signal?.aborted || (error instanceof BackendRequestError && error.code === "CANCELLED")) {
+            throw new RemoteError("CANCELLED");
+          }
+          if (error instanceof BackendRequestError && error.preserveResponseError) {
+            throw new RemoteError(error.code);
+          }
           throw uncertainOutcomeError();
         }
         this.idempotencyCache.delete(idempotencyKey);
@@ -348,14 +354,15 @@ function validateJournal(value: unknown): JournalDocument {
   for (const valueEntry of value.entries) {
     if (!isRecord(valueEntry) || typeof valueEntry.deviceId !== "string" || valueEntry.deviceId.length === 0 ||
       typeof valueEntry.requestId !== "string" || typeof valueEntry.idempotencyKey !== "string" || valueEntry.idempotencyKey.length === 0 ||
-      valueEntry.operation !== "plan.revision.request" || typeof valueEntry.businessHash !== "string" || !/^[0-9a-f]{64}$/.test(valueEntry.businessHash) ||
+      typeof valueEntry.operation !== "string" || !EFFECTFUL_OPERATIONS.has(valueEntry.operation as Operation) ||
+      typeof valueEntry.businessHash !== "string" || !/^[0-9a-f]{64}$/.test(valueEntry.businessHash) ||
       typeof valueEntry.requestHash !== "string" || !/^[0-9a-f]{64}$/.test(valueEntry.requestHash) ||
       !["in_flight", "uncertain", "completed"].includes(String(valueEntry.outcome)) ||
       typeof valueEntry.expiresAt !== "number" || !Number.isFinite(valueEntry.expiresAt)) {
       throw new Error("invalid operation journal");
     }
     const entry = valueEntry as unknown as CacheEntry;
-    if (entry.outcome === "completed" && !isResponseEnvelope(entry.response)) throw new Error("invalid operation journal");
+    if (entry.outcome === "completed" && (!isResponseEnvelope(entry.response) || entry.response.operation !== entry.operation)) throw new Error("invalid operation journal");
     if (entry.outcome !== "completed" && entry.response !== undefined) throw new Error("invalid operation journal");
     const key = cacheKey(entry.deviceId, entry.idempotencyKey);
     if (seen.has(key)) throw new Error("invalid operation journal");
@@ -368,7 +375,8 @@ function validateJournal(value: unknown): JournalDocument {
 function isResponseEnvelope(value: unknown): value is ResponseEnvelope {
   return isRecord(value) && value.protocol === PROTOCOL && value.kind === "response" &&
     typeof value.request_id === "string" && typeof value.session_id === "string" &&
-    value.operation === "plan.revision.request" && value.status === "OK" && isRecord(value.result) &&
+    typeof value.operation === "string" && EFFECTFUL_OPERATIONS.has(value.operation as Operation) &&
+    value.status === "OK" && isRecord(value.result) &&
     typeof value.completed_at === "string" && typeof value.replayed === "boolean";
 }
 

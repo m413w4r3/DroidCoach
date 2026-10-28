@@ -1,5 +1,5 @@
 import { RemoteError } from "./errors.js";
-import { assertSmallResponse, type Operation } from "./protocol.js";
+import { assertCoachChatResponse, assertSmallResponse, type Operation } from "./protocol.js";
 
 export type FetchLike = typeof fetch;
 
@@ -17,6 +17,7 @@ export class BackendRequestError extends RemoteError {
     retryable: boolean,
     readonly outcomeMayHaveOccurred: boolean,
     message?: string,
+    readonly preserveResponseError = false,
   ) {
     super(code, retryable, message);
   }
@@ -79,10 +80,11 @@ export class BackendClient {
         return { status: result.status === "ok" ? "ok" : "unavailable" };
       }
       assertSmallResponse(result);
+      if (operation === "coach.chat.request") assertCoachChatResponse(result);
       return result;
     } catch (error) {
       if (route.method === "POST" && error instanceof RemoteError) {
-        throw new BackendRequestError(error.code, error.retryable, true, error.message);
+        throw new BackendRequestError(error.code, error.retryable, true, error.message, operation === "coach.chat.request");
       }
       throw error;
     }
@@ -102,6 +104,8 @@ function routeFor(operation: Operation, payload: Record<string, unknown>): Route
       return { method: "GET", path: "/health", auth: false };
     case "coach.status":
       return { method: "GET", path: "/v2/agent/status", auth: true };
+    case "coach.chat.request":
+      return { method: "POST", path: "/v2/agent/chat", auth: true, body: payload };
     case "plan.today.read":
       return { method: "GET", path: "/v1/plan/today", auth: true };
     case "plan.revision.request":

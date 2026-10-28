@@ -37,6 +37,7 @@ interface QuotaBucket {
 }
 
 const OPERATION_CAPABILITY: Partial<Record<string, Capability>> = {
+  "coach.chat.request": "coach.chat",
   "coach.status": "coach.status",
   "plan.today.read": "plan.today",
   "plan.revision.request": "plan.revision",
@@ -178,6 +179,7 @@ export class PeerSession {
     if (this.closed) return;
     this.lastActivity = this.now();
     let currentRequestId: string | null = null;
+    const frameBytes = typeof data === "string" ? Buffer.byteLength(data, "utf8") : data.byteLength;
     try {
       const value = parseJsonFrame(data);
       if (!this.auth) {
@@ -202,6 +204,7 @@ export class PeerSession {
       if (!isRecord(value) || value.protocol !== PROTOCOL || typeof value.kind !== "string") throw new RemoteError("INVALID_REQUEST");
       if (value.kind === "request") {
         currentRequestId = typeof value.request_id === "string" && UUID.test(value.request_id) ? value.request_id : null;
+        if (frameBytes > MAX_REQUEST_BYTES) throw new RemoteError("PAYLOAD_TOO_LARGE");
         await this.handleRequest(value);
       } else if (value.kind === "ping") {
         if (Object.keys(value).length !== 3 || typeof value.nonce !== "string" || value.nonce.length < 1 || value.nonce.length > 32) throw new RemoteError("INVALID_REQUEST");
