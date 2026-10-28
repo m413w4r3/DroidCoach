@@ -18,6 +18,9 @@
 | R-12 | Service systemd non installé pendant la campagne | Démarrage après crash non qualifié sur le PC personnel | validation isolée + unité fournie ; installation après autorisation |
 | R-13 | Proxy Node ajoutant une surface de bug | Indisponibilité ou bypass | tests unitaires, intégration relais réel, revue indépendante |
 | R-14 | Secrets dans logs, preuves ou commits | Compromission | scans, preuves expurgées, revue, aucun token en argument |
+| R-15 | Un tiers connaissant le `serverId` ouvre `/ws?role=server` via le Funnel et remplace la connexion de contrôle du PC (le relais Paseo v2 remplace l'ancien contrôle) | Déni de service de routage temporaire ; aucune lecture Noise possible sans la clé privée | risque résiduel du modèle relais ; reconnexion bornée du connecteur, limites de connexions, serverId non publié ; à réévaluer si le serverId fuite |
+| R-16 | Le MagicDNS du PC résout `all.taildc7886.ts.net` vers l'adresse tailnet `100.119.62.63` au lieu de l'ingress public | Le connecteur PC peut emprunter le terminateur Funnel via le tailnet plutôt que l'ingress public | même certificat et même terminateur ; test public supplémentaire avec résolution IP publique ; documenter la résolution réellement utilisée |
+| R-17 | Derrière le Funnel, toutes les connexions apparaissent en loopback : le proxy ne peut pas faire de rate-limit par source | Épuisement des 64 connexions ou du budget relais par un tiers | limites de connexions, budget du relais, redémarrage supervisé ; DoS générique non éliminable au niveau du proxy |
 
 ## Limitations connues à ce stade
 
