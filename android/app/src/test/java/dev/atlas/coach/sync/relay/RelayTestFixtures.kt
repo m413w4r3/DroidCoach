@@ -35,6 +35,7 @@ internal class FakeRelaySocketFactory(
     private val result: JSONObject = JSONObject().put("accepted", true),
     private val respondToPings: Boolean = false,
     private val serverCapabilities: Set<String> = setOf("plan.revision"),
+    private val beforeSendText: ((FakeRelaySocket, Int, String) -> Unit)? = null,
     private val onConnected: (FakeRelaySocket, Int) -> Unit = { _, _ -> },
 ) : RelaySocketFactory {
     val connectCount = AtomicInteger()
@@ -64,6 +65,7 @@ internal class FakeRelaySocketFactory(
             result,
             respondToPings,
             serverCapabilities,
+            beforeSendText,
         )
         sockets += socket
         callbacks.onOpen(socket)
@@ -88,14 +90,17 @@ internal class FakeRelaySocket(
     private val result: JSONObject,
     private val respondToPings: Boolean,
     private val serverCapabilities: Set<String>,
+    private val beforeSendText: ((FakeRelaySocket, Int, String) -> Unit)?,
 ) : RelaySocket {
     val sentText = CopyOnWriteArrayList<String>()
     val helloSends = CountDownLatch(2)
+    private val sendTextCount = AtomicInteger()
     @Volatile var closedCode: Int? = null
         private set
     private var responder: TestNoiseResponder? = null
 
     override fun sendText(text: String): Boolean {
+        beforeSendText?.invoke(this, sendTextCount.incrementAndGet(), text)
         sentText += text
         if (text.startsWith("{")) {
             val handshake = runCatching { JSONObject(text) }.getOrNull()
@@ -188,6 +193,18 @@ internal class FakeRelaySocket(
                 .put("request_id", JSONObject.NULL).put("session_id", SESSION_ID)
                 .put("error", JSONObject().put("code", code).put("message", message).put("retryable", false))
                 .put("completed_at", Instant.now().toString()),
+        )
+    }
+
+    fun sendResponseForRequest(requestId: String) {
+        val request = factory.requests.firstOrNull { it.optString("request_id") == requestId }
+            ?: error("request was not captured")
+        sendEnvelope(
+            JSONObject().put("protocol", AtlasRemoteProtocol.PROTOCOL).put("kind", "response")
+                .put("request_id", requestId).put("session_id", SESSION_ID)
+                .put("operation", request.getString("operation")).put("status", "OK")
+                .put("result", JSONObject(result.toString())).put("completed_at", Instant.now().toString())
+                .put("replayed", false),
         )
     }
 
