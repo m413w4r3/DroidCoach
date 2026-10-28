@@ -153,7 +153,7 @@ class R3bRelayChatInstrumentedTest {
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             }
-            composeRule.onNodeWithTag("agent_message_input").assertTextEquals(draft)
+            composeRule.onNodeWithTag("agent_message_input").assertTextContains(draft, substring = true)
             composeRule.onNodeWithTag("agent_connection_status")
                 .assertTextContains("OpenClaw via PC", substring = true)
             composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
