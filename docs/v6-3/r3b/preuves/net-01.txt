@@ -1,0 +1,93 @@
+ATLAS V6.3 / R3-B — preuve R3B-NET-01
+Date: 2026-10-28
+
+État Git et session
+-------------------
+BASE_SHA du ticket: 5795d378d38b3e86ce99f1551c41d5044cd4a81c
+HEAD au démarrage (`git rev-parse HEAD`):
+  b4b164658f9858c10fae258075daab1f39e2ac26
+La base demandée est le parent direct de ce HEAD (`git merge-base` retourne
+5795d378d38b3e86ce99f1551c41d5044cd4a81c). Le seul commit de préparation
+entre les deux ouvre les contrats documentaires R3-B. Le worktree initial était
+propre sur `feat/r3b-net-01`; aucune référence Git n'a été déplacée.
+
+Métadonnées Paseo vérifiées: session `180017b9-b399-4a47-aa9a-43bb83cf8b65`,
+provider `codex`, modèle `gpt-6-luna`, effort effectif `xhigh`.
+
+Environnement et commandes
+--------------------------
+`node --version`
+  v24.18.0
+
+`node --check integrations/relay/proxy/src/server.mjs`
+`node --check integrations/relay/proxy/test/proxy.test.mjs`
+  PASS, les deux modules sont syntaxiquement valides.
+
+`node --test integrations/relay/proxy/test`
+  PASS — 17 tests, 17 réussis, 0 échec, 0 ignoré.
+  Un premier lancement sans autorisation réseau de la sandbox a échoué sur
+  `Error: listen EPERM: operation not permitted 127.0.0.1`. Le même oracle a
+  ensuite été relancé avec les seules ouvertures loopback nécessaires aux
+  fixtures locales; il a réussi. Tous les sockets de test sont fermés.
+
+`systemd-analyze verify integrations/relay/proxy/systemd/atlas-relay-proxy.service`
+  PASS — le modèle d'unité est syntaxiquement valide. Il n'a pas été installé
+  ni activé.
+
+`git diff --cached --check`
+  PASS — aucun défaut d'espacement dans les six fichiers autorisés.
+
+Relais Paseo épinglé
+-------------------
+Pré-vol restreint:
+`curl --silent --show-error --max-time 2 --include http://127.0.0.1:4402/health`
+  exit 7, `curl: (7) Failed to connect to 127.0.0.1 port 4402 after 0 ms: Couldn't connect to server`.
+
+Vérification read-only après autorisation loopback:
+`docker ps --filter name=atlas-relay-r3b-probe --format '{{.Names}} {{.Status}} {{.Ports}}'`
+  `atlas-relay-r3b-probe Up 15 minutes 127.0.0.1:4402->4000/tcp`.
+
+Le test d'intégration optionnel a atteint ce relais sans le redémarrer ni le
+modifier. Le proxy a écouté sur `127.0.0.1:4400`, puis a été arrêté; le test a
+vérifié la réponse directe et proxifiée de `/health` et `/ready` (statut, corps
+et content-type identiques, statut 200), le refus `/metrics` (404) et l'upgrade
+Paseo v2 `/ws?serverId=synthetic&role=server&v=2` (101). La session WebSocket
+synthétique a été fermée après le handshake.
+Après la suite, `ss -ltn` ne montrait plus de listener sur le port proxy 4400.
+
+Couverture de la suite locale
+-----------------------------
+- HTTP: `/health` et `/ready` préservent statut, corps et content-type; `/metrics`
+  et chemins inconnus sont refusés; POST/PUT/DELETE donnent 405 et `Allow: GET`.
+- WebSocket: le serveur synthétique vérifie les en-têtes de handshake, puis
+  renvoie les octets TCP des frames. Les frames texte et binaire reviennent
+  octet pour octet. Les en-têtes Authorization et privés ne sont pas transmis.
+  `Content-Length: 0` reste accepté; `Content-Length: 1` avec un octet et
+  `Transfer-Encoding: chunked` sont refusés avec 400 avant tout upgrade amont
+  (`upstreamUpgrades` reste à 0).
+- Query: v=1, v absent, rôle invalide, serverId absent, clé inconnue, doublons,
+  échappement invalide, caractères de contrôle et limites de taille sont refusés.
+- Erreurs/limites: amont indisponible, dépassement de corps, délai HTTP, délai
+  de handshake, inactivité WebSocket, en-têtes trop grands et quota de
+  connexions donnent des réponses bornées ou ferment le tunnel comme prévu.
+- Logs: les tests vérifient l'absence de query, en-tête secret, payload et frame.
+- Arrêt: SIGTERM et SIGINT terminent le processus avec code 0 et libèrent le port.
+
+Limites de la preuve
+--------------------
+Le test réel est une recette loopback contre le relais local; il ne qualifie
+pas le Funnel Tailscale, Internet public, LTE/5G ni une disponibilité prolongée.
+Aucune configuration Tailscale n'a été consultée ou modifiée. L'unité systemd
+est un modèle seulement. Les identifiants de routage et frames de test sont
+synthétiques.
+
+Limites configurées dans le proxy: en-têtes 8 KiB, cible 2 KiB, 64 connexions,
+connexion amont 2 s, réponse HTTP 5 s, handshake 3 s, inactivité WebSocket
+60 s, corps amont 64 KiB, en-tête WebSocket retransmis 2 KiB.
+
+Vérification de correction: depuis `integrations/relay/proxy`, Node v24.18.0,
+`node --test test` donne 18 tests réussis, 0 échec, 0 ignoré; `git diff --check`
+termine avec le code 0. Le commit local de la correction applicative est
+`f9fd3af756280c3333b45cb5b4af66e4d2047cf5`
+(`Reject HTTP bodies on WebSocket upgrades`). Le SHA du commit final,
+qui inclut cette preuve, est fourni dans le compte rendu de tâche.

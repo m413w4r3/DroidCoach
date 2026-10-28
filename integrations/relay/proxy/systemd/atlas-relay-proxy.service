@@ -1,0 +1,34 @@
+# Model only. This unit was not installed or activated.
+# Before a later authorized deployment, set WorkingDirectory/ExecStart to the
+# checkout path and the absolute Node 24 binary used on that host.
+[Unit]
+Description=ATLAS loopback Paseo relay proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/DroidCoach
+ExecStart=/usr/bin/node %h/DroidCoach/integrations/relay/proxy/src/server.mjs
+Restart=on-failure
+RestartSec=2s
+KillSignal=SIGTERM
+TimeoutStopSec=6s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+Environment=LISTEN_HOST=127.0.0.1
+Environment=LISTEN_PORT=4400
+Environment=UPSTREAM_HOST=127.0.0.1
+Environment=UPSTREAM_PORT=4402
+
+[Install]
+WantedBy=default.target
