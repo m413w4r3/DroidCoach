@@ -2,11 +2,15 @@ package dev.atlas.coach.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -26,8 +30,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -145,6 +153,7 @@ fun FocusSessionScreen(
     } else {
         eligibleGoals.singleOrNull()?.record?.id
     }
+    var showSessionDetails by remember(session?.id) { mutableStateOf(false) }
     val onFocusGoalSelected: (String?) -> Unit = { id ->
         selectedGoalId = id
         hasExplicitGoalSelection = true
@@ -163,37 +172,34 @@ fun FocusSessionScreen(
         when {
             session?.status == FocusStatus.RUNNING || session?.status == FocusStatus.PAUSED -> {
                 val activeSession = session ?: return@Column
-                Text("${activeSession.taskTitle ?: controller.directiveTitle(activeSession.directiveId)}", modifier = Modifier.testTag("focus_active_task"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                FocusGoalSessionProjection(controller, activeSession)
-                Text("${activeSession.workSeconds / 60} min de concentration · " +
-                    if (activeSession.continuous) "mode continu" else "${activeSession.totalWorkCycles} cycles",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    formatFocusCountdown(activeSession.remainingSeconds),
-                    modifier = Modifier.fillMaxWidth().testTag("focus_time_remaining"),
-                    textAlign = TextAlign.Center,
-                    fontSize = 56.sp,
-                    fontWeight = FontWeight.Light,
+                    activeSession.taskTitle ?: controller.directiveTitle(activeSession.directiveId),
+                    modifier = Modifier.testTag("focus_active_task"),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                Text(activeSession.phase.focusLabel() + if (activeSession.status == FocusStatus.PAUSED) " · en pause" else " · en cours", modifier = Modifier.testTag("focus_phase"))
+                FocusGoalSessionProjection(controller, activeSession)
+                FocusTimeGauge(activeSession)
+                Text(
+                    activeSession.phase.focusLabel() +
+                        if (activeSession.status == FocusStatus.PAUSED) " · en pause" else " · en cours",
+                    modifier = Modifier.fillMaxWidth().testTag("focus_phase"),
+                    textAlign = TextAlign.Center,
+                )
                 if (activeSession.continuous) {
                     Text("Cycle ${activeSession.completedWorkCycles + 1} · mode continu", modifier = Modifier.testTag("focus_cycles"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Text("Cycle ${activeSession.completedWorkCycles + 1} / ${activeSession.totalWorkCycles}", modifier = Modifier.testTag("focus_cycles"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                val endMillis = approximateFocusEndMillis(activeSession, now.toInstant().toEpochMilli())
-                Text(
-                    if (activeSession.continuous) {
-                        "Fin approximative de cette phase · ${formatFocusEnd(endMillis)}"
-                    } else {
-                        "Fin approximative de la session · ${formatFocusEnd(endMillis)}"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "Notifications : ${focusNotificationStatus(controller)}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val notificationsNeedAttention =
+                    controller.capabilities[AtlasController.CAP_FOCUS_NOTIFICATIONS] == true &&
+                        !controller.notificationPermissionGranted()
+                if (notificationsNeedAttention) {
+                    Text(
+                        "Notifications : ${focusNotificationStatus(controller)}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (controller.capabilities[AtlasController.CAP_FOCUS] == true) {
                     Button(
                         modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("focus_pause_resume"),
@@ -213,6 +219,34 @@ fun FocusSessionScreen(
                         modifier = Modifier.weight(1f).sizeIn(minHeight = 48.dp).testTag("focus_finish"),
                         onClick = controller::finishFocus,
                     ) { Text("Terminer") }
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("focus_details_toggle"),
+                    onClick = { showSessionDetails = !showSessionDetails },
+                ) {
+                    Text(if (showSessionDetails) "Masquer les détails" else "Détails")
+                }
+                if (showSessionDetails) {
+                    Text(
+                        "${activeSession.workSeconds / 60} min de concentration · " +
+                            if (activeSession.continuous) "mode continu" else "${activeSession.totalWorkCycles} cycles",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val endMillis = approximateFocusEndMillis(activeSession, now.toInstant().toEpochMilli())
+                    Text(
+                        if (activeSession.continuous) {
+                            "Fin approximative de cette phase · ${formatFocusEnd(endMillis)}"
+                        } else {
+                            "Fin approximative de la session · ${formatFocusEnd(endMillis)}"
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!notificationsNeedAttention) {
+                        Text(
+                            "Notifications : ${focusNotificationStatus(controller)}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             session?.status == FocusStatus.FINISHED && showManualSetup &&
@@ -268,6 +302,65 @@ fun FocusSessionScreen(
                     onStart = { taskTitle, config -> controller.startFocus(config, taskTitle, selectedFocusGoalId) },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FocusTimeGauge(session: FocusSession) {
+    val progress = focusGaugeProgress(session)
+    val indicatorColor = MaterialTheme.colorScheme.primary
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        val gaugeSize = (maxWidth * 0.76f).coerceIn(196.dp, 256.dp)
+        val countdownFontSize = if (gaugeSize < 224.dp) 26.sp else 30.sp
+        Box(
+            modifier = Modifier
+                .size(gaugeSize)
+                .semantics {
+                    progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f)
+                    contentDescription = focusGaugeContentDescription(session.remainingMillis)
+                }
+                .testTag("focus_time_gauge"),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val strokeWidth = 10.dp.toPx()
+                val inset = strokeWidth / 2f
+                val diameter = size.minDimension - strokeWidth
+                drawArc(
+                    color = trackColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                    size = androidx.compose.ui.geometry.Size(diameter, diameter),
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                )
+                if (progress > 0f) {
+                    drawArc(
+                        color = indicatorColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f * progress,
+                        useCenter = false,
+                        topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                        size = androidx.compose.ui.geometry.Size(diameter, diameter),
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    )
+                }
+            }
+            Text(
+                text = formatFocusCountdown(session.remainingSeconds),
+                modifier = Modifier.fillMaxWidth(0.86f).testTag("focus_time_remaining"),
+                textAlign = TextAlign.Center,
+                fontSize = countdownFontSize,
+                fontWeight = FontWeight.Light,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }
