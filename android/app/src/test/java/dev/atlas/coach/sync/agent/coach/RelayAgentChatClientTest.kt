@@ -34,16 +34,30 @@ class RelayAgentChatClientTest {
         var sentBody: JSONObject? = null
         var auditedSnapshot: AgentContextSnapshot? = null
         var auditCount = 0
+        var freshContextCalls = 0
+        var executorEntered = false
+        var auditCompletedBeforeExecutor = false
         var keySeen: String? = null
         val client = RelayAgentChatClient(
             executor = RelayChatRequestExecutor { _, idempotencyKey, payloadFactory, beforeDispatch ->
+                executorEntered = true
+                assertTrue("audit must complete before relay executor invocation", auditCompletedBeforeExecutor)
+                assertEquals("fresh context must be prepared before relay executor invocation", 1, freshContextCalls)
+                assertEquals(1, auditCount)
                 assertTrue(beforeDispatch())
+                assertEquals("beforeDispatch must not repeat the audit", 1, auditCount)
+                assertEquals("beforeDispatch must not rebuild fresh context", 1, freshContextCalls)
                 keySeen = idempotencyKey
                 sentBody = payloadFactory()
                 RelayCallResult.Success(chatResult(), replayed = false)
             },
-            freshRequestContext = { requestContext },
-            onContextWritten = { auditCount++; auditedSnapshot = it; true },
+            freshRequestContext = { freshContextCalls++; requestContext },
+            onContextWritten = {
+                auditCount++
+                auditCompletedBeforeExecutor = !executorEntered
+                auditedSnapshot = it
+                true
+            },
             requestAllowed = { true },
         )
 
@@ -61,15 +75,18 @@ class RelayAgentChatClientTest {
         assertEquals(1, auditCount)
         assertEquals(minimized.toJsonString(), response.sharedContextJson)
         assertEquals(AgentStatus.CONNECTED, response.status)
+        assertEquals(1, freshContextCalls)
     }
 
     @Test
-    fun capabilityUnavailableDoesNotBuildPayloadOrAuditContext() {
+    fun capabilityUnavailableIsReturnedAfterPreDispatchAudit() {
         var audits = 0
+        var executorCalls = 0
         val mandate = AgentMandate.default()
         val context = context(mandate, 1_800_000_000_000L, emptyMap())
         val client = RelayAgentChatClient(
             executor = RelayChatRequestExecutor { _, _, _, _ ->
+                executorCalls++
                 RelayCallResult.RemoteError("OPERATION_UNAVAILABLE", "coach.chat is unavailable", false)
             },
             freshRequestContext = { requestContext(mandate, context, 1_800_000_000_000L) },
@@ -83,7 +100,8 @@ class RelayAgentChatClientTest {
         assertTrue(error is AgentChatException)
         assertEquals(AgentChatFailureKind.OPERATION_UNAVAILABLE, (error as AgentChatException).kind)
         assertEquals("OPERATION_UNAVAILABLE", error.remoteCode)
-        assertEquals(0, audits)
+        assertEquals(1, audits)
+        assertEquals(1, executorCalls)
     }
 
     @Test
@@ -96,10 +114,12 @@ class RelayAgentChatClientTest {
             mandate.copy(suspended = true),
             mandate.copy(expiresAtUtcMillis = now),
         ).forEach { invalidMandate ->
+            var executorCalls = 0
             var payloadCalls = 0
             var audits = 0
             val client = RelayAgentChatClient(
                 executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
+                    executorCalls++
                     if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                     else {
                         payloadCalls++
@@ -116,6 +136,7 @@ class RelayAgentChatClientTest {
 
             assertTrue(error is AgentChatException)
             assertEquals(AgentChatFailureKind.POLICY_DENIED, (error as AgentChatException).kind)
+            assertEquals(0, executorCalls)
             assertEquals(0, payloadCalls)
             assertEquals(0, audits)
         }
@@ -160,14 +181,49 @@ class RelayAgentChatClientTest {
     }
 
     @Test
+    fun relayCancellationRemainsExplicitAfterSinglePreDispatchAudit() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        var auditCount = 0
+        var executorCalls = 0
+        var auditBeforeExecutor = false
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
+                executorCalls++
+                assertTrue(auditBeforeExecutor)
+                assertEquals(1, auditCount)
+                assertTrue(beforeDispatch())
+                assertEquals("beforeDispatch must not repeat the audit", 1, auditCount)
+                RelayCallResult.Failure(RelayCallResult.Failure.Reason.CANCELLED)
+            },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = {
+                auditCount++
+                auditBeforeExecutor = executorCalls == 0
+                true
+            },
+        )
+
+        val error = runCatching { client.chat(null, "synthetic", mandate, context, "stable-cancel-key") }.exceptionOrNull()
+
+        assertTrue(error is AgentChatException)
+        assertEquals(AgentChatFailureKind.CANCELLED, (error as AgentChatException).kind)
+        assertEquals(1, auditCount)
+        assertEquals(1, executorCalls)
+    }
+
+    @Test
     fun failedContextAuditBlocksDispatchAndUnknownAgentStatusIsRejected() {
         val now = 1_800_000_000_000L
         val mandate = AgentMandate.default()
         val context = context(mandate, now, emptyMap())
         var payloadCalls = 0
         var sent = 0
+        var executorCalls = 0
         val auditFailureClient = RelayAgentChatClient(
             executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
+                executorCalls++
                 if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                 else {
                     sent++
@@ -184,6 +240,7 @@ class RelayAgentChatClientTest {
         }.exceptionOrNull()
         assertTrue(auditError is AgentChatException)
         assertEquals(AgentChatFailureKind.POLICY_DENIED, (auditError as AgentChatException).kind)
+        assertEquals(0, executorCalls)
         assertEquals(0, sent)
         assertEquals(0, payloadCalls)
 
