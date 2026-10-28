@@ -3,14 +3,15 @@ Horodatage de rédaction : 2026-10-28 13:11 UTC
 
 ÉTAT
 - Base reçue : 781bbaa4caf1709ad8f7066d0968c982a09dd7f6
-- Commit local des classes corrigées : 7be05995b7c804ca2c44d5dc59ba29fa55e3e8bf
+- Commit local des classes corrigées : c916ab8499b1f56c7ee46f246a8fe8c6c97d3217
 - Branche : feat/r3b-android-01
 - Profil vérifié dans les métadonnées Paseo : codex / gpt-6-luna / xhigh
 - Pixel : le parent a confirmé que le chat relayé reçoit une réponse OpenClaw et
   atteint RELAY_CONNECTED. Les deux premiers essais instrumentés ont échoué sur
   des sélecteurs Compose (statut exact, puis provenance dupliquée dans
   l'historique persistant), corrigés dans le SHA indiqué ci-dessus ; ce SHA reste
-  à rejouer.
+  à rejouer. Un diagnostic Pixel A4 confirme également state=REVOKED et le
+  lastError de révocation ; le test A4 corrigé doit encore être rejoué.
 - Aucun ADB, installation, push, révocation PC ou accès à des données personnelles
   par cette session
 
@@ -207,3 +208,31 @@ CORRECTION DE ROBUSTESSE HISTORIQUE DU 2026-10-28
   zéro erreur, zéro ignoré.
 - Ce rejeu Pixel du nouveau SHA reste à faire par le parent. Cette session n'a
   exécuté aucune commande ADB et n'a consigné ni réponse de chat ni jeton.
+
+CORRECTION A4 — synchronisation des lectures d'état du 2026-10-28
+- Le parent a confirmé par diagnostic sur Pixel que la révocation produit
+  `state=REVOKED` et `lastError="Cet appareil a été révoqué sur le PC. Réappairez-le
+  pour vous reconnecter."`. L'échec venait du test qui lisait `lastError`
+  immédiatement sur le thread de test après l'attente de l'état.
+- `R3bA4RevocationInstrumentedTest` attend maintenant `REVOKED` jusqu'à 30 s,
+  puis attend jusqu'à 5 s que `lastError` contienne « révoqué ». L'état, l'erreur
+  et `credentialsConfigured` sont ensuite capturés sur le thread principal
+  avant assertion. Les champs Compose après effacement suivent la même lecture
+  sur le thread principal.
+- `R3bA4AfterClearInstrumentedTest` appelle `onAppResumed` sur le thread
+  principal et attend `PAIRING_REQUIRED` avec `awaitRelayState`, qui synchronise
+  les lectures d'état sur ce thread. Il vérifie credentials=false, deviceId et
+  clé publique vides, puis que l'état et l'horodatage de dernière connexion
+  restent inchangés pendant une seconde sans credential. `lastError` peut être
+  null au démarrage ; le test accepte null ou un texte contenant « appair »,
+  car le contrôleur ne pose pas toujours un message au premier affichage.
+- SHA code androidTest : c916ab8499b1f56c7ee46f246a8fe8c6c97d3217.
+  Compilation : `cd android && ./gradlew :app:assembleDebugAndroidTest
+  --max-workers=1` — PASS, BUILD SUCCESSFUL. SHA-256 de l'APK androidTest :
+  `131875593226d9179419bfe654b5f272dd1131f2905ef1610347dd6e4dab869b`.
+- Suite JVM forcée : `cd android && ./gradlew :app:testDebugUnitTest
+  --max-workers=1 --rerun-tasks` — PASS, 685 tests, 96 suites, zéro échec,
+  zéro erreur, zéro ignoré.
+- Aucun ADB n'a été exécuté par cette session. Le parent rejouera A4 avec un
+  appareil synthétique neuf ; les tests Pixel A3/A4 complets restent non validés
+  jusqu'à ce rejeu.
