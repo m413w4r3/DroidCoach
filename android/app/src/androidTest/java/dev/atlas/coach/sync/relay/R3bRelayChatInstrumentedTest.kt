@@ -5,7 +5,6 @@ import android.content.res.Configuration
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -128,10 +127,11 @@ class R3bRelayChatInstrumentedTest {
             response.contextSources.contains("agent_status:connected"),
         )
         composeRule.onNodeWithTag("agent_connection_status")
-            .assertTextContains("OpenClaw via PC", substring = true)
-        composeRule.onAllNodesWithText("Provenance : OpenClaw via PC", substring = false)
-            .get(0)
-            .assertExists()
+            .assertTextContains("Connecté", substring = true)
+        assertTrue(
+            "The conversation did not show the compact OpenClaw source label",
+            composeRule.onAllNodesWithText("OpenClaw", substring = false).fetchSemanticsNodes().isNotEmpty(),
+        )
         composeRule.onNodeWithText(message, substring = false).assertExists()
 
         val returnedProposals = controller.agentInbox.filter { it.id !in proposalIdsBefore }
@@ -154,7 +154,7 @@ class R3bRelayChatInstrumentedTest {
             }
             composeRule.onNodeWithTag("agent_message_input").assertTextContains(draft, substring = true)
             composeRule.onNodeWithTag("agent_connection_status")
-                .assertTextContains("OpenClaw via PC", substring = true)
+                .assertTextContains("Connecté", substring = true)
             composeRule.onNodeWithText(message, substring = false).assertExists()
             assertTrue("The conversation did not survive activity rotation", controller.agentConversation.any {
                 it.role == AgentMessageRole.USER && it.text == message

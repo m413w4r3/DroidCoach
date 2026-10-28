@@ -152,11 +152,12 @@ class LotEUiInstrumentationTest {
     }
 
     @Test
-    fun coachConversationLinksToThreeSeparateAdvancedScreens() {
+    fun coachContextScreenKeepsIntegrationAndAdvancedLinks() {
         resetIsolatedState()
         val controller = AtlasController(isolatedContext)
         controller.navigationState.replace(AtlasScreenId.COACH)
         val currentRoute = mutableStateOf(AtlasScreenId.COACH)
+        val showingContext = mutableStateOf(false)
         composeRule.setContent {
             AtlasTheme(AtlasThemePreference.DARK) {
                 androidx.compose.foundation.layout.Column(
@@ -166,7 +167,15 @@ class LotEUiInstrumentationTest {
                         AtlasScreenId.AGENT_SETTINGS -> AgentSettingsScreen(controller)
                         AtlasScreenId.AGENT_SHARING -> AgentSharingScreen(controller)
                         AtlasScreenId.AGENT_EFFECTS -> AgentEffectsScreen(controller)
-                        else -> AgentCoachScreen(controller = controller, pullOnOpen = false)
+                        else -> if (showingContext.value) {
+                            CoachContextScreen(controller)
+                        } else {
+                            AgentCoachScreen(
+                                controller = controller,
+                                pullOnOpen = false,
+                                onOpenContext = { showingContext.value = true },
+                            )
+                        }
                     }
                 }
             }
@@ -174,6 +183,15 @@ class LotEUiInstrumentationTest {
 
         composeRule.onNodeWithText("Conversation").assertIsDisplayed()
         composeRule.onNodeWithText("Proposition prioritaire").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Objectifs").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Localisation").assertCountEquals(0)
+        composeRule.onNodeWithTag("agent_open_context").performScrollTo().performClick()
+        composeRule.onNodeWithText("Contexte du coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Objectifs").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Localisation").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Contexte du prochain envoi").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Tâches en arrière-plan").performScrollTo().assertIsDisplayed()
+
         composeRule.onNodeWithTag("agent_settings_link").performScrollTo().performClick()
         assertEquals(AtlasScreenId.AGENT_SETTINGS, controller.navigationState.current)
         composeRule.runOnUiThread { currentRoute.value = controller.navigationState.current }
