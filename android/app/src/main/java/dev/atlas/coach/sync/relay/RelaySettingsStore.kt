@@ -126,6 +126,11 @@ class KeystoreRelayCredentialStore(
     override fun clear() {
         preferences.edit().remove(TOKEN_KEY).commit()
         settingsStore.updateIdentity("", "")
+        // Remove the per-relay AES alias too. The ciphertext is already gone, but deleting the
+        // alias leaves no reusable key material behind after an explicit unpair.
+        runCatching {
+            KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.deleteEntry(KEY_ALIAS)
+        }
     }
 
     private fun readToken(): String? = runCatching {

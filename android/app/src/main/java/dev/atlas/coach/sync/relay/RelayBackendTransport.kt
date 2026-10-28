@@ -54,6 +54,8 @@ class RelayBackendTransport internal constructor(
         Thread(it, "atlas-relay-state").apply { isDaemon = true }
     }
     @Volatile private var connectionState = RelayConnectionState.LOCAL
+    @Volatile var lastCloseCode: Int? = null
+        private set
     private var appSessionId: String? = null
     private var appSessionExpiry: Instant? = null
     private var heartbeatTask: java.util.concurrent.ScheduledFuture<*>? = null
@@ -562,6 +564,7 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun onSocketClosed(code: Int, @Suppress("UNUSED_PARAMETER") reason: String) {
+        lastCloseCode = code
         val alreadyRevoked = synchronized(lock) { connectionState == RelayConnectionState.REVOKED }
         if (code == 4001 && !alreadyRevoked) reportRemoteFailure("AUTH_REQUIRED")
         synchronized(lock) {

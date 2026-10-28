@@ -13,6 +13,7 @@ import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.relay.assertR3bTokenNotPlaintext
 import dev.atlas.coach.sync.relay.connectR3bRelay
 import dev.atlas.coach.sync.relay.r3bCredentialStore
+import dev.atlas.coach.sync.relay.r3bRelayKeystoreAliasPresent
 import dev.atlas.coach.sync.relay.requireR3bRelayArguments
 import dev.atlas.coach.sync.relay.writeR3bA4ClearMarker
 import dev.atlas.coach.test.BackendArgumentsAwareRunner
@@ -95,6 +96,12 @@ class R3bA4RevocationInstrumentedTest {
         assertEquals("The Android controller did not report PC revocation within 30s", RelayConnectionState.REVOKED, revokedState)
         assertTrue("Revocation incorrectly erased the local credential before user choice", credentialsConfiguredAfterRevocation)
         assertTrue("The controller did not expose the revocation error", revocationError.orEmpty().contains("révoqué", ignoreCase = true))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            controller.relaySettings.lastCloseCode != null
+        }
+        var closeCode: Int? = null
+        composeRule.runOnUiThread { closeCode = controller.relaySettings.lastCloseCode }
+        assertEquals("The relay WebSocket was not closed with 4001", 4001, closeCode)
         assertR3bTokenNotPlaintext(context, storedToken)
         SystemClock.sleep(1_000)
         composeRule.waitUntil(timeoutMillis = 1_000) {
@@ -138,6 +145,7 @@ class R3bA4RevocationInstrumentedTest {
             .getSharedPreferences(AndroidRelaySettingsStore.PREFERENCES_NAME, Context.MODE_PRIVATE)
             .contains("relay_device_token"))
         assertTrue("The cleared Keystore credential is still readable", r3bCredentialStore(context).credentials() == null)
+        assertFalse("The cleared Keystore AES alias is still present", r3bRelayKeystoreAliasPresent())
         writeR3bA4ClearMarker(context, connectedDeviceId)
     }
 }

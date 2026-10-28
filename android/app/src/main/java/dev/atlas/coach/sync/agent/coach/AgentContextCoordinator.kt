@@ -152,6 +152,26 @@ class AgentContextCoordinator(
         )
     }
 
+    /**
+     * Cheap final-boundary check for a payload prepared earlier. It re-minimizes the immutable
+     * snapshot against the latest mandate, consent dates and domain consent without rebuilding
+     * domains or writing an audit, so it is safe inside the relay's pre-dispatch callback.
+     */
+    @Synchronized
+    fun consentStillAllows(
+        snapshot: AgentContextSnapshot,
+        domainConsent: AgentContextDomainConsent,
+    ): Boolean {
+        if (!agentAccessAllowed()) return false
+        val now = nowUtcMillis().coerceAtLeast(1L)
+        val currentMandate = mandateProvider()
+        if (currentMandate.revoked || currentMandate.suspended || now >= currentMandate.expiresAtUtcMillis) return false
+        val blocked = blockedCategories()
+        val filteredMandate = effectiveMandate(currentMandate, blocked)
+        val dates = currentConsentDates(blocked)
+        return snapshot.stillAllows(filteredMandate, dates, now, domainConsent)
+    }
+
     private object AgentContextConsentMigrationCompat {
         fun migrate(categories: Set<String>, nowUtcMillis: Long): Map<String, Long> =
             dev.atlas.coach.sync.agent.context.AgentContextConsentMigration

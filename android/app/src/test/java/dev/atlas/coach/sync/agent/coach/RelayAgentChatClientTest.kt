@@ -143,6 +143,45 @@ class RelayAgentChatClientTest {
     }
 
     @Test
+    fun revokedCategoryAfterPreparationBlocksThePreparedPayloadAtDispatch() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default().copy(sharedDataCategories = setOf("focus", "goals"))
+        val context = context(mandate, now, mapOf("focus" to now - 100, "goals" to now - 100))
+        val prepared = requestContext(mandate, context, now)
+        var consentChecks = 0
+        var executorCalls = 0
+        var payloadCalls = 0
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
+                executorCalls++
+                if (!beforeDispatch()) {
+                    RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
+                } else {
+                    payloadCalls++
+                    payloadFactory()
+                    RelayCallResult.Success(chatResult(), replayed = false)
+                }
+            },
+            freshRequestContext = { prepared },
+            onContextWritten = { true },
+            snapshotStillAuthorized = {
+                consentChecks++
+                false
+            },
+        )
+
+        val error = runCatching {
+            client.chat(null, "synthetic", mandate, context, "stale-consent-key")
+        }.exceptionOrNull()
+
+        assertTrue(error is AgentChatException)
+        assertEquals(AgentChatFailureKind.POLICY_DENIED, (error as AgentChatException).kind)
+        assertEquals(1, executorCalls)
+        assertEquals(0, payloadCalls)
+        assertEquals(1, consentChecks)
+    }
+
+    @Test
     fun timeoutIsAnUncertainResultAndMalformedResponseIsExplicit() {
         val now = 1_800_000_000_000L
         val mandate = AgentMandate.default()

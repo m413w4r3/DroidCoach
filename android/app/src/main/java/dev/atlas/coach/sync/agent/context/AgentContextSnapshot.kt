@@ -135,6 +135,21 @@ class AgentContextSnapshot internal constructor(
         )
     }
 
+    /**
+     * Re-minimizes against the latest authorization and reports whether the exact payload is
+     * still permitted. This is pure and allocation-bounded, so a transport may call it at the
+     * final pre-dispatch boundary without repeating an audit or rebuilding domain views.
+     */
+    fun stillAllows(
+        currentMandate: AgentMandate,
+        currentConsentAtUtcMillis: Map<String, Long>,
+        nowUtcMillis: Long,
+        currentDomainConsent: AgentContextDomainConsent = AgentContextDomainConsent(),
+    ): Boolean {
+        val minimized = minimizeFor(currentMandate, currentConsentAtUtcMillis, nowUtcMillis, currentDomainConsent)
+        return minimized.consentedCategories == consentedCategories && minimized.categories == categories
+    }
+
     internal fun sourceTimestamp(category: String, itemIndex: Int): Long? =
         sourceTimestampsUtcMillis[category]?.getOrNull(itemIndex)
 

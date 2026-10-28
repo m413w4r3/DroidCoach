@@ -44,6 +44,26 @@ describe("device authentication and session controls", () => {
     }
   });
 
+  it("grants only stored capabilities to a newer client requesting more", async () => {
+    const context = await makeContext();
+    try {
+      const device = await paired(context, ["sync.status"]);
+      const channel = new FakeSecureChannel();
+      const peer = context.manager.create(channel);
+      await peer.receive(JSON.stringify(hello(device.deviceId, device.token, {
+        capabilities: ["sync.status", "coach.chat"],
+      })));
+      expect(channel.lastMessage()).toMatchObject({ kind: "hello_ok", capabilities: ["sync.status"] });
+      const sessionId = String(channel.lastMessage().session_id);
+      await peer.receive(JSON.stringify(request(sessionId, "coach.status")));
+      expect(channel.lastMessage()).toMatchObject({ kind: "error", error: { code: "OPERATION_UNAVAILABLE" } });
+      expect(context.manager.activeSessionCount()).toBe(1);
+      peer.close();
+    } finally {
+      await context.dispose();
+    }
+  });
+
   it("rejects a bad token and a replayed client nonce with close code 4001", async () => {
     const context = await makeContext();
     try {
@@ -61,6 +81,20 @@ describe("device authentication and session controls", () => {
       await context.manager.create(replay).receive(JSON.stringify(hello(device.deviceId, device.token, { client_nonce: nonce })));
       expect(replay.lastMessage()).toMatchObject({ kind: "error", error: { code: "AUTH_FAILED" } });
       expect(replay.closeEvents[0]?.code).toBe(4001);
+    } finally {
+      await context.dispose();
+    }
+  });
+
+  it("defers the 4001 close when a revoked client frame races the polling check", async () => {
+    const context = await makeContext();
+    try {
+      const session = await authenticate(context);
+      await context.registry.revoke(session.deviceId);
+      await session.peer.receive(JSON.stringify(request(session.sessionId, "sync.status")));
+      expect(session.channel.lastMessage()).toMatchObject({ kind: "error", error: { code: "DEVICE_REVOKED" } });
+      expect(session.channel.closeEvents[0]).toMatchObject({ code: 4001 });
+      expect(context.manager.activeSessionCount()).toBe(0);
     } finally {
       await context.dispose();
     }

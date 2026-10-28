@@ -12,6 +12,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume
 import java.io.File
+import java.security.KeyStore
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
@@ -186,6 +187,10 @@ internal fun assertR3bTokenNotPlaintext(context: Context, token: String) {
     assertNotNull("The Keystore credential ciphertext was not stored", encryptedToken)
     assertFalse("The Keystore credential value equals the clear token", encryptedToken == token)
 }
+
+internal fun r3bRelayKeystoreAliasPresent(): Boolean = runCatching {
+    KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias("atlas_relay_device_v1")
+}.getOrDefault(false)
 
 internal fun assertR3bCredentialRemoved(context: Context) {
     val preferences = context.getSharedPreferences(

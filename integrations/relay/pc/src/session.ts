@@ -88,7 +88,10 @@ export class SessionManager {
     if (expectedHash.length !== suppliedHash.length || !timingSafeEqual(expectedHash, suppliedHash)) throw new RemoteError("AUTH_FAILED");
     const nonceKey = `${hello.device_id}:${hello.client_nonce}`;
     if (this.nonces.has(nonceKey)) throw new RemoteError("AUTH_FAILED");
-    if (hello.capabilities.some((capability) => !record.capabilities.includes(capability))) throw new RemoteError("AUTH_FAILED");
+    // The device record is authoritative. A newer client may request a capability
+    // that an older pairing does not hold; grant only the stored intersection so
+    // its existing operations keep working and the missing one stays unavailable.
+    const grantedCapabilities = hello.capabilities.filter((capability) => record.capabilities.includes(capability));
     this.nonces.set(nonceKey, now + CACHE_TTL_MS);
 
     const prior = this.active.get(hello.device_id);
@@ -96,7 +99,7 @@ export class SessionManager {
     const authenticated: AuthenticatedDevice = {
       record,
       sessionId: randomUUID(),
-      capabilities: [...hello.capabilities],
+      capabilities: [...grantedCapabilities],
       expiresAt: now + SESSION_SECONDS * 1000,
     };
     this.active.set(hello.device_id, peer);
@@ -159,6 +162,7 @@ export class PeerSession {
   private finished = false;
   private inFlight = new Map<string, AbortController>();
   private outstandingPing: string | null = null;
+  private revocationClose: Promise<void> | null = null;
   private lastActivity = Date.now();
   private heartbeat: ReturnType<typeof setInterval>;
   private readonly openedAt: number;
@@ -223,19 +227,34 @@ export class PeerSession {
       const remoteError = asRemoteError(error);
       this.metrics.error();
       await this.sendError(remoteError, currentRequestId);
-      if (!this.auth || remoteError.code === "AUTH_REQUIRED" || remoteError.code === "DEVICE_REVOKED") this.close(4001, remoteError.message);
+      if (remoteError.code === "DEVICE_REVOKED") {
+        await this.closeForRevocation(remoteError.message);
+      } else if (!this.auth || remoteError.code === "AUTH_REQUIRED") {
+        this.close(4001, remoteError.message);
+      }
     }
   }
 
-  /** Notifies the client before closing so the UI can distinguish revocation from a network error. */
+  /**
+   * Notifies the client before closing so the UI can distinguish revocation from a network error.
+   * The relay forwards the error over the paired data connection; closing the server data socket
+   * immediately can race that forwarding. A single bounded grace window is shared by the polling
+   * path and by a DEVICE_REVOKED frame received from a client, so both close after the relay has
+   * had time to route the revocation frame.
+   */
   async revoke(): Promise<void> {
     if (this.closed) return;
     await this.sendError(new RemoteError("DEVICE_REVOKED"), null);
-    // The relay forwards the error over the paired data connection. Closing the
-    // server data socket immediately can race that forwarding; a bounded grace
-    // window lets the relay route the revocation frame before the close.
-    await new Promise((resolve) => setTimeout(resolve, REVOKE_GRACE_MS));
-    this.close(4001, "device revoked");
+    await this.closeForRevocation("device revoked");
+  }
+
+  private closeForRevocation(reason: string): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    if (!this.revocationClose) {
+      this.revocationClose = new Promise<void>((resolve) => setTimeout(resolve, REVOKE_GRACE_MS))
+        .then(() => this.close(4001, reason));
+    }
+    return this.revocationClose;
   }
 
   close(code = 1000, reason = "closed"): void {

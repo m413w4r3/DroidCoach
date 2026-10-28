@@ -176,6 +176,7 @@ import dev.atlas.coach.coach.proactive.android.ProactiveCoachWorkScheduler
 import dev.atlas.coach.location.MobilitySessionCompletion
 import dev.atlas.coach.location.MobilitySessionStatusStore
 import dev.atlas.coach.sync.agent.context.AgentContextCategory
+import dev.atlas.coach.sync.agent.context.AgentContextDomainConsent
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
 import dev.atlas.coach.sync.agent.context.AgentContextPreview
 import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
@@ -1372,6 +1373,16 @@ class AtlasController @JvmOverloads constructor(
         )
     }
 
+    /** Consent-only projection used at the relay's final dispatch boundary; no domain assembly. */
+    private fun agentContextDomainConsent(): AgentContextDomainConsent {
+        val usageConsent = usageStores.currentConsent().takeIf { usageConsentActive && usagePermissionGranted }
+        return AgentContextDomainConsent(
+            usageConsent = usageConsent,
+            locationSummarySharingEnabled = locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled(),
+            includeExistingGoals = agentContextCoordinator.includesExistingGoals(),
+        )
+    }
+
     private fun goalFocusSessions(): List<FocusSession> = buildList {
         addAll(focusHistoryEntries)
         focusSnapshot?.takeIf { it.status in setOf(FocusStatus.FINISHED, FocusStatus.CANCELLED) }?.let(::add)
@@ -1908,6 +1919,9 @@ class AtlasController @JvmOverloads constructor(
                 freshRequestContext = agentContextCoordinator::requestContext,
                 onContextWritten = { snapshot -> recordAgentContextWritten(snapshot) },
                 requestAllowed = ::isAgentRequestAllowed,
+                snapshotStillAuthorized = { snapshot ->
+                    agentContextCoordinator.consentStillAllows(snapshot, agentContextDomainConsent())
+                },
             )
         }
         if (mode != RelayTransportMode.OFFLINE && client == null) {

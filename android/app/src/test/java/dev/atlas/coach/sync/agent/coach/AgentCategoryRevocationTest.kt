@@ -12,6 +12,7 @@ import dev.atlas.coach.goals.GoalMetric
 import dev.atlas.coach.goals.GoalRecord
 import dev.atlas.coach.sync.BearerTokenProvider
 import dev.atlas.coach.sync.agent.AgentMandate
+import dev.atlas.coach.sync.agent.context.AgentContextDomainConsent
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
 import org.json.JSONArray
 import org.json.JSONObject
@@ -30,6 +31,21 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 class AgentCategoryRevocationTest {
+    @Test
+    fun finalDispatchCheckRejectsSnapshotAfterCategoryRevocation() {
+        val mandate = mandateWithCategories(GOALS, FOCUS)
+        val coordinator = coordinator(mandate, RevocationBarrier(MemoryBarrierStorage()))
+        val snapshot = coordinator.assembleCurrent()
+        val domainConsent = AgentContextDomainConsent()
+
+        assertTrue(coordinator.consentStillAllows(snapshot, domainConsent))
+        coordinator.setCategoryConsent(GOALS, false)
+        assertFalse(
+            "A category withdrawn after preparation must block the prepared payload at dispatch",
+            coordinator.consentStillAllows(snapshot, domainConsent),
+        )
+    }
+
     @Test
     fun successfulCategoryWithdrawalKeepsAgentAvailableAndOmitsCategoryFromPayload() {
         val barrierStorage = MemoryBarrierStorage()

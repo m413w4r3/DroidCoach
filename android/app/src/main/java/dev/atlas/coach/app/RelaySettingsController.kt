@@ -69,6 +69,9 @@ class RelaySettingsController(
     var credentialsConfigured by mutableStateOf(credentialStore.credentials() != null)
         private set
 
+    /** WebSocket close code observed by the active transport; 4001 is the revocation close. */
+    val lastCloseCode: Int? get() = transport?.lastCloseCode
+
     val isRelayMode: Boolean get() = mode == RelayTransportMode.RELAY
 
     fun saveConfiguration(
@@ -205,6 +208,7 @@ class RelaySettingsController(
         freshRequestContext: (AgentContextSnapshot) -> AgentRequestContext?,
         onContextWritten: (AgentContextSnapshot) -> Boolean,
         requestAllowed: () -> Boolean,
+        snapshotStillAuthorized: (AgentContextSnapshot) -> Boolean = { true },
     ): AgentChatClient? {
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
@@ -217,7 +221,13 @@ class RelaySettingsController(
                 beforeDispatch = beforeDispatch,
             )
         }
-        return RelayAgentChatClient(executor, freshRequestContext, onContextWritten, requestAllowed)
+        return RelayAgentChatClient(
+            executor,
+            freshRequestContext,
+            onContextWritten,
+            requestAllowed,
+            snapshotStillAuthorized,
+        )
     }
 
     fun close() {

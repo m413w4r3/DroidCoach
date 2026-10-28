@@ -168,6 +168,7 @@ class RelayAgentChatClient(
     private val freshRequestContext: (AgentContextSnapshot) -> AgentRequestContext?,
     private val onContextWritten: (AgentContextSnapshot) -> Boolean,
     private val requestAllowed: () -> Boolean = { true },
+    private val snapshotStillAuthorized: (AgentContextSnapshot) -> Boolean = { true },
 ) : AgentChatClient {
     override fun chat(
         conversationId: String?,
@@ -215,7 +216,8 @@ class RelayAgentChatClient(
             beforeDispatch = {
                 runCatching(requestAllowed).getOrDefault(false) &&
                     !dispatchMandate.revoked && !dispatchMandate.suspended &&
-                    System.currentTimeMillis() < dispatchMandate.expiresAtUtcMillis
+                    System.currentTimeMillis() < dispatchMandate.expiresAtUtcMillis &&
+                    runCatching { snapshotStillAuthorized(dispatchSnapshot) }.getOrDefault(false)
             },
             payloadFactory = {
                 AgentChatRequestBody.build(conversationId, message, dispatchMandate, dispatchSnapshot)
