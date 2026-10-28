@@ -11,19 +11,19 @@ preuve.
 
 | ID | Gate | Commande / environnement | Statut initial |
 |---|---|---|---|
-| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | NOT_RUN |
+| T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped sur `dfe6da3` |
 | T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | NOT_RUN |
 | T3 | Lint Android | `android/gradlew :app:lintDebug` | NOT_RUN |
 | T4 | Build debug | `android/gradlew :app:assembleDebug` | NOT_RUN |
 | T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | NOT_RUN |
 | T6 | Instrumentation API 37 | Pixel physique / émulateur API 37 | NOT_RUN |
-| T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | NOT_RUN |
-| T8 | Image relais épinglée | `atlas-paseo-relay:r3a`, `/health` loopback | NOT_RUN |
-| T9 | Tests proxy filtrant | `node --test integrations/relay/proxy/test` | NOT_RUN |
-| T10 | Unités systemd | `systemd-analyze --user verify` (sans installation) | NOT_RUN |
-| T11 | WSS public Funnel | `https://all.taildc7886.ts.net:8443/health`, `/ready` | NOT_RUN |
-| T12 | Chat mock isolé | Backend mock + transport relayé | NOT_RUN |
-| T13 | Chat OpenClaw | Isolé et/ou personnel autorisé | NOT_RUN |
+| T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 72 tests sur `dfe6da3`, proxy 4400 actif |
+| T8 | Image relais épinglée | `atlas-paseo-relay:r3a`, `/health` loopback | **PASS** — image locale vérifiée, `/health` 200 sur 127.0.0.1:4402 |
+| T9 | Tests proxy filtrant | `node --test integrations/relay/proxy/test` | **PASS** — 18/18 sur `dfe6da3`, intégration relais réel incluse |
+| T10 | Unités systemd | `systemd-analyze --user verify` (sans installation) | **PARTIAL** — vérification statique PASS pour proxy et connecteur ; aucun service installé ni lancé |
+| T11 | WSS public Funnel | `https://all.taildc7886.ts.net:8443/health`, `/ready` | **PASS (PC)** — TLS 1.3 valide, `/health` 200, `/ready` 200, WSS 101 ; Android traité en NET-02 |
+| T12 | Chat mock isolé | Backend mock + transport relayé | **PASS** — chat mock via Funnel public, Noise protégé, replay sans doublon |
+| T13 | Chat OpenClaw | Isolé et/ou personnel autorisé | **PARTIAL** — OpenClaw personnel isolé PASS (`agent_status=connected`, 1 proposition) ; chemin relayé public à rejouer |
 | T14 | A3 Keystore | Pairing + force-stop + redémarrage Android | NOT_RUN |
 | T15 | A4 révocation | Session active + révocation PC + effacement local | NOT_RUN |
 | T16 | Données Pixel | Hashes ATLAS et compteurs calendrier | NOT_RUN |
@@ -33,37 +33,37 @@ preuve.
 
 | ID | Critère | Statut initial |
 |---|---|---|
-| NET-01 | DNS public et TLS valide | NOT_RUN |
-| NET-02 | WSS public sur 8443, sans VPN Android | NOT_RUN |
+| NET-01 | DNS public et TLS valide | **PASS (PC)** — DNS public via DoH, certificat Let's Encrypt, TLS 1.3, SNI/SAN conformes |
+| NET-02 | WSS public sur 8443, sans VPN Android | **PARTIAL** — WSS public 101 et Noise protégé depuis le PC ; Android LTE/5G à exécuter |
 | NET-03 | Absence d'`adb reverse` et de proxy USB | NOT_RUN |
-| NET-04 | Noise NK `protected` et identité épinglée | NOT_RUN |
-| NET-05 | `backend.health` via Funnel jusqu'au PC | NOT_RUN |
-| NET-06 | Chat réel via le relais et l'adaptateur autorisé | NOT_RUN |
+| NET-04 | Noise NK `protected` et identité épinglée | **PASS** — handshake protégé et auth appareil via l'IP publique |
+| NET-05 | `backend.health` via Funnel jusqu'au PC | **PASS** — réponse `{"status":"ok"}` via Funnel public et FastAPI 8100 |
+| NET-06 | Chat réel via le relais et l'adaptateur autorisé | **PARTIAL** — mock relayé PASS ; OpenClaw personnel isolé PASS ; chemin relayé OpenClaw à rejouer |
 | NET-07 | Coupure LTE/5G et état OFFLINE | NOT_RUN |
 | NET-08 | Reconnexion après restauration réseau | NOT_RUN |
 | NET-09 | Wi-Fi → LTE/5G → Wi-Fi | NOT_RUN |
-| NET-10 | Redémarrage connecteur/FastAPI | NOT_RUN |
+| NET-10 | Redémarrage connecteur/FastAPI | **PARTIAL** — redémarrage connecteur et reprise relais PASS ; redémarrage FastAPI réel à rejouer |
 | NET-11 | Redémarrage proxy/relais | NOT_RUN |
 | NET-12 | Révocation avec session active | NOT_RUN |
-| NET-13 | Expiration de requête, session et token | NOT_RUN |
-| NET-14 | Version et payload invalides | NOT_RUN |
-| NET-15 | `/metrics` inaccessible publiquement | NOT_RUN |
+| NET-13 | Expiration de requête, session et token | **PARTIAL** — expiration de requête et idempotence testées ; session/token à rejouer |
+| NET-14 | Version et payload invalides | **PASS** — `v=1`, query inconnue, serverId manquant, message >2000 refusés |
+| NET-15 | `/metrics` inaccessible publiquement | **PASS** — `/metrics` public 404, upgrade `/metrics` 404 |
 | NET-16 | Données locales inchangées | NOT_RUN |
 
 ## 3. Conversation relayée
 
 | ID | Cas | Statut initial |
 |---|---|---|
-| CHAT-01 | Conversation sur adaptateur mock isolé | NOT_RUN |
-| CHAT-02 | Conversation sur instance OpenClaw de test isolée si disponible | NOT_RUN |
-| CHAT-03 | Contexte réellement consenti vérifié | NOT_RUN |
-| CHAT-04 | Refus des opérations sans capacité | NOT_RUN |
-| CHAT-05 | Mandat révoqué ou expiré | NOT_RUN |
-| CHAT-06 | Déconnexion en cours de requête | NOT_RUN |
-| CHAT-07 | Reconnexion et absence de doublon | NOT_RUN |
-| CHAT-08 | Payload malformé, trop grand ou mauvaise version | NOT_RUN |
-| CHAT-09 | Proposition non exécutée sans confirmation | NOT_RUN |
-| CHAT-10 | Distinction visible de provenance mock/personnelle | NOT_RUN |
+| CHAT-01 | Conversation sur adaptateur mock isolé | **PASS** — chat mock via Funnel public et backend mock |
+| CHAT-02 | Conversation sur instance OpenClaw de test isolée si disponible | **PARTIAL** — OpenClaw personnel isolé PASS ; relayé public en attente |
+| CHAT-03 | Contexte réellement consenti vérifié | **PARTIAL** — payload exact et minimisation testés côté Node ; UI Android à vérifier |
+| CHAT-04 | Refus des opérations sans capacité | **PASS** — appareil sans `coach.chat` reçoit `OPERATION_UNAVAILABLE` via le Funnel |
+| CHAT-05 | Mandat révoqué ou expiré | **PARTIAL** — tests JVM/Node ; parcours Android à rejouer |
+| CHAT-06 | Déconnexion en cours de requête | **PARTIAL** — tests Node de déconnexion ; Android à rejouer |
+| CHAT-07 | Reconnexion et absence de doublon | **PASS** — rejeu public `replayed=true`, aucun second POST ; reconnexion Noise testée |
+| CHAT-08 | Payload malformé, trop grand ou mauvaise version | **PASS** — refus public INVALID_REQUEST/PAYLOAD_TOO_LARGE et tests Node |
+| CHAT-09 | Proposition non exécutée sans confirmation | **PARTIAL** — politique et tests existants ; Android à rejouer |
+| CHAT-10 | Distinction visible de provenance mock/personnelle | **PARTIAL** — `agent_status` mock/connected disponible ; UI Android à vérifier |
 
 ## 4. Identité persistante A3
 
