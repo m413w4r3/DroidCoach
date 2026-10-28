@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.atlas.coach.app.ui.AtlasStatus
 import dev.atlas.coach.app.ui.AtlasStatusKind
+import dev.atlas.coach.app.ui.AtlasSpacing
 import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanChange
@@ -93,6 +95,30 @@ internal object PlanUiLogic {
 
     private fun ActivityStatus.isTerminalForNextActivity(): Boolean =
         this == ActivityStatus.DONE || this == ActivityStatus.MISSED || this == ActivityStatus.CANCELLED
+}
+
+@Composable
+internal fun PlanNextActivityCard(activity: PlanActivity) {
+    Card(modifier = Modifier.fillMaxWidth().testTag("plan_next_activity_card")) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            AtlasStatus("Prochaine activité", AtlasStatusKind.ACTIVE)
+            Text(activity.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                "${PlanController.timeLabel(activity.scheduledLocal.startMinute)} – " +
+                    "${PlanController.endTimeLabel(activity.scheduledLocal.startMinute, activity.scheduledLocal.durationMinutes)} · " +
+                    "${activity.scheduledLocal.durationMinutes} min",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Priorité · ${PlanController.priorityLabel(activity.priority)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable

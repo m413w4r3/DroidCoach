@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -43,6 +44,7 @@ import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.Priority
 import java.time.Duration
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +58,17 @@ import kotlinx.coroutines.withContext
  * planRevision capability and consent, and it still produces only a preview.
  */
 @Composable
-internal fun PlanScreen(controller: PlanController, atlasController: AtlasController? = null) {
+internal fun PlanScreen(sourceController: PlanController, atlasController: AtlasController? = null) {
+    var selectedTomorrow by rememberSaveable { mutableStateOf(false) }
+    var optionsExpanded by rememberSaveable { mutableStateOf(false) }
+    var currentDate by remember(sourceController) { mutableStateOf(sourceController.today) }
+    LaunchedEffect(sourceController.revision) {
+        currentDate = sourceController.today
+    }
+    val tomorrowController = remember(currentDate) {
+        sourceController.forDate(LocalDate.parse(currentDate).plusDays(1))
+    }
+    val controller = if (selectedTomorrow) tomorrowController else sourceController
     val plan = controller.plan
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var showDetails by rememberSaveable { mutableStateOf(false) }
@@ -75,7 +87,7 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
     var calendarDiverged by remember { mutableStateOf(false) }
     val appContext = LocalContext.current.applicationContext
     var calendarEffectController by remember { mutableStateOf<CalendarEffectController?>(null) }
-    var currentMinute by remember(controller.timezone) {
+    var currentMinute by remember(controller) {
         mutableIntStateOf(ZonedDateTime.now(ZoneId.of(controller.timezone)).let { it.hour * 60 + it.minute })
     }
     val scope = rememberCoroutineScope()
@@ -87,7 +99,7 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
         }
     }
 
-    LaunchedEffect(calendarEffectController, controller.revision, plan?.version) {
+    LaunchedEffect(calendarEffectController, controller, controller.revision, plan?.version) {
         val effectController = calendarEffectController ?: return@LaunchedEffect
         val appliedPlan = plan?.takeIf { it.version >= 2 } ?: return@LaunchedEffect
         val verification = withContext(Dispatchers.IO) { effectController.verifyPlan(appliedPlan) }
@@ -99,23 +111,30 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
     // Reload on foreground return and at the next local midnight so a long-lived
     // process never shows yesterday's plan under today's date.
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    LaunchedEffect(controller) {
+        controller.refresh()
+    }
+    DisposableEffect(lifecycleOwner, controller) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) controller.refresh()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                controller.refresh()
+                currentDate = sourceController.today
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(controller) {
         while (true) {
             val zone = ZoneId.of(controller.timezone)
             val now = ZonedDateTime.now(zone)
             val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(zone)
             delay(Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L))
             controller.refresh()
+            currentDate = sourceController.today
         }
     }
-    LaunchedEffect(controller.timezone) {
+    LaunchedEffect(controller) {
         val zone = ZoneId.of(controller.timezone)
         while (true) {
             val now = ZonedDateTime.now(zone)
@@ -125,6 +144,7 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
     }
 
     val coachReady = isCoachRequestReady(atlasController)
+    val nextActivity = plan?.let { PlanUiLogic.nextActivity(it.activities, currentMinute) }
     val activitiesById = plan?.activities?.associateBy(PlanActivity::activityId).orEmpty()
     val editing = editingId?.let(activitiesById::get)
     val moving = movingId?.let(activitiesById::get)
@@ -137,8 +157,22 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
             .padding(AtlasSpacing.page),
         verticalArrangement = Arrangement.spacedBy(AtlasSpacing.medium),
     ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !selectedTomorrow,
+                onClick = { selectedTomorrow = false },
+                label = { Text("Aujourd’hui") },
+                modifier = Modifier.testTag("plan_day_today"),
+            )
+            FilterChip(
+                selected = selectedTomorrow,
+                onClick = { selectedTomorrow = true },
+                label = { Text("Demain") },
+                modifier = Modifier.testTag("plan_day_tomorrow"),
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Aujourd’hui", style = MaterialTheme.typography.headlineSmall)
+            Text(if (selectedTomorrow) "Demain" else "Aujourd’hui", style = MaterialTheme.typography.headlineSmall)
             Text(PlanUiLogic.readableDate(controller.today), style = MaterialTheme.typography.titleSmall)
             Text(
                 plan?.let { PlanUiLogic.progressLabel(it.activities) }
@@ -146,13 +180,9 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (plan != null) {
-                TextButton(
-                    onClick = { showDetails = true },
-                    modifier = Modifier.sizeIn(minHeight = 48.dp),
-                ) { Text("Détails") }
-            }
         }
+
+        nextActivity?.let { PlanNextActivityCard(it) }
 
         controller.corruption?.let { reason ->
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -176,31 +206,35 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
         if (plan == null) {
             if (controller.corruption == null) Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(AtlasSpacing.medium), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Préparer la journée", style = MaterialTheme.typography.titleMedium)
+                    Text(if (selectedTomorrow) "Préparer demain" else "Préparer la journée", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    AtlasPrimaryButton("Créer le programme du jour", onClick = { controller.createTodayPlan() })
+                    AtlasPrimaryButton(
+                        if (selectedTomorrow) "Créer le programme de demain" else "Créer le programme du jour",
+                        onClick = { controller.createTodayPlan() },
+                    )
                 }
             }
         } else {
-            AtlasPrimaryButton(
-                label = when {
-                    coachBusy -> "Demande en cours…"
-                    coachReady -> "Demander au coach"
-                    else -> "Ajouter une activité"
-                },
-                onClick = {
-                    if (coachReady) {
+            if (coachReady) {
+                AtlasPrimaryButton(
+                    label = "Demander au coach",
+                    onClick = {
                         configurationMessage = null
                         showCoachRequest = true
-                    } else {
-                        showAdd = true
-                    }
-                },
-                enabled = !coachBusy,
-            )
+                    },
+                    enabled = !coachBusy,
+                )
+            }
+            AtlasSecondaryButton("Ajouter une activité", onClick = { showAdd = true })
+            if (!coachReady) {
+                AtlasSecondaryButton(
+                    "Configurer le coach",
+                    onClick = { optionsExpanded = true },
+                )
+            }
             AtlasSection("Activités") {
                 if (PlanUiLogic.emptyStateLabel(hasDocument = true, activityCount = plan.activities.size) != null) {
                     Text(
@@ -219,55 +253,65 @@ internal fun PlanScreen(controller: PlanController, atlasController: AtlasContro
                     )
                 }
             }
-            PlanAgentSection(controller, atlasController, configurationMessage)
-            if (plan.version >= 2) {
-                AtlasSection("Calendrier") {
-                    val effectController = calendarEffectController
-                    if (effectController == null) {
-                        Text("Diagnostic calendrier en cours de chargement…", style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        AtlasSecondaryButton(
-                            label = if (calendarSyncBusy) "Synchronisation…" else "Synchroniser avec le calendrier",
-                            enabled = !calendarSyncBusy,
-                            onClick = {
-                                calendarSyncBusy = true
-                                scope.launch {
-                                    val preview = withContext(Dispatchers.IO) {
-                                        effectController.syncAppliedPlan(plan)
+            TextButton(
+                onClick = { optionsExpanded = !optionsExpanded },
+                modifier = Modifier.sizeIn(minHeight = 48.dp),
+            ) { Text("Options du planning") }
+            if (optionsExpanded) {
+                PlanAgentSection(controller, atlasController, configurationMessage)
+                if (plan.version >= 2) {
+                    AtlasSection("Calendrier") {
+                        val effectController = calendarEffectController
+                        if (effectController == null) {
+                            Text("Diagnostic calendrier en cours de chargement…", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            AtlasSecondaryButton(
+                                label = if (calendarSyncBusy) "Synchronisation…" else "Synchroniser avec le calendrier",
+                                enabled = !calendarSyncBusy,
+                                onClick = {
+                                    calendarSyncBusy = true
+                                    scope.launch {
+                                        val preview = withContext(Dispatchers.IO) {
+                                            effectController.syncAppliedPlan(plan)
+                                        }
+                                        calendarSyncBusy = false
+                                        if (!preview.ready) {
+                                            calendarSyncMessage = preview.issue?.userLabel()
+                                            calendarDiverged = preview.issue == CalendarEffectIssue.DIVERGENCE_REQUIRES_REVIEW
+                                        } else if (preview.effects.isEmpty()) {
+                                            calendarSyncMessage = "Le calendrier correspond déjà à la version ${plan.version}."
+                                            calendarDiverged = false
+                                        } else {
+                                            calendarPlanAtDialogOpen = plan
+                                            calendarPreview = preview
+                                            calendarSyncMessage = null
+                                        }
                                     }
-                                    calendarSyncBusy = false
-                                    if (!preview.ready) {
-                                        calendarSyncMessage = preview.issue?.userLabel()
-                                        calendarDiverged = preview.issue == CalendarEffectIssue.DIVERGENCE_REQUIRES_REVIEW
-                                    } else if (preview.effects.isEmpty()) {
-                                        calendarSyncMessage = "Le calendrier correspond déjà à la version ${plan.version}."
-                                        calendarDiverged = false
-                                    } else {
-                                        calendarPlanAtDialogOpen = plan
-                                        calendarPreview = preview
-                                        calendarSyncMessage = null
-                                    }
-                                }
-                            },
-                        )
-                        calendarSyncMessage?.let { message ->
-                            Text(message, style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (calendarDiverged) {
-                            AtlasStatus("Divergence calendrier à vérifier", AtlasStatusKind.UNAVAILABLE)
-                            TextButton(
-                                onClick = { atlasController?.navigationState?.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) },
-                                modifier = Modifier.sizeIn(minHeight = 48.dp),
-                            ) { Text("Ouvrir le diagnostic calendrier") }
+                                },
+                            )
+                            calendarSyncMessage?.let { message ->
+                                Text(message, style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (calendarDiverged) {
+                                AtlasStatus("Divergence calendrier à vérifier", AtlasStatusKind.UNAVAILABLE)
+                                TextButton(
+                                    onClick = { atlasController?.navigationState?.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) },
+                                    modifier = Modifier.sizeIn(minHeight = 48.dp),
+                                ) { Text("Ouvrir le diagnostic calendrier") }
+                            }
                         }
                     }
                 }
+                TextButton(
+                    onClick = { showDetails = true },
+                    modifier = Modifier.sizeIn(minHeight = 48.dp),
+                ) { Text("Détails") }
+                Text(
+                    "Les modifications du programme restent locales. Le calendrier ne change qu’après une confirmation groupée.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                "Les modifications du programme restent locales. Le calendrier ne change qu’après une confirmation groupée.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         controller.message?.let { message ->

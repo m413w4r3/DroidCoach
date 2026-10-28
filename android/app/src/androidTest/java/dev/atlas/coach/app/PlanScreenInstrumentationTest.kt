@@ -63,6 +63,18 @@ class PlanScreenInstrumentationTest {
     }
 
     @Test
+    fun selectingTomorrowShowsItsSeparateEmptyPlanAction() {
+        val context = isolatedContext()
+        val controller = PlanController(File(context.cacheDir, "plan-ui-tomorrow-${UUID.randomUUID()}"))
+
+        setPlanScreen(controller, context)
+
+        composeRule.onNodeWithTag("plan_day_tomorrow").performClick()
+        composeRule.onNodeWithText("Créer le programme de demain").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Créer le programme du jour").assertCountEquals(0)
+    }
+
+    @Test
     fun threeActivitiesRenderChronologicallyAndHighlightTheNextOne() {
         val activities = listOf(
             activity(ID_3, "Étirements", 18 * 60 + 30, duration = 30),

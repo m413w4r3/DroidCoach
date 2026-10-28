@@ -80,6 +80,16 @@ class PlanController(
     val today: String get() = todayProvider().toString()
     val timezone: String get() = zoneIdProvider().id
 
+    /** Creates an independent controller pinned to [date] in the same local-plan store. */
+    fun forDate(date: LocalDate): PlanController = PlanController(
+        directory = directory,
+        clock = clock,
+        zoneIdProvider = { zoneIdProvider() },
+        todayProvider = { date },
+        engine = engine,
+        agentRevisionMapper = agentRevisionMapper,
+    )
+
     /** Reloads the plan document and rotates to the current local date when needed. */
     fun refresh() {
         val date = today
@@ -131,7 +141,7 @@ class PlanController(
             is PlanWriteResult.Saved -> {
                 plan = result.plan
                 corruption = null
-                message = "Programme du jour créé. Ajoutez une première activité."
+                message = "Programme créé. Ajoutez une première activité."
                 revision++
                 true
             }
@@ -156,7 +166,7 @@ class PlanController(
         notes: String? = null,
     ): Boolean {
         val current = plan ?: run {
-            message = "Créez d'abord le programme du jour."
+            message = "Créez d'abord le programme de cette date."
             return false
         }
         val cleanTitle = title.trim()
