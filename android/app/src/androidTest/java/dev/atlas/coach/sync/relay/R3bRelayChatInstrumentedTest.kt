@@ -130,7 +130,7 @@ class R3bRelayChatInstrumentedTest {
         composeRule.onNodeWithTag("agent_connection_status")
             .assertTextContains("OpenClaw via PC", substring = true)
         composeRule.onAllNodesWithText("Provenance : OpenClaw via PC", substring = false)
-            .onFirst()
+            .get(0)
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
