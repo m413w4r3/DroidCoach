@@ -3,32 +3,33 @@
 Mise à jour finale: **2026-10-28**. Statuts : `PASS`, `FAIL`, `PARTIAL`,
 `BLOCKED`, `NOT_RUN`.
 
-Code intégré de référence : `dc8f55e` (branche de campagne). L'APK principal
-`b55776a9…` est construit sur le code Android `8eb4845`; les commits
-`f266416`, `937b95a` et `790b476` ne modifient que les tests androidTest. Le
-connecteur final contient le délai borné de révocation (`dc8f55e`).
+Code intégré de référence : `7754005` (branche de campagne). L'APK final
+`1a877422…` contient le correctif de consentement au dispatch et les preuves
+A4 renforcées. L'APK `b55776a9…` a servi aux tests Pixel A3/A4/chat/réseau
+avant ce correctif; les tests du nouvel APK sont bloqués par la panne
+d'ingress public Funnel (R-18/R-20).
 
 ## 1. Gates techniques
 
 | ID | Gate | Commande / environnement | Statut final |
 |---|---|---|---|
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped, 1 warning (arbre final `dc8f55e`) |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 688 tests, 0 échec/erreur/ignoré (arbre final) |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 97 suites, 690 tests, 0 échec/erreur/ignoré (arbre final `7754005`) |
 | T3 | Lint Android | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 71 avertissements (arbre final) |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `b55776a9…`, signature debug |
-| T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `025fd62e…` (arbre final, tests réseau inclus) |
-| T6 | Instrumentation API 37 | Pixel physique `45301FDAS001QT`, Android 17 / API 37 | **PASS (ciblé)** — A3 pairing/persistence, A4 révocation/after-clear/repair, chat relayé, réseau coupure/reprise/handover/connecteur : OK. Suite androidTest complète non lancée d'un bloc |
-| T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 74 tests (arbre final `dc8f55e`, proxy 4400 actif) |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `1a877422…` (final) ; APK Pixel antérieur `b55776a9…`, signature debug |
+| T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `d9213e63…` (arbre final, assertions A4 4001/alias incluses) |
+| T6 | Instrumentation API 37 | Pixel physique `45301FDAS001QT`, Android 17 / API 37 | **PARTIAL** — tests ciblés PASS sur l'APK `b55776a9`, avant le correctif de consentement ; re-test de l'APK final `1a877422` bloqué par l'indisponibilité de l'ingress public Funnel. Suite complète non lancée d'un bloc |
+| T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 76 tests (arbre final `7754005`, proxy 4400 actif) |
 | T8 | Image relais épinglée | `atlas-paseo-relay:r3a`, `/health` loopback | **PASS** — image locale vérifiée, `/health` 200 sur 127.0.0.1:4402 |
 | T9 | Tests proxy filtrant | `node --test integrations/relay/proxy/test` | **PASS** — 18/18 (arbre final, relais réel 4402) |
 | T10 | Unités systemd | `systemd-analyze --user verify` (sans installation) | **PARTIAL** — vérification statique PASS ; aucun service installé ni lancé |
 | T11 | WSS public Funnel | `https://all.taildc7886.ts.net:8443/health`, `/ready` | **PASS (PC, qualification publique)** — TLS 1.3, `/health` 200, `/ready` 200, WSS 101, Noise protégé. Recontrôle public final indisponible (contrôle Tailscale injoignable, voir R-18) ; E2E final via MagicDNS PASS |
 | T12 | Chat mock isolé | Backend mock + transport relayé | **PASS** — chat mock via Funnel public, replay sans doublon (preuve antérieure) ; tests Node 74/74 sur l'arbre final |
 | T13 | Chat OpenClaw | Isolé et/ou personnel autorisé | **PASS** — OpenClaw personnel réel via Funnel public (`agent_status=connected`, 1 proposition, max 4 295 ms) ; E2E final via MagicDNS `connected` |
-| T14 | A3 Keystore | Pairing + force-stop + redémarrage Android | **PASS** — `R3bA3PairingInstrumentedTest` et `R3bA3PersistenceInstrumentedTest` sur Pixel |
-| T15 | A4 révocation | Session active + révocation PC + effacement local | **PASS** — `R3bA4RevocationInstrumentedTest`, `R3bA4AfterClearInstrumentedTest`, `R3bA4RepairInstrumentedTest` sur Pixel |
+| T14 | A3 Keystore | Pairing + force-stop + redémarrage Android | **PASS (réserve R-19)** — `R3bA3PairingInstrumentedTest` et `R3bA3PersistenceInstrumentedTest` sur Pixel/APK antérieur ; journaux horodatés partiels ; re-test final bloqué par l'ingress |
+| T15 | A4 révocation | Session active + révocation PC + effacement local | **PARTIAL** — parcours A4 PASS sur l'APK antérieur ; assertions renforcées close 4001 et alias Keystore non rejouées sur l'APK final à cause de l'ingress public. Voir A4-4/A4-8 |
 | T16 | Données Pixel | Hashes ATLAS et compteurs calendrier | **PASS** — 5/5 hashes, calendriers 12, événements 91 après restauration finale |
-| T17 | Revue indépendante | Lecture seule sur SHA final | **RUNNING** — session `codex/gpt-6-luna` `xhigh` en cours ; rapport à ajouter |
+| T17 | Revue indépendante | Lecture seule sur SHA final | **RUNNING** — revue 1 `BLOQUÉ` (P1 corrigé en `7754005`) ; re-revue du SHA final à exécuter ; voir `REVUE_INDEPENDANTE.md` |
 
 ## 2. Réseau public et Funnel
 
@@ -86,11 +87,11 @@ connecteur final contient le délai borné de révocation (`dc8f55e`).
 | A4-1 | Session authentifiée active | **PASS** — session Pixel active avant révocation |
 | A4-2 | Révocation côté PC | **PASS** — `revoke-device` sur le connecteur |
 | A4-3 | Réception `DEVICE_REVOKED` | **PASS** — trame reçue avant fermeture (grâce 200 ms) |
-| A4-4 | Fermeture WebSocket `4001` | **PASS** — code observé |
-| A4-5 | État Android `REVOKED` | **PASS** — état et message vérifiés |
+| A4-4 | Fermeture WebSocket `4001` | **PARTIAL** — code observé antérieurement et assertion `lastCloseCode == 4001` ajoutée dans `7754005` ; test renforcé non rejoué sur Pixel à cause de l'ingress public |
+| A4-5 | État Android `REVOKED` | **PASS (APK antérieur)** — état et message vérifiés ; re-test final bloqué par l'ingress |
 | A4-6 | Absence de reconnexion authentifiée | **PASS** — aucune reconnexion authentifiée |
 | A4-7 | Suppression explicite des identifiants locaux | **PASS** — action UI explicite |
-| A4-8 | Vérification de l'effacement des credentials | **PASS** — préférences et Keystore effacés |
+| A4-8 | Vérification de l'effacement des credentials | **PARTIAL** — credential/ciphertext effacé et testé sur l'APK antérieur ; suppression de l'alias Keystore et assertion ajoutées dans `7754005`, non rejouées sur Pixel à cause de l'ingress |
 | A4-9 | Relance sans réappairage implicite | **PASS** — PAIRING_REQUIRED |
 | A4-10 | Nouvel appairage explicite possible | **PASS** — device6 réappairé explicitement |
 
@@ -136,3 +137,6 @@ connecteur final contient le délai borné de révocation (`dc8f55e`).
 - Le recontrôle public final du 2026-10-28 15:15 a échoué au TLS parce que
   `tailscaled` ne joignait plus le plan de contrôle Tailscale (réseau
   injoignable); aucune configuration Tailscale n'a été modifiée. Voir R-18.
+- La revue indépendante 1 a rendu `BLOQUÉ` sur un P1 de consentement périmé.
+  Le correctif `7754005` est couvert par 690 tests JVM et 76 tests Node ; le
+  re-test Pixel de l'APK final est bloqué par l'ingress public (R-20).

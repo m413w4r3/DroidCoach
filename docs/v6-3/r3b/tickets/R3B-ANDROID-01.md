@@ -172,3 +172,14 @@ avant fermeture 4001 (commit `dc8f55e`) laisse le relais router
 `DEVICE_REVOKED`. Restauration finale : 5/5 hashes, calendriers 12/91, aucun
 artefact. Preuves : `preuves/pixel-instrumentation-final.txt`,
 `preuves/pixel-restore-final.txt`.
+
+## Correctifs de revue 1 (7754005)
+
+- A4-4 : `RelayBackendTransport.lastCloseCode` est exposé ; le test A4 attend
+  et affirme 4001.
+- A4-8 : `clear()` supprime l'alias Keystore `atlas_relay_device_v1` ; le test
+  vérifie son absence.
+- A3 : les journaux horodatés partiels restent une limite (R-19).
+- Le re-test Pixel de l'APK final `1a877422` est bloqué par l'indisponibilité de
+  l'ingress public Funnel (R-20) ; les parcours A3/A4 antérieurs restent PASS
+  sur l'APK `b55776a9`.

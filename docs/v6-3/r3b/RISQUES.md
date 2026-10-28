@@ -23,6 +23,7 @@
 | R-17 | Derrière le Funnel, toutes les connexions apparaissent en loopback : le proxy ne peut pas faire de rate-limit par source | Épuisement des 64 connexions ou du budget relais par un tiers | limites de connexions, budget du relais, redémarrage supervisé ; DoS générique non éliminable au niveau du proxy |
 | R-18 | Au recontrôle final (2026-10-28 15:15), `tailscaled` ne joignait plus le plan de contrôle Tailscale (`network is unreachable`) ; l'ingress public fermait le TLS | Accès distant public indisponible tant que la connectivité Tailscale du PC n'est pas rétablie | aucune configuration modifiée ; qualification publique antérieure PASS ; rejeu final via MagicDNS PASS ; vérifier `tailscale status`/connectivité avant usage distant |
 | R-19 | Les journaux horodatés de certains tests Pixel (A3 persistence, A4 after-clear/repair, chat) n'ont pas tous survécu à la compaction de session | Preuve moins directe pour ces lignes | résultats recoupés par les preuves JVM/Node, les fichiers de restauration et l'observation parentale ; aucun PASS inventé |
+| R-20 | Le re-test Pixel de l'APK final `1a877422` (correctif P1, close 4001, alias Keystore) n'a pas pu être exécuté : l'ingress public Funnel est indisponible depuis Wi-Fi et LTE | Le correctif de consentement et les assertions A4 renforcées ne sont prouvés que par JVM/static sur le binaire final | JVM 690/690, Node 76/76 ; parcours Pixel antérieur PASS sur `b55776a9` ; rejouer A3/A4/chat sur le Pixel dès que l'ingress public revient |
 
 ## Limitations connues à ce stade
 
@@ -33,6 +34,10 @@
   perte de connectivité au plan de contrôle (R-18).
 - L'état applicatif observé pendant une coupure est `ERROR`, pas `OFFLINE` ;
   NET-07 reste PARTIAL sur le libellé exact.
+- Le P1 de consentement périmé est corrigé et couvert JVM, mais le re-test
+  Pixel de l'APK final n'a pas pu être exécuté (R-20).
+- A4-4 (close 4001) et A4-8 (alias Keystore) sont PARTIAL sur le binaire final
+  pour la même raison ; les parcours antérieurs restent PASS.
 - L'expiration de session (1 h) et de token n'a pas été rejouée sur Pixel ;
   NET-13 reste PARTIAL.
 - Mandat révoqué/expiré et déconnexion pendant un chat en vol : couverture

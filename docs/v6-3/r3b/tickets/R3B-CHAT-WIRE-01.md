@@ -118,3 +118,12 @@ RELAY_CONNECTED, provenance « OpenClaw via PC », aucun token/URL backend
 direct, aucune proposition exécutée sans confirmation, brouillon et historique
 conservés après rotation. APK principal `b55776a9…`. Preuve :
 `preuves/pixel-instrumentation-final.txt` et `preuves/chat-wire-01-android.txt`.
+
+## Correctif de revue 1 (7754005)
+
+Le P1 de consentement périmé entre préparation et dispatch est corrigé :
+`AgentContextSnapshot.stillAllows()` + `AgentContextCoordinator.consentStillAllows()`
+sont appelés dans `beforeDispatch` ; un retrait de catégorie après préparation
+bloque l'envoi (`POLICY_DENIED`, zéro payload). Tests JVM 690/690, dont deux
+tests dédiés. Le re-test Pixel de l'APK final est bloqué par l'indisponibilité
+de l'ingress public Funnel (R-20).

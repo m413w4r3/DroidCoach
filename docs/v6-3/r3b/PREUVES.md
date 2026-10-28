@@ -17,7 +17,7 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | [`preuves/chat-wire-01-android.txt`](preuves/chat-wire-01-android.txt) | Intégration Android relayée, JVM, timeout 55 s, audit/verrou | `a437b17` / `c5e1bea`, 688 tests JVM | PASS (JVM) + Pixel dans `pixel-instrumentation-final.txt` |
 | [`preuves/android-01-implementation.txt`](preuves/android-01-implementation.txt) | Implémentation A3/A4 et corrections de tests | `c916ab8` / `7be0599` | PASS (implémentation) |
 | [`preuves/pixel-install-r3b.txt`](preuves/pixel-install-r3b.txt) | Installation APK R3-B, sauvegarde, SHA | Pixel, APK `b55776a9…` | PASS |
-| [`preuves/pixel-instrumentation-final.txt`](preuves/pixel-instrumentation-final.txt) | A3, A4, chat relayé, réseau, résultats Pixel | Pixel API 37, code `dc8f55e`, APK `b55776a9…` | PASS (ciblé) ; voir limites |
+| [`preuves/pixel-instrumentation-final.txt`](preuves/pixel-instrumentation-final.txt) | A3, A4, chat relayé, réseau, résultats Pixel | Pixel API 37, APK `b55776a9…` (avant correctif P1) | PASS (ciblé) ; re-test de l'APK final `1a877422…` bloqué par l'ingress public |
 | [`preuves/pixel-network.txt`](preuves/pixel-network.txt) | Coupure/reprise, handover LTE/5G, redémarrage connecteur | Pixel API 37, Funnel, code `dc8f55e` | PASS sauf NET-07 PARTIAL |
 | [`preuves/pixel-restore-final.txt`](preuves/pixel-restore-final.txt) | Restauration finale des données, 5 hashes, calendrier | Pixel API 37, sauvegarde `fbca987a…` | PASS |
 | [`preuves/fastapi-restart-public.txt`](preuves/fastapi-restart-public.txt) | Arrêt/relance FastAPI réel via Funnel | `dfe6da3` | PASS (`BACKEND_UNAVAILABLE` puis `ok`) |
@@ -27,11 +27,11 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | Vérification | Commande | Résultat |
 |---|---|---|
 | Backend | `backend/.venv/bin/python -m pytest -q` | 196 passed, 1 skipped, 1 warning |
-| Node connecteur | `integrations/relay/pc: npm test` (proxy 4400, relais 4402) | 15 fichiers, 74 tests, 0 échec |
+| Node connecteur | `integrations/relay/pc: npm test` (proxy 4400, relais 4402) | 15 fichiers, 76 tests, 0 échec (`7754005`) |
 | Proxy filtrant | `node --test integrations/relay/proxy/test` | 18/18 |
-| JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 688 tests, 0 échec |
+| JVM Android | `./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | 97 suites, 690 tests, 0 échec (`7754005`) |
 | Lint | `./gradlew :app:lintDebug` | 0 erreur, 71 avertissements |
-| Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK principal `b55776a9…`, androidTest `025fd62e…` |
+| Builds | `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` | APK final `1a877422…`, androidTest `d9213e63…` ; APK Pixel antérieur `b55776a9…` |
 | Proxy/relais redémarrés | arrêt/relance proxy, `docker restart atlas-relay-r3b-probe` | `/health` 200, `/ready` 200, `/metrics` 404 en local et via MagicDNS |
 
 ## Preuves publiques complémentaires (PC)
@@ -92,12 +92,24 @@ Statut : **PERSONAL_OPENCLAW_PASS**, confirmé via le chemin relayé public dans
 [`preuves/openclaw-public.txt`](preuves/openclaw-public.txt) et par le rejeu
 final `agent_status=connected`.
 
+## Revue indépendante
+
+Voir [`REVUE_INDEPENDANTE.md`](REVUE_INDEPENDANTE.md). La revue 1
+(`codex/gpt-6-luna`, `xhigh`, SHA `beb8f33`) a rendu **BLOQUÉ** sur un P1 de
+consentement périmé, sans P0. Le correctif `7754005` ajoute la revalidation du
+snapshot au dispatch, la grâce de révocation sur le chemin `receive()`,
+l'intersection des capacités pour les anciens appairages, l'assertion du close
+4001 et la suppression de l'alias Keystore. Tests : Node 76/76, JVM 690/690.
+Le re-test Pixel de l'APK final est bloqué par la panne d'ingress public ; la
+re-revue du SHA final est en cours.
+
 ## Corrections parentales documentées
 
 | Commit | Nature | Vérification |
 |---|---|---|
 | `dc8f55e` | Délai borné de 200 ms avant fermeture 4001, pour laisser le relais router `DEVICE_REVOKED` | A4 Pixel PASS ; Node 74/74 ; code revu |
 | `f266416`, `937b95a`, `790b476` | Corrections test-only : sélecteurs Compose, historique long, état `RELAY_CONNECTING` pendant l'arrêt du connecteur | Tests Pixel rejoués ; APK principal inchangé |
+| `7754005` | Consentement revalidé au dispatch, grâce sur `receive()`, intersection de capacités, close 4001/alias Keystore | Node 76/76 ; JVM 690/690 ; lint 0 erreur ; Pixel final bloqué par l'ingress |
 
 ## Règles
 
