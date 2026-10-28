@@ -20,10 +20,10 @@ actifs, dont trois implémentations.
 
 | Ticket | Vague | Statut | Propriétaire / scope exclusif | Oracle principal |
 |---|---|---|---|---|
-| `R3B-NET-01` | A | RUNNING | `integrations/relay/proxy/**` (nouveau), `docs/v6-3/r3b/preuves/net-01*.txt` | Proxy filtrant `4400 -> 4402` : `/health` et `/ready` proxifiés, `/metrics` refusé, upgrade `/ws` v2 réel, tests négatifs |
-| `R3B-PC-01` | A | RUNNING | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
-| `R3B-CHAT-01` | A | RUNNING | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
-| `R3B-CHAT-WIRE-01` | B | BLOCKED (dépend de CHAT-01 intégré) | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
+| `R3B-NET-01` | A | INTEGRATED | `integrations/relay/proxy/**` (nouveau), `docs/v6-3/r3b/preuves/net-01*.txt` | Proxy filtrant `4400 -> 4402` : `/health` et `/ready` proxifiés, `/metrics` refusé, upgrade `/ws` v2 réel, tests négatifs |
+| `R3B-PC-01` | A | INTEGRATED | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
+| `R3B-CHAT-01` | A | INTEGRATED | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
+| `R3B-CHAT-WIRE-01` | B | READY | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
 | `R3B-ANDROID-01` | B | BLOCKED (dépend de CHAT-WIRE-01 intégré) | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
 | `R3B-QA-C` | C | BLOCKED (dépend de B) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
 | `R3B-REVIEW-01` | D | BLOCKED (dépend de C) | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final |
@@ -42,6 +42,17 @@ acceptation.
   tests Pixel sous autorisation de l'utilisateur, régressions et accessibilité.
 - **Vague D** : corrections, rejeu sur SHA intégré, revue indépendante,
   nettoyage, handoff et verdict.
+
+## Intégration vague A
+
+| Ticket | Commit de code | Commit final ticket | Merge sur campagne | Gates rejouées sur le SHA intégré |
+|---|---|---|---|---|
+| `R3B-PC-01` | `0a96281f29b78031b2ecb792bebcc7239d35f3f7` | `0a96281` | `dcf3309` | harnais 14 scénarios PASS ; `npm test` 72/72 avec proxy sur 4400 |
+| `R3B-NET-01` | `4363d8f0102002350a8b846a00575d6a91a16774` | `4363d8f` | `bb5bb99` | 18/18 tests proxy PASS ; systemd-analyze PASS ; Funnel public TLS/HTTP/WSS PASS |
+| `R3B-CHAT-01` | `1b2e8f485000dc4f0e2743b32c2ad19b5b60a15a` | `1b2e8f4` | `dfe6da3` | backend 196/1 ; chat 10/10 ; Node 72/72 ; intégration Noise publique PASS |
+
+Aucune notification de fin n'a été acceptée sans rejeu parent. Les trois tickets
+restent liés à leurs preuves dans `docs/v6-3/r3b/preuves/`.
 
 ## Sessions enfants — vague A
 
