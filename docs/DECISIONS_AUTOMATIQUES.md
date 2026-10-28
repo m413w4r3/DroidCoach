@@ -233,3 +233,19 @@
 | 2026-10-26 | Le prompt plan revision énumère les 8 `kind` autorisés et impose `priority` non nulle (`REQUIRED`/`IMPORTANT`/`OPTIONAL`) | `invalid_output` réel sur Pixel: le modèle avait produit `kind="BREAK"` et `priority=null`; le schéma V3 les rejette. Correction backend `a6ee1c7`, testée par sonde réelle (`BUFFER`/`OPTIONAL`) puis parcours app |
 | 2026-10-26 | Le diagnostic calendrier masque tout `displayName` contenant un email ou égal à `accountName`/`ownerAccount` | P3 Pixel: des noms de calendriers étaient des adresses e-mail affichées malgré « Compte expurgé ». Correction `db15715`; aucun identifiant de compte ne doit entrer dans le modèle UI, y compris via le nom du calendrier |
 | 2026-10-26 | L'APK `6ab95fac…` (redaction calendrier) a été installé après **accord propriétaire P1ter** | Installation `adb install -r` réussie, SHA relu identique, plan v4 et données conservés; P3 rejoué PASS (0 motif e-mail, 4 calendriers expurgés, noms normaux conservés, Etar, aucun événement); révocation finale refusée/liste masquée; rollbacks `66c7d8f6`/`5956bb6f` et sauvegarde `8617727e…` conservés |
+
+## V6.3 — Passe UX/UI R4 (2026-10-28)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-10-28 | Branche locale `feat/atlas-v6-3-ux-daily-use` depuis `566668ac9cd0778f43d7f4d90a93c6a45645935c`; push final sur `main` demandé explicitement par le propriétaire | Le prompt maître fixe la base; le propriétaire autorise le push final. |
+| 2026-10-28 | Navigation cible `Accueil · Plan · Coach · Focus · Plus`; Coach et Plan deviennent des onglets directs | Priorité explicite : coach et planning de demain les parcours les plus évidents. Habitudes reste accessible depuis l'accueil et Plus. |
+| 2026-10-28 | Le propriétaire a activé ATLAS comme application d'accueil sur le Pixel pendant la passe; le rôle HOME n'est ni retiré ni modifié sans nouvelle demande | L'utilisateur a fourni une autorisation ciblée pour examiner et tester le launcher. |
+| 2026-10-28 | Le launcher HOME est amélioré sans refonte : carte prochaine action actionnable, accès `Plan` au pied de page, action si aucun favori | Préserver les comportements HOME, favoris, recherche, retour au launcher précédent et pause d'urgence. |
+| 2026-10-28 | Les panneaux Objectifs/Localisation/Contexte/Tâches de fond du Coach sont déplacés vers un écran `Contexte du coach` | Réduire la densité du parcours conversation sans supprimer de fonctionnalité ni de consentement. |
+| 2026-10-28 | Les identifiants techniques du relais (URL, serverId, clé X25519, UUID) passent dans une section `Avancé` repliée; les erreurs TLS, révocations et consentements manquants restent visibles | Demande UX explicite; aucune erreur critique ne doit être masquée. |
+| 2026-10-28 | `Aujourd'hui / Demain` est implémenté par un `PlanController` de date séparé, même répertoire, fichier `day-plan-<date>.json`; le controller du jour utilisé par l'accueil n'est pas remplacé | Permet de préparer demain sans écraser le plan courant; isolation testable par date. |
+| 2026-10-28 | Aucun test instrumenté destructif sur le Pixel personnel; l'AVD API 37 jetable est utilisée pour ces suites | Les tests existants effacent `atlas_local_state` via `targetContext`; le Pixel contient des données utilisateur. |
+| 2026-10-28 | Aucun `pm clear`, désinstallation, changement de permission sensible ou modification de compte pendant la passe | Préservation des données et des consentements existants. |
+| 2026-10-28 | Les captures publiées sont expurgées : bulle Signal masquée, conversations synthétiques ou caviardées, aucun jeton, UUID, serverId ni donnée personnelle | Le dossier de captures est versionné et ne doit contenir aucune donnée intime. |
+| 2026-10-28 | Tous les enfants Paseo sont `codex:gpt-6-luna`, effort `xhigh`, sans sous-délégation; maximum 3 implémentations simultanées | Contrat `AGENTS.md` et prompt maître. |
