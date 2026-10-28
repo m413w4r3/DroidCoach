@@ -13,13 +13,18 @@ Derniers commits documentaires : `2796dad`, `e1de88f`
 
 Le code R3-C compile, les suites Android/backend/Node/proxy passent, le
 chemin public Funnel est réellement qualifié avec TLS, Noise, authentification,
-chat mock et chat OpenClaw réel, et les corrections NET-01, COMPAT-01, RACE-01
-sont intégrées et testées. La qualification Pixel du nouveau binaire reste
-**`BLOCKED_DEVICE`** : aucun appareil n'était connecté en ADB et aucun mandat
-d'installation n'a été exercé. La CI distante a été poussée après autorisation :
-le premier run a échoué sur un test Node exigeant un relais réel ; le correctif
-de séparation est poussé et le rejeu est en attente. Aucun PASS CI n'est
-revendiqué avant un run terminé avec `success`.
+chat mock et chat OpenClaw réel. Le couple APK R3-C a été **installé sur le
+Pixel** et A3, le chat réel, NET-07 (OFFLINE), NET-09 (handover) et les
+régressions UI principales sont PASS sur ce binaire.
+
+La gate **A4-4 échoue** : le relais épinglé ferme le socket client avec
+`1012` au lieu de propager le `4001` émis par le connecteur. `DEVICE_REVOKED`,
+`REVOKED`, l'absence de reconnexion, l'effacement explicite et le réappairage
+sont PASS. La CI distante est **success** sur `a72ba9e` ; un dernier run est
+requis après le commit final.
+
+Aucun `GO_REMOTE_WITH_LIMITATIONS` ni `GO_V63` n'est revendiqué : A4-4 reste
+un écart explicite, et H24/Doze/systemd/wger ne sont pas qualifiés.
 
 Aucun `GO_REMOTE_WITH_LIMITATIONS` ni `GO_V63` n'est revendiqué.
 
@@ -52,6 +57,29 @@ Le chemin public a été rétabli sans modifier Tailscale :
 - Source physique du PC utilisée (hors `tailscale0`) ; ports internes
   `4400/4401/4402/8100` fermés sur l'IP publique.
 
+## 3bis. Qualification Pixel sur le binaire R3-C
+
+APK principal `365bd84a…`, androidTest `09ecfd7a…`, utilisateur 0, Android 17 /
+API 37.
+
+| Domaine | Résultat |
+|---|---|
+| Installation | PASS — hash installé identique, signature debug, profils 12/13 non modifiés |
+| A3 appairage Keystore | PASS — 1,149 s, token chiffré, aucun clair |
+| A3 force-stop | PASS — 0,89 s |
+| A3 redémarrage Android | PASS — 1,439 s, identité et token conservés |
+| A4 `DEVICE_REVOKED` / `REVOKED` / erreur | PASS |
+| A4 fermeture 4001 | **FAIL** — relais `1012`, trois probes concordants |
+| A4 effacement / PAIRING_REQUIRED / réappairage | PASS — 0,284 s / 1,122 s / 2,386 s (chemin production, clic UI non rejoué) |
+| Chat réel OpenClaw | PASS — 15,658 s, provenance « OpenClaw via PC », aucune action non confirmée |
+| NET-07 coupure | PASS — `OFFLINE` observé, reconnexion, conversation conservée (10,346 s) |
+| NET-09 handover | PASS — CELLULAR puis WIFI, conversation conservée (9,931 s) |
+| UI-06 HOME | PASS — launcher puis relance, hash local inchangé |
+| UI-07 hors ligne | PASS — écran local utilisable, aucun crash |
+| UI-08 police/rotation | PASS pour police 1,3 et paysage ; TalkBack NON EXÉCUTÉ |
+| UI-04 token | PARTIAL — champ masqué, stockage Keystore vérifié, frappe UI non rejouée |
+| Données locales | PASS sur le périmètre R3-C (aucune donnée R3-B pour user 0) |
+
 ## 4. Gates sur le SHA intégré
 
 | Gate | Résultat |
@@ -59,13 +87,13 @@ Le chemin public a été rétabli sans modifier Tailscale :
 | Android JVM | **100 suites, 712 tests, 0 échec/erreur/ignoré** |
 | Android lint | **0 erreur, 71 avertissements** |
 | Build APK principal (propre) | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
-| Build APK androidTest (propre) | `143aae62cba4eef4eca1579be36a8ca40be57a98a97fe1388b271e3546b8df43` |
+| Build APK androidTest (propre) | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` (inclut le test R3-C d'effacement) |
 | Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Version | `versionCode=1`, `versionName=0.1.0`, compileSdk 37 |
 | Backend | **196 passed, 1 skipped** |
 | Node connecteur | **17 fichiers, 81 tests PASS** (dont relais réel) |
 | Proxy filtrant | **18/18 PASS** |
-| CI distante | **FAIL (run 1) → correctif poussé, rejeu en attente** |
+| CI distante | **success** sur `a72ba9e` (run `40733692711`) ; dernier run requis après le commit final |
 
 ## 5. Revue indépendante
 
@@ -84,15 +112,21 @@ lecture seule, agent `88c30a0b-573b-4cbb-941d-1ef9b1effd2d`.
 
 ## 6. Limites explicites
 
-- **Pixel `BLOCKED_DEVICE`** : aucun appareil ADB ; A3/A4/chat/réseau/UI ne
-  sont pas rejoués sur le couple APK R3-C. Aucun PASS Pixel n'est revendiqué.
-- **CI distante `NOT_RUN`** : les gates locales sont PASS, mais aucun run
-  GitHub n'a été déclenché.
-- **OpenClaw réel** : testé avec un message synthétique via le PC ; parcours
-  UI Android, provenance et consentement visuel non rejoués sur Pixel.
-- **NET-07** : PASS JVM ; observation sur le binaire final Pixel requise pour
-  un PASS Pixel.
-- **NET-13, CHAT-05, UI-04/06/07/08** : PARTIAL ou NOT_RUN côté Pixel.
+- **A4-4 FAIL** : le relais épinglé ferme avec `1012` au lieu de `4001`.
+  `DEVICE_REVOKED`, `REVOKED`, l'effacement et le réappairage sont PASS.
+- **UI-04 PARTIAL** : champ token masqué et stockage Keystore vérifiés, mais
+  frappe manuelle non rejouée. **UI-01/UI-03 PARTIAL** après l'échec A4-4.
+- **UI-08 PARTIAL** : police 1,3 et paysage PASS ; TalkBack NON EXÉCUTÉ.
+- **CI distante** : success sur `a72ba9e` ; dernier run requis après le commit
+  final (compilation androidTest incluse).
+- **OpenClaw réel** : testé via le PC et via l'UI Android sur Pixel avec un
+  message synthétique ; une conversation synthétique existe côté gateway.
+- **NET-07** : PASS sur Pixel (OFFLINE observé). Le mode avion seul laissait
+  la Wi-Fi active sur ce Pixel ; la coupure réelle a été faite en désactivant
+  Wi-Fi + données.
+- **NET-13, CHAT-05/06** : PARTIAL, pas de parcours Pixel dédié.
+- **Données Pixel** : aucune donnée R3-B pour l'utilisateur 0 au pré-vol ;
+  la préservation est démontrée sur le périmètre R3-C (hash local, conversation).
 - **H24/Doze** : NOT_RUN ; aucune promesse de disponibilité permanente.
 - **systemd** : modèles vérifiés statiquement, non installés ;
   `BLOCKED_AUTHORIZATION`. `linger` déjà actif, non modifié.
@@ -121,15 +155,13 @@ lecture seule, agent `88c30a0b-573b-4cbb-941d-1ef9b1effd2d`.
 
 ## 8. Condition pour passer à `GO_REMOTE_WITH_LIMITATIONS`
 
-1. Connecter le Pixel et fournir le mandat d'installation ciblé.
-2. Installer le couple APK `365bd84a…` / `143aae62…` après sauvegarde
-   vérifiée et contrôle de signature/versionCode.
-3. Rejouer A3 (Keystore, force-stop, reboot, identité, reconnexion) et A4
-   (`DEVICE_REVOKED`, `4001` asserté, `REVOKED`, effacement, réappairage).
-4. Rejouer chat relayé avec OpenClaw réel, consentement, révocation,
-   provenance et brouillon/rotation.
-5. Rejouer NET-07 (OFFLINE), NET-13, CHAT-05/06 et les régressions UI.
-6. Vérifier l'absence de perte de données (témoins et compteurs calendrier).
-7. Exécuter la revue indépendante finale sur le SHA/APK installé.
-8. Publier la branche et obtenir un run CI distant terminé `success`
-   (autorisation de push requise).
+1. **Trancher A4-4** : corriger la propagation du code de fermeture dans le
+   relais amont, ou accepter explicitement `1012` comme fermeture de transport
+   après `DEVICE_REVOKED` et adapter le contrat. C'est le seul écart bloquant
+   identifié pour `GO_REMOTE`.
+2. Rejouer le test A4 UI complet (clic « Supprimer », confirmation) sur le
+   binaire retenu après la décision A4-4.
+3. Attendre le dernier run CI `success` sur le commit final.
+4. Clore, si souhaité, UI-04 (frappe manuelle), TalkBack, NET-13 et CHAT-05/06.
+5. Pour `GO_V63` seulement : qualifier H24/Doze, installer la supervision
+   systemd avec mandat, et statuer sur wger.

@@ -130,6 +130,36 @@ complètes 712 tests JVM / 0 échec. Voir `PREUVES.md` P-NET-01 et P-GATES-01.
 **Limites.** La classification est prouvée en JVM ; la reproduction Pixel
 réelle (mode avion, Wi-Fi/LTE, TLS invalide) reste à exécuter en vague C.
 
+## R3C-A4-CLOSE-01 — Fermeture 4001 non propagée par le relais
+
+**Statut : FAIL de la gate A4-4, sans correction de production.**
+
+**Constat Pixel.** `R3bA4RevocationInstrumentedTest` reçoit `DEVICE_REVOKED`,
+passe à `REVOKED` et expose l'erreur de révocation, mais `lastCloseCode` reste
+nul dans la fenêtre de 5 s. Un probe Node synthétique, sur trois chemins
+(public Funnel, proxy local, relais direct `4402`), observe :
+
+```text
+0 ms     WS_OPEN
+~1300 ms APP error DEVICE_REVOKED
+~1530 ms WS_CLOSE 1012 "Server disconnected"
+```
+
+Le connecteur appelle bien `channel.close(4001, …)` sur son socket serveur,
+mais le relais épinglé ferme le socket client avec **1012** et ne propage pas
+le code applicatif 4001. Le même comportement est observé sans Funnel et sans
+proxy : c'est le relais, pas le transport public.
+
+**Impact.** La révocation reste effective (`DEVICE_REVOKED`, `REVOKED`, aucune
+reconnexion authentifiée, effacement explicite, `PAIRING_REQUIRED`,
+réappairage). A4-5 à A4-10 sont PASS. Seule l'assertion diagnostique 4001
+échoue.
+
+**Options.** Corriger la propagation du code de fermeture dans le relais
+épinglé (nécessite la source amont et une revue, hors périmètre R3-C), ou
+accepter explicitement 1012 comme fermeture de transport après révocation et
+adapter le contrat A4-4. Aucune de ces décisions n'a été prise unilatéralement.
+
 ## R3C-PIXEL-SAFETY-01 — Runbook non destructif
 
 Le runbook R3-B est remplacé pour la qualification par

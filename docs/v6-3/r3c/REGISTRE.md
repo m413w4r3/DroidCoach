@@ -49,12 +49,12 @@ un échec logiciel : statut `BLOCKED_SANDBOX` documenté.
 | `R3C-ANDROID-NET-01` | A | **INTEGRATED** `d2419b3` | `PaseoRelayClient.kt`, nouveau test de classification | OFFLINE vs ERROR, TLS terminal, reprise réseau |
 | `R3C-COMPAT-01` | A | **INTEGRATED** `a162f70` | `RelayBackendTransport.kt`, tests Android/Node | session maintenue, `OPERATION_UNAVAILABLE` ciblé, aucune élévation |
 | `R3C-RACE-01` | A | **INTEGRATED** `22ba24f` | tests et hooks de test uniquement | 3 scénarios Android + 3 scénarios Node, ordre DEVICE_REVOKED/4001 |
-| `R3C-PIXEL-SAFETY-01` | A/B | READY (runbook) | parent, docs | runbook non destructif, sauvegarde vérifiée |
-| `R3C-PIXEL-QUALIFY-01` | C | BLOCKED_DEVICE | parent, opérateur ADB unique | Pixel connecté + mandat d'installation |
-| `R3C-FUNNEL-01` | B | PARTIAL → PASS public PC | parent, diagnostic non destructif | TLS/health/ready/metrics/WSS/Noise/auth/chat via IP publique |
-| `R3C-REGRESSION-01` | C | PARTIAL | parent + Pixel | NET-07/13, CHAT-05/06, UI-04/06/07/08, R-22 |
-| `R3C-PC-DEPLOY-01` | B | PARTIAL | parent, services de test isolés | ordre, SIGKILL, réseau, logs, ports, rollback |
-| `R3C-CI-01` | B | INTEGRATED `cd6e751` | `.github/workflows/ci.yml`, harnais relais isolé | Android + backend + Node + proxy |
+| `R3C-PIXEL-SAFETY-01` | A/B | **PASS** (runbook appliqué, aucune opération destructive) | parent, docs | runbook non destructif, sauvegarde vérifiée |
+| `R3C-PIXEL-QUALIFY-01` | C | **PARTIAL** — A3/chat/NET/UI PASS, A4-4 FAIL | parent, opérateur ADB unique | binaire R3-C installé et testé |
+| `R3C-FUNNEL-01` | B | **PASS public PC + Pixel** | parent, diagnostic non destructif | TLS/health/ready/metrics/WSS/Noise/auth/chat via IP publique |
+| `R3C-REGRESSION-01` | C | **PARTIAL** | parent + Pixel | NET-07/09, CHAT-01/02/09/10, UI-02/06/07/08 ; NET-13/CHAT-05/06/UI-04/TalkBack partiels |
+| `R3C-PC-DEPLOY-01` | B | **PASS isolé / BLOCKED_AUTHORIZATION persistant** | parent, services de test isolés | ordre, SIGKILL, réseau, logs, ports, rollback ; systemd non installé |
+| `R3C-CI-01` | B | **INTEGRATED** + CI success `a72ba9e` | `.github/workflows/ci.yml`, harnais relais isolé | Android + backend + Node + proxy ; dernier run après clôture |
 | `R3C-REVIEW-01` | D | **ACCEPTED** — APPROUVE | relecteur indépendant lecture seule | Aucun P0/P1 ; P2 identifiants/image/conteneur/placeholder corrigés |
 
 ## 4. Intégration
@@ -75,13 +75,32 @@ ci-dessus a été rejouée sur le SHA intégré.
 |---|---|
 | Dernier commit de code Android | `d2419b3` |
 | Dernier commit d'infrastructure (CI/harnais) | `e3a9867` |
-| Dernier commit de documentation | `2796dad` |
-| Gates finales | Android 712 tests / 0 échec, lint 0/71, backend 196/1, Node 81/81, proxy 18/18 |
-| APK principal (build propre) | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
-| APK androidTest (build propre) | `143aae62cba4eef4eca1579be36a8ca40be57a98a97fe1388b271e3546b8df43` |
+| Dernier commit de documentation/test androidTest | voir `git rev-parse HEAD` (clôture) |
+| Gates locales | Android 712 tests / 0 échec, lint 0/71, backend 196/1, Node 81/81, proxy 18/18 |
+| APK principal | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
+| APK androidTest | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` |
 | Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
-| État Pixel | `BLOCKED_DEVICE` — aucun appareil ADB |
-| État CI distante | `NOT_RUN` — aucun push autorisé |
+| État Pixel | **installé et testé** : A3 PASS, chat réel PASS, NET-07/09 PASS, A4 partiel (A4-4 FAIL 1012) |
+| État CI distante | **success** sur `a72ba9e` (run `40733692711`) ; dernier run requis après clôture |
+
+## 4bis. Qualification Pixel R3-C
+
+Pixel 9 Pro XL, Android 17 / API 37, utilisateur 0, APK `365bd84a…` /
+androidTest `09ecfd7a…`.
+
+| Test | Résultat |
+|---|---|
+| Installation | PASS — hash identique, signature debug |
+| A3 appairage / force-stop / reboot | PASS (1,149 s / 0,89 s / 1,439 s) |
+| A4 DEVICE_REVOKED / REVOKED / pas de reconnexion | PASS |
+| A4 fermeture 4001 | **FAIL** — relais 1012 |
+| A4 effacement / PAIRING_REQUIRED / réappairage | PASS (0,284 s / 1,122 s / 2,386 s) |
+| Chat OpenClaw réel | PASS (15,658 s) |
+| NET-07 OFFLINE + reprise | PASS (10,346 s) |
+| NET-09 handover | PASS (9,931 s) |
+| UI-06 HOME / UI-07 hors ligne | PASS |
+| UI-08 police 1,3 + paysage | PASS ; TalkBack NOT_RUN |
+| Données locales | PASS sur le périmètre R3-C |
 
 ## 5. Autorisations
 

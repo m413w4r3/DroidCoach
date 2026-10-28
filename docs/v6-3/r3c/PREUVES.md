@@ -198,6 +198,97 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Statut | **PASS** |
 | Limites | L'identité X25519 et le registre historique sont conservés ; aucun appareil utilisateur n'a été touché |
 
+## P-PIXEL-INSTALL-01 — Installation du couple APK R3-C sur Pixel
+
+| Champ | Valeur |
+|---|---|
+| SHA source Android | `d2419b3` |
+| APK principal | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
+| APK androidTest | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` (inclut le test R3-C d'effacement) |
+| Environnement | Pixel 9 Pro XL `PIXEL_SERIAL`, Android 17/API 37, utilisateur 0 |
+| Commande | `adb install -r --user 0 …` ; hash du `base.apk` installé |
+| Horodatage | 2026-10-28T18:16+01:00 |
+| Observé | installation **Success** ; hash installé identique à l'APK hôte ; `versionCode=1`, `versionName=0.1.0`, signature debug `da301466…` ; données utilisateur 0 créées ; profils 12/13 non modifiés |
+| Statut | **PASS** |
+| Limites | L'app n'était pas installée pour l'utilisateur 0 au pré-vol (données absentes) ; aucun test de préservation des données R3-B n'est donc revendiqué. Voir `DECISIONS.md` |
+
+## P-PIXEL-A3-01 — A3 Keystore, force-stop, redémarrage
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, appareil synthétique `2bcb073d-…` puis `f3a2b54f-…` |
+| Commande | `am instrument … R3bA3PairingInstrumentedTest` ; force-stop ; `R3bA3PersistenceInstrumentedTest` ; `adb reboot` ; rejeu persistance |
+| Horodatage | 2026-10-28T18:17–18:19+01:00 |
+| Observé | appairage **OK (1 test, 1,149 s)** ; persistance force-stop **OK (0,89 s)** ; redémarrage Android puis persistance **OK (1,439 s)** ; token chiffré Keystore déchiffré, préfs sans token en clair, marqueur A3 conservé, reconnexion sans ressaisie |
+| Statut | **PASS** |
+| Limites | Données utilisateur 0 créées pour R3-C (pas de données R3-B à préserver) |
+
+## P-PIXEL-A4-01 — A4 révocation, fermeture et effacement
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, appareils synthétiques dédiés |
+| Commande | `R3bA4RevocationInstrumentedTest` avec révocation PC sur marqueur ; `R3cA4ClearInstrumentedTest` ; force-stop + `R3bA4AfterClearInstrumentedTest` ; `R3bA4RepairInstrumentedTest` |
+| Horodatage | 2026-10-28T18:25–18:59+01:00 |
+| Observé | `DEVICE_REVOKED` reçu, état `REVOKED`, erreur de révocation, aucune reconnexion authentifiée : **PASS** ; effacement explicite credential + alias Keystore et `PAIRING_REQUIRED` : **PASS (0,284 s)** ; relance sans reconnexion : **PASS (1,122 s)** ; réappairage explicite : **PASS (2,386 s)** ; **mais** `lastCloseCode` n'est pas `4001` : le relais ferme avec **1012 « Server disconnected »** |
+| Statut | **FAIL A4-4 / PASS A4-5..A4-10** |
+| Limites | Le relais épinglé ne propage pas le code 4001 du connecteur ; trois probes (public, proxy local, relais direct) observent 1012. Le test échoue à l'assertion 4001 avant l'effacement UI ; l'effacement a été validé par le même chemin de production `clearCredentials()`, pas par le clic UI. Détail dans `CORRECTIFS.md` et `RISQUES_RESIDUELS.md` |
+
+## P-PIXEL-CHAT-01 — Chat réel Android via OpenClaw
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, FastAPI isolé `openclaw`, Funnel public, appareil synthétique `0aba4868-…` |
+| Commande | `am instrument … R3bRelayChatInstrumentedTest` |
+| Horodatage | 2026-10-28T18:59+01:00 |
+| Observé | **OK (1 test, 15,658 s)** : message relayé, réponse OpenClaw réelle, `agent_status=connected`, provenance « OpenClaw via PC », aucune action exécutée sans confirmation, brouillon/historique après rotation, aucun fallback HTTP direct |
+| Statut | **PASS** |
+| Limites | Message synthétique ; l'OpenClaw personnel n'a pas été modifié ; conversation synthétique créée côté gateway |
+
+## P-PIXEL-NET-01 — NET-07 coupure et reprise
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, Wi-Fi et données mobiles désactivés par le parent |
+| Commande | `R3bNetworkStateInstrumentedTest#relayRecoversAfterForcedOffline` avec orchestration parent |
+| Horodatage | 2026-10-28T19:04+01:00 |
+| Observé | marqueur `{"state":"OFFLINE"}` ; reconnexion `RELAY_CONNECTED` ; conversation locale conservée ; **OK (1 test, 10,346 s)** |
+| Statut | **PASS** |
+| Limites | Le mode avion seul laissait la Wi-Fi active sur ce Pixel ; la coupure réelle a été obtenue en désactivant Wi-Fi + données. Le mode avion n'a donc pas produit OFFLINE à lui seul, ce qui est un comportement de l'appareil, pas un ERROR applicatif |
+
+## P-PIXEL-NET-02 — NET-09 handover Wi-Fi / cellulaire / Wi-Fi
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, réseau cellulaire actif puis retour Wi-Fi |
+| Commande | `R3bNetworkStateInstrumentedTest#relayRemainsUsableAfterWifiCellularHandover` |
+| Horodatage | 2026-10-28T19:05+01:00 |
+| Observé | `Transports: CELLULAR` observé, retour `Transports: WIFI`, `RELAY_CONNECTED`, conversation conservée ; **OK (1 test, 9,931 s)** |
+| Statut | **PASS** |
+| Limites | Aucune mesure de débit ; pas de test 5G standalone séparé |
+
+## P-PIXEL-UI-01 — UI-06, UI-07, UI-08
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37 |
+| Commande | `input keyevent HOME`, relance, hash `atlas_local_state.xml` ; coupure réseau + capture ; `font_scale=1.3` + capture ; rotation paysage + capture |
+| Horodatage | 2026-10-28T19:05–19:08+01:00 |
+| Observé | HOME → launcher, relance ATLAS, hash local **inchangé** ; mode hors ligne : écran local « Proposition locale · disponible hors ligne », aucun crash ; police 1,3 : rendu complet 1008×2244 ; paysage : rendu complet 2244×1008 ; réglages restaurés (`font_scale=1.0`, rotation 0, mode avion 0) |
+| Statut | **PASS UI-06/UI-07/UI-08 (police + rotation)** ; **PARTIAL UI-04 et TalkBack** |
+| Limites | Saisie manuelle du token non rejouée par frappe UI (champ masqué et stockage Keystore vérifiés statiquement + A3) ; TalkBack non activé |
+
+## P-PIXEL-DATA-01 — Préservation des données locales
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, utilisateur 0 |
+| Commande | hash `atlas_local_state.xml` avant/après HOME ; assertions du test réseau sur `agentConversation.size` ; marqueur A3 après reboot |
+| Horodatage | 2026-10-28T18:17–19:08+01:00 |
+| Observé | hash local identique après HOME/relance ; conversation conservée pendant OFFLINE et handover ; marqueur A3 conservé après reboot ; credentials effacés uniquement sur action explicite |
+| Statut | **PASS (périmètre R3-C)** |
+| Limites | Aucune donnée R3-B pour l'utilisateur 0 au pré-vol ; les hashes R3-B restent des témoins historiques |
+
 ## P-COMPAT-01 — Ancien appairage sans `coach.chat`
 
 | Champ | Valeur |
@@ -304,9 +395,9 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Commande | workflow `CI`, jobs `verify` et `relay-node` |
 | Horodatage | préparation 2026-10-28T17:04+01:00 |
 | Attendu | Android + backend + Node + proxy |
-| Observé | run distant `40730173153` : job `verify` **PASS**, job `relay-node` **FAIL** — `stale-client-timeout.test.ts` exige un relais réel absent du runner. Correctif : `test:unit` exclut `relay.integration.test.ts` et `stale-client-timeout.test.ts` ; le harnais local épinglé couvre ces deux tests. Rejeu après push. |
-| Statut | **FAIL (run 1) → rejeu en attente** |
-| Limites | Aucun PASS CI tant que le workflow de rejeu n'est pas terminé avec `success` |
+| Observé | run `40730173153` : `verify` PASS, `relay-node` FAIL (`stale-client-timeout.test.ts`, relais réel absent). Correctif : `test:unit` exclut les deux tests à relais réel. Run `40733692711` sur `a72ba9e` : **success**, `verify` et `relay-node` PASS. Le workflow compile désormais aussi `assembleDebugAndroidTest`. Dernier run requis après le commit de clôture. |
+| Statut | **PASS sur `a72ba9e` ; dernier run en attente** |
+| Limites | Aucun PASS CI pour le commit de clôture tant que son run n'est pas terminé avec `success` |
 
 ## P-CI-02 — Reproduction locale du job `relay-node`
 

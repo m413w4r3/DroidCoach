@@ -174,6 +174,12 @@ adb -s $PIXEL_SERIAL shell getprop sys.boot_completed
 Ne jamais supprimer l'alias Keystore par une commande système ou un script
 externe : uniquement via l'action applicative consentie.
 
+> **Constat R3-C (2026-10-28).** Sur le relais épinglé `atlas-paseo-relay:r3a`,
+> le client reçoit `DEVICE_REVOKED`, puis la fermeture **1012 « Server
+> disconnected »**, et non `4001`, malgré le `4001` émis par le connecteur.
+> L'assertion `lastCloseCode == 4001` échoue. Ne pas annoncer A4-4 PASS tant
+> que le relais n'est pas corrigé ou que 1012 n'est pas explicitement accepté.
+
 ## 6. Conversation relayée
 
 - Message relayé jusqu'au backend approuvé, réponse réelle si l'accès est

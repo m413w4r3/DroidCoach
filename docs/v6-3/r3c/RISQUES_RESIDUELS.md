@@ -30,21 +30,24 @@ sorties instrumentées horodatées complètes de la vague Pixel restent
 `BLOCKED_DEVICE`. Ne pas considérer les anciennes preuves R3-B comme preuves
 R3-C.
 
-## R-20 — Ingress public et preuve « réseau extérieur »
+## R-20 — Preuve « réseau extérieur »
 
-La qualification publique R3-C est faite depuis le PC avec une résolution DNS
-publique indépendante (`1.1.1.1`) et l'IP publique du Funnel, sans MagicDNS ni
-`100.119.62.63`. Elle traverse bien l'Internet public. Elle ne remplace
-toutefois pas une preuve depuis un **réseau mobile Pixel sans VPN Tailscale**,
-qui reste à exécuter. Ne pas annoncer `GO_REMOTE` sur la seule preuve PC.
+La qualification publique R3-C a été faite depuis le PC avec une résolution
+DNS publique indépendante (`1.1.1.1`) et l'IP publique du Funnel. Le Pixel a
+ensuite utilisé l'URL publique `wss://all.taildc7886.ts.net:8443` sur Wi-Fi
+puis sur réseau cellulaire (NET-09), sans VPN actif : Tailscale est installé
+mais aucun transport VPN n'est actif et aucun VPN permanent n'est configuré.
+La preuve Pixel existe donc sur Wi-Fi domestique et cellulaire ; il n'y a pas
+de test depuis un réseau tiers totalement indépendant (autre opérateur ou
+réseau public), qui reste une limite mineure.
 
-## R-21 — APK final non installé sur Pixel
+## R-21 — APK final et A4
 
-Le binaire R3-C (`8332afd9…` au moment de la rédaction) n'a pas été installé.
-Aucun PASS Pixel A3/A4/chat/réseau ne peut être revendiqué pour ce binaire.
-Le Pixel `PIXEL_SERIAL (hors dépôt)` est hors USB ; Tailscale le voyait `offline` depuis
-23 jours. Toute installation exige une sauvegarde app-only vérifiée et un
-mandat ciblé.
+Le binaire R3-C `365bd84a…` est installé sur l'utilisateur 0 du Pixel et A3
+est PASS sur ce binaire. A4-5 à A4-10 sont PASS, mais **A4-4 échoue** : le
+relais ferme avec 1012 au lieu de 4001. L'utilisateur 0 n'avait plus l'app ni
+ses données au pré-vol ; les profils 12/13 n'ont pas été modifiés. Aucune
+donnée R3-B de l'utilisateur 0 n'a été restaurée.
 
 ## R-22 — Courses consentement/révocation
 
@@ -68,20 +71,22 @@ l'autonomie des enfants ; il doit être corrigé pour une campagne future
 (worktrees avec métadonnées Git accessibles, caches Gradle/npm partagés en
 lecture seule ou préchauffés).
 
-## R-24 — CI distante non exécutée
+## R-24 — CI distante
 
-La CI de la branche R3-C n'a pas été lancée : aucun push n'a été autorisé.
-Les gates locales sont PASS, mais le workflow distant `relay-node` reste
-`NOT_RUN`. Ne pas déclarer la CI verte avant un run terminé avec `success`.
+La CI a été poussée après autorisation. Le premier run `40730173153` a échoué
+sur `stale-client-timeout.test.ts` (relais réel absent du runner). Après
+séparation des tests, le run `40733692711` sur `a72ba9e` est **success**
+(`verify` et `relay-node`). Un dernier run est requis après le commit final
+(test androidTest + documentation) ; aucun PASS CI n'est déclaré avant ce run.
+Le workflow inclut désormais la compilation de l'APK androidTest.
 
-## R-25 — OpenClaw réel : preuve PC, pas Pixel
+## R-25 — OpenClaw réel
 
-Le chat R3-C a été qualifié via l'adaptateur `mock` **et** via l'OpenClaw réel
-du PC avec un message synthétique : `agent_status=connected`, 7/7 contrôles
-publics PASS. L'OpenClaw personnel et le Bridge n'ont pas été modifiés, mais
-une conversation synthétique a été créée côté gateway. La provenance et le
-contenu affichés dans l'UI Android, ainsi que le consentement visuel sur
-Pixel, restent à rejouer.
+Le chat R3-C a été qualifié via l'adaptateur `mock`, via l'OpenClaw réel du PC
+(message synthétique) et via l'UI Android sur le Pixel : `agent_status=connected`,
+provenance « OpenClaw via PC », aucune action exécutée sans confirmation.
+L'OpenClaw personnel et le Bridge n'ont pas été modifiés, mais une conversation
+synthétique a été créée côté gateway.
 
 ## R-26 — Supervision persistante
 
@@ -109,6 +114,23 @@ Un émulateur API 37 ne vaut pas preuve Pixel.
 
 ## R-30 — Latence et performance
 
-Le chat public a été mesuré avec l'adaptateur mock ; aucune promesse de latence
-OpenClaw réelle n'est faite. Les tests de charge du relais public ne sont pas
-au périmètre R3-C.
+Le chat public a été mesuré avec l'adaptateur mock et OpenClaw réel ; aucune
+promesse de latence OpenClaw réelle n'est faite. Les tests de charge du relais
+public ne sont pas au périmètre R3-C.
+
+## R-31 — Code de fermeture 4001 non propagé
+
+Le relais épinglé ferme le socket client avec **1012 « Server disconnected »**
+après `DEVICE_REVOKED`, au lieu de propager le `4001` émis par le connecteur.
+Trois probes (public, proxy local, relais direct) le confirment. La révocation
+reste effective, mais la gate A4-4 échoue. Décision requise : corriger le
+relais amont ou accepter explicitement 1012 comme fermeture de transport.
+Aucune modification du relais n'a été tentée.
+
+## R-32 — Effacement A4 validé hors clic UI
+
+L'échec A4-4 interrompt le test UI avant le clic « Supprimer les identifiants ».
+L'effacement, l'absence d'alias Keystore et `PAIRING_REQUIRED` ont été validés
+par un test R3-C dédié appelant le même chemin de production
+`clearCredentials()`. Le clic UI et la boîte de confirmation ne sont pas
+rejoués après l'échec A4-4 ; ce point reste `PARTIAL`.
