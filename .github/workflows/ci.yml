@@ -48,3 +48,32 @@ jobs:
 
       - name: Run backend tests
         run: python -m pytest -q
+
+  # Node connectors and the filtering proxy are covered without external
+  # services. The real-relay integration test needs the pinned local Docker
+  # image and runs on the supervised PC through
+  # integrations/relay/pc/scripts/run-isolated-relay-tests.sh.
+  relay-node:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: integrations/relay/pc/package-lock.json
+
+      - name: Install connector dependencies
+        working-directory: integrations/relay/pc
+        run: npm ci
+
+      - name: Run connector tests without a real relay
+        working-directory: integrations/relay/pc
+        run: npm run test:unit
+
+      - name: Run filtering proxy tests
+        run: node --test integrations/relay/proxy/test
