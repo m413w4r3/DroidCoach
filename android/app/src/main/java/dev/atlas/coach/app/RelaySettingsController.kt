@@ -208,9 +208,10 @@ class RelaySettingsController(
     ): AgentChatClient? {
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
-        val executor = RelayChatRequestExecutor { idempotencyKey, payloadFactory, beforeDispatch ->
+        val executor = RelayChatRequestExecutor { timeoutMillis, idempotencyKey, payloadFactory, beforeDispatch ->
             active.executeDeferred(
                 operation = "coach.chat.request",
+                timeoutMillis = timeoutMillis,
                 idempotencyKey = idempotencyKey,
                 payloadFactory = payloadFactory,
                 beforeDispatch = beforeDispatch,

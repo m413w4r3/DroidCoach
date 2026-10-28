@@ -36,7 +36,7 @@ class RelayAgentChatClientTest {
         var auditCount = 0
         var keySeen: String? = null
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { idempotencyKey, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, idempotencyKey, payloadFactory, beforeDispatch ->
                 assertTrue(beforeDispatch())
                 keySeen = idempotencyKey
                 sentBody = payloadFactory()
@@ -69,7 +69,7 @@ class RelayAgentChatClientTest {
         val mandate = AgentMandate.default()
         val context = context(mandate, 1_800_000_000_000L, emptyMap())
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _ ->
+            executor = RelayChatRequestExecutor { _, _, _, _ ->
                 RelayCallResult.RemoteError("OPERATION_UNAVAILABLE", "coach.chat is unavailable", false)
             },
             freshRequestContext = { requestContext(mandate, context, 1_800_000_000_000L) },
@@ -99,7 +99,7 @@ class RelayAgentChatClientTest {
             var payloadCalls = 0
             var audits = 0
             val client = RelayAgentChatClient(
-                executor = RelayChatRequestExecutor { _, payloadFactory, beforeDispatch ->
+                executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
                     if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                     else {
                         payloadCalls++
@@ -126,8 +126,12 @@ class RelayAgentChatClientTest {
         val now = 1_800_000_000_000L
         val mandate = AgentMandate.default()
         val context = context(mandate, now, emptyMap())
+        var timeoutMillisSeen: Long? = null
+        var timeoutCalls = 0
         val timeoutClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { timeoutMillis, _, _, beforeDispatch ->
+                timeoutMillisSeen = timeoutMillis
+                timeoutCalls++
                 assertTrue(beforeDispatch())
                 RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT)
             },
@@ -136,9 +140,13 @@ class RelayAgentChatClientTest {
         )
         val timeout = runCatching { timeoutClient.chat(null, "synthetic", mandate, context, "stable-timeout-key") }.exceptionOrNull()
         assertEquals(AgentChatFailureKind.RESULT_UNCERTAIN, (timeout as AgentChatException).kind)
+        assertEquals(RelayAgentChatClient.RELAY_CHAT_TIMEOUT_MILLIS, timeoutMillisSeen)
+        assertEquals(55_000L, timeoutMillisSeen)
+        assertTrue("relay chat timeout must be below the 60-second envelope TTL", requireNotNull(timeoutMillisSeen) < 60_000L)
+        assertEquals("timeout remains uncertain and is never automatically replayed", 1, timeoutCalls)
 
         val malformedClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(JSONObject().put("reply", "x".repeat(4_001)).put("proposals", JSONArray())
                     .put("agent_status", "connected"), replayed = false)
@@ -159,7 +167,7 @@ class RelayAgentChatClientTest {
         var payloadCalls = 0
         var sent = 0
         val auditFailureClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
                 if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                 else {
                     sent++
@@ -180,7 +188,7 @@ class RelayAgentChatClientTest {
         assertEquals(0, payloadCalls)
 
         val malformedStatusClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(chatResult().put("agent_status", "connected-but-unknown"), replayed = false)
             },
@@ -213,7 +221,7 @@ class RelayAgentChatClientTest {
             reason = "Synthetic proposal",
             requiredLevel = ProposalLevel.CONFIRM,
         )
-        val executor = RelayChatRequestExecutor { _, _, beforeDispatch ->
+        val executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
             assertTrue(beforeDispatch())
             RelayCallResult.Success(chatResult(proposal), replayed = false)
         }

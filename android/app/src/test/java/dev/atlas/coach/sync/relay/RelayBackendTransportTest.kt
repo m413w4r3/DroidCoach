@@ -86,6 +86,35 @@ class RelayBackendTransportTest {
     }
 
     @Test
+    fun relayChatTimeoutKeepsEnvelopeTtlWithinProtocolLimit() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = setOf("plan.revision", "coach.chat"))
+        try {
+            transport.start()
+            val result = transport.executeDeferred(
+                operation = "coach.chat.request",
+                timeoutMillis = 55_000L,
+                idempotencyKey = "chat-send-55s-ttl",
+                payloadFactory = { JSONObject().put("message", "synthetic") },
+            )
+
+            assertTrue(result is RelayCallResult.Success)
+            val request = sockets.requests.single()
+            val ttlMillis = Instant.parse(request.getString("expires_at")).toEpochMilli() -
+                Instant.parse(request.getString("created_at")).toEpochMilli()
+            assertEquals(55_000L, ttlMillis)
+            assertTrue(
+                "request TTL must remain at or below the protocol's 60-second maximum",
+                ttlMillis <= AtlasRemoteProtocol.MAX_REQUEST_TTL_SECONDS * 1_000L,
+            )
+        } finally { transport.close() }
+    }
+
+    @Test
     fun correlatesResponsesAndKeepsIdempotencyKeyAcrossCallerRetries() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(staticPair, result = JSONObject().put("status", "ok"))

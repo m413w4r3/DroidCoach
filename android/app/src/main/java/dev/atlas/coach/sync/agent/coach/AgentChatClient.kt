@@ -155,6 +155,7 @@ class AgentChatException(
 /** Injectable boundary keeps relay chat tests independent of real sockets. */
 fun interface RelayChatRequestExecutor {
     fun execute(
+        timeoutMillis: Long,
         idempotencyKey: String,
         payloadFactory: () -> JSONObject,
         beforeDispatch: () -> Boolean,
@@ -182,6 +183,7 @@ class RelayAgentChatClient(
         var dispatchFailure: AgentChatException? = null
 
         val result = executor.execute(
+            timeoutMillis = RELAY_CHAT_TIMEOUT_MILLIS,
             idempotencyKey = idempotencyKey,
             beforeDispatch = {
                 try {
@@ -259,5 +261,10 @@ class RelayAgentChatClient(
                 throw AgentChatException(kind, message)
             }
         }
+    }
+
+    companion object {
+        /** Leaves headroom for the relay's strict 60-second request TTL. */
+        const val RELAY_CHAT_TIMEOUT_MILLIS = 55_000L
     }
 }
