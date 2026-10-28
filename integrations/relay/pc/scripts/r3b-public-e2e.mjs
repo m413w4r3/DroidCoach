@@ -31,6 +31,7 @@ const CAPABILITIES = (process.env.ATLAS_E2E_CAPABILITIES ??
   .split(",").map((value) => value.trim()).filter(Boolean);
 const EXPECT_CHAT_UNAVAILABLE = process.env.ATLAS_E2E_EXPECT_CHAT_UNAVAILABLE === "1";
 const ONLY = process.env.ATLAS_E2E_ONLY || "";
+const CHAT_MESSAGE = process.env.ATLAS_E2E_CHAT_MESSAGE || "Propose une prochaine étape synthétique R3B.";
 const EXPECT_HEALTH = process.env.ATLAS_E2E_EXPECT_HEALTH || "ok";
 
 const results = [];
@@ -190,7 +191,7 @@ function required(name) {
   return value;
 }
 
-function chatPayload(message = "Propose une prochaine étape synthétique R3B.") {
+function chatPayload(message = CHAT_MESSAGE) {
   return {
     conversation_id: "r3b-public-e2e-conversation",
     message,
@@ -259,7 +260,7 @@ async function main() {
       record("chat_requires_capability", first.kind === "error" && first.error?.code === "OPERATION_UNAVAILABLE" ? "PASS" : "FAIL",
         { kind: first.kind, error: first.error?.code });
     } else {
-      record("coach_chat_relayed", first.kind === "response" && first.result?.agent_status === "mock" ? "PASS" : "FAIL",
+      record("coach_chat_relayed", first.kind === "response" && (first.result?.agent_status === "mock" || first.result?.agent_status === "connected") ? "PASS" : "FAIL",
         { kind: first.kind, agent_status: first.result?.agent_status, reply_length: first.result?.reply?.length ?? null,
           proposals: first.result?.proposals?.length ?? null, replayed: first.replayed ?? null });
       if (first.kind === "response") {
