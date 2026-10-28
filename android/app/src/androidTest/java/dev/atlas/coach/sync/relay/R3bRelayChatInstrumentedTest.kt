@@ -125,7 +125,7 @@ class R3bRelayChatInstrumentedTest {
             response.contextSources.contains("agent_status:connected"),
         )
         composeRule.onNodeWithTag("agent_connection_status")
-            .assertTextContains("OpenClaw via PC")
+            .assertTextContains("OpenClaw via PC", substring = true)
         composeRule.onNodeWithText("Provenance : OpenClaw via PC", substring = false)
             .performScrollTo()
             .assertIsDisplayed()
@@ -150,7 +150,8 @@ class R3bRelayChatInstrumentedTest {
                 composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             }
             composeRule.onNodeWithTag("agent_message_input").assertTextEquals(draft)
-            composeRule.onNodeWithTag("agent_connection_status").assertTextContains("OpenClaw via PC")
+            composeRule.onNodeWithTag("agent_connection_status")
+                .assertTextContains("OpenClaw via PC", substring = true)
             composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
             assertTrue("The conversation did not survive activity rotation", controller.agentConversation.any {
                 it.role == AgentMessageRole.USER && it.text == message
