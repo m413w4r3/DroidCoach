@@ -8,8 +8,7 @@ Code Android final : `d2419b3`
 Infrastructure finale : `e3a9867`
 Commit de clôture : voir `git rev-parse HEAD` (docs + test androidTest)
 Push : effectué sur la branche de campagne, **aucune PR ni merge**.
-CI distante : **success** sur `a6a5602` (run `40744237164`) ; dernier run requis
-après le correctif fail-closed du contrôle d'alias.
+CI distante : **success** sur `98824c8` (run `40746772807`) ; commit docs-only final ensuite.
 
 ## 1. Où en est le système
 
@@ -103,11 +102,12 @@ n'a pas été modifié. Aucune promesse H24.
 ## 6. Revue indépendante
 
 Relecteur `codex/gpt-6-luna`, `xhigh` effectif, lecture seule, agent
-`88c30a0b-573b-4cbb-941d-1ef9b1effd2d`. Verdict final **`APPROUVE`**, aucun
-P0/P1. Les P2 identifiants/image/conteneur/placeholder ont été corrigés et
-confirmés. Le test Android `R3cA4ClearInstrumentedTest` a été ajouté après la
-revue pour qualifier l'effacement sans clic UI ; il est test-only et doit être
-relu lors de la prochaine revue.
+`88c30a0b-573b-4cbb-941d-1ef9b1effd2d`. Verdict final
+**`APPROUVE_AVEC_RESERVES`**, aucun P0/P1. Réserve unique : l'historique Git
+antérieur contient encore les identifiants R3-B retirés de l'arbre courant
+(R-33) ; aucune réécriture d'historique recommandée. Le contrôle d'alias
+Keystore est fail-closed et rejoué PASS. Le test Android
+`R3cA4ClearInstrumentedTest` a été ajouté après la revue et confirmé.
 
 ## 7. Index
 

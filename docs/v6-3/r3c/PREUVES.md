@@ -417,8 +417,8 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Commande | workflow `CI`, jobs `verify` et `relay-node` |
 | Horodatage | préparation 2026-10-28T17:04+01:00 |
 | Attendu | Android + backend + Node + proxy |
-| Observé | run `40730173153` : `verify` PASS, `relay-node` FAIL (`stale-client-timeout.test.ts`, relais réel absent). Correctif : `test:unit` exclut les deux tests à relais réel. Run `40733692711` sur `a72ba9e` : **success**. Run `40744237164` sur `a6a5602` : **success**, `verify` et `relay-node` PASS, `assembleDebugAndroidTest` compilé. Dernier run requis après le correctif fail-closed du contrôle d'alias. |
-| Statut | **PASS sur `a6a5602` ; dernier run en attente** |
+| Observé | run `40730173153` : `verify` PASS, `relay-node` FAIL (`stale-client-timeout.test.ts`, relais réel absent). Correctif : `test:unit` exclut les deux tests à relais réel. Run `40733692711` sur `a72ba9e` : **success**. Run `40744237164` sur `a6a5602` : **success**. Run `40746772807` sur `98824c8` (fail-closed) : **success**, `verify` et `relay-node` PASS, `assembleDebugAndroidTest` compilé. |
+| Statut | **PASS sur `98824c8`** (run `40746772807`) |
 | Limites | Aucun PASS CI pour le commit de clôture tant que son run n'est pas terminé avec `success` |
 
 ## P-CI-02 — Reproduction locale du job `relay-node`

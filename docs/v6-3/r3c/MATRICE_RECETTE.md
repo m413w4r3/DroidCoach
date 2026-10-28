@@ -29,7 +29,7 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | T14 | A3 Keystore | PASS ancien APK | **PASS (APK R3-C)** | appairage 1,149 s ; force-stop 0,89 s ; reboot 1,439 s |
 | T15 | A4 révocation | PARTIAL ancien APK | **PARTIAL** — `DEVICE_REVOKED`/`REVOKED`/effacement/réappairage PASS ; **A4-4 FAIL** close 1012 | relais ne propage pas 4001 |
 | T16 | Données Pixel | PASS 5/5 | **PASS (périmètre R3-C)** | hash local stable, conversation conservée, aucun effacement implicite |
-| T17 | Revue indépendante | PASS avec réserves | **PASS** — `APPROUVE`, aucun P0/P1 ; P2 corrigés | `REVUE_INDEPENDANTE.md` |
+| T17 | Revue indépendante | PASS avec réserves | **PASS avec réserve** — `APPROUVE_AVEC_RESERVES` (historique R-33), aucun P0/P1 ; fail-closed corrigé | `REVUE_INDEPENDANTE.md` |
 
 ## 2. Réseau et Funnel
 

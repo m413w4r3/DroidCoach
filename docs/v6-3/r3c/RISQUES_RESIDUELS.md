@@ -76,9 +76,9 @@ lecture seule ou préchauffés).
 La CI a été poussée après autorisation. Le premier run `40730173153` a échoué
 sur `stale-client-timeout.test.ts` (relais réel absent du runner). Après
 séparation des tests, le run `40733692711` sur `a72ba9e` est **success**,
-puis le run `40744237164` sur `a6a5602` est **success** (`verify` et
-`relay-node`, compilation androidTest incluse). Un dernier run est requis
-après le correctif fail-closed du contrôle d'alias.
+puis le run `40744237164` sur `a6a5602` est **success**, et le run
+`40746772807` sur `98824c8` (fail-closed) est **success** (`verify` et
+`relay-node`, compilation androidTest incluse).
 
 ## R-25 — OpenClaw réel
 
@@ -134,3 +134,23 @@ L'effacement, l'absence d'alias Keystore et `PAIRING_REQUIRED` ont été validé
 par un test R3-C dédié appelant le même chemin de production
 `clearCredentials()`. Le clic UI et la boîte de confirmation ne sont pas
 rejoués après l'échec A4-4 ; ce point reste `PARTIAL`.
+
+## R-33 — Identifiants dans l'historique Git déjà publié
+
+Les identifiants d'environnement (série Pixel, IP publiques/privées) étaient
+déjà présents dans les commits R3-B de `origin/main` **avant** R3-C. La
+redaction (`2796dad`, `98824c8`) les retire de l'arbre courant, mais ils
+restent visibles dans les lignes supprimées du diff et dans l'historique Git.
+Une suppression complète exigerait une réécriture d'historique et un
+force-push, opérations non autorisées et contraires à la consigne de préserver
+l'historique. La redaction ne crée aucune nouvelle exposition ; elle réduit
+l'exposition de l'arbre courant. Les valeurs exactes sont conservées hors
+dépôt en 0600 (`~/atlas-backups/r3c/`). Toute purge d'historique doit être
+traitée comme une opération séparée, explicitement autorisée.
+
+## R-34 — Contrôle d'alias Keystore
+
+Le helper `r3bRelayKeystoreAliasPresent()` est désormais fail-closed : toute
+erreur d'accès au Keystore lève une `AssertionError`. Le test vérifie l'alias
+présent avant `clearCredentials()` et absent après. Une régression future du
+helper serait détectée comme échec, pas comme PASS silencieux.

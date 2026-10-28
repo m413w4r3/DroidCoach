@@ -12,16 +12,10 @@
 | SHA revu initialement | `c5ec1f4` (code `d2419b3` + docs) |
 | Correctifs vérifiés | `d51525f`, `e3a9867`, `2796dad`, `e1de88f` (lus depuis les objets Git partagés) |
 
-## 2. Verdict final
+## 2. Verdict
 
-**`APPROUVE`** — aucun P0, aucun P1, aucune réserve ouverte.
-
-Historique :
-1. revue initiale : `APPROUVE_AVEC_RESERVES`, trois P2 ;
-2. vérification des corrections : les trois P2 **CONFIRMÉS** ;
-3. vérification de la pseudonymisation : une réserve P2 résiduelle
-   (`curl --interface` avec un placeholder en prose) ;
-4. vérification finale : réserve **CONFIRMÉE corrigée**, verdict `APPROUVE`.
+**`APPROUVE_AVEC_RESERVES`** — réserve d'historique Git (R-33), aucun P0/P1,
+aucun écart de code ouvert.
 
 ## 3. Findings et corrections
 
@@ -102,3 +96,44 @@ dans la convention.
 - Les valeurs exactes hors dépôt n'ont pas été vérifiées par le relecteur.
 - La revue porte sur le code `d2419b3` et les documents jusqu'à `e1de88f` ;
   toute modification de code ultérieure exige une nouvelle revue.
+
+## 6. Post-revue — `a6a5602` → `98824c8`
+
+### 6.1 Contrôle d'alias Keystore fail-open — **CORRIGÉ**
+
+**Constat du relecteur.** `r3bRelayKeystoreAliasPresent()` retournait `false`
+sur toute exception, donc `assertFalse` pouvait passer sans prouver l'absence
+de l'alias.
+
+**Correction `29052f2`.** Le helper lève une `AssertionError` si le Keystore
+est illisible. `R3cA4ClearInstrumentedTest` vérifie l'alias **présent avant**
+`clearCredentials()` puis **absent après**. Rejeu Pixel : **PASS (0,192 s)**.
+Aucun code de production modifié.
+
+### 6.2 Identifiants dans les lignes supprimées du diff — **RÉSERVE D'HISTORIQUE**
+
+**Constat du relecteur.** Le diff `c5ec1f4..a6a5602` montre les anciennes
+valeurs dans les lignes `-` des documents R3-B.
+
+**Contexte.** Ces valeurs étaient **déjà publiées dans les commits R3-B de
+`origin/main`** avant R3-C. La redaction les retire de l'arbre courant ; leur
+présence dans les lignes supprimées est inévitable sans réécriture
+d'historique. La mission impose de préserver l'historique R3-B et interdit les
+opérations destructives non autorisées ; une purge complète serait une
+opération séparée (réécriture + force-push) nécessitant une autorisation
+explicite. La redaction ne crée aucune nouvelle exposition. Les valeurs
+exactes sont hors dépôt en 0600. Voir `RISQUES_RESIDUELS.md` R-33.
+
+### 6.3 Verdict post-revue
+
+**`APPROUVE_AVEC_RESERVES`** (relecteur, `98824c8`).
+
+- Fail-closed Keystore : **CONFIRMÉ**.
+- Diff `a6a5602..98824c8` : limité à deux fichiers androidTest et huit
+  documents, aucun code de production.
+- Réserve unique : l'historique Git antérieur (R3-B déjà sur `origin/main`)
+  contient encore les identifiants retirés de l'arbre courant. Le relecteur
+  ne recommande **pas** de réécrire l'historique dans ce périmètre.
+
+Aucun `GO_REMOTE` n'est revendiqué : la réserve est documentée dans
+`RISQUES_RESIDUELS.md` R-33 et la gate A4-4 reste FAIL.

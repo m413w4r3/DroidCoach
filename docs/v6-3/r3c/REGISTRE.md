@@ -33,7 +33,7 @@ Tous les enfants sont `provider=codex`, `model=gpt-6-luna`,
 | `R3C-ANDROID-NET-01` | `6a1b8d43-8c2a-4eed-807e-03142cf7f1e6` | `<worktree Paseo>/r3c-net-01` | `feat/r3c-net-01` | BLOCKED_SANDBOX → patch intégré |
 | `R3C-COMPAT-01` | `6093964c-7ce5-4f6e-9424-ea59b08f1761` | `<worktree Paseo>/r3c-compat-01` | `feat/r3c-compat-01` | BLOCKED_SANDBOX → patch intégré |
 | `R3C-RACE-01` | `be46e357-2cc0-4fd4-b367-3d036d5e7df3` | `<worktree Paseo>/r3c-race-01` | `feat/r3c-race-01` | BLOCKED_SANDBOX → patch intégré |
-| `R3C-REVIEW-01` | `88c30a0b-573b-4cbb-941d-1ef9b1effd2d` | `<worktree Paseo>/review-r3c-final-c5ec1f4` | `review/r3c-final-c5ec1f4` | lecture seule, **APPROUVE** après corrections P2 |
+| `R3C-REVIEW-01` | `88c30a0b-573b-4cbb-941d-1ef9b1effd2d` | `<worktree Paseo>/review-r3c-final-c5ec1f4` | `review/r3c-final-c5ec1f4` | lecture seule, **APPROUVE_AVEC_RESERVES** (historique R-33) |
 
 Le bac à sable Codex refuse l'écriture dans `.git/worktrees`, `~/.gradle` et
 l'exécution de certains binaires `node_modules` (`Read-only file system`,
@@ -55,7 +55,7 @@ un échec logiciel : statut `BLOCKED_SANDBOX` documenté.
 | `R3C-REGRESSION-01` | C | **PARTIAL** | parent + Pixel | NET-07/09, CHAT-01/02/09/10, UI-02/06/07/08 ; NET-13/CHAT-05/06/UI-04/TalkBack partiels |
 | `R3C-PC-DEPLOY-01` | B | **PASS isolé / BLOCKED_AUTHORIZATION persistant** | parent, services de test isolés | ordre, SIGKILL, réseau, logs, ports, rollback ; systemd non installé |
 | `R3C-CI-01` | B | **INTEGRATED** + CI success `a72ba9e` | `.github/workflows/ci.yml`, harnais relais isolé | Android + backend + Node + proxy ; dernier run après clôture |
-| `R3C-REVIEW-01` | D | **ACCEPTED** — APPROUVE | relecteur indépendant lecture seule | Aucun P0/P1 ; P2 identifiants/image/conteneur/placeholder corrigés |
+| `R3C-REVIEW-01` | D | **ACCEPTED** — APPROUVE_AVEC_RESERVES | relecteur indépendant lecture seule | Aucun P0/P1 ; réserve historique R-33 |
 
 ## 4. Intégration
 
@@ -81,7 +81,7 @@ ci-dessus a été rejouée sur le SHA intégré.
 | APK androidTest | `d79031f8c96c409bada82f1fcb25fe80c99218a2352b23067f6af17185fb3706` |
 | Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | État Pixel | **installé et testé** : A3 PASS, chat réel PASS, NET-07/09 PASS, A4 partiel (A4-4 FAIL 1012) |
-| État CI distante | **success** sur `a6a5602` (run `40744237164`) ; dernier run requis après le correctif fail-closed |
+| État CI distante | **success** sur `98824c8` (run `40746772807`) |
 
 ## 4bis. Qualification Pixel R3-C
 

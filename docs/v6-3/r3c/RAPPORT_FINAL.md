@@ -93,7 +93,7 @@ API 37.
 | Backend | **196 passed, 1 skipped** |
 | Node connecteur | **17 fichiers, 81 tests PASS** (dont relais réel) |
 | Proxy filtrant | **18/18 PASS** |
-| CI distante | **success** sur `a6a5602` (run `40744237164`) ; dernier run requis après le correctif fail-closed |
+| CI distante | **success** sur `98824c8` (run `40746772807`) |
 
 ## 5. Revue indépendante
 
@@ -107,8 +107,9 @@ lecture seule, agent `88c30a0b-573b-4cbb-941d-1ef9b1effd2d`.
 - Réserve résiduelle historique R3-B corrigée par pseudonymisation
   (`2796dad`) ; dernier contrôle de la commande `curl --interface` corrigé
   (`e1de88f`).
-- **Verdict final : `APPROUVE`**, aucune réserve ouverte. Voir
-  `REVUE_INDEPENDANTE.md` pour le détail.
+- **Verdict final : `APPROUVE_AVEC_RESERVES`** — réserve d'historique Git
+  (identifiants R3-B déjà publiés, R-33), aucun P0/P1, aucun écart de code
+  ouvert. Voir `REVUE_INDEPENDANTE.md`.
 
 ## 6. Limites explicites
 
