@@ -50,14 +50,28 @@ class R3bA4RevocationInstrumentedTest {
         val context = composeRule.activity.applicationContext
         connectedMarker = File(context.filesDir, "r3b-a4-connected.marker").also { it.delete() }
         val controller = (composeRule.activity.application as AtlasApplication).controller
-        assertTrue("The first device is not paired", controller.relaySettings.credentialsConfigured)
-        assertEquals(arguments.serverId, controller.relaySettings.serverId)
-        assertEquals(arguments.serverPublicKey, controller.relaySettings.serverPublicKey)
-        val connectedDeviceId = controller.relaySettings.deviceId
+        var initiallyConfigured = false
+        var configuredServerId = ""
+        var configuredServerPublicKey = ""
+        var connectedDeviceId = ""
+        composeRule.runOnUiThread {
+            initiallyConfigured = controller.relaySettings.credentialsConfigured
+            configuredServerId = controller.relaySettings.serverId
+            configuredServerPublicKey = controller.relaySettings.serverPublicKey
+            connectedDeviceId = controller.relaySettings.deviceId
+        }
+        assertTrue("The first device is not paired", initiallyConfigured)
+        assertEquals(arguments.serverId, configuredServerId)
+        assertEquals(arguments.serverPublicKey, configuredServerPublicKey)
         assertTrue("The stored device identity is empty", connectedDeviceId.isNotBlank())
 
         connectR3bRelay(controller.relaySettings)
-        assertEquals(RelayConnectionState.RELAY_CONNECTED, controller.relaySettings.state)
+        composeRule.waitUntil(timeoutMillis = 25_000) {
+            controller.relaySettings.state == RelayConnectionState.RELAY_CONNECTED
+        }
+        var stateAfterConnect: RelayConnectionState? = null
+        composeRule.runOnUiThread { stateAfterConnect = controller.relaySettings.state }
+        assertEquals(RelayConnectionState.RELAY_CONNECTED, stateAfterConnect)
         val credentials = r3bCredentialStore(context).credentials()
         assertNotNull("The Keystore credential disappeared before revocation", credentials)
         val storedToken = requireNotNull(credentials).deviceToken
@@ -67,19 +81,28 @@ class R3bA4RevocationInstrumentedTest {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             controller.relaySettings.state == RelayConnectionState.REVOKED
         }
-        assertEquals("The Android controller did not report PC revocation within 30s", RelayConnectionState.REVOKED, controller.relaySettings.state)
-        assertTrue("Revocation incorrectly erased the local credential before user choice", controller.relaySettings.credentialsConfigured)
-        assertTrue(
-            "The controller did not expose the revocation error",
-            controller.relaySettings.lastError.orEmpty().contains("révoqué", ignoreCase = true),
-        )
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            controller.relaySettings.lastError.orEmpty().contains("révoqué", ignoreCase = true)
+        }
+        var revokedState: RelayConnectionState? = null
+        var revocationError: String? = null
+        var credentialsConfiguredAfterRevocation = false
+        composeRule.runOnUiThread {
+            revokedState = controller.relaySettings.state
+            revocationError = controller.relaySettings.lastError
+            credentialsConfiguredAfterRevocation = controller.relaySettings.credentialsConfigured
+        }
+        assertEquals("The Android controller did not report PC revocation within 30s", RelayConnectionState.REVOKED, revokedState)
+        assertTrue("Revocation incorrectly erased the local credential before user choice", credentialsConfiguredAfterRevocation)
+        assertTrue("The controller did not expose the revocation error", revocationError.orEmpty().contains("révoqué", ignoreCase = true))
         assertR3bTokenNotPlaintext(context, storedToken)
         SystemClock.sleep(1_000)
-        assertEquals(
-            "The controller attempted to reconnect after revocation",
-            RelayConnectionState.REVOKED,
-            controller.relaySettings.state,
-        )
+        composeRule.waitUntil(timeoutMillis = 1_000) {
+            controller.relaySettings.state == RelayConnectionState.REVOKED
+        }
+        var stateAfterRevocationGracePeriod: RelayConnectionState? = null
+        composeRule.runOnUiThread { stateAfterRevocationGracePeriod = controller.relaySettings.state }
+        assertEquals("The controller attempted to reconnect after revocation", RelayConnectionState.REVOKED, stateAfterRevocationGracePeriod)
 
         composeRule.runOnUiThread { controller.navigationState.selectTab(AtlasScreenId.RELAY_SETTINGS) }
         composeRule.waitForIdle()
@@ -94,10 +117,23 @@ class R3bA4RevocationInstrumentedTest {
             !controller.relaySettings.credentialsConfigured &&
                 controller.relaySettings.state == RelayConnectionState.PAIRING_REQUIRED
         }
-        assertFalse(controller.relaySettings.credentialsConfigured)
-        assertEquals("", controller.relaySettings.deviceId)
-        assertEquals("", controller.relaySettings.serverPublicKey)
-        assertEquals(RelayTransportMode.RELAY, controller.relaySettings.mode)
+        var clearedState: RelayConnectionState? = null
+        var clearedMode: RelayTransportMode? = null
+        var credentialsConfiguredAfterClear = true
+        var clearedDeviceId = "not-cleared"
+        var clearedServerPublicKey = "not-cleared"
+        composeRule.runOnUiThread {
+            clearedState = controller.relaySettings.state
+            clearedMode = controller.relaySettings.mode
+            credentialsConfiguredAfterClear = controller.relaySettings.credentialsConfigured
+            clearedDeviceId = controller.relaySettings.deviceId
+            clearedServerPublicKey = controller.relaySettings.serverPublicKey
+        }
+        assertEquals(RelayConnectionState.PAIRING_REQUIRED, clearedState)
+        assertFalse(credentialsConfiguredAfterClear)
+        assertEquals("", clearedDeviceId)
+        assertEquals("", clearedServerPublicKey)
+        assertEquals(RelayTransportMode.RELAY, clearedMode)
         assertFalse("The clear UI left the encrypted token preference behind", context
             .getSharedPreferences(AndroidRelaySettingsStore.PREFERENCES_NAME, Context.MODE_PRIVATE)
             .contains("relay_device_token"))
