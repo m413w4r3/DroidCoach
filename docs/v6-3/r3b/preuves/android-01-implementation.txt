@@ -1,0 +1,152 @@
+R3B-ANDROID-01 — classes instrumentées A3/A4 et chat relayé
+Horodatage de rédaction : 2026-10-28 13:11 UTC
+
+ÉTAT
+- Base reçue : 781bbaa4caf1709ad8f7066d0968c982a09dd7f6
+- Commit local des classes : ae9409c343832374fb7dc91364bb7b63b314d573
+- Branche : feat/r3b-android-01
+- Profil vérifié dans les métadonnées Paseo : codex / gpt-6-luna / xhigh
+- Appareil : aucun test lancé ; qualification Pixel Android 17 à exécuter par le parent
+- Aucun ADB, installation, push, révocation PC ou accès à des données personnelles
+
+CLASSES LIVRÉES
+- dev.atlas.coach.sync.relay.R3bA3PairingInstrumentedTest
+- dev.atlas.coach.sync.relay.R3bA3PersistenceInstrumentedTest
+- dev.atlas.coach.app.R3bA4RevocationInstrumentedTest
+  (fichier R3bA4RevocationUiInstrumentedTest.kt : suppression confirmée dans l'UI de production)
+- dev.atlas.coach.sync.relay.R3bA4AfterClearInstrumentedTest
+- dev.atlas.coach.sync.relay.R3bA4RepairInstrumentedTest
+- dev.atlas.coach.sync.relay.R3bRelayChatInstrumentedTest
+- dev.atlas.coach.sync.relay.R3bRelayTestSupport
+
+VALIDATION LOCALE AU SHA ae9409c343832374fb7dc91364bb7b63b314d573
+Environnement : JDK 21, SDK Android configuré, Gradle 9.6.0.
+
+Commande : cd android && ./gradlew :app:assembleDebugAndroidTest --max-workers=1
+Résultat : PASS — BUILD SUCCESSFUL ; compilation Kotlin main et androidTest réussie.
+SHA-256 de app-debug-androidTest.apk :
+a2f6bf4de359d07177021508e88ebcce2b4cc75782e7e30d0a837d467b41db87
+
+Commande : cd android && ./gradlew :app:testDebugUnitTest --max-workers=1
+Résultat : PASS — 685 tests, 96 suites, 0 échec, 0 erreur, 0 ignoré.
+
+Les commandes ci-dessus n'installent ni ne lancent l'APK. La compilation a émis
+un avertissement déjà présent dans PlanScreen.kt:336 (condition toujours fausse).
+La compilation JVM a affiché des avertissements de casts non vérifiés dans les
+tests existants.
+
+ARGUMENTS D'INSTRUMENTATION NON SECRETS
+Avant l'exécution, le parent définit ces valeurs à partir de l'identité PC
+synthétique déjà fournie :
+
+  DEVICE=45301FDAS001QT
+  RELAY_URL=wss://all.taildc7886.ts.net:8443
+  SERVER_ID=<serverId non secret fourni par le parent>
+  SERVER_PUBLIC_KEY=<clé publique X25519 Base64 fournie par le parent>
+  RUNNER=dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
+
+Le jeton n'est jamais un argument. `device_token_file` transporte uniquement
+le nom d'un fichier privé du filesDir ; le test vérifie ses permissions 0600,
+lit `{device_id, token}`, puis supprime le fichier après stockage Keystore.
+Les méthodes qui reçoivent des arguments sont filtrées avec
+BackendArgumentsAwareRunner / RequiresBackendArguments et font un Assume sur
+toute valeur requise manquante.
+
+COMMANDES PIXEL — À EXÉCUTER PAR LE PARENT
+Exécuter après la sauvegarde et les contrôles d'installation du RUNBOOK_PIXEL.
+Les lignes `SERVER_ID` et `SERVER_PUBLIC_KEY` sont des valeurs publiques, pas
+des jetons.
+
+A3-1 — le parent dépose `r3b-pixel-device.json` en 0600 dans filesDir :
+
+  adb -s "$DEVICE" shell am instrument -w \
+    -e class dev.atlas.coach.sync.relay.R3bA3PairingInstrumentedTest \
+    -e relay_url "$RELAY_URL" -e server_id "$SERVER_ID" \
+    -e server_public_key "$SERVER_PUBLIC_KEY" \
+    -e device_token_file r3b-pixel-device.json \
+    "$RUNNER"
+
+A3-2 — force-stop, sans redéposer de jeton :
+
+  adb -s "$DEVICE" shell am force-stop dev.atlas.coach
+  adb -s "$DEVICE" shell am instrument -w \
+    -e class dev.atlas.coach.sync.relay.R3bA3PersistenceInstrumentedTest \
+    -e relay_url "$RELAY_URL" -e server_id "$SERVER_ID" \
+    -e server_public_key "$SERVER_PUBLIC_KEY" \
+    -e device_token_file r3b-pixel-device.json \
+    "$RUNNER"
+
+A3-3 — redémarrer Android, attendre le boot selon le runbook, puis relancer la
+même classe A3Persistence avec les mêmes arguments A3-2. La reconnexion passe
+par le credential déchiffré du vrai Keystore ; le marqueur `r3b-a3-marker.json`
+ne contient que deviceId, empreinte de clé, SHA-256 du jeton et timestamp.
+
+A4 — lancer cette commande dans un terminal et laisser l'instrumentation
+attendre la révocation PC. Le marqueur de présence, sans jeton, peut être lu
+dans un second terminal ; le parent peut aussi suivre active_sessions comme le
+prévoit le runbook :
+
+  adb -s "$DEVICE" shell am instrument -w \
+    -e class dev.atlas.coach.app.R3bA4RevocationInstrumentedTest \
+    -e relay_url "$RELAY_URL" -e server_id "$SERVER_ID" \
+    -e server_public_key "$SERVER_PUBLIC_KEY" \
+    "$RUNNER"
+
+  adb -s "$DEVICE" shell run-as dev.atlas.coach cat files/r3b-a4-connected.marker
+  scripts/revoke-device.sh "$HOME/.config/atlas/relay.env" 9cbe6da6-07d0-41a3-9b47-938b79b3db43
+
+Le test attend REVOKED au plus 30 secondes, vérifie le lastError de révocation,
+garde les credentials jusqu'au choix explicite, clique « Supprimer les
+identifiants de cet appareil », confirme, puis vérifie l'effacement des
+credentials, du deviceId, de la clé publique et du ciphertext de préférence.
+
+A4 après effacement — force-stop/relance avant cette commande :
+
+  adb -s "$DEVICE" shell am force-stop dev.atlas.coach
+  adb -s "$DEVICE" shell am instrument -w \
+    -e class dev.atlas.coach.sync.relay.R3bA4AfterClearInstrumentedTest \
+    "$RUNNER"
+
+A4 réparation — le parent dépose `r3b-pixel-device-2.json` en 0600 ; le nom
+fourni reste non secret :
+
+  adb -s "$DEVICE" shell am instrument -w \
+    -e class dev.atlas.coach.sync.relay.R3bA4RepairInstrumentedTest \
+    -e relay_url "$RELAY_URL" -e server_id "$SERVER_ID" \
+    -e server_public_key "$SERVER_PUBLIC_KEY" \
+    -e device_token_file r3b-pixel-device-2.json \
+    "$RUNNER"
+
+Chat relayé — le parent redépose le premier fichier privé 0600 si une phase
+précédente l'a consommé :
+
+  adb -s "$DEVICE" shell am instrument -w \
+    -e class dev.atlas.coach.sync.relay.R3bRelayChatInstrumentedTest \
+    -e relay_url "$RELAY_URL" -e server_id "$SERVER_ID" \
+    -e server_public_key "$SERVER_PUBLIC_KEY" \
+    -e device_token_file r3b-pixel-device.json \
+    "$RUNNER"
+
+Le test supprime d'abord le jeton et l'URL backend directs, connecte le Relay,
+configure l'agent en PROPOSALS_ONLY avec catégories partagées désactivées et
+actions limitées, puis vérifie la réponse, le statut CONNECTED, la provenance
+OpenClaw via PC, l'absence d'exécution de propositions sans confirmation,
+l'absence de jeton direct et la conservation du brouillon après rotation.
+
+LIMITES À CONSERVER DANS LA PREUVE PIXEL
+- Les classes instrumentées ont été compilées mais ne sont PAS exécutées ici.
+  A3, A4, la vraie conversation Funnel, la rotation, le Keystore après reboot et
+  l'état des données ATLAS restent NOT_RUN jusqu'à l'exécution parent sur Pixel.
+- RelaySettingsController ne rend pas le code de fermeture WebSocket 4001
+  observable aux androidTest. Ce lot vérifie l'état REVOKED, le lastError et
+  l'absence de transition de reconnexion ; le code 4001 doit être confirmé dans
+  la preuve relay/PC si cette sous-vérification reste requise.
+- Le test instrumenté ne calcule pas les cinq empreintes de données ATLAS
+  personnelles de pré-vol. Le parent doit comparer les empreintes et les
+  compteurs calendrier du RUNBOOK_PIXEL sans en copier le contenu dans la
+  preuve.
+- Les fichiers de jeton A3 et chat sont consommés puis supprimés ; le parent
+  doit les redéposer en 0600 avant chaque phase qui en a besoin. Le fichier du
+  second appareil est réservé à la réparation explicite A4.
+- Aucune commande adb, installation, donnée personnelle ou réponse de chat
+  n'a été exécutée ou consignée par cette session.
