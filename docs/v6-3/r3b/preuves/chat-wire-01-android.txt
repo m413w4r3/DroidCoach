@@ -4,13 +4,14 @@ Base SHA : c536a3ac02de3183a3d9740ab236d2511e25e5fd
 Commit de code initial : d40084c2d4e48df4254433b4417be82f9be0d27e
 Commit de correction du timeout testé : 7f15ad45f20a8cf5189a2da6f653e07b82371936
 Commit de correction audit/verrou testé : a437b175383a229bba374cb03b4ce32885442da1
+Commit de correction révocation testé : c5e1bea20cc6ef3540fe3ab9f1e39c0ae54bde77
 Branche : feat/r3b-chat-wire-01
 Environnement : OpenJDK 21.0.12.1, Gradle Wrapper 9.6.0, Android SDK local.
 
 Commandes et résultats, sur le commit de code ci-dessus :
 
 - `cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1`
-  PASS — 686 tests, 0 échec, 0 erreur, 0 ignoré.
+  PASS — 688 tests, 0 échec, 0 erreur, 0 ignoré.
 - `cd android && ./gradlew :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1`
   PASS — lint et les deux assemblages réussis. Lint rapporte 0 erreur et 71
   avertissements existants du dépôt; aucun avertissement ne vise les nouvelles
@@ -44,6 +45,13 @@ incertain sans rejeu avec timeout chat de 55 s et TTL d'enveloppe borné,
 déconnexion et reconnexion sans doublon, annulation `CANCELLED` avec audit
 unique et annulation transport best-effort, erreurs de taille/version/réponse,
 proposition au niveau CONFIRM, mock local et libellés de provenance.
+
+Correction de présentation de révocation : l'état `REVOKED` remplace toujours
+une erreur antérieure par « Cet appareil a été révoqué sur le PC. Réappairez-le
+pour vous reconnecter. » Le listener ignore les erreurs non `REVOKED` reçues
+ensuite. Deux tests JVM vérifient le remplacement et la conservation du message
+face à une erreur réseau ultérieure, ainsi que l'acceptation de l'échec
+`REVOKED`.
 
 Limites : pas de test contre un connecteur Node réel, un relais réel, un serveur
 OpenClaw réel ou un appareil Android; les tests de transport utilisent des
