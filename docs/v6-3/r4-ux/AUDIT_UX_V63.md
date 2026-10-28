@@ -78,6 +78,7 @@ Le propriétaire a explicitement activé ATLAS comme application d'accueil penda
 | La directive « AUJOURD'HUI » et la carte « Prochaine action » se répètent. | Deux blocs pour la même journée. | Garder la prochaine action en hero, la directive en bloc secondaire compact. |
 | Le tiroir affiche « Glissez vers le bas pour revenir à l'accueil. » | Explication utile mais verbeuse. | Réduire à « Glisser vers le bas pour fermer » ou icône/geste documenté. |
 | Le launcher est déjà sobre, textuel, avec horloge et date. | Base saine. | Ne pas refondre ; préserver les comportements HOME, favoris, recherche, retour au launcher précédent et pause d'urgence. |
+| **P0 physique constaté** : le raccourci `Coach` du pied de page lance `MainActivity` avec `FLAG_ACTIVITY_NEW_TASK` ; `LauncherActivity` reste au-dessus, donc le tableau de bord est inaccessible depuis HOME. | Le parcours prioritaire « ouvrir le coach » est cassé quand ATLAS est le launcher. | Remplacer par `FLAG_ACTIVITY_REORDER_TO_FRONT` + `FLAG_ACTIVITY_SINGLE_TOP` (ou `CLEAR_TOP`), sans `NEW_TASK` ; vérifier `Coach` et les autres raccourcis sur le Pixel. |
 
 ### 2.7 Paramètres `SettingsScreen`, Sport, Bibliothèque, Mémoire
 
