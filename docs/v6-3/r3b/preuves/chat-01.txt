@@ -57,3 +57,38 @@ ticket ; aucun appareil ni ADB n’a été utilisé.
 
 Toutes les fixtures utilisent des valeurs synthétiques. Aucun secret réel ni
 donnée personnelle n’est inclus dans cette preuve.
+
+Correction P1 — délai du backend chat relayé
+--------------------------------------------
+Défaut constaté après intégration : `BackendClient` appliquait son délai de
+5 000 ms à toutes les opérations. Une réponse OpenClaw plus lente pouvait donc
+interrompre le POST chat après son dispatch et laisser l’idempotence en état
+incertain.
+
+Correction : `coach.chat.request` dispose maintenant d’un délai configurable
+`chatTimeoutMs`, par défaut 55 000 ms et plafonné à 55 000 ms, sous le TTL de
+60 s du protocole. Les autres opérations gardent le délai par défaut de
+5 000 ms. L’annulation reste composée avec le délai via `AbortSignal.any` quand
+un signal client est présent, `redirect: "error"` est conservé, et l’expiration
+d’un POST chat reste `BACKEND_UNAVAILABLE` avec résultat incertain, sans rejeu
+automatique.
+
+Commit de correction code/tests :
+`9f5c4ea785fa5bae70b8f327ccb1316cdff20fc3`.
+
+Commandes et résultats de correction
+------------------------------------
+`npm run build`
+PASS — TypeScript compilé.
+
+`npx vitest run test/chat-r3b.test.ts`
+PASS — 12/12 tests. Les deux nouveaux scénarios vérifient qu’une réponse à
+80 ms réussit avec timeout général 20 ms / timeout chat 300 ms, et qu’une
+expiration chat à 60 ms avec backend retardé journalise l’issue incertaine et
+bloque le nouvel appel, y compris après redémarrage de l’exécuteur.
+
+`ATLAS_TEST_RELAY_URL=ws://127.0.0.1:4402 npm run test:unit`
+PASS — 14 fichiers, 73/73 tests.
+
+`git diff --check`
+PASS — aucune erreur de whitespace.
