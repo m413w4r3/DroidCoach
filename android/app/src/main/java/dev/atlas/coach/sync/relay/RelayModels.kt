@@ -26,6 +26,8 @@ data class RelayConfig(
     val maxReconnectAttempts: Int = 8,
     val maxQueuedRequests: Int = 16,
     val maxConcurrentRequests: Int = 4,
+    /** Defaults to the R3-A capability for source compatibility with older clients. */
+    val requestedCapabilities: Set<String> = setOf("plan.revision"),
 ) {
     init {
         val uri = URI(relayUrl)
@@ -36,6 +38,8 @@ data class RelayConfig(
         require(reconnectBaseMillis > 0 && reconnectMaxMillis >= reconnectBaseMillis)
         require(maxReconnectAttempts >= 0 && maxQueuedRequests in 1..256)
         require(maxConcurrentRequests in 1..4)
+        require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= 8)
+        require(requestedCapabilities.all { it in AtlasRemoteProtocol.HELLO_CAPABILITIES })
     }
 
     /** Paseo Relay v2 client endpoint; credentials are never placed in this URL. */

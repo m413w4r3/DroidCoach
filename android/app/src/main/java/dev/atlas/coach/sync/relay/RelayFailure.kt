@@ -20,6 +20,7 @@ enum class RelayFailureKind {
     NOISE_IDENTITY_MISMATCH,
     AUTHENTICATION,
     REVOKED,
+    CAPABILITY_UNAVAILABLE,
     NETWORK_UNREACHABLE,
     PERMISSION_DENIED,
     UNKNOWN,
@@ -52,6 +53,7 @@ data class RelayFailure(
         fun fromRemoteCode(code: String): RelayFailure = when (code) {
             "AUTH_REQUIRED", "AUTH_FAILED" -> of(RelayFailureKind.AUTHENTICATION)
             "DEVICE_REVOKED" -> of(RelayFailureKind.REVOKED)
+            "OPERATION_UNAVAILABLE" -> of(RelayFailureKind.CAPABILITY_UNAVAILABLE)
             else -> of(RelayFailureKind.UNKNOWN)
         }
 
@@ -119,6 +121,7 @@ private val RelayFailureKind.userMessage: String
         RelayFailureKind.NOISE_IDENTITY_MISMATCH -> "L’identité épinglée du PC ne correspond pas. Vérifiez l’appairage avant de réessayer."
         RelayFailureKind.AUTHENTICATION -> "L’authentification de l’appareil a été refusée. Vérifiez le jeton d’appairage."
         RelayFailureKind.REVOKED -> "Cet appareil a été révoqué sur le PC. Réappairez-le pour vous reconnecter."
+        RelayFailureKind.CAPABILITY_UNAVAILABLE -> "L'appareil appairé ne prend pas en charge coach.chat. Réappairez-le pour utiliser le chat relayé."
         RelayFailureKind.NETWORK_UNREACHABLE -> "Le relais est injoignable. Vérifiez la connexion réseau et l’adresse du relais."
         RelayFailureKind.PERMISSION_DENIED -> "Android a refusé l’autorisation nécessaire à la connexion au relais."
         RelayFailureKind.UNKNOWN -> "La connexion relayée a échoué. Réessayez ou vérifiez la configuration."

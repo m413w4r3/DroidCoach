@@ -88,6 +88,11 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                "Le chat relayé nécessite la capacité coach.chat. Un appareil déjà appairé sans cette capacité doit être réappairé pour utiliser le chat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         AtlasSection("État") {

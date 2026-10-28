@@ -20,14 +20,14 @@ object AtlasRemoteProtocol {
 
     val OPERATIONS = setOf(
         "backend.health", "coach.status", "plan.today.read", "plan.revision.request",
-        "plan.revision.result", "sport.plan.read", "sync.status",
+        "plan.revision.result", "sport.plan.read", "sync.status", "coach.chat.request",
     )
     val ERROR_CODES = setOf(
         "INVALID_REQUEST", "UNKNOWN_OPERATION", "PAYLOAD_TOO_LARGE", "EXPIRED", "AUTH_REQUIRED",
         "AUTH_FAILED", "DEVICE_REVOKED", "RATE_LIMITED", "IDEMPOTENCY_CONFLICT", "BACKEND_UNAVAILABLE",
         "BACKEND_REJECTED", "OPERATION_UNAVAILABLE", "CANCELLED", "INTERNAL",
     )
-    private val helloCapabilities = setOf("plan.revision", "coach.status", "plan.today", "sport.plan", "sync.status")
+    val HELLO_CAPABILITIES = setOf("plan.revision", "coach.chat", "coach.status", "plan.today", "sport.plan", "sync.status")
     private val uuidPattern = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     private val tokenPattern = Regex("^[A-Za-z0-9_-]{43}$")
     private val idempotencyPattern = Regex("^[A-Za-z0-9._:-]{1,160}$")
@@ -77,8 +77,18 @@ object AtlasRemoteProtocol {
         }
     }
 
-    fun hello(credentials: RelayCredentials, clientVersion: String, now: Instant = Instant.now()): JSONObject {
+    fun hello(credentials: RelayCredentials, clientVersion: String, now: Instant = Instant.now()): JSONObject =
+        hello(credentials, clientVersion, setOf("plan.revision"), now)
+
+    fun hello(
+        credentials: RelayCredentials,
+        clientVersion: String,
+        requestedCapabilities: Set<String>,
+        now: Instant = Instant.now(),
+    ): JSONObject {
         require(clientVersion.isNotBlank() && clientVersion.length <= 40)
+        require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= 8)
+        require(requestedCapabilities.all { it in HELLO_CAPABILITIES })
         val nonce = ByteArray(16).also(java.security.SecureRandom()::nextBytes)
         val envelope = JSONObject()
             .put("protocol", PROTOCOL)
@@ -86,7 +96,7 @@ object AtlasRemoteProtocol {
             .put("device_id", credentials.deviceId)
             .put("client_nonce", Base64.getEncoder().encodeToString(nonce))
             .put("client_version", clientVersion)
-            .put("capabilities", JSONArray().put("plan.revision"))
+            .put("capabilities", JSONArray(requestedCapabilities.sorted()))
             .put("auth", JSONObject().put("scheme", "device-token-v1").put("token", credentials.deviceToken))
             .put("timestamp", now.toString())
         validate(envelope)
@@ -115,6 +125,12 @@ object AtlasRemoteProtocol {
     fun newUuid(): String = UUID.randomUUID().toString()
 
     fun isUuid(value: String): Boolean = uuidPattern.matches(value)
+
+    fun requiredCapability(operation: String): String? = when (operation) {
+        "plan.revision.request", "plan.revision.result" -> "plan.revision"
+        "coach.chat.request" -> "coach.chat"
+        else -> null
+    }
 
     fun isDeviceToken(value: String): Boolean {
         if (!tokenPattern.matches(value)) return false
@@ -145,7 +161,7 @@ object AtlasRemoteProtocol {
         val seen = mutableSetOf<String>()
         for (i in 0 until capabilities.length()) {
             val cap = stringValue(capabilities.get(i), "capability")
-            if (cap !in helloCapabilities || !seen.add(cap)) fail("invalid capability")
+            if (cap !in HELLO_CAPABILITIES || !seen.add(cap)) fail("invalid capability")
         }
         val auth = objectValue(value, "auth")
         exactKeys(auth, setOf("scheme", "token"))

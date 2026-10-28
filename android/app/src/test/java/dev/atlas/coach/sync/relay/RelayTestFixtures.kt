@@ -34,19 +34,23 @@ internal class FakeRelaySocketFactory(
     private val mismatchResponseId: Boolean = false,
     private val result: JSONObject = JSONObject().put("accepted", true),
     private val respondToPings: Boolean = false,
+    private val serverCapabilities: Set<String> = setOf("plan.revision"),
     private val onConnected: (FakeRelaySocket, Int) -> Unit = { _, _ -> },
 ) : RelaySocketFactory {
     val connectCount = AtomicInteger()
+    val secondConnection = CountDownLatch(1)
     val sockets = CopyOnWriteArrayList<FakeRelaySocket>()
     val requests = CopyOnWriteArrayList<JSONObject>()
     val appHellos = CopyOnWriteArrayList<JSONObject>()
     val cancels = CopyOnWriteArrayList<JSONObject>()
     val urls = CopyOnWriteArrayList<String>()
     val requestCaptured = CountDownLatch(1)
+    val cancelCaptured = CountDownLatch(1)
 
     override fun connect(url: String, callbacks: RelaySocketCallbacks) {
         urls += url
         val index = connectCount.incrementAndGet()
+        if (index >= 2) secondConnection.countDown()
         val socket = FakeRelaySocket(
             callbacks,
             this,
@@ -59,6 +63,7 @@ internal class FakeRelaySocketFactory(
             mismatchResponseId,
             result,
             respondToPings,
+            serverCapabilities,
         )
         sockets += socket
         callbacks.onOpen(socket)
@@ -67,7 +72,7 @@ internal class FakeRelaySocketFactory(
 
     internal fun recordRequest(request: JSONObject) { requests += JSONObject(request.toString()); requestCaptured.countDown() }
     internal fun recordHello(hello: JSONObject) { appHellos += JSONObject(hello.toString()) }
-    internal fun recordCancel(cancel: JSONObject) { cancels += JSONObject(cancel.toString()) }
+    internal fun recordCancel(cancel: JSONObject) { cancels += JSONObject(cancel.toString()); cancelCaptured.countDown() }
 }
 
 internal class FakeRelaySocket(
@@ -82,6 +87,7 @@ internal class FakeRelaySocket(
     private val mismatchResponseId: Boolean,
     private val result: JSONObject,
     private val respondToPings: Boolean,
+    private val serverCapabilities: Set<String>,
 ) : RelaySocket {
     val sentText = CopyOnWriteArrayList<String>()
     val helloSends = CountDownLatch(2)
@@ -133,7 +139,7 @@ internal class FakeRelaySocket(
                     sendEnvelope(
                         JSONObject().put("protocol", AtlasRemoteProtocol.PROTOCOL).put("kind", "hello_ok")
                             .put("session_id", SESSION_ID).put("server_time", Instant.now().toString())
-                            .put("expires_in_seconds", 3600).put("capabilities", org.json.JSONArray().put("plan.revision"))
+                            .put("expires_in_seconds", 3600).put("capabilities", org.json.JSONArray(serverCapabilities.sorted()))
                             .put("max_request_bytes", AtlasRemoteProtocol.MAX_REQUEST_BYTES)
                             .put("max_response_bytes", AtlasRemoteProtocol.MAX_RESPONSE_BYTES),
                     )
