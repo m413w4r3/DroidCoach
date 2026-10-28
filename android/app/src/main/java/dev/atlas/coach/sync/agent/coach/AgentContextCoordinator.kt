@@ -1,5 +1,6 @@
 package dev.atlas.coach.sync.agent.coach
 
+import dev.atlas.coach.data.AgentConsentGate
 import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.sync.agent.context.AgentContextAssembler
 import dev.atlas.coach.sync.agent.context.AgentContextCategory
@@ -23,6 +24,7 @@ class AgentContextCoordinator(
     private val blockedCategories: () -> Set<String> = { emptySet() },
     initialIncludeExistingGoals: Boolean = false,
     private val persistIncludeExistingGoals: (Boolean) -> Unit = {},
+    private val consentGate: AgentConsentGate = AgentConsentGate(),
 ) {
     private var includeExistingGoalsSnapshot = initialIncludeExistingGoals
     private val consentAt = linkedMapOf<String, Long>().apply {
@@ -43,15 +45,18 @@ class AgentContextCoordinator(
     @Synchronized
     fun includesExistingGoals(): Boolean = includeExistingGoalsSnapshot
 
-    @Synchronized
     fun setIncludeExistingGoals(enabled: Boolean) {
-        val previous = includeExistingGoalsSnapshot
-        includeExistingGoalsSnapshot = enabled
-        try {
-            persistIncludeExistingGoals(enabled)
-        } catch (error: Exception) {
-            includeExistingGoalsSnapshot = previous
-            throw error
+        consentGate.withLock {
+            synchronized(this) {
+                val previous = includeExistingGoalsSnapshot
+                includeExistingGoalsSnapshot = enabled
+                try {
+                    persistIncludeExistingGoals(enabled)
+                } catch (error: Exception) {
+                    includeExistingGoalsSnapshot = previous
+                    throw error
+                }
+            }
         }
     }
 
@@ -59,41 +64,47 @@ class AgentContextCoordinator(
     fun effectiveMandate(mandate: AgentMandate = mandateProvider()): AgentMandate =
         effectiveMandate(mandate, blockedCategories())
 
-    @Synchronized
     fun setCategoryConsent(category: String, enabled: Boolean, resetIncludeExistingGoals: Boolean = false) {
         require(category in AgentContextCategory.wireValueSet) { "Unknown context category" }
-        val previous = consentAt[category]
-        val previousIncludeExistingGoals = includeExistingGoalsSnapshot
-        if (enabled) consentAt[category] = nowUtcMillis().coerceAtLeast(1L) else consentAt.remove(category)
-        if (resetIncludeExistingGoals && category == AgentContextCategory.GOALS.wireValue) {
-            includeExistingGoalsSnapshot = false
-        }
-        try {
-            persistConsentDates(consentAt.toMap())
-        } catch (error: Exception) {
-            if (previous == null) consentAt.remove(category) else consentAt[category] = previous
-            includeExistingGoalsSnapshot = previousIncludeExistingGoals
-            throw error
+        consentGate.withLock {
+            synchronized(this) {
+                val previous = consentAt[category]
+                val previousIncludeExistingGoals = includeExistingGoalsSnapshot
+                if (enabled) consentAt[category] = nowUtcMillis().coerceAtLeast(1L) else consentAt.remove(category)
+                if (resetIncludeExistingGoals && category == AgentContextCategory.GOALS.wireValue) {
+                    includeExistingGoalsSnapshot = false
+                }
+                try {
+                    persistConsentDates(consentAt.toMap())
+                } catch (error: Exception) {
+                    if (previous == null) consentAt.remove(category) else consentAt[category] = previous
+                    includeExistingGoalsSnapshot = previousIncludeExistingGoals
+                    throw error
+                }
+            }
         }
     }
 
-    @Synchronized
     fun resetCategoryConsents(categories: Set<String>) {
         require(categories.all { it in AgentContextCategory.wireValueSet }) { "Unknown context category" }
-        val previous = consentAt.toMap()
-        val previousIncludeExistingGoals = includeExistingGoalsSnapshot
-        val now = nowUtcMillis().coerceAtLeast(1L)
-        AgentContextCategory.wireValues.forEach { category ->
-            if (category in categories) consentAt[category] = now else consentAt.remove(category)
-        }
-        if (AgentContextCategory.GOALS.wireValue in categories) includeExistingGoalsSnapshot = false
-        try {
-            persistConsentDates(consentAt.toMap())
-        } catch (error: Exception) {
-            consentAt.clear()
-            consentAt.putAll(previous)
-            includeExistingGoalsSnapshot = previousIncludeExistingGoals
-            throw error
+        consentGate.withLock {
+            synchronized(this) {
+                val previous = consentAt.toMap()
+                val previousIncludeExistingGoals = includeExistingGoalsSnapshot
+                val now = nowUtcMillis().coerceAtLeast(1L)
+                AgentContextCategory.wireValues.forEach { category ->
+                    if (category in categories) consentAt[category] = now else consentAt.remove(category)
+                }
+                if (AgentContextCategory.GOALS.wireValue in categories) includeExistingGoalsSnapshot = false
+                try {
+                    persistConsentDates(consentAt.toMap())
+                } catch (error: Exception) {
+                    consentAt.clear()
+                    consentAt.putAll(previous)
+                    includeExistingGoalsSnapshot = previousIncludeExistingGoals
+                    throw error
+                }
+            }
         }
     }
 
@@ -157,8 +168,14 @@ class AgentContextCoordinator(
      * snapshot against the latest mandate, consent dates and domain consent without rebuilding
      * domains or writing an audit, so it is safe inside the relay's pre-dispatch callback.
      */
-    @Synchronized
     fun consentStillAllows(
+        snapshot: AgentContextSnapshot,
+        domainConsentProvider: () -> AgentContextDomainConsent,
+    ): Boolean = consentGate.withLock {
+        synchronized(this) { consentStillAllowsLocked(snapshot, domainConsentProvider()) }
+    }
+
+    private fun consentStillAllowsLocked(
         snapshot: AgentContextSnapshot,
         domainConsent: AgentContextDomainConsent,
     ): Boolean {

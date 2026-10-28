@@ -13,7 +13,10 @@ data class RevocationBarrierState(
     val blockedCategories: Set<String> = emptySet(),
 )
 
-class RevocationBarrier(private val storage: RevocationBarrierStorage) {
+class RevocationBarrier(
+    private val storage: RevocationBarrierStorage,
+    private val consentGate: AgentConsentGate = AgentConsentGate(),
+) {
     @Volatile
     private var state = runCatching(storage::readState).getOrDefault(RevocationBarrierState(agentBlocked = true))
 
@@ -22,40 +25,48 @@ class RevocationBarrier(private val storage: RevocationBarrierStorage) {
     fun blockedCategories(): Set<String> = state.blockedCategories.toSet()
 
     /** Latch in memory before I/O so a failed marker write still disables this process. */
-    @Synchronized
     fun block(): Boolean = blockAgent()
 
-    @Synchronized
-    fun blockAgent(): Boolean = writeBlockedState(state.copy(agentBlocked = true), latchBeforeWrite = true)
+    fun blockAgent(): Boolean = consentGate.withLock {
+        synchronized(this) {
+            writeBlockedState(state.copy(agentBlocked = true), latchBeforeWrite = true)
+        }
+    }
 
-    @Synchronized
     fun blockCategory(category: String): Boolean {
         require(category.isNotBlank())
-        val written = writeBlockedState(
-            state.copy(blockedCategories = state.blockedCategories + category),
-            latchBeforeWrite = true,
-        )
-        if (!written) state = state.copy(agentBlocked = true)
-        return written
+        return consentGate.withLock {
+            synchronized(this) {
+                val written = writeBlockedState(
+                    state.copy(blockedCategories = state.blockedCategories + category),
+                    latchBeforeWrite = true,
+                )
+                if (!written) state = state.copy(agentBlocked = true)
+                written
+            }
+        }
     }
 
     /** Only a completed, explicit agent opt-in may clear the global agent deny bit. */
-    @Synchronized
-    fun clearAfterDurableOptIn(durablyStored: Boolean): Boolean {
-        if (!durablyStored) return false
-        if (!state.agentBlocked) return true
-        return writeBlockedState(state.copy(agentBlocked = false), latchBeforeWrite = false)
+    fun clearAfterDurableOptIn(durablyStored: Boolean): Boolean = consentGate.withLock {
+        synchronized(this) {
+            if (!durablyStored) return@synchronized false
+            if (!state.agentBlocked) return@synchronized true
+            writeBlockedState(state.copy(agentBlocked = false), latchBeforeWrite = false)
+        }
     }
 
     /** Category revocations require a fresh opt-in for the same category. */
-    @Synchronized
-    fun clearCategoryAfterDurableOptIn(category: String, durablyStored: Boolean): Boolean {
-        if (!durablyStored || category !in state.blockedCategories) return durablyStored
-        return writeBlockedState(
-            state.copy(blockedCategories = state.blockedCategories - category),
-            latchBeforeWrite = false,
-        )
-    }
+    fun clearCategoryAfterDurableOptIn(category: String, durablyStored: Boolean): Boolean =
+        consentGate.withLock {
+            synchronized(this) {
+                if (!durablyStored || category !in state.blockedCategories) return@synchronized durablyStored
+                writeBlockedState(
+                    state.copy(blockedCategories = state.blockedCategories - category),
+                    latchBeforeWrite = false,
+                )
+            }
+        }
 
     private fun writeBlockedState(next: RevocationBarrierState, latchBeforeWrite: Boolean): Boolean {
         if (latchBeforeWrite) state = next

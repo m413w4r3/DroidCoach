@@ -36,8 +36,10 @@ import java.util.Base64
 class RelaySettingsController(
     context: Context,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val consentGate: dev.atlas.coach.data.AgentConsentGate =
+        dev.atlas.coach.data.AgentConsentGate(),
     private val transportFactory: (RelayConfig, RelayCredentialStore) -> RelayBackendTransport =
-        { config, credentials -> RelayBackendTransport(config, credentials) },
+        { config, credentials -> RelayBackendTransport(config, credentials, consentGate = consentGate) },
 ) {
     private val allowLoopbackWs = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     private val settingsStore = AndroidRelaySettingsStore(context)

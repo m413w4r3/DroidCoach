@@ -57,6 +57,8 @@ describe("device authentication and session controls", () => {
       const sessionId = String(channel.lastMessage().session_id);
       await peer.receive(JSON.stringify(request(sessionId, "coach.status")));
       expect(channel.lastMessage()).toMatchObject({ kind: "error", error: { code: "OPERATION_UNAVAILABLE" } });
+      await peer.receive(JSON.stringify(request(sessionId, "sync.status")));
+      expect(channel.lastMessage()).toMatchObject({ kind: "response", operation: "sync.status" });
       expect(context.manager.activeSessionCount()).toBe(1);
       peer.close();
     } finally {
@@ -95,6 +97,37 @@ describe("device authentication and session controls", () => {
       expect(session.channel.lastMessage()).toMatchObject({ kind: "error", error: { code: "DEVICE_REVOKED" } });
       expect(session.channel.closeEvents[0]).toMatchObject({ code: 4001 });
       expect(context.manager.activeSessionCount()).toBe(0);
+    } finally {
+      await context.dispose();
+    }
+  });
+
+  it("aborts an in-flight operation as soon as revocation starts", async () => {
+    let backendStarted!: () => void;
+    const started = new Promise<void>((resolve) => { backendStarted = resolve; });
+    const context = await makeContext({
+      fetcher: async (_input, init) => {
+        backendStarted();
+        await new Promise<never>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal?.aborted) {
+            reject(new Error("aborted"));
+            return;
+          }
+          signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        });
+        throw new Error("unreachable");
+      },
+    });
+    try {
+      const session = await authenticate(context);
+      const pending = session.peer.receive(JSON.stringify(request(session.sessionId, "backend.health")));
+      await started;
+      await context.registry.revoke(session.deviceId);
+      await context.manager.closeRevokedSessions();
+      await pending;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(session.channel.closeEvents[0]).toMatchObject({ code: 4001 });
     } finally {
       await context.dispose();
     }

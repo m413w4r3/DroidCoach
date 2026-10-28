@@ -1,5 +1,6 @@
 package dev.atlas.coach.sync.relay
 
+import dev.atlas.coach.data.AgentConsentGate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -24,6 +25,7 @@ sealed interface RelayCallResult {
 class RelayBackendTransport internal constructor(
     private val config: RelayConfig,
     private val credentialStore: RelayCredentialStore,
+    private val consentGate: AgentConsentGate = AgentConsentGate(),
     socketFactory: RelaySocketFactory = OkHttpRelaySocketFactory(config),
     private val scheduler: java.util.concurrent.ScheduledExecutorService =
         java.util.concurrent.Executors.newSingleThreadScheduledExecutor { Thread(it, "atlas-relay-transport").apply { isDaemon = true } },
@@ -423,6 +425,12 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun pump() {
+        // Hold the same gate as consent/revocation mutations from the pre-dispatch check through
+        // the WebSocket write. A withdrawal cannot interleave between the check and the frame.
+        consentGate.withLock { pumpUnderConsentGate() }
+    }
+
+    private fun pumpUnderConsentGate() {
         val outgoing = mutableListOf<Pair<Pending, ByteArray>>()
         var refreshSession = false
         synchronized(lock) {

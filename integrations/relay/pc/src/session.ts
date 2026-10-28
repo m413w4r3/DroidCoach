@@ -244,17 +244,25 @@ export class PeerSession {
    */
   async revoke(): Promise<void> {
     if (this.closed) return;
+    this.abortInFlightForRevocation();
     await this.sendError(new RemoteError("DEVICE_REVOKED"), null);
     await this.closeForRevocation("device revoked");
   }
 
   private closeForRevocation(reason: string): Promise<void> {
     if (this.closed) return Promise.resolve();
+    this.abortInFlightForRevocation();
     if (!this.revocationClose) {
       this.revocationClose = new Promise<void>((resolve) => setTimeout(resolve, REVOKE_GRACE_MS))
         .then(() => this.close(4001, reason));
     }
     return this.revocationClose;
+  }
+
+  /** Stop backend effects immediately; the bounded grace only delays the socket close. */
+  private abortInFlightForRevocation(): void {
+    for (const controller of this.inFlight.values()) controller.abort();
+    this.inFlight.clear();
   }
 
   close(code = 1000, reason = "closed"): void {

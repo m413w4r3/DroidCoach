@@ -38,11 +38,11 @@ class AgentCategoryRevocationTest {
         val snapshot = coordinator.assembleCurrent()
         val domainConsent = AgentContextDomainConsent()
 
-        assertTrue(coordinator.consentStillAllows(snapshot, domainConsent))
+        assertTrue(coordinator.consentStillAllows(snapshot) { domainConsent })
         coordinator.setCategoryConsent(GOALS, false)
         assertFalse(
             "A category withdrawn after preparation must block the prepared payload at dispatch",
-            coordinator.consentStillAllows(snapshot, domainConsent),
+            coordinator.consentStillAllows(snapshot) { domainConsent },
         )
     }
 

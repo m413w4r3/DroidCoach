@@ -1,5 +1,6 @@
 package dev.atlas.coach.sync.relay
 
+import dev.atlas.coach.data.AgentConsentGate
 import dev.atlas.coach.plan.PlanRevisionApiRequest
 import dev.atlas.coach.plan.PlanRevisionApiResult
 import dev.atlas.coach.plan.dayPlan
@@ -83,6 +84,62 @@ class RelayBackendTransportTest {
             assertEquals("chat-send-001", sockets.requests.single().getString("idempotency_key"))
             assertEquals("synthetic", sockets.requests.single().getJSONObject("payload").getString("message"))
         } finally { transport.close() }
+    }
+
+    @Test
+    fun consentMutationWaitsForTheFinalPayloadAndWebSocketWrite() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            result = JSONObject().put("accepted", true),
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val gate = AgentConsentGate()
+        val transport = transport(
+            credentials,
+            sockets,
+            requestedCapabilities = setOf("plan.revision", "coach.chat"),
+            consentGate = gate,
+        )
+        val payloadStarted = CountDownLatch(1)
+        val releasePayload = CountDownLatch(1)
+        val mutationStarted = CountDownLatch(1)
+        val mutationDone = CountDownLatch(1)
+        try {
+            transport.start()
+            val call = Thread {
+                transport.executeDeferred(
+                    operation = "coach.chat.request",
+                    idempotencyKey = "consent-gate-send",
+                    beforeDispatch = { true },
+                    payloadFactory = {
+                        payloadStarted.countDown()
+                        check(releasePayload.await(5, TimeUnit.SECONDS)) { "payload release timed out" }
+                        JSONObject().put("message", "synthetic")
+                    },
+                )
+            }.apply { isDaemon = true; start() }
+            assertTrue("payload preparation did not start", payloadStarted.await(5, TimeUnit.SECONDS))
+
+            val mutation = Thread {
+                mutationStarted.countDown()
+                gate.withLock { mutationDone.countDown() }
+            }.apply { isDaemon = true; start() }
+            assertTrue("consent mutation did not start", mutationStarted.await(5, TimeUnit.SECONDS))
+            assertFalse(
+                "consent mutation entered while the payload/WebSocket write held the gate",
+                mutationDone.await(300, TimeUnit.MILLISECONDS),
+            )
+
+            releasePayload.countDown()
+            assertTrue("consent mutation did not run after the send", mutationDone.await(5, TimeUnit.SECONDS))
+            call.join(5_000)
+            assertFalse("relay send did not finish", call.isAlive)
+            assertEquals(1, sockets.requests.size)
+        } finally {
+            releasePayload.countDown()
+            transport.close()
+        }
     }
 
     @Test
@@ -318,7 +375,8 @@ class RelayBackendTransportTest {
         val missing = RelayBackendTransport(
             RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 0),
             InMemoryRelayCredentialStore(),
-            FakeRelaySocketFactory(staticPair),
+            consentGate = AgentConsentGate(),
+            socketFactory = FakeRelaySocketFactory(staticPair),
         )
         try {
             missing.start()
@@ -434,6 +492,7 @@ class RelayBackendTransportTest {
         sockets: FakeRelaySocketFactory,
         maxQueuedRequests: Int = 16,
         requestedCapabilities: Set<String> = setOf("plan.revision"),
+        consentGate: AgentConsentGate = AgentConsentGate(),
     ) = RelayBackendTransport(
         config = RelayConfig(
             "ws://127.0.0.1:4400",
@@ -443,6 +502,7 @@ class RelayBackendTransportTest {
             requestedCapabilities = requestedCapabilities,
         ),
         credentialStore = InMemoryRelayCredentialStore(credentials),
+        consentGate = consentGate,
         socketFactory = sockets,
     )
 }

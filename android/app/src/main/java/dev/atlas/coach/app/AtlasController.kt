@@ -25,6 +25,7 @@ import dev.atlas.coach.content.ContentCatalog
 import dev.atlas.coach.content.ContentItem
 import dev.atlas.coach.content.ContentOpenResult
 import dev.atlas.coach.content.ContentUrlValidator
+import dev.atlas.coach.data.AgentConsentGate
 import dev.atlas.coach.data.AndroidStateBackend
 import dev.atlas.coach.data.AndroidPersistenceDiagnosticsStore
 import dev.atlas.coach.data.AndroidRevocationBarrierStorage
@@ -220,9 +221,12 @@ class AtlasController @JvmOverloads constructor(
     phaseNotifierOverride: PhaseNotifier? = null,
 ) : AgentActionPort {
     private val appContext = context.applicationContext
+    /** Shared by consent/revocation mutations and the relay's final check + WebSocket write. */
+    private val agentConsentGate = AgentConsentGate()
     // This deny marker is read before any agent client can be constructed or request scheduled.
     private val revocationBarrier = RevocationBarrier(
         revocationBarrierStorageOverride ?: AndroidRevocationBarrierStorage(appContext),
+        consentGate = agentConsentGate,
     )
     private val persistenceDiagnostics = PersistenceDiagnostics(
         persistenceDiagnosticsStoreOverride ?: AndroidPersistenceDiagnosticsStore(appContext),
@@ -239,7 +243,11 @@ class AtlasController @JvmOverloads constructor(
     private val syncTokenStore = SharedPreferencesBearerTokenStore(appContext)
     private val syncSettingsStore = AndroidSyncStorage.settings(appContext)
     /** Optional relayed transport; it never opens a socket in DIRECT or OFFLINE mode. */
-    val relaySettings = RelaySettingsController(appContext, clock = { clock.nowMillis() })
+    val relaySettings = RelaySettingsController(
+        appContext,
+        clock = { clock.nowMillis() },
+        consentGate = agentConsentGate,
+    )
     /** Local, durable memory facts and their user-facing controller. */
     val memoryController = MemoryController(File(appContext.filesDir, "memory"))
     /** Independent global UsageStats path; no collection happens until the user consents and refreshes. */
@@ -569,6 +577,7 @@ class AtlasController @JvmOverloads constructor(
         persistIncludeExistingGoals = {
             persistOrThrow("agent.goals_include_existing")
         },
+        consentGate = agentConsentGate,
     )
     private val goalPanelCoordinator = GoalPanelCoordinator(
         readSubdocument = { goalsSubdocument },
@@ -1920,7 +1929,7 @@ class AtlasController @JvmOverloads constructor(
                 onContextWritten = { snapshot -> recordAgentContextWritten(snapshot) },
                 requestAllowed = ::isAgentRequestAllowed,
                 snapshotStillAuthorized = { snapshot ->
-                    agentContextCoordinator.consentStillAllows(snapshot, agentContextDomainConsent())
+                    agentContextCoordinator.consentStillAllows(snapshot) { agentContextDomainConsent() }
                 },
             )
         }
