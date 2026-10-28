@@ -199,6 +199,7 @@ class PaseoRelayClient internal constructor(
         handshake = noise
         handshakeText = hello
         if (!socketSendLocked(hello)) return
+        if (stopped || handshake == null || socket == null || state != RelayConnectionState.RELAY_CONNECTING) return
         cancelHandshakeRetryLocked()
         handshakeRetry = scheduler.scheduleAtFixedRate({
             synchronized(lock) {
@@ -311,29 +312,20 @@ class PaseoRelayClient internal constructor(
         } else {
             error
         }
-        notifyFailure(failure)
-        failChannelLocked(4002, "protected handshake failed", failure)
+        handleConnectionFailureLocked(failure, 4002, "protected handshake failed")
     }
 
     private fun failProtectedLocked(error: Throwable) {
-        notifyFailure(error)
-        failChannelLocked(4003, "protected record rejected", error)
+        handleConnectionFailureLocked(error, 4003, "protected record rejected")
     }
 
     private fun failChannel(code: Int, reason: String, error: Throwable) = synchronized(lock) {
-        notifyFailure(error)
-        failChannelLocked(code, reason, error)
+        handleConnectionFailureLocked(error, code, reason)
     }
 
-    private fun notifyFailure(error: Throwable) {
+    private fun notifyFailure(error: Throwable, failure: RelayFailure) {
         listener.onProtocolFailure(error)
-        listener.onRelayFailure(RelayFailure.fromThrowable(error))
-    }
-
-    private fun failChannelLocked(code: Int, reason: String, @Suppress("UNUSED_PARAMETER") error: Throwable) {
-        cancelHandshakeRetryLocked()
-        clearChannelLocked()
-        socket?.close(code, reason)
+        listener.onRelayFailure(failure)
     }
 
     private fun connectionClosed(code: Int, reason: String) {
@@ -348,6 +340,11 @@ class PaseoRelayClient internal constructor(
                     setStateLocked(RelayConnectionState.AUTH_REQUIRED)
                     stopped = true
                 }
+                4002, 4003 -> handleConnectionFailureLocked(
+                    RelayProtocolException("remote rejected protected relay channel"),
+                    code,
+                    "relay protocol failure",
+                )
                 else -> scheduleReconnectLocked()
             }
         }
@@ -356,12 +353,32 @@ class PaseoRelayClient internal constructor(
     private fun connectionFailed(error: Throwable) {
         synchronized(lock) {
             if (stopped) return
-            socket = null
-            clearChannelLocked()
-            cancelHandshakeRetryLocked()
-            notifyFailure(error)
-            scheduleReconnectLocked()
+            handleConnectionFailureLocked(error, 1001, "relay connection failed")
         }
+    }
+
+    /** Network errors are recoverable; every other typed failure is terminal. */
+    private fun handleConnectionFailureLocked(error: Throwable, closeCode: Int, reason: String) {
+        val failure = RelayFailure.fromThrowable(error)
+        val activeSocket = socket
+        socket = null
+        generation += 1
+        clearChannelLocked()
+        cancelHandshakeRetryLocked()
+
+        if (failure.kind == RelayFailureKind.NETWORK_UNREACHABLE) {
+            setStateLocked(RelayConnectionState.OFFLINE)
+            listener.onRelayFailure(failure)
+            activeSocket?.close(closeCode, reason)
+            scheduleReconnectLocked()
+            return
+        }
+
+        stopped = true
+        cancelReconnectLocked()
+        setStateLocked(RelayConnectionState.ERROR)
+        notifyFailure(error, failure)
+        activeSocket?.close(closeCode, reason)
     }
 
     private fun scheduleReconnectLocked() {
@@ -378,7 +395,7 @@ class PaseoRelayClient internal constructor(
             attempt = attempt,
             jitter = jitter,
         )
-        setStateLocked(RelayConnectionState.RELAY_CONNECTING)
+        setStateLocked(RelayConnectionState.OFFLINE)
         cancelReconnectLocked()
         reconnectTask = scheduler.schedule({ connect() }, delay, TimeUnit.MILLISECONDS)
     }
