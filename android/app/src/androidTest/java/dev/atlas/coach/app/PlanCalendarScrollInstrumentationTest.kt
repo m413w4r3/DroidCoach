@@ -7,8 +7,10 @@ import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.ui.AtlasRoutes
@@ -61,7 +63,7 @@ class PlanCalendarScrollInstrumentationTest {
         }
 
         composeRule.onAllNodesWithText("Plan du jour").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Aujourd’hui").assertCountEquals(1)
+        composeRule.onNodeWithTag("plan_day_today").assertIsDisplayed()
     }
 
     @Test

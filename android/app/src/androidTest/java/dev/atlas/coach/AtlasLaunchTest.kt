@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -96,12 +97,12 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Usage quotidien").performScrollTo().performClick()
         composeRule.onNodeWithText("Accueil Android").performScrollTo().assertIsDisplayed()
         composeRule.activity.onBackPressedDispatcher.onBackPressed()
-        composeRule.onNodeWithText("Autres espaces").assertIsDisplayed()
+        composeRule.onNodeWithText("Autres espaces").performScrollTo().assertIsDisplayed()
 
         openFocus()
-        composeRule.onNodeWithTag("focus_task_title").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("focus_pomodoro_start").assertCountEquals(1)
         openHome()
-        composeRule.onNodeWithText("Directive du coach").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Directive du coach").assertCountEquals(1)
     }
 
     @Test
@@ -109,8 +110,9 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Aujourd'hui").assertIsDisplayed()
         composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Commencer").performClick()
-        composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
+        composeRule.onNodeWithText("Commencer").performScrollTo().performClick()
+        openFocus()
+        composeRule.onNodeWithText("Lis/avance 10 min").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Pause").performScrollTo().performClick()
         composeRule.onNodeWithText("Reprendre").performScrollTo().assertIsDisplayed()
         composeRule.activityRule.scenario.recreate()
@@ -120,22 +122,25 @@ class AtlasLaunchTest {
 
         openHome()
         openHabits()
-        composeRule.onNodeWithTag("habit_input").performTextInput("Lire dix minutes")
-        composeRule.onNodeWithText("Ajouter l'habitude").performScrollTo().performClick()
-        composeRule.onNodeWithText("Valider aujourd'hui").performScrollTo().performClick()
-        composeRule.onNodeWithText("Annuler aujourd'hui").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Annuler aujourd'hui").performScrollTo().performClick()
-        composeRule.onNodeWithText("Valider aujourd'hui").assertIsDisplayed()
-        composeRule.onNodeWithText("30 jours").performClick()
+        composeRule.onNodeWithTag("habits_add").performScrollTo().performClick()
+        composeRule.onNodeWithTag("habit_name").performTextInput("Lire dix minutes")
+        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Valider Lire dix minutes aujourd'hui").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Annuler la validation de Lire dix minutes aujourd'hui").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Annuler la validation de Lire dix minutes aujourd'hui").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Valider Lire dix minutes aujourd'hui").assertIsDisplayed()
+        composeRule.onNodeWithText("Détail").performScrollTo().performClick()
+        composeRule.onNodeWithText("30 jours").performScrollTo().performClick()
+        composeRule.onNodeWithText("← Mes habitudes").performScrollTo().performClick()
         composeRule.onNodeWithText("Exporter CSV").performScrollTo().performClick()
         composeRule.onNodeWithText("record_type", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Fermer").performClick()
+        composeRule.onAllNodesWithText("Fermer").get(0).performClick()
 
         composeRule.activityRule.scenario.recreate()
         openHome()
         openHabits()
         composeRule.onNodeWithText("Lire dix minutes").assertIsDisplayed()
-        composeRule.onNodeWithText("Valider aujourd'hui").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Valider Lire dix minutes aujourd'hui").assertIsDisplayed()
 
         openHome()
         openFocus()
@@ -192,15 +197,17 @@ class AtlasLaunchTest {
     @Test
     fun disablingFocusPausesSessionAndDisablingHabitsRemovesLinkButton() {
         openHabits()
-        composeRule.onNodeWithTag("habit_input").performTextInput("Lire hors ligne")
-        composeRule.onNodeWithText("Ajouter l'habitude").performScrollTo().performClick()
+        composeRule.onNodeWithTag("habits_add").performScrollTo().performClick()
+        composeRule.onNodeWithTag("habit_name").performTextInput("Lire hors ligne")
+        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         openHome()
 
-        composeRule.onNodeWithText("Commencer").performClick()
+        composeRule.onNodeWithText("Commencer").performScrollTo().performClick()
+        openFocus()
         composeRule.onNodeWithTag("focus_phase").assertTextEquals("Concentration · en cours")
         openHome()
         openSettings()
-        composeRule.onNodeWithContentDescription("Activer ou désactiver Focus").performClick()
+        composeRule.onNodeWithContentDescription("Activer ou désactiver Focus").performScrollTo().performClick()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val application = context.applicationContext as AtlasApplication
         val controller = application.controller
@@ -233,7 +240,7 @@ class AtlasLaunchTest {
 
         openHome()
         openSettings()
-        composeRule.onNodeWithContentDescription("Activer ou désactiver Habitudes").performClick()
+        composeRule.onNodeWithContentDescription("Activer ou désactiver Habitudes").performScrollTo().performClick()
         openHome()
         openFocus()
         composeRule.onNodeWithText("Session terminée").assertIsDisplayed()
@@ -242,7 +249,8 @@ class AtlasLaunchTest {
 
     @Test
     fun focusSessionRestorationSeed() {
-        composeRule.onNodeWithText("Commencer").performClick()
+        composeRule.onNodeWithText("Commencer").performScrollTo().performClick()
+        openFocus()
         composeRule.onNodeWithTag("focus_phase").assertTextEquals("Concentration · en cours")
     }
 
@@ -264,7 +272,7 @@ class AtlasLaunchTest {
         openMore()
         composeRule.onAllNodesWithText("Accueil et applications favorites").assertCountEquals(0)
         openHome()
-        composeRule.onNodeWithText("Directive du coach").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Directive du coach").assertCountEquals(1)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertTrue(AndroidLauncherCatalog(context).list().none { it.appPackage == context.packageName })
     }
@@ -301,7 +309,7 @@ class AtlasLaunchTest {
         composeRule.onNodeWithText("Nom de la routine").performTextInput("Routine de test")
         composeRule.onNodeWithText("Ajouter la routine").performClick()
         composeRule.onNodeWithText("Routine de test").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Une routine envoie une proposition", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Une routine envoie une proposition", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Commencer").assertCountEquals(0)
     }
 

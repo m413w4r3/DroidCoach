@@ -9,6 +9,7 @@ internal object AtlasScreenId {
     const val HABITS = "Habitudes"
     const val LIBRARY = "Bibliothèque"
     const val COACH = "Coach"
+    const val COACH_CONTEXT = "Contexte du coach"
     const val AGENT_SETTINGS = "Mandat du Coach"
     const val AGENT_SHARING = "Données partagées"
     const val AGENT_EFFECTS = "Journal des effets"

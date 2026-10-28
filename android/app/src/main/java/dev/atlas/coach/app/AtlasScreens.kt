@@ -577,8 +577,12 @@ internal fun LibraryScreen(controller: AtlasController, @Suppress("UNUSED_PARAME
 }
 
 @Composable
-internal fun CoachScreen(controller: AtlasController, revision: Int) {
-    AgentCoachScreen(controller, revision = revision)
+internal fun CoachScreen(
+    controller: AtlasController,
+    revision: Int,
+    onOpenContext: () -> Unit = {},
+) {
+    AgentCoachScreen(controller, revision = revision, onOpenContext = onOpenContext)
 }
 
 @Composable

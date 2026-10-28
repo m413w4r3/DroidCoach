@@ -124,11 +124,12 @@ class AtlasPresentationTest {
             stateContext.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
             controller = AtlasController(stateContext)
         }
+        val planController = PlanController(File(context.cacheDir, "v63-plan-presentation"))
         composeRule.setContent {
             AtlasTheme {
                 AtlasApp(
                     controller = controller,
-                    planController = PlanController(File(context.cacheDir, "v63-plan-presentation")),
+                    planController = planController,
                     context = context,
                     requestHomeRole = {},
                     openSystemHome = {},
@@ -148,7 +149,7 @@ class AtlasPresentationTest {
         composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
         composeRule.onNodeWithText("Parler au coach").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Coach").assertIsSelected()
-        composeRule.onNodeWithText("Coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Conversation").assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
@@ -181,22 +182,31 @@ class AtlasPresentationTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val stateContext = isolatedContext()
         lateinit var controller: AtlasController
+        val backend = object : dev.atlas.coach.data.StateBackend {
+            private var value: String? = null
+            override fun read(): String? = value
+            override fun write(value: String) {
+                this.value = value
+            }
+        }
         composeRule.runOnUiThread {
             stateContext.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
-            controller = AtlasController(stateContext)
-            controller.reportMessage("Notice temporaire de test")
+            controller = AtlasController(stateContext, stateBackendOverride = backend)
         }
+        val planController = PlanController(File(context.cacheDir, "v63-notice-presentation"))
         composeRule.setContent {
             AtlasTheme {
                 AtlasApp(
                     controller = controller,
-                    planController = PlanController(File(context.cacheDir, "v63-notice-presentation")),
+                    planController = planController,
                     context = context,
                     requestHomeRole = {},
                     openSystemHome = {},
                 )
             }
         }
+        composeRule.waitForIdle()
+        composeRule.runOnUiThread { controller.reportMessage("Notice temporaire de test") }
 
         composeRule.onNodeWithText("Notice temporaire de test").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Fermer").performScrollTo().performClick()

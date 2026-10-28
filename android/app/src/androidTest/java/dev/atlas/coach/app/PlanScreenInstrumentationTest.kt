@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -173,7 +174,7 @@ class PlanScreenInstrumentationTest {
             }
         }
 
-        composeRule.onNodeWithText("Créer le programme du jour").assertIsDisplayed()
+        composeRule.onNodeWithText("Créer le programme du jour").performScrollTo().assertIsDisplayed()
     }
 
     @Test
