@@ -42,7 +42,7 @@ qui reste à exécuter. Ne pas annoncer `GO_REMOTE` sur la seule preuve PC.
 
 Le binaire R3-C (`8332afd9…` au moment de la rédaction) n'a pas été installé.
 Aucun PASS Pixel A3/A4/chat/réseau ne peut être revendiqué pour ce binaire.
-Le Pixel `45301FDAS001QT` est hors USB ; Tailscale le voyait `offline` depuis
+Le Pixel `PIXEL_SERIAL (hors dépôt)` est hors USB ; Tailscale le voyait `offline` depuis
 23 jours. Toute installation exige une sauvegarde app-only vérifiée et un
 mandat ciblé.
 
@@ -74,12 +74,14 @@ La CI de la branche R3-C n'a pas été lancée : aucun push n'a été autorisé.
 Les gates locales sont PASS, mais le workflow distant `relay-node` reste
 `NOT_RUN`. Ne pas déclarer la CI verte avant un run terminé avec `success`.
 
-## R-25 — OpenClaw réel non rejoué
+## R-25 — OpenClaw réel : preuve PC, pas Pixel
 
-Le chat R3-C a été qualifié via l'adaptateur `mock`. L'OpenClaw personnel et
-le Bridge n'ont pas été modifiés. Une réponse OpenClaw réelle via le Funnel
-reste à rejouer si l'accès est autorisé ; les preuves R3-B historiques ne
-valent pas preuve R3-C.
+Le chat R3-C a été qualifié via l'adaptateur `mock` **et** via l'OpenClaw réel
+du PC avec un message synthétique : `agent_status=connected`, 7/7 contrôles
+publics PASS. L'OpenClaw personnel et le Bridge n'ont pas été modifiés, mais
+une conversation synthétique a été créée côté gateway. La provenance et le
+contenu affichés dans l'UI Android, ainsi que le consentement visuel sur
+Pixel, restent à rejouer.
 
 ## R-26 — Supervision persistante
 

@@ -30,9 +30,9 @@ Tous les enfants sont `provider=codex`, `model=gpt-6-luna`,
 
 | Ticket | Agent ID | Worktree | Branche | Statut |
 |---|---|---|---|---|
-| `R3C-ANDROID-NET-01` | `6a1b8d43-8c2a-4eed-807e-03142cf7f1e6` | `/home/nill/.paseo/worktrees/073527gm/r3c-net-01` | `feat/r3c-net-01` | BLOCKED_SANDBOX → patch intégré |
-| `R3C-COMPAT-01` | `6093964c-7ce5-4f6e-9424-ea59b08f1761` | `/home/nill/.paseo/worktrees/073527gm/r3c-compat-01` | `feat/r3c-compat-01` | BLOCKED_SANDBOX → patch intégré |
-| `R3C-RACE-01` | `be46e357-2cc0-4fd4-b367-3d036d5e7df3` | `/home/nill/.paseo/worktrees/073527gm/r3c-race-01` | `feat/r3c-race-01` | BLOCKED_SANDBOX → patch intégré |
+| `R3C-ANDROID-NET-01` | `6a1b8d43-8c2a-4eed-807e-03142cf7f1e6` | `<worktree Paseo>/r3c-net-01` | `feat/r3c-net-01` | BLOCKED_SANDBOX → patch intégré |
+| `R3C-COMPAT-01` | `6093964c-7ce5-4f6e-9424-ea59b08f1761` | `<worktree Paseo>/r3c-compat-01` | `feat/r3c-compat-01` | BLOCKED_SANDBOX → patch intégré |
+| `R3C-RACE-01` | `be46e357-2cc0-4fd4-b367-3d036d5e7df3` | `<worktree Paseo>/r3c-race-01` | `feat/r3c-race-01` | BLOCKED_SANDBOX → patch intégré |
 
 Le bac à sable Codex refuse l'écriture dans `.git/worktrees`, `~/.gradle` et
 l'exécution de certains binaires `node_modules` (`Read-only file system`,
@@ -85,13 +85,13 @@ pas modifié.
 
 | Élément | Valeur |
 |---|---|
-| Dépôt | `/home/nill/perso/AndroCoach/atlas-preparation` |
+| Dépôt | `$REPO` |
 | JDK | OpenJDK 21.0.12.1 |
 | Node / npm | v24.18.0 / 11.16.0 |
 | Python | 3.12.3 |
-| Android SDK | `/home/nill/Android/Sdk`, API 37.x |
+| Android SDK | `$ANDROID_HOME`, API 37.x |
 | ADB | appareil : **aucun connecté au pré-vol** |
-| Pixel | `45301FDAS001QT`, hors USB ; Tailscale `offline, last seen 23d` |
+| Pixel | `PIXEL_SERIAL (hors dépôt)`, hors USB ; Tailscale `offline, last seen 23d` |
 | Tailscale | 1.104.4, `Self.Online=true`, `Health=[]` |
 | Funnel | `tcp://all.taildc7886.ts.net:8443` → `127.0.0.1:4400` |
 | Relais local | image `atlas-paseo-relay:r3a`, `127.0.0.1:4402` |

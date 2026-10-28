@@ -5,6 +5,18 @@ commande, horodatage, résultat brut ou résumé vérifiable, résultat attendu,
 résultat observé, statut, limites. Les horodatages sont locaux
 (`Europe/Paris`, +01:00) sauf mention UTC.
 
+## Convention de pseudonymisation
+
+- `PIXEL_SERIAL` : numéro de série exact conservé **hors dépôt** dans
+  `~/atlas-backups/r3c/pixel-serial.txt` (0600).
+- `$FUNNEL_PUBLIC_IP` : adresse publique résolue par DoH, conservée hors
+  dépôt dans `~/atlas-backups/r3c/funnel-public-ip.txt` (0600).
+- L'IP physique du PC et son interface sont conservées hors dépôt
+  (`pc-physical-ip.txt`) ; l'IP publique du PC n'est pas publiée.
+- Le hostname Funnel `all.taildc7886.ts.net` est l'infrastructure **imposée
+  par la mission** et n'est pas un secret ; il reste nécessaire aux commandes
+  d'exploitation. Aucun token, clé privée ou contenu personnel n'est publié.
+
 ## P-BASE-01 — Git local et distant
 
 | Champ | Valeur |
@@ -52,7 +64,7 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Horodatage | 2026-10-28T16:52+01:00 |
 | Observé | Node v24.18.0 ; OpenJDK 21.0.12.1 ; Python 3.12.3 ; **aucun appareil ADB** ; Tailscale 1.104.4 |
 | Statut | **PASS (inventaire)** |
-| Limites | Le Pixel `45301FDAS001QT` est déconnecté ; toute recette Pixel est `BLOCKED_DEVICE` jusqu'à reconnexion et mandat |
+| Limites | Le Pixel `PIXEL_SERIAL` est déconnecté ; toute recette Pixel est `BLOCKED_DEVICE` jusqu'à reconnexion et mandat |
 
 ## P-FUNNEL-01 — Diagnostic non destructif
 
@@ -63,7 +75,7 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Commande | `tailscale status` ; `tailscale funnel status --json` ; `tailscale netcheck` ; `systemctl is-active tailscaled` |
 | Horodatage | 2026-10-28T16:52+01:00 |
 | Attendu | Distinguer panne réseau, backend arrêté, proxy/relais/connecteur, TLS |
-| Observé | `Self.Online=true`, `Health=[]` ; Funnel `8443 → 127.0.0.1:4400`, `AllowFunnel=true` ; netcheck UDP OK, IPv4 publique `88.160.125.113:20588`, DERP Francfort ; `tailscaled` actif |
+| Observé | `Self.Online=true`, `Health=[]` ; Funnel `8443 → 127.0.0.1:4400`, `AllowFunnel=true` ; netcheck UDP OK, IPv4 publique `IP publique du PC (hors dépôt)`, DERP Francfort ; `tailscaled` actif |
 | Statut | **PASS (diagnostic)** |
 | Limites | Le plan de contrôle était injoignable en R3-B ; il est de nouveau joignable. Aucune configuration Tailscale modifiée |
 
@@ -82,11 +94,11 @@ résultat observé, statut, limites. Les horodatages sont locaux
 
 | Champ | Valeur |
 |---|---|
-| Environnement | PC, résolution DoH `1.1.1.1`, IP publique `176.58.90.46` |
-| Commande | DoH A/AAAA ; `openssl s_client -connect 176.58.90.46:8443 -servername all.taildc7886.ts.net` ; `curl --resolve all.taildc7886.ts.net:8443:176.58.90.46 …` |
+| Environnement | PC, résolution DoH `1.1.1.1`, IP publique `$FUNNEL_PUBLIC_IP` |
+| Commande | DoH A/AAAA ; `openssl s_client -connect $FUNNEL_PUBLIC_IP:8443 -servername all.taildc7886.ts.net` ; `curl --resolve all.taildc7886.ts.net:8443:$FUNNEL_PUBLIC_IP …` |
 | Horodatage | 2026-10-28T16:57+01:00 |
 | Attendu | TLS public valide, `/health` 200, `/ready` 200, `/metrics` 404 |
-| Observé | A `176.58.90.46/.63/.145`, AAAA `2a00:dd80:3e::47e/…` ; TLSv1.3, `CN=all.taildc7886.ts.net`, `Verification: OK` ; `health_http=200 tls_verify=0`, `ready_http=200`, `metrics_http=404` |
+| Observé | A `$FUNNEL_PUBLIC_IP/.63/.145`, AAAA `2a00:dd80:3e::47e/…` ; TLSv1.3, `CN=all.taildc7886.ts.net`, `Verification: OK` ; `health_http=200 tls_verify=0`, `ready_http=200`, `metrics_http=404` |
 | Statut | **PASS** |
 | Limites | Connexion initiée par le PC via l'IP publique, sans MagicDNS ni `100.119.62.63` ; ce n'est pas encore une preuve depuis le réseau mobile Pixel |
 
@@ -107,13 +119,68 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Champ | Valeur |
 |---|---|
 | SHA source | `eedf915…` (code R3-B) + services de test |
-| Environnement | `wss://all.taildc7886.ts.net:8443` via IP publique `176.58.90.46`, appareil synthétique `49f67626-…` |
-| Commande | `ATLAS_E2E_PUBLIC_IP=176.58.90.46 node scripts/r3b-public-e2e.mjs` |
+| Environnement | `wss://all.taildc7886.ts.net:8443` via IP publique `$FUNNEL_PUBLIC_IP`, appareil synthétique `49f67626-…` |
+| Commande | `ATLAS_E2E_PUBLIC_IP=$FUNNEL_PUBLIC_IP node scripts/r3b-public-e2e.mjs` |
 | Horodatage | 2026-10-28T16:59+01:00 |
 | Attendu | Noise `protected`, auth appareil, `backend.health`, `sync.status`, chat relayé, rejeu, idempotence, limite payload |
 | Observé | **7/7 PASS** : `noise_protected_and_device_auth`, `backend_health_via_funnel` (`ok`), `sync_status_via_funnel` (`relay_connected=true`), `coach_chat_relayed` (`agent_status=mock`, 2 propositions), `coach_chat_replay_no_duplicate` (`replayed=true`), `coach_chat_idempotency_conflict` (`IDEMPOTENCY_CONFLICT`), `coach_chat_payload_limit` (`INVALID_REQUEST`) |
 | Statut | **PASS (PC, ingress public)** |
 | Limites | Adaptateur `mock`, pas OpenClaw réel ; connexion initiée par le PC ; pas encore de Pixel sur réseau mobile. Les preuves R3-B de chat OpenClaw réel restent historiques, pas des preuves R3-C |
+
+## P-FUNNEL-06 — Chemin public via l'interface physique, ports internes fermés
+
+| Champ | Valeur |
+|---|---|
+| Environnement | PC, interface `interface physique (hors dépôt)`, IP source `IP physique du PC (hors dépôt)`, IP publique du Funnel `$FUNNEL_PUBLIC_IP` |
+| Commande | `curl --interface IP physique du PC (hors dépôt) --resolve all.taildc7886.ts.net:8443:$FUNNEL_PUBLIC_IP …` ; tests TCP vers `4400/4401/4402/8100` |
+| Horodatage | 2026-10-28T17:13+01:00 |
+| Observé | `health_http=200`, `local_ip=IP physique du PC (hors dépôt)` (donc hors `tailscale0`) ; ports `4400`, `4401`, `4402`, `8100` **closed** sur l'IP publique |
+| Statut | **PASS** |
+| Limites | Le PC reste sur le même réseau domestique ; ce n'est pas un réseau mobile indépendant |
+
+## P-FUNNEL-07 — Ancien appairage sans `coach.chat` via le Funnel public
+
+| Champ | Valeur |
+|---|---|
+| Environnement | appareil synthétique `95a472e3-…`, capacités `sync.status` uniquement, IP publique |
+| Commande | `ATLAS_E2E_CAPABILITIES=sync.status ATLAS_E2E_EXPECT_CHAT_UNAVAILABLE=1 node scripts/r3b-public-e2e.mjs` |
+| Horodatage | 2026-10-28T17:13+01:00 |
+| Observé | **4/4 PASS** : Noise/auth 101 protégé, `backend.health` ok, `sync.status` `relay_connected=true`, `coach.chat.request` → `OPERATION_UNAVAILABLE` ; session non fermée |
+| Statut | **PASS (connecteur public)** |
+| Limites | Le client de test est Node, pas l'app Android ; la correction Android COMPAT est couverte en JVM |
+
+## P-FUNNEL-08 — FastAPI arrêté puis rétabli via le Funnel public
+
+| Champ | Valeur |
+|---|---|
+| Environnement | FastAPI isolé `127.0.0.1:8100`, IP publique |
+| Commande | arrêt contrôlé ; `ATLAS_E2E_EXPECT_HEALTH=BACKEND_UNAVAILABLE ATLAS_E2E_ONLY=health node scripts/r3b-public-e2e.mjs` ; relance ; même test avec `ok` |
+| Horodatage | 2026-10-28T17:14+01:00 |
+| Observé | arrêt : `kind=error`, `health_status=BACKEND_UNAVAILABLE`, session Noise toujours authentifiée ; relance : `kind=response`, `health_status=ok`, `fastapi_health=200` |
+| Statut | **PASS** |
+| Limites | Redémarrage d'une instance isolée, pas d'un service persistant |
+
+## P-PC-SIGKILL — Résilience du connecteur
+
+| Champ | Valeur |
+|---|---|
+| Environnement | connecteur réel, état `~/.local/state/atlas-relay` |
+| Commande | identité/registre hashés ; `kill -9` ; relance `scripts/start.sh` ; attente métriques |
+| Horodatage | 2026-10-28T17:14+01:00 |
+| Observé | identité `7c7df954…` et hash registre `bb9ad1b1…` **identiques avant/après** ; `relay_connected=true` après relance |
+| Statut | **PASS** |
+| Limites | Un redémarrage complet réel du PC reste `NOT_RUN` |
+
+## P-FUNNEL-09 — Chat OpenClaw réel via le Funnel public
+
+| Champ | Valeur |
+|---|---|
+| Environnement | FastAPI isolé `127.0.0.1:8100`, `ATLAS_AGENT_ADAPTER=openclaw`, jeton existant 0600, IP publique `$FUNNEL_PUBLIC_IP`, appareil synthétique `49f67626-…` |
+| Commande | `ATLAS_E2E_CHAT_MESSAGE='Ceci est un test synthétique ATLAS R3C. Réponds en une phrase, sans action.' node scripts/r3b-public-e2e.mjs` |
+| Horodatage | 2026-10-28T17:19+01:00 |
+| Observé | **7/7 PASS** : Noise/auth protégé, `backend.health` ok, `sync.status` `relay_connected=true`, chat `agent_status=connected`, réponse de 32 caractères, 0 proposition, rejeu `replayed=true`, idempotence `IDEMPOTENCY_CONFLICT`, limite payload `INVALID_REQUEST` |
+| Statut | **PASS (PC public, OpenClaw réel)** |
+| Limites | Message synthétique uniquement ; OpenClaw personnel non modifié ; une conversation synthétique a été créée côté gateway ; aucun test Pixel ni UI de provenance |
 
 ## P-COMPAT-01 — Ancien appairage sans `coach.chat`
 
@@ -224,3 +291,37 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Observé | YAML valide ; suite Node locale 81/81 ; proxy local 18/18 ; harnais relais réel 81/81. **Aucun run CI distant déclaré avant exécution terminée** |
 | Statut | **NOT_RUN (distant)** |
 | Limites | Un push est nécessaire pour déclencher la CI distante ; il exige une autorisation explicite. En attendant, le statut reste `NOT_RUN`, pas `PASS` |
+
+## P-CI-02 — Reproduction locale du job `relay-node`
+
+| Champ | Valeur |
+|---|---|
+| SHA source | `c5ec1f4` (code `d2419b3`) |
+| Environnement | Node 24.18.0, `integrations/relay/pc` |
+| Commande | `npm ci` puis `npm run test:unit` |
+| Horodatage | 2026-10-28T17:16+01:00 |
+| Observé | `npm ci` PASS (artefact relais vérifié) ; `test:unit` **16 fichiers, 80 tests PASS** (exclut l'intégration relais réel, comme la CI) |
+| Statut | **PASS (local)** |
+| Limites | Ce n'est pas le runner GitHub ; le job distant reste `NOT_RUN` |
+
+## P-SUPERVISION-01 — Unités systemd et hygiène des secrets
+
+| Champ | Valeur |
+|---|---|
+| Environnement | PC hôte |
+| Commande | `systemd-analyze --user verify …` ; `stat -c '%a'` ; `check-secret.mjs` ; `rg` sur les logs |
+| Horodatage | 2026-10-28T17:17+01:00 |
+| Observé | unités relais et proxy **rc=0** ; `relay.env` 0600, état 0700, `identity.json`/`devices.json`/`operations.json` 0600, sauvegarde Pixel 0600 ; aucun motif de secret dans les logs `/tmp/atlas-r3c/*.log` |
+| Statut | **PASS (statique)** |
+| Limites | Unités non installées ; `linger` déjà actif non modifié ; redémarrage complet du PC `NOT_RUN` |
+
+## P-DATA-01 — Sauvegarde et réversibilité
+
+| Champ | Valeur |
+|---|---|
+| Environnement | `~/atlas-backups/r3b` |
+| Commande | `sha256sum` ; `stat` ; lecture des permissions |
+| Horodatage | 2026-10-28T17:05+01:00 |
+| Observé | sauvegarde app-only `fbca987a…` 0600, APK rollback `66645143…` 0600, état connecteur `identity.json`/`devices.json`/`manifest.json` 0600 |
+| Statut | **PASS (inventaire)** |
+| Limites | Les hashes ATLAS ne sont pas une preuve d'intégrité exhaustive ; aucune restauration n'a été tentée pendant R3-C |

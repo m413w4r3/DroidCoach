@@ -1,5 +1,11 @@
 # ATLAS V6.3 — R3-B — Runbook Pixel
 
+> **OBSOLÈTE POUR LA QUALIFICATION R3-C.** Suivre
+> [`../r3c/RUNBOOK_PIXEL_FINAL.md`](../r3c/RUNBOOK_PIXEL_FINAL.md). Les
+> restaurations globales, suppressions de répertoires applicatifs,
+> `pm clear`, `uninstall` et suppressions d'alias Keystore hors appairage
+> explicite sont **interdites**. Ce document reste l'historique R3-B.
+
 Cible de qualification : **Pixel 9 Pro XL physique**, Android 17 / API 37,
 numéro de série `45301FDAS001QT`. Aucun émulateur ne vaut preuve Pixel.
 

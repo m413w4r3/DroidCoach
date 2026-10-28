@@ -1,5 +1,10 @@
 # ATLAS V6.3 — R3-B — Runbook PC
 
+> **HISTORIQUE R3-B.** Pour l'exploitation et la qualification R3-C, suivre
+> [`../r3c/RUNBOOK_REPRISE_PC.md`](../r3c/RUNBOOK_REPRISE_PC.md). Ce document
+> reste la référence des chemins et scripts R3-B ; les services persistants
+> ne sont pas installés.
+
 Runbook d'exploitation du PC hôte. L'architecture, le DNS, le TLS et le
 filtrage sont décrits dans
 [`DEPLOIEMENT_TAILSCALE_FUNNEL.md`](DEPLOIEMENT_TAILSCALE_FUNNEL.md).

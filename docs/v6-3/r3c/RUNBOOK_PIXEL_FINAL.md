@@ -1,8 +1,12 @@
 # ATLAS V6.3 — R3-C — Runbook Pixel final (non destructif)
 
 Cible : **Pixel 9 Pro XL physique**, Android 17 / API 37, série
-`45301FDAS001QT`. Aucun émulateur ne vaut preuve Pixel. Ce runbook remplace
+`$PIXEL_SERIAL`. Aucun émulateur ne vaut preuve Pixel. Ce runbook remplace
 les instructions de restauration R3-B devenues dangereuses.
+
+Le numéro de série exact est conservé **hors dépôt** dans
+`~/atlas-backups/r3c/pixel-serial.txt` (0600) ; l'exporter dans
+`PIXEL_SERIAL` avant d'exécuter les commandes. Ne jamais le committer.
 
 ## 0. Autorisations et principe
 
@@ -32,12 +36,12 @@ ciblée.
 
 ```sh
 adb devices -l
-adb -s 45301FDAS001QT shell getprop ro.build.version.release
-adb -s 45301FDAS001QT shell getprop ro.build.version.sdk
-adb -s 45301FDAS001QT shell pm path dev.atlas.coach
-adb -s 45301FDAS001QT shell dumpsys package dev.atlas.coach | grep -E 'versionCode=|versionName='
-adb -s 45301FDAS001QT reverse --list          # doit être vide
-adb -s 45301FDAS001QT shell settings get global http_proxy
+adb -s $PIXEL_SERIAL shell getprop ro.build.version.release
+adb -s $PIXEL_SERIAL shell getprop ro.build.version.sdk
+adb -s $PIXEL_SERIAL shell pm path dev.atlas.coach
+adb -s $PIXEL_SERIAL shell dumpsys package dev.atlas.coach | grep -E 'versionCode=|versionName='
+adb -s $PIXEL_SERIAL reverse --list          # doit être vide
+adb -s $PIXEL_SERIAL shell settings get global http_proxy
 ```
 
 Vérifier aussi que l'appareil est bien celui attendu et que la batterie est
@@ -49,7 +53,7 @@ suffisante. Aucun `adb root`, aucun Device Owner, aucun kiosque.
 backup_dir="$HOME/atlas-backups/r3c"
 umask 077
 mkdir -p "$backup_dir" && chmod 700 "$HOME/atlas-backups" "$backup_dir"
-adb -s 45301FDAS001QT exec-out run-as dev.atlas.coach tar -cf - . \
+adb -s $PIXEL_SERIAL exec-out run-as dev.atlas.coach tar -cf - . \
   > "$backup_dir/pixel-app-backup-pre-r3c.tar"
 chmod 600 "$backup_dir/pixel-app-backup-pre-r3c.tar"
 sha256sum "$backup_dir/pixel-app-backup-pre-r3c.tar"
@@ -84,8 +88,8 @@ son parcours réel ; ne jamais supprimer l'alias hors du scénario A4
 Calendrier : compter les calendriers et événements, ne jamais lire les titres.
 
 ```sh
-adb -s 45301FDAS001QT shell content query --uri content://com.android.calendar/calendars --projection _id | wc -l
-adb -s 45301FDAS001QT shell content query --uri content://com.android.calendar/events --projection _id | wc -l
+adb -s $PIXEL_SERIAL shell content query --uri content://com.android.calendar/calendars --projection _id | wc -l
+adb -s $PIXEL_SERIAL shell content query --uri content://com.android.calendar/events --projection _id | wc -l
 ```
 
 ## 3. Construction et contrôle de l'APK R3-C
@@ -118,9 +122,9 @@ Avant installation :
 Si la signature diffère : **ne pas désinstaller**, statut `BLOCKED`.
 
 ```sh
-adb -s 45301FDAS001QT install -r "$apk"
-adb -s 45301FDAS001QT install -r -t "$testapk"
-adb -s 45301FDAS001QT shell dumpsys package dev.atlas.coach | grep -E 'versionCode=|versionName='
+adb -s $PIXEL_SERIAL install -r "$apk"
+adb -s $PIXEL_SERIAL install -r -t "$testapk"
+adb -s $PIXEL_SERIAL shell dumpsys package dev.atlas.coach | grep -E 'versionCode=|versionName='
 ```
 
 Après installation, comparer les témoins et les compteurs calendrier. Aucun
@@ -142,10 +146,10 @@ Appareil synthétique dédié, token fourni une seule fois par fichier `0600`.
 Commandes de contrôle :
 
 ```sh
-adb -s 45301FDAS001QT shell am force-stop dev.atlas.coach
-adb -s 45301FDAS001QT reboot
-adb -s 45301FDAS001QT wait-for-device
-adb -s 45301FDAS001QT shell getprop sys.boot_completed
+adb -s $PIXEL_SERIAL shell am force-stop dev.atlas.coach
+adb -s $PIXEL_SERIAL reboot
+adb -s $PIXEL_SERIAL wait-for-device
+adb -s $PIXEL_SERIAL shell getprop sys.boot_completed
 ```
 
 ## 5. A4 — Révocation complète avec session établie

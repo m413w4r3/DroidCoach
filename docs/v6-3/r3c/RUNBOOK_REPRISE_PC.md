@@ -38,8 +38,10 @@ Aucune unité systemd ATLAS n'est installée.
 ## 3. Ordre de démarrage (services de test isolés)
 
 ```sh
+REPO=$(git rev-parse --show-toplevel)
+
 # 1. Relais épinglé
-cd /home/nill/perso/AndroCoach/atlas-preparation
+cd "$REPO"
 ATLAS_RELAY_PORT=4402 scripts/r3a/start-relay.sh
 
 # 2. Proxy filtrant
@@ -60,7 +62,7 @@ setsid -f env ATLAS_TOKEN="$ATLAS_TOKEN" ATLAS_DB_PATH="$ATLAS_DB_PATH" \
   > /tmp/atlas-r3c/fastapi.log 2>&1
 
 # 4. Connecteur (après relais, proxy et FastAPI)
-cd /home/nill/perso/AndroCoach/atlas-preparation/integrations/relay/pc
+cd "$REPO/integrations/relay/pc"
 npm run build
 setsid -f scripts/start.sh "$HOME/.config/atlas/relay.env" \
   > /tmp/atlas-r3c/connector.log 2>&1

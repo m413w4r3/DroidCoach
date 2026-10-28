@@ -25,7 +25,7 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | T10 | Unités systemd | PARTIAL | **PARTIAL / BLOCKED_AUTHORIZATION** | Modèles non installés ; vérification statique seule |
 | T11 | WSS public Funnel | PASS historique / PARTIAL final | **PASS (PC, IP publique)** | TLS 1.3, health/ready 200, metrics 404, WSS 101, E2E 7/7 |
 | T12 | Chat mock relayé | PASS | **PASS (PC public)** | adaptateur mock |
-| T13 | Chat OpenClaw réel | PASS historique | **NOT_REPLAYED_R3C** | Aucune instance OpenClaw réelle utilisée dans R3-C |
+| T13 | Chat OpenClaw réel | PASS historique | **PASS (PC public, message synthétique)** | `agent_status=connected`, réponse réelle ; aucun Pixel |
 | T14 | A3 Keystore | PASS ancien APK | **BLOCKED_DEVICE** | Pas de Pixel ; pas de nouveau binaire installé |
 | T15 | A4 révocation | PARTIAL ancien APK | **BLOCKED_DEVICE** | Assertions 4001/Keystore non rejouées sur binaire R3-C |
 | T16 | Données Pixel | PASS 5/5 | **BLOCKED_DEVICE** | Pas de comparaison possible sans appareil |
@@ -35,16 +35,16 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 
 | ID | Cas | R3-B | R3-C | Limite |
 |---|---|---|---|---|
-| NET-01 | DNS public + TLS | PASS historique | **PASS** — DoH 1.1.1.1, IP `176.58.90.46`, TLS 1.3, certificat valide | PC, pas Pixel mobile |
+| NET-01 | DNS public + TLS | PASS historique | **PASS** — DoH 1.1.1.1, IP `$FUNNEL_PUBLIC_IP`, TLS 1.3, certificat valide, source physique hors dépôt | PC, pas Pixel mobile |
 | NET-02 | WSS public 8443 sans VPN Android | PASS historique | **NOT_RUN_PIXEL** | Pixel absent |
 | NET-03 | Absence `adb reverse`/proxy USB | PASS historique | **NOT_RUN_PIXEL** | Pixel absent |
 | NET-04 | Noise NK `protected`, identité épinglée | PASS historique | **PASS (PC public)** | E2E 7/7 |
 | NET-05 | `backend.health` via Funnel | PASS | **PASS (PC public)** | mock |
-| NET-06 | Chat réel via relais/adaptateur autorisé | PASS historique | **PASS mock / NOT_REPLAYED OpenClaw** | pas de modification OpenClaw |
+| NET-06 | Chat réel via relais/adaptateur autorisé | PASS historique | **PASS (PC public, OpenClaw réel)** | message synthétique, pas de Pixel |
 | NET-07 | Coupure réseau → OFFLINE | PARTIAL (ERROR observé) | **PASS JVM / BLOCKED_DEVICE Pixel** | 14 cas JVM ; observation finale sur binaire R3-C requise |
 | NET-08 | Reconnexion après réseau | PASS | **PASS JVM (reprise OFFLINE→CONNECTING→CONNECTED)** | Pixel à rejouer |
 | NET-09 | Wi-Fi → LTE/5G → Wi-Fi | PASS historique | **NOT_RUN_PIXEL** | Pixel absent |
-| NET-10 | Redémarrage connecteur/FastAPI | PASS | **PASS (services isolés)** | SIGKILL/relance déjà couverts par tests Node ; redémarrage PC réel non exécuté |
+| NET-10 | Redémarrage connecteur/FastAPI | PASS | **PASS** — SIGKILL connecteur (identité/registre conservés), arrêt/relance FastAPI public (`BACKEND_UNAVAILABLE` puis `ok`) | Redémarrage complet du PC non exécuté |
 | NET-11 | Redémarrage proxy/relais | PASS | **PASS (proxy redémarré, connecteur reconnecté)** | |
 | NET-12 | Révocation avec session active | PASS historique | **PASS JVM/Node, BLOCKED_DEVICE Pixel** | |
 | NET-13 | Expiration requête/session/token | PARTIAL | **PARTIAL** | Horloges contrôlées JVM/Node ; parcours Pixel non rejoué |
@@ -57,15 +57,15 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | ID | Cas | R3-B | R3-C | Limite |
 |---|---|---|---|---|
 | CHAT-01 | Chat mock relayé | PASS | **PASS (PC public)** | |
-| CHAT-02 | Chat OpenClaw réel | PASS historique | **NOT_REPLAYED_R3C** | |
+| CHAT-02 | Chat OpenClaw réel | PASS historique | **PASS (PC public)** | message synthétique, pas de Pixel |
 | CHAT-03 | Contexte consenti/minimisé | PASS | **PASS (tests JVM/Node)** | Pixel non rejoué |
-| CHAT-04 | Refus sans capacité | PASS connecteur, Android fermait la session | **PASS** — session maintenue, `OPERATION_UNAVAILABLE`, anciennes opérations utilisables | `a162f70` |
+| CHAT-04 | Refus sans capacité | PASS connecteur, Android fermait la session | **PASS** — session maintenue, `OPERATION_UNAVAILABLE`, anciennes opérations utilisables ; vérifié aussi via Funnel public avec un ancien appareil | `a162f70`, P-FUNNEL-07 |
 | CHAT-05 | Mandat révoqué/expiré | PARTIAL | **PARTIAL** | Tests JVM/Node ; parcours Pixel non rejoué |
 | CHAT-06 | Déconnexion pendant chat en vol | PARTIAL | **PASS JVM/Node** | Pixel non rejoué |
 | CHAT-07 | Reconnexion sans doublon | PASS | **PASS (public + Node)** | |
 | CHAT-08 | Payload malformé/trop grand | PASS | **PASS** | |
 | CHAT-09 | Aucune action sans confirmation | PASS historique | **NOT_REPLAYED_R3C** | Pixel absent |
-| CHAT-10 | Provenance mock/OpenClaw | PASS historique | **PARTIAL** — mock public ; OpenClaw non rejoué | |
+| CHAT-10 | Provenance mock/OpenClaw | PASS historique | **PARTIAL** — mock et OpenClaw réels qualifiés côté transport (`agent_status`) ; UI Pixel non rejouée | |
 
 ## 4. Identité et révocation
 
