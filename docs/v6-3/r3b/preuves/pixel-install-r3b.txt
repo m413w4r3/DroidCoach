@@ -1,0 +1,31 @@
+ATLAS V6.3 R3-B — Installation APK R3-B sur Pixel
+Date: 2026-10-28
+Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
+Source SHA: 3ecccad8c14c64be99966e137fbd32af64345b20
+APK installé: android/app/build/outputs/apk/debug/app-debug.apk
+SHA-256 APK: bf72c735ba12027cfc9fa7321b5cab076ccdf663d56d034083ca849c5d6ca0d4
+APK androidTest compilé: cd83bac80e5bf32c2d1572235e690ee425c5c206529400ac35a561b6d8de4fc3
+Signature: V2 debug, certificat SHA-256
+da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee
+Paquet: dev.atlas.coach, versionCode=1, versionName=0.1.0, compileSdk 37
+Commande: adb -s 45301FDAS001QT install -r <apk>
+Résultat: Success ; lastUpdateTime=2026-10-28 14:01:04
+
+Données ATLAS avant/après installation (identiques) :
+  6e72d8b2d8462d72310db02a505f5051b16e097e9aa53ecfa56e1d1f7724b9a5  atlas_local_state.xml
+  745038187c38bbc4907268bf002d8d7fd24d357fd46613f1d643005506508742  atlas_sync_configuration.xml
+  edcfba43fe11ddccea1273e8e0749b31e0fd9b36db257dd3b8a8ef348fece6a6  atlas_agent_revocation_barrier.xml
+  c5a1f5ed484e57d8470fae0c02e420591230ac451a17d625198e26a6d9bf7c5d  files/atlas_agent_inbox_v2.json
+  fc003a7f8734de958a8aa97d6d0c204d404d39b22c420e75192ba2800863af3d  files/plans/day-plan-2026-10-26.json
+
+Lancement à blanc :
+  launcher dev.atlas.coach/.app.MainActivity, Status ok, COLD, 656 ms
+  topResumedActivity = dev.atlas.coach/.app.MainActivity
+  AndroidRuntime:E vide (aucun crash)
+  Aucun ADB reverse, aucun proxy.
+
+Limites:
+  - Cet APK précède les classes androidTest A3/A4/chat d'ANDROID-01 ; il sera
+    reconstruit depuis le SHA intégré final pour la recette instrumentée.
+  - Aucune donnée personnelle, aucun contenu de calendrier ni token dans cette
+    preuve.
