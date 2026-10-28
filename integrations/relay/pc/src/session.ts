@@ -36,6 +36,8 @@ interface QuotaBucket {
   times: number[];
 }
 
+const REVOKE_GRACE_MS = 200;
+
 const OPERATION_CAPABILITY: Partial<Record<string, Capability>> = {
   "coach.chat.request": "coach.chat",
   "coach.status": "coach.status",
@@ -229,6 +231,10 @@ export class PeerSession {
   async revoke(): Promise<void> {
     if (this.closed) return;
     await this.sendError(new RemoteError("DEVICE_REVOKED"), null);
+    // The relay forwards the error over the paired data connection. Closing the
+    // server data socket immediately can race that forwarding; a bounded grace
+    // window lets the relay route the revocation frame before the close.
+    await new Promise((resolve) => setTimeout(resolve, REVOKE_GRACE_MS));
     this.close(4001, "device revoked");
   }
 
