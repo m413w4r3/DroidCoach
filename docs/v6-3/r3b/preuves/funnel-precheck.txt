@@ -1,0 +1,20 @@
+ATLAS V6.3 R3-B — Pré-contrôle Funnel (avant proxy)
+Date: 2026-10-28
+tailscale funnel status:
+  Funnel on: tcp://all.taildc7886.ts.net:8443
+  TLS-terminated TCP -> tcp://127.0.0.1:4400
+  https://all.taildc7886.ts.net -> http://127.0.0.1:8770 (tailnet only, hors périmètre)
+
+DNS public (DoH 1.1.1.1):
+  all.taildc7886.ts.net A 176.58.90.46, 176.58.90.63, 176.58.90.145 (TTL 300)
+DNS local Tailscale (MagicDNS):
+  100.119.62.63 (adresse tailnet, non publique)
+
+Constat pré-proxy:
+  openssl s_client vers 176.58.90.46:8443 avec SNI all.taildc7886.ts.net:
+    échec handshake (unexpected eof / SSL_ERROR_SYSCALL)
+  curl https://all.taildc7886.ts.net:8443/health: http_code=000
+Cause probable: aucun listener sur 127.0.0.1:4400 (proxy non encore démarré), le
+Funnel ne peut pas servir la terminaison applicative.
+Conclusion: NET-01/NET-02 NON qualifiés à ce stade. Aucun PASS revendiqué.
+À rejouer après démarrage du proxy filtrant sur 127.0.0.1:4400.
