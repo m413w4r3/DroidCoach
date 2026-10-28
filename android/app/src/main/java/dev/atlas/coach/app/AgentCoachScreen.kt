@@ -170,8 +170,16 @@ internal fun AgentCoachScreen(
     }
     val humanConnectionDetail = when {
         consentDetail != null -> consentDetail
-        tlsFailure -> "La connexion sécurisée au PC a échoué."
-        humanConnection.label == "Erreur de connexion" -> "La connexion au PC a échoué."
+        tlsFailure -> "Erreur TLS · liaison sécurisée indisponible."
+        humanConnection.label == "Accès révoqué" -> "Accès révoqué par le PC · réappairage requis."
+        humanConnection.label == "Erreur de connexion" -> "Connexion au PC impossible."
+        connectionLabel == "Hors ligne" -> "Données locales · aucun renvoi automatique."
+        humanConnection.label == "Mode local" -> "Réponse locale, sans serveur distant."
+        humanConnection.label == "Connexion en cours…" -> "Liaison en cours."
+        humanConnection.label == "Connexion requise" -> "Jeton absent ou refusé."
+        humanConnection.label == "Appairage nécessaire" -> "Appairage requis avant connexion."
+        humanConnection.label == "Relais inactif" -> "Mode relayé inactif."
+        humanConnection.label == "Connexion directe" -> "PC joignable en direct."
         rawTechnicalDetail != null && humanConnection.detail == rawTechnicalDetail -> "Un problème empêche la connexion au PC."
         else -> humanConnection.detail
     }
@@ -205,7 +213,7 @@ internal fun AgentCoachScreen(
                 Text(humanConnectionDetail, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 rawTechnicalDetail?.let { detail ->
                     TextButton(
-                        modifier = Modifier.sizeIn(minHeight = 40.dp).testTag("agent_connection_technical_detail_toggle"),
+                        modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_connection_technical_detail_toggle"),
                         onClick = { showTechnicalConnectionDetail = !showTechnicalConnectionDetail },
                     ) {
                         Text(if (showTechnicalConnectionDetail) "Masquer le détail technique" else "Détail technique")
@@ -222,7 +230,7 @@ internal fun AgentCoachScreen(
             }
         }
         TextButton(
-            modifier = Modifier.sizeIn(minHeight = 40.dp).testTag("agent_refresh"),
+            modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_refresh"),
             onClick = controller::pullAgentInbox,
         ) { Text("Actualiser") }
         if (controller.capabilities[AtlasController.CAP_COACH] != true) {
@@ -231,7 +239,7 @@ internal fun AgentCoachScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Conversation", style = MaterialTheme.typography.titleLarge)
                 if (controller.agentConversation.isEmpty()) {
-                    Text("Écrivez un message pour démarrer. Sans serveur configuré, la démonstration locale reste disponible.")
+                    Text("Écrivez un message pour démarrer. La démo locale fonctionne sans serveur.")
                 }
                 controller.agentConversation.forEach { entry ->
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -263,7 +271,7 @@ internal fun AgentCoachScreen(
                     onValueChange = { if (it.length <= AtlasController.MAX_AGENT_MESSAGE_LENGTH) message = it },
                     modifier = Modifier.fillMaxWidth().testTag("agent_message_input"),
                     label = { Text("Message au coach") },
-                    supportingText = { Text("Au plus 2 000 caractères. Appuyez sur Envoyer pour transmettre votre message.") },
+                    supportingText = { Text("2 000 caractères maximum · Envoyer transmet le message.") },
                     minLines = 2,
                     maxLines = 5,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -353,7 +361,9 @@ internal fun AgentCoachScreen(
                         onReject = { controller.rejectAgentProposal(proposal.id) },
                     )
                     if (pendingProposals.size > 1) {
-                        Text("${pendingProposals.size - 1} autre(s) proposition(s) apparaîtront après celle-ci.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val otherProposalCount = pendingProposals.size - 1
+                        val otherLabel = if (otherProposalCount == 1) "autre proposition" else "autres propositions"
+                        Text("$otherProposalCount $otherLabel après celle-ci.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -428,7 +438,7 @@ private fun AgentProposalCard(
             Text("Proposition", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(actionLabels[entry.proposal.actionType] ?: entry.proposal.actionType, style = MaterialTheme.typography.titleMedium)
             Text("Motif : ${entry.proposal.reason}")
-            if (highlighted) Text("Ouverte depuis une notification", style = MaterialTheme.typography.labelMedium)
+            if (highlighted) Text("Ouverte via notification", style = MaterialTheme.typography.labelMedium)
             Text("Provenance : $provenanceLabel", style = MaterialTheme.typography.bodySmall)
             contextCategories?.let { Text("Catégories : $it", style = MaterialTheme.typography.bodySmall) }
             Text("État : ${proposalStateLabel(entry)}", style = MaterialTheme.typography.bodySmall)

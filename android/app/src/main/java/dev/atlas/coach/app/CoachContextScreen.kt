@@ -46,7 +46,7 @@ internal fun CoachContextScreen(
 ) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Contexte du coach", style = MaterialTheme.typography.headlineSmall)
-        Text("Objectifs, localisation, confidentialité et tâches en arrière-plan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Objectifs, localisation et confidentialité.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         AgentIntegrationPanels(controller, revision)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Mandat et historique", style = MaterialTheme.typography.titleMedium)
@@ -77,6 +77,7 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
     var pendingLocationAction by remember { mutableStateOf<LocationUiContinuation?>(null) }
     var locationPermissionResult by remember { mutableStateOf<Boolean?>(null) }
     var notificationPermissionResult by remember { mutableStateOf<Boolean?>(null) }
+    var showContextCategoryDetails by remember { mutableStateOf(false) }
     var showContextPayload by remember { mutableStateOf(false) }
     var showLastSharedContextPayload by remember { mutableStateOf(false) }
 
@@ -175,24 +176,44 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
 
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Contexte du prochain envoi", style = MaterialTheme.typography.titleLarge)
-            Text("Vérifiez les catégories autorisées et les données disponibles avant un envoi.")
-            AgentContextCategory.wireValues.forEach { category ->
-                val allowed = category in contextPreview.authorizedCategories
-                val count = contextPreview.includedCategories[category]?.size ?: 0
-                Text(
-                    "${dataCategoryLabels[category] ?: category} · ${if (allowed) "autorisée" else "non autorisée"} · " +
-                        if (count == 0) "aucune donnée disponible" else "$count élément(s) inclus",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            val authorizedCategoryCount = contextPreview.authorizedCategories.size
+            val includedItemCount = contextPreview.authorizedCategories.sumOf { category ->
+                contextPreview.includedCategories[category]?.size ?: 0
+            }
+            val authorizationSummary = when (authorizedCategoryCount) {
+                0 -> "Aucune catégorie autorisée"
+                1 -> "1 catégorie autorisée"
+                else -> "$authorizedCategoryCount catégories autorisées"
+            }
+            val includedSummary = "$includedItemCount élément${if (includedItemCount == 1) "" else "s"} inclus"
+            Text("$authorizationSummary · $includedSummary")
+            TextButton(
+                modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_context_categories_toggle"),
+                onClick = { showContextCategoryDetails = !showContextCategoryDetails },
+            ) {
+                Text(if (showContextCategoryDetails) "Masquer les catégories" else "Détails des catégories")
+            }
+            if (showContextCategoryDetails) {
+                AgentContextCategory.wireValues.forEach { category ->
+                    val allowed = category in contextPreview.authorizedCategories
+                    val count = contextPreview.includedCategories[category]?.size ?: 0
+                    Text(
+                        "${dataCategoryLabels[category] ?: category} · ${if (allowed) "autorisée" else "non autorisée"} · " +
+                            if (count == 0) "aucune donnée disponible" else "$count élément(s) inclus",
+                        modifier = Modifier.testTag("agent_context_category_$category"),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text("Seuls les éléments disponibles des catégories autorisées sont envoyés.", style = MaterialTheme.typography.bodySmall)
             }
             if (contextPreview.authorizedCategories.isNotEmpty()) {
                 TextButton(
-                    modifier = Modifier.testTag("agent_next_context_payload_toggle"),
+                    modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_next_context_payload_toggle"),
                     onClick = { showContextPayload = !showContextPayload },
                 ) {
                     Text(
-                        if (showContextPayload) "Masquer le JSON exact du prochain envoi"
-                        else "Afficher le JSON exact du prochain envoi",
+                        if (showContextPayload) "Masquer le JSON"
+                        else "Voir le JSON du prochain envoi",
                     )
                 }
                 if (showContextPayload) {
@@ -207,9 +228,8 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                     }
                 }
             } else {
-                Text("Le détail du prochain contexte s'affichera pendant un consentement actif.", style = MaterialTheme.typography.bodySmall)
+                Text("Le détail apparaît après consentement.", style = MaterialTheme.typography.bodySmall)
             }
-            Text("Seules les catégories autorisées et les données disponibles sont incluses avant l'envoi.", style = MaterialTheme.typography.bodySmall)
             val audit = controller.lastContextDisclosureAudit
             val sentAt = audit?.sentAtUtcMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
             Text(
@@ -225,14 +245,14 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
             }
             if (contextPreview.authorizedCategories.isNotEmpty()) {
                 controller.lastSharedAgentContextJson?.let { payload ->
-                    Text("Aperçu du dernier contexte conservé en mémoire pour cette session seulement.", style = MaterialTheme.typography.bodySmall)
+                    Text("Dernier contexte · conservé en mémoire pour cette session.", style = MaterialTheme.typography.bodySmall)
                     TextButton(
-                        modifier = Modifier.testTag("agent_last_shared_context_payload_toggle"),
+                        modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_last_shared_context_payload_toggle"),
                         onClick = { showLastSharedContextPayload = !showLastSharedContextPayload },
                     ) {
                         Text(
-                            if (showLastSharedContextPayload) "Masquer l'aperçu du dernier contexte"
-                            else "Afficher l'aperçu du dernier contexte",
+                            if (showLastSharedContextPayload) "Masquer le JSON"
+                            else "Voir le JSON du dernier contexte",
                         )
                     }
                     if (showLastSharedContextPayload) {
@@ -248,7 +268,7 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                     }
                 }
             }
-            Text("Arrêter le partage bloque les prochains envois. Supprimer l'historique local efface l'audit enregistré; la copie déjà reçue par le backend n'est pas supprimée.", style = MaterialTheme.typography.bodySmall)
+            Text("Arrêter le partage bloque les prochains envois. Supprimer l'historique efface l'audit local, pas la copie déjà reçue par le backend.", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_delete_context_history"),
                 onClick = controller::deleteLastContextDisclosureHistory,
@@ -257,7 +277,7 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
                 onClick = controller::requestAgentPlan,
                 enabled = controller.isAgentEnabled,
-            ) { Text("Demander un plan sans ajouter de message au chat") }
+            ) { Text("Demander un plan · sans message au chat") }
             controller.latestAgentPlanReply?.let { Text("Plan · $it") }
         }
 
@@ -268,7 +288,18 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Observation UsageStats toutes les 30 minutes au mieux", Modifier.weight(1f))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("UsageStats · toutes les 30 min au mieux")
+                    val usageAccessMissing = !controller.usagePermissionGranted
+                    val usageConsentMissing = !controller.usageConsentActive
+                    val usageRequirement = when {
+                        usageConsentMissing && usageAccessMissing -> "Consentement ATLAS + accès UsageStats Android requis."
+                        usageConsentMissing -> "Consentement ATLAS requis."
+                        usageAccessMissing -> "Autorisez UsageStats dans Android."
+                        else -> "Consentement et accès actifs."
+                    }
+                    Text(usageRequirement, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Switch(
                     checked = controller.capabilities[AtlasController.CAP_USAGE_BACKGROUND] == true,
                     enabled = controller.usageConsentActive && controller.usagePermissionGranted,
@@ -287,15 +318,17 @@ private fun AgentIntegrationPanels(controller: AtlasController, revision: Int) {
                     onCheckedChange = { controller.setCapability(AtlasController.CAP_AGENT_PROACTIVE, it) },
                 )
             }
-            Text("Au plus ${controller.proactiveEngagementMode.notificationLimitPerLocalDay} notifications par jour.")
+            Text("Quota : ${controller.proactiveEngagementMode.notificationLimitPerLocalDay} notifications/jour.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
+                    modifier = Modifier.sizeIn(minHeight = 48.dp),
                     onClick = { controller.setProactiveEngagementMode(ProactiveEngagementMode.NORMAL) },
                     enabled = controller.capabilities[AtlasController.CAP_AGENT_PROACTIVE] == true,
                 ) {
                     Text(if (controller.proactiveEngagementMode == ProactiveEngagementMode.NORMAL) "✓ Normal · 3/j" else "Normal · 3/j")
                 }
                 OutlinedButton(
+                    modifier = Modifier.sizeIn(minHeight = 48.dp),
                     onClick = { controller.setProactiveEngagementMode(ProactiveEngagementMode.REINFORCED) },
                     enabled = controller.capabilities[AtlasController.CAP_AGENT_PROACTIVE] == true,
                 ) {
