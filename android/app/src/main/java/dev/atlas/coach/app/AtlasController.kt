@@ -4036,14 +4036,18 @@ class AtlasController @JvmOverloads constructor(
 
     fun revokeUsageObservation(message: String = "Observation désactivée. L'historique et les données de déduplication ont été supprimés.") {
         withProactiveAuthorizationClose(invalidateAgentRequests = true) {
-            runCatching { UsageObservationWorkScheduler.cancel(appContext) }
-            usageObserver.revokeConsent()
-            queueProactivePurgeRevoked()
-            pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
-            policy = policy.copy(allowlistedPackageNames = emptySet())
-            capabilities = capabilities + (CAP_APP_TRACKING to false)
-            latestMessage = message
-            persist()
+            // Usage consent is part of the chat domain consent. Mutating it under the same gate
+            // as the relay dispatch prevents a removal from racing a queued usage snapshot.
+            agentConsentGate.withLock {
+                runCatching { UsageObservationWorkScheduler.cancel(appContext) }
+                usageObserver.revokeConsent()
+                queueProactivePurgeRevoked()
+                pendingUsagePreferences.edit().remove(KEY_PENDING_USAGE_PACKAGES).apply()
+                policy = policy.copy(allowlistedPackageNames = emptySet())
+                capabilities = capabilities + (CAP_APP_TRACKING to false)
+                latestMessage = message
+                persist()
+            }
         }
     }
 

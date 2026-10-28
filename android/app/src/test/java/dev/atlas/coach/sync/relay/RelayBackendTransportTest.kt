@@ -87,7 +87,7 @@ class RelayBackendTransportTest {
     }
 
     @Test
-    fun consentMutationWaitsForTheFinalPayloadAndWebSocketWrite() {
+    fun usageConsentRevocationWaitsForTheFinalPayloadAndWebSocketWrite() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(
             staticPair,
@@ -121,6 +121,8 @@ class RelayBackendTransportTest {
             }.apply { isDaemon = true; start() }
             assertTrue("payload preparation did not start", payloadStarted.await(5, TimeUnit.SECONDS))
 
+            // Models AtlasController.revokeUsageObservation(): the real revocation takes the
+            // same shared gate before mutating the usage consent store.
             val mutation = Thread {
                 mutationStarted.countDown()
                 gate.withLock { mutationDone.countDown() }

@@ -6,6 +6,7 @@ import { DeviceRegistry } from "../src/device-registry.js";
 import { RemoteError } from "../src/errors.js";
 import { request, makeContext, authenticate, hello, paired, FakeSecureChannel } from "./helpers.js";
 
+
 describe("device authentication and session controls", () => {
   it("persists an X25519 identity and the device registry as mode 0600", async () => {
     const context = await makeContext();
@@ -55,7 +56,22 @@ describe("device authentication and session controls", () => {
       })));
       expect(channel.lastMessage()).toMatchObject({ kind: "hello_ok", capabilities: ["sync.status"] });
       const sessionId = String(channel.lastMessage().session_id);
-      await peer.receive(JSON.stringify(request(sessionId, "coach.status")));
+      await peer.receive(JSON.stringify(request(sessionId, "coach.chat.request", {
+        conversation_id: "synthetic-conversation-r3b",
+        message: "Propose une prochaine étape synthétique.",
+        shared_context: {
+          consented_categories: ["projects"],
+          categories: { projects: ["Projet synthétique"] },
+        },
+        mandate_summary: {
+          id: "synthetic-mandate-r3b",
+          version: 1,
+          allowed_actions: ["home.set_directive", "focus.propose"],
+          mode: "proposals_only",
+          focus_window: null,
+          app_policy_bounds: {},
+        },
+      })));
       expect(channel.lastMessage()).toMatchObject({ kind: "error", error: { code: "OPERATION_UNAVAILABLE" } });
       await peer.receive(JSON.stringify(request(sessionId, "sync.status")));
       expect(channel.lastMessage()).toMatchObject({ kind: "response", operation: "sync.status" });

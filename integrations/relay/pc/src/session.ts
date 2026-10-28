@@ -226,11 +226,15 @@ export class PeerSession {
     } catch (error) {
       const remoteError = asRemoteError(error);
       this.metrics.error();
-      await this.sendError(remoteError, currentRequestId);
       if (remoteError.code === "DEVICE_REVOKED") {
+        // Stop backend effects before awaiting the error write; the relay may process
+        // several receives concurrently and an in-flight effect must not outlive revocation.
+        this.abortInFlightForRevocation();
+        await this.sendError(remoteError, currentRequestId);
         await this.closeForRevocation(remoteError.message);
-      } else if (!this.auth || remoteError.code === "AUTH_REQUIRED") {
-        this.close(4001, remoteError.message);
+      } else {
+        await this.sendError(remoteError, currentRequestId);
+        if (!this.auth || remoteError.code === "AUTH_REQUIRED") this.close(4001, remoteError.message);
       }
     }
   }
