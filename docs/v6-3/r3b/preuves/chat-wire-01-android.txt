@@ -1,0 +1,33 @@
+R3B-CHAT-WIRE-01 — preuve Android JVM et builds
+
+Base SHA : c536a3ac02de3183a3d9740ab236d2511e25e5fd
+Commit de code testé : d40084c2d4e48df4254433b4417be82f9be0d27e
+Branche : feat/r3b-chat-wire-01
+Environnement : OpenJDK 21.0.12.1, Gradle Wrapper 9.6.0, Android SDK local.
+
+Commandes et résultats, sur le commit de code ci-dessus :
+
+- `cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1`
+  PASS — 684 tests, 0 échec, 0 erreur, 0 ignoré.
+- `cd android && ./gradlew :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1`
+  PASS — lint et les deux assemblages réussis. Lint rapporte 0 erreur et 71
+  avertissements existants du dépôt; aucun avertissement ne vise les nouvelles
+  lignes de chat. L'APK AndroidTest a été assemblé, mais aucun test instrumenté
+  n'a été exécuté.
+- `git diff --check`
+  PASS — aucun espace ou marqueur de conflit invalide.
+
+Couverture ajoutée : capacités `plan.revision` et `coach.chat`, compatibilité
+de l'ancien hello plan-only, absence de dispatch sans capability, payload HTTP
+et relayé identique via le constructeur partagé, contexte consenti minimisé,
+mandat révoqué/suspendu/expiré, audit de contexte avant dispatch, timeout
+incertain sans rejeu, déconnexion et reconnexion sans doublon, annulation
+best-effort, erreurs de taille/version/réponse, proposition au niveau CONFIRM,
+mock local et libellés de provenance.
+
+Limites : pas de test contre un connecteur Node réel, un relais réel, un serveur
+OpenClaw réel ou un appareil Android; les tests de transport utilisent des
+faux sockets JVM. Aucun ADB ni push n'a été exécuté.
+
+Aucune donnée personnelle, aucun message utilisateur réel, jeton ou secret
+n'est inclus dans cette preuve.
