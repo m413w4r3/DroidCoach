@@ -1,0 +1,55 @@
+ATLAS V6.3 R3-B — Chat OpenClaw réel via Funnel public
+Date: 2026-10-28
+SHA code intégré: 2548673b811f0683742842980a1535c63b5b07cf
+Correctif timeout chat intégré: 9f5c4ea (timeout chat 55 s, autres 5 s)
+Environnement: connecteur personnel (identité existante) sur
+wss://all.taildc7886.ts.net:8443, proxy 127.0.0.1:4400, relais
+atlas-paseo-relay:r3a sur 127.0.0.1:4402, FastAPI réel sur 127.0.0.1:8100
+avec ATLAS_AGENT_ADAPTER=openclaw, OpenClaw personnel existant sur
+127.0.0.1:18789 (aucune modification de configuration), client Noise public
+avec résolution forcée vers l'IP publique 176.58.90.46.
+
+Commande (les secrets sont lus depuis l'environnement/fichiers 0600, jamais
+affichés) :
+  ATLAS_E2E_SERVER_ID=<serverId dérivé de l'identité>
+  ATLAS_E2E_PUBLIC_KEY=<clé publique X25519 existante>
+  ATLAS_E2E_DEVICE_ID=<uuid synthétique appairé avec coach.chat>
+  ATLAS_E2E_TOKEN_FILE=<fichier 0600 synthétique>
+  ATLAS_E2E_PUBLIC_IP=176.58.90.46
+  ATLAS_E2E_CHAT_MESSAGE='<message synthétique unique>'
+  node scripts/r3b-public-e2e.mjs
+
+Résultats observés :
+  noise_protected_and_device_auth        PASS
+  backend_health_via_funnel              PASS (status=ok)
+  sync_status_via_funnel                 PASS (relay_connected=true)
+  coach_chat_relayed                     PASS
+      agent_status=connected, reply_length=98, proposals=1, replayed=false
+  coach_chat_replay_no_duplicate         PASS (replayed=true, aucun second POST)
+  coach_chat_idempotency_conflict        PASS (IDEMPOTENCY_CONFLICT)
+  coach_chat_payload_limit               PASS (INVALID_REQUEST)
+  exit=0
+
+Métriques connecteur mesurées après les exécutions (127.0.0.1:4401/metrics) :
+  relay_connected=true, sessions_opened_total=2, requests_total=12,
+  errors_total=4, uncertain_outcomes_total=0,
+  latency_average_ms=580, latency_max_ms=4295.
+
+FastAPI /v2/agent/status :
+  adapter=openclaw, connected=true, breaker=closed,
+  calls_last_minute=1, daily_tokens=16758 (deux appels réels synthétiques).
+
+Interprétation :
+  - La latence maximale mesurée du chat réel (4 295 ms) est proche de l'ancien
+    timeout global de 5 000 ms ; le correctif 55 s est nécessaire pour un usage
+    réel et reste sous le TTL protocole de 60 s.
+  - Aucun résultat incertain, aucune duplication observée.
+  - Les propositions restent des données ; aucune action Android n'est exécutée.
+
+Limites :
+  - OpenClaw personnel utilisé car son jeton d'accès existait déjà ; aucune
+    configuration ni politique OpenClaw modifiée.
+  - Message synthétique unique ; le contenu de la réponse et les propositions
+    ne sont pas versionnés (seuls statut et longueurs).
+  - Aucun test Android/LTE/5G dans cette preuve.
+  - Quota OpenClaw personnel consommé (16 758 tokens sur 100 000).

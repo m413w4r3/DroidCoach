@@ -23,7 +23,7 @@ preuve.
 | T10 | Unités systemd | `systemd-analyze --user verify` (sans installation) | **PARTIAL** — vérification statique PASS pour proxy et connecteur ; aucun service installé ni lancé |
 | T11 | WSS public Funnel | `https://all.taildc7886.ts.net:8443/health`, `/ready` | **PASS (PC)** — TLS 1.3 valide, `/health` 200, `/ready` 200, WSS 101 ; Android traité en NET-02 |
 | T12 | Chat mock isolé | Backend mock + transport relayé | **PASS** — chat mock via Funnel public, Noise protégé, replay sans doublon |
-| T13 | Chat OpenClaw | Isolé et/ou personnel autorisé | **PARTIAL** — OpenClaw personnel isolé PASS (`agent_status=connected`, 1 proposition) ; chemin relayé public à rejouer |
+| T13 | Chat OpenClaw | Isolé et/ou personnel autorisé | **PASS** — OpenClaw personnel réel via Funnel public (`agent_status=connected`, 1 proposition, 4 295 ms max) |
 | T14 | A3 Keystore | Pairing + force-stop + redémarrage Android | NOT_RUN |
 | T15 | A4 révocation | Session active + révocation PC + effacement local | NOT_RUN |
 | T16 | Données Pixel | Hashes ATLAS et compteurs calendrier | NOT_RUN |
@@ -38,7 +38,7 @@ preuve.
 | NET-03 | Absence d'`adb reverse` et de proxy USB | NOT_RUN |
 | NET-04 | Noise NK `protected` et identité épinglée | **PASS** — handshake protégé et auth appareil via l'IP publique |
 | NET-05 | `backend.health` via Funnel jusqu'au PC | **PASS** — réponse `{"status":"ok"}` via Funnel public et FastAPI 8100 |
-| NET-06 | Chat réel via le relais et l'adaptateur autorisé | **PARTIAL** — mock relayé PASS ; OpenClaw personnel isolé PASS ; chemin relayé OpenClaw à rejouer |
+| NET-06 | Chat réel via le relais et l'adaptateur autorisé | **PASS** — OpenClaw personnel réel via Funnel public, `PERSONAL_OPENCLAW_PASS` |
 | NET-07 | Coupure LTE/5G et état OFFLINE | NOT_RUN |
 | NET-08 | Reconnexion après restauration réseau | NOT_RUN |
 | NET-09 | Wi-Fi → LTE/5G → Wi-Fi | NOT_RUN |
@@ -55,7 +55,7 @@ preuve.
 | ID | Cas | Statut initial |
 |---|---|---|
 | CHAT-01 | Conversation sur adaptateur mock isolé | **PASS** — chat mock via Funnel public et backend mock |
-| CHAT-02 | Conversation sur instance OpenClaw de test isolée si disponible | **PARTIAL** — OpenClaw personnel isolé PASS ; relayé public en attente |
+| CHAT-02 | Conversation sur instance OpenClaw de test isolée si disponible | **PASS** — `PERSONAL_OPENCLAW_PASS` via le Funnel public et l'adaptateur autorisé |
 | CHAT-03 | Contexte réellement consenti vérifié | **PARTIAL** — payload exact et minimisation testés côté Node ; UI Android à vérifier |
 | CHAT-04 | Refus des opérations sans capacité | **PASS** — appareil sans `coach.chat` reçoit `OPERATION_UNAVAILABLE` via le Funnel |
 | CHAT-05 | Mandat révoqué ou expiré | **PARTIAL** — tests JVM/Node ; parcours Android à rejouer |

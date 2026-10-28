@@ -13,6 +13,7 @@ Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 | [`preuves/net-01.txt`](preuves/net-01.txt) | Proxy filtrant, 18 tests, intégration relais réel, limits, logs, arrêt | `4363d8f`, Node 24 | PASS |
 | [`preuves/pc-01-validation.txt`](preuves/pc-01-validation.txt) | Résilience connecteur, SIGTERM/SIGKILL, FastAPI synthétique, rejeu incertain, rollback | `0a96281`, Node 24, relais 4402 | PASS (dynamique) ; FastAPI réel NOT_RUN |
 | [`preuves/chat-01.txt`](preuves/chat-01.txt) | Contrat chat, capacité, route fixe, limites, idempotence, erreurs | `1b2e8f4`, backend 196/1, Node 71/71 | PASS (mock) |
+| [`preuves/openclaw-public.txt`](preuves/openclaw-public.txt) | Chat OpenClaw personnel réel via Funnel public, latences mesurées | `2548673`, PC Linux, FastAPI 8100/OpenClaw, IP publique | PASS (`PERSONAL_OPENCLAW_PASS`) |
 | [`preuves/chat-wire-01*.txt`](preuves/) | Intégration Android relayée | à produire par `R3B-CHAT-WIRE-01` | NOT_RUN |
 | [`preuves/android-01*.txt`](preuves/) | A3 Keystore / A4 révocation | à produire par `R3B-ANDROID-01` | NOT_RUN |
 
@@ -51,9 +52,9 @@ configuration OpenClaw. Requête synthétique :
 - `/v2/agent/status` : 200, adaptateur `openclaw`, breaker `closed`
 - `/v2/agent/chat` : 200, `agent_status=connected`, réponse de 120 caractères,
   1 proposition.
-Statut : **PERSONAL_OPENCLAW_PASS (adaptateur isolé)**. Le chemin relayé public
-avec l'adaptateur OpenClaw reste à rejouer après la correction du timeout
-backend chat.
+Statut : **PERSONAL_OPENCLAW_PASS**, confirmé via le chemin relayé public dans
+[`preuves/openclaw-public.txt`](preuves/openclaw-public.txt) après la correction
+du timeout backend chat.
 
 ## Règles
 
