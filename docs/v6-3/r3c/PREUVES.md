@@ -16,6 +16,9 @@ résultat observé, statut, limites. Les horodatages sont locaux
 - Le hostname Funnel `all.taildc7886.ts.net` est l'infrastructure **imposée
   par la mission** et n'est pas un secret ; il reste nécessaire aux commandes
   d'exploitation. Aucun token, clé privée ou contenu personnel n'est publié.
+- Les documents R3-B ont été pseudonymisés le 2026-10-28 ; voir
+  [`../r3b/REDACTION_IDENTIFIANTS.md`](../r3b/REDACTION_IDENTIFIANTS.md).
+  Aucun SHA, résultat ni verdict R3-B n'a été modifié.
 
 ## P-BASE-01 — Git local et distant
 

@@ -1,6 +1,6 @@
 ATLAS V6.3 R3-B — Preuve réseau Pixel
 Date: 2026-10-28
-Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
+Device: $PIXEL_SERIAL, Pixel 9 Pro XL, Android 17 / API 37
 SHA code principal: 8eb4845ddf3ce144615acc3e335252b8af8a14d8
 APK principal installé: b55776a91d523e9752594abe9de11b2d1ff53e304cbc94020892837948704fcc
 Test APK: build androidTest du SHA de tests final (R3bNetworkStateInstrumentedTest inclus)

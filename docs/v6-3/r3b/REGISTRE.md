@@ -1,5 +1,9 @@
 # ATLAS V6.3 — R3-B — Registre de campagne
 
+> Identifiants d'environnement pseudonymisés le 2026-10-28 ; voir
+> [`REDACTION_IDENTIFIANTS.md`](REDACTION_IDENTIFIANTS.md). Aucun statut ni
+> résultat n'a été modifié.
+
 Campagne ouverte le **2026-10-28**. Orchestrateur parent unique : session Paseo
 `wks_df1c3be12eaa95f6` / hôte `srv_ye_FTq15PUEs`. Tous les enfants sont
 `codex:gpt-6-luna`, effort `xhigh`, sans sous-délégation. Maximum six enfants
@@ -89,7 +93,7 @@ changer de modèle.
 | Modèle des sous-agents | `codex/gpt-6-luna`, `xhigh` effectif pour les sessions enfants de la vague A/B ; les corrections d'intégration et les tests Pixel ont été opérés par le parent |
 
 Les tests Pixel A3, A4, chat et réseau ont tous été exécutés sur l'appareil
-physique `45301FDAS001QT`, avec sauvegarde app-only préalable et restauration
+physique `$PIXEL_SERIAL`, avec sauvegarde app-only préalable et restauration
 finale. Voir `preuves/pixel-instrumentation-final.txt` et
 `preuves/pixel-network.txt`.
 
@@ -171,7 +175,7 @@ services de test isolés, adaptateur mock, émulateur après pré-vol, préparat
 des runbooks, revue indépendante, diagnostic non destructif.
 
 Autorisation utilisateur explicite : **utiliser le Pixel physique
-`45301FDAS001QT`** pour les tests de la campagne. Toute installation d'APK
+`$PIXEL_SERIAL`** pour les tests de la campagne. Toute installation d'APK
 exige une sauvegarde app-only vérifiée et un mandat ciblé ; `pm clear`,
 désinstallation, factory reset, modification HOME, permissions non consenties
 et écritures wger restent interdits.
@@ -193,7 +197,7 @@ contournement.
 | Python | 3.12.3 |
 | Android SDK | `/home/nill/Android/Sdk` |
 | ADB | 1.0.41 |
-| Pixel | `45301FDAS001QT`, Pixel 9 Pro XL, Android 17 / API 37 |
+| Pixel | `$PIXEL_SERIAL`, Pixel 9 Pro XL, Android 17 / API 37 |
 | Tailscale | 1.104.4 |
 | Funnel | `tcp://all.taildc7886.ts.net:8443` → `tcp://127.0.0.1:4400` |
 | Relais local | image `atlas-paseo-relay:r3a` vérifiée, à lancer sur `127.0.0.1:4402` |

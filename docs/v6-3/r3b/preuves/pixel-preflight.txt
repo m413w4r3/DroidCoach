@@ -1,12 +1,12 @@
 ATLAS V6.3 R3-B — Pré-vol Pixel (lecture seule)
 Date: 2026-10-28 (Europe/Paris)
-Device: 45301FDAS001QT
+Device: $PIXEL_SERIAL
 Modèle: Pixel 9 Pro XL (komodo)
 Android: 17 / API 37
 Fingerprint: google/komodo/komodo:17/CP3A.260905.009/16091614:user/release-keys
 Paquet: dev.atlas.coach, versionCode=1, versionName=0.1.0, DEBUGGABLE
 Dernière mise à jour: 2026-10-27 21:32:24
-adb devices: 45301FDAS001QT device usb:3-1
+adb devices: $PIXEL_SERIAL device usb:3-1
 
 Sauvegarde app-only:
   ~/atlas-backups/r3b/pixel-app-backup-pre-r3b.tar (0600, hors dépôt)

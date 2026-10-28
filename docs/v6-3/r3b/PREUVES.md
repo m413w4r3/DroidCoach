@@ -3,13 +3,18 @@
 Chaque preuve est liée à un SHA, un environnement, une commande et une limite.
 Aucun token, clé privée, message personnel ou donnée intime n'est versionné.
 
+> Les identifiants d'environnement (série Pixel, IP publiques/privées) ont été
+> pseudonymisés le 2026-10-28 ; voir
+> [`REDACTION_IDENTIFIANTS.md`](REDACTION_IDENTIFIANTS.md). Aucun résultat,
+> SHA ni verdict n'a été modifié.
+
 ## Preuves versionnées
 
 | Fichier | Sujet | SHA / environnement | Statut |
 |---|---|---|---|
 | [`preuves/pixel-preflight.txt`](preuves/pixel-preflight.txt) | Pré-vol Pixel, sauvegarde app-only, hashes ATLAS, compteurs calendrier | Pixel 9 Pro XL, Android 17 / API 37, base `5795d37` | PASS |
 | [`preuves/funnel-precheck.txt`](preuves/funnel-precheck.txt) | État Funnel avant proxy | `5795d37`, Tailscale 1.104.4 | PARTIAL — TLS non qualifié avant listener 4400 |
-| [`preuves/funnel-public.txt`](preuves/funnel-public.txt) | DNS/TLS public, HTTP `/health` `/ready`, refus `/metrics`, WSS 101, refus v=1/query, Noise protégé via Funnel | `dfe6da3`, PC Linux, IP publique 176.58.90.46 | PASS (PC) |
+| [`preuves/funnel-public.txt`](preuves/funnel-public.txt) | DNS/TLS public, HTTP `/health` `/ready`, refus `/metrics`, WSS 101, refus v=1/query, Noise protégé via Funnel | `dfe6da3`, PC Linux, IP publique $FUNNEL_PUBLIC_IP | PASS (PC) |
 | [`preuves/net-01.txt`](preuves/net-01.txt) | Proxy filtrant, 18 tests, intégration relais réel, limits, logs, arrêt | `4363d8f`, Node 24 | PASS |
 | [`preuves/pc-01-validation.txt`](preuves/pc-01-validation.txt) | Résilience connecteur, SIGTERM/SIGKILL, FastAPI synthétique, rejeu incertain, rollback | `0a96281`, Node 24, relais 4402 | PASS (dynamique) ; FastAPI réel rejoué en `fastapi-restart-public.txt` |
 | [`preuves/chat-01.txt`](preuves/chat-01.txt) | Contrat chat, capacité, route fixe, limites, idempotence, timeout OpenClaw, erreurs | `2548673` / `9f5c4ea`, backend 196/1, chat 12/12 | PASS (mock) |
@@ -46,7 +51,7 @@ ATLAS_E2E_SERVER_ID=atlas-pc-<empreinte> \
 ATLAS_E2E_PUBLIC_KEY=<clé publique X25519> \
 ATLAS_E2E_DEVICE_ID=<uuid synthétique> \
 ATLAS_E2E_TOKEN_FILE=<fichier 0600 synthétique> \
-ATLAS_E2E_PUBLIC_IP=176.58.90.46 \
+ATLAS_E2E_PUBLIC_IP=$FUNNEL_PUBLIC_IP \
 node scripts/r3b-public-e2e.mjs
 ```
 

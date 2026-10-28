@@ -136,11 +136,11 @@ L'agent produit les classes instrumentées et documente les commandes exactes.
 Le parent exécute :
 
 ```sh
-adb -s 45301FDAS001QT shell am instrument -w \
+adb -s $PIXEL_SERIAL shell am instrument -w \
   -e class dev.atlas.coach.sync.relay.R3bA3PairingInstrumentedTest \
   dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 # force-stop, puis phase A3-2, reboot, phase A3-3
-adb -s 45301FDAS001QT shell am instrument -w \
+adb -s $PIXEL_SERIAL shell am instrument -w \
   -e class dev.atlas.coach.sync.relay.R3bA4RevocationInstrumentedTest \
   dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner
 ```

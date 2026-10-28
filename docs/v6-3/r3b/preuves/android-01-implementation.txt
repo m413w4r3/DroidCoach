@@ -45,7 +45,7 @@ ARGUMENTS D'INSTRUMENTATION NON SECRETS
 Avant l'exécution, le parent définit ces valeurs à partir de l'identité PC
 synthétique déjà fournie :
 
-  DEVICE=45301FDAS001QT
+  DEVICE=$PIXEL_SERIAL
   RELAY_URL=wss://all.taildc7886.ts.net:8443
   SERVER_ID=<serverId non secret fourni par le parent>
   SERVER_PUBLIC_KEY=<clé publique X25519 Base64 fournie par le parent>

@@ -19,7 +19,7 @@ d'ingress public Funnel (R-18/R-20).
 | T3 | Lint Android | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 71 avertissements (arbre final) |
 | T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `05756094…` (final construit) ; APK `1a877422…` installé ; APK Pixel testé `b55776a9…`, signature debug |
 | T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK `5aef1321…` (arbre final, assertions A4 4001/alias incluses) |
-| T6 | Instrumentation API 37 | Pixel physique `45301FDAS001QT`, Android 17 / API 37 | **PARTIAL** — tests ciblés PASS sur l'APK `b55776a9`, avant le correctif de consentement ; re-test de l'APK final bloqué par la déconnexion USB du Pixel et l'indisponibilité de l'ingress public Funnel ; aucun PASS Pixel du binaire final. Suite complète non lancée d'un bloc |
+| T6 | Instrumentation API 37 | Pixel physique `$PIXEL_SERIAL`, Android 17 / API 37 | **PARTIAL** — tests ciblés PASS sur l'APK `b55776a9`, avant le correctif de consentement ; re-test de l'APK final bloqué par la déconnexion USB du Pixel et l'indisponibilité de l'ingress public Funnel ; aucun PASS Pixel du binaire final. Suite complète non lancée d'un bloc |
 | T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 77 tests (arbre final `7754005`, proxy 4400 actif) |
 | T8 | Image relais épinglée | `atlas-paseo-relay:r3a`, `/health` loopback | **PASS** — image locale vérifiée, `/health` 200 sur 127.0.0.1:4402 |
 | T9 | Tests proxy filtrant | `node --test integrations/relay/proxy/test` | **PASS** — 18/18 (arbre final, relais réel 4402) |

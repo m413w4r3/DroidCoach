@@ -28,7 +28,7 @@ Funnel / réseau:
     configuration
 
 Pixel:
-  - appareil 45301FDAS001QT déconnecté de l'USB avant l'installation de
+  - appareil $PIXEL_SERIAL déconnecté de l'USB avant l'installation de
     l'APK final; dernier état vérifié après restauration:
     5/5 hashes d'avant campagne, calendriers 12, événements 91, aucun
     artefact de test

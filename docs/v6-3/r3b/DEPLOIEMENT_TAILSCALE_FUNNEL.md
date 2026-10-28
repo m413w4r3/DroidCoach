@@ -70,7 +70,7 @@ Paseo v2.
 
 `100.119.62.63` et `fd7a:115c:a1e0::3b01:3ed6` sont des adresses Tailscale,
 pas les adresses publiques. Les IP publiques observées via DNS public sont
-`176.58.90.46`, `176.58.90.63` et `176.58.90.145` (TTL 300).
+`$FUNNEL_PUBLIC_IP`, `$FUNNEL_PUBLIC_IP` et `$FUNNEL_PUBLIC_IP` (TTL 300).
 
 ## 3. État Funnel de référence
 
@@ -199,7 +199,7 @@ curl -s -H 'accept: application/dns-json' \
 Puis vérifier le certificat et le chemin public :
 
 ```sh
-pubip=176.58.90.46
+pubip=$FUNNEL_PUBLIC_IP
 openssl s_client -connect "$pubip:8443" \
   -servername all.taildc7886.ts.net -verify_return_error -brief </dev/null
 curl --resolve "all.taildc7886.ts.net:8443:$pubip" \

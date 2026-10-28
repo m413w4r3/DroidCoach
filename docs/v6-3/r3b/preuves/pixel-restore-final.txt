@@ -1,6 +1,6 @@
 ATLAS V6.3 R3-B — Preuve de restauration finale des données Pixel
 Date: 2026-10-28
-Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
+Device: $PIXEL_SERIAL, Pixel 9 Pro XL, Android 17 / API 37
 
 Sauvegarde utilisée:
   ~/atlas-backups/r3b/pixel-app-backup-pre-r3b.tar (0600, hors dépôt)

@@ -18,7 +18,7 @@ Aucun push, aucune PR, aucune modification GitHub distante.
   `127.0.0.1:4400`, mais sans backend actif. Le plan de contrôle Tailscale
   n'était plus joignable au recontrôle final ; l'ingress public est à
   revalider avant tout usage distant.
-- Le Pixel `45301FDAS001QT` est **déconnecté de l'USB**. Sa dernière
+- Le Pixel `$PIXEL_SERIAL` est **déconnecté de l'USB**. Sa dernière
   restauration vérifiée est 5/5 hashes et calendrier 12/91.
 - Aucun PASS Pixel n'est revendiqué pour l'APK final `05756094`.
 
@@ -36,9 +36,9 @@ Aucun push, aucune PR, aucune modification GitHub distante.
 
 Pour reprendre le Pixel :
 ```sh
-adb devices   # attendre 45301FDAS001QT
-adb -s 45301FDAS001QT install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb -s 45301FDAS001QT install -r -t android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb devices   # attendre $PIXEL_SERIAL
+adb -s $PIXEL_SERIAL install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s $PIXEL_SERIAL install -r -t android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 ```
 Ne pas utiliser `pm clear` ni `uninstall` comme rollback. Restaurer les données
 app-only uniquement après contrôle de la sauvegarde et consentement ciblé.

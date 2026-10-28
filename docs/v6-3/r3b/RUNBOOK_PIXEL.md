@@ -7,7 +7,7 @@
 > explicite sont **interdites**. Ce document reste l'historique R3-B.
 
 Cible de qualification : **Pixel 9 Pro XL physique**, Android 17 / API 37,
-numéro de série `45301FDAS001QT`. Aucun émulateur ne vaut preuve Pixel.
+numéro de série `$PIXEL_SERIAL`. Aucun émulateur ne vaut preuve Pixel.
 
 ## 1. État de référence
 
@@ -39,11 +39,11 @@ copier leur contenu dans une preuve.
 
 ```sh
 adb devices -l
-adb -s 45301FDAS001QT shell getprop ro.build.version.release
-adb -s 45301FDAS001QT shell getprop ro.build.version.sdk
-adb -s 45301FDAS001QT shell pm path dev.atlas.coach
-adb -s 45301FDAS001QT reverse --list          # doit être vide
-adb -s 45301FDAS001QT shell settings get global http_proxy
+adb -s $PIXEL_SERIAL shell getprop ro.build.version.release
+adb -s $PIXEL_SERIAL shell getprop ro.build.version.sdk
+adb -s $PIXEL_SERIAL shell pm path dev.atlas.coach
+adb -s $PIXEL_SERIAL reverse --list          # doit être vide
+adb -s $PIXEL_SERIAL shell settings get global http_proxy
 ```
 
 ## 3. Sauvegarde et extraction de contrôle
@@ -51,7 +51,7 @@ adb -s 45301FDAS001QT shell settings get global http_proxy
 ```sh
 mkdir -p ~/atlas-backups/r3b && chmod 700 ~/atlas-backups ~/atlas-backups/r3b
 cd ~/atlas-backups/r3b
-adb -s 45301FDAS001QT exec-out run-as dev.atlas.coach tar -cf - . \
+adb -s $PIXEL_SERIAL exec-out run-as dev.atlas.coach tar -cf - . \
   > pixel-app-backup-pre-r3b.tar
 chmod 600 pixel-app-backup-pre-r3b.tar
 sha256sum pixel-app-backup-pre-r3b.tar
@@ -85,9 +85,9 @@ La signature debug doit correspondre au certificat de référence
 diffère, **ne pas désinstaller** : arrêter et traiter comme `BLOCKED`.
 
 ```sh
-adb -s 45301FDAS001QT install -r "$apk"
-adb -s 45301FDAS001QT shell pm path dev.atlas.coach
-adb -s 45301FDAS001QT shell dumpsys package dev.atlas.coach \
+adb -s $PIXEL_SERIAL install -r "$apk"
+adb -s $PIXEL_SERIAL shell pm path dev.atlas.coach
+adb -s $PIXEL_SERIAL shell dumpsys package dev.atlas.coach \
   | grep -E 'versionCode=|versionName='
 ```
 
@@ -115,10 +115,10 @@ un faux provider.
 Commandes de contrôle :
 
 ```sh
-adb -s 45301FDAS001QT shell am force-stop dev.atlas.coach
-adb -s 45301FDAS001QT reboot
-adb -s 45301FDAS001QT wait-for-device
-adb -s 45301FDAS001QT shell getprop sys.boot_completed
+adb -s $PIXEL_SERIAL shell am force-stop dev.atlas.coach
+adb -s $PIXEL_SERIAL reboot
+adb -s $PIXEL_SERIAL wait-for-device
+adb -s $PIXEL_SERIAL shell getprop sys.boot_completed
 ```
 
 ## 6. A4 — Révocation complète
@@ -141,10 +141,10 @@ Préconditions : Wi-Fi désactivé, données mobiles actives, aucun `adb reverse
 aucun proxy USB, Funnel public autorisé.
 
 ```sh
-adb -s 45301FDAS001QT shell svc wifi disable
-adb -s 45301FDAS001QT shell svc data enable
-adb -s 45301FDAS001QT reverse --list       # vide
-adb -s 45301FDAS001QT shell settings get global http_proxy   # null
+adb -s $PIXEL_SERIAL shell svc wifi disable
+adb -s $PIXEL_SERIAL shell svc data enable
+adb -s $PIXEL_SERIAL reverse --list       # vide
+adb -s $PIXEL_SERIAL shell settings get global http_proxy   # null
 ```
 
 Scénarios :
@@ -188,7 +188,7 @@ hors ligne, police agrandie, rotation, TalkBack. Aucune refonte générale.
 
 1. Arrêter les services de test.
 2. Réinstaller l'APK de rollback :
-   `adb -s 45301FDAS001QT install -r ~/atlas-backups/r3b/pixel-current-r3a-plus.apk`.
+   `adb -s $PIXEL_SERIAL install -r ~/atlas-backups/r3b/pixel-current-r3a-plus.apk`.
 3. Si nécessaire, restaurer les données app-only depuis la sauvegarde, après
    avoir vérifié son extraction.
 4. Révoquer les appareils de test sur le PC.

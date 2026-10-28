@@ -1,6 +1,6 @@
 ATLAS V6.3 R3-B — Installation APK R3-B sur Pixel
 Date: 2026-10-28
-Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
+Device: $PIXEL_SERIAL, Pixel 9 Pro XL, Android 17 / API 37
 Source SHA: 3ecccad8c14c64be99966e137fbd32af64345b20
 APK installé: android/app/build/outputs/apk/debug/app-debug.apk
 SHA-256 APK: bf72c735ba12027cfc9fa7321b5cab076ccdf663d56d034083ca849c5d6ca0d4
@@ -8,7 +8,7 @@ APK androidTest compilé: cd83bac80e5bf32c2d1572235e690ee425c5c206529400ac35a561
 Signature: V2 debug, certificat SHA-256
 da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee
 Paquet: dev.atlas.coach, versionCode=1, versionName=0.1.0, compileSdk 37
-Commande: adb -s 45301FDAS001QT install -r <apk>
+Commande: adb -s $PIXEL_SERIAL install -r <apk>
 Résultat: Success ; lastUpdateTime=2026-10-28 14:01:04
 
 Données ATLAS avant/après installation (identiques) :

@@ -5,21 +5,21 @@ Environnement: PC Linux, Tailscale 1.104.4, relais atlas-paseo-relay:r3a sur
 127.0.0.1:4402, proxy intégré sur 127.0.0.1:4400, Node v24.18.0.
 
 DNS public (DoH 1.1.1.1):
-  all.taildc7886.ts.net A 176.58.90.46, 176.58.90.63, 176.58.90.145 (TTL 300)
+  all.taildc7886.ts.net A $FUNNEL_PUBLIC_IP, $FUNNEL_PUBLIC_IP, $FUNNEL_PUBLIC_IP (TTL 300)
 
-TLS public vers 176.58.90.46:8443, SNI all.taildc7886.ts.net:
+TLS public vers $FUNNEL_PUBLIC_IP:8443, SNI all.taildc7886.ts.net:
   CONNECTION ESTABLISHED, TLSv1.3, TLS_AES_128_GCM_SHA256
   Certificat CN=all.taildc7886.ts.net, SAN DNS:all.taildc7886.ts.net
   Émetteur: Let's Encrypt YE1
   notBefore=Sep 24 18:23:57 2026 GMT, notAfter=Dec 23 18:23:56 2026 GMT
   Verification: OK
 
-HTTP public avec --resolve vers 176.58.90.46:8443:
+HTTP public avec --resolve vers $FUNNEL_PUBLIC_IP:8443:
   GET /health  -> 200 {"status":"ok"}
   GET /ready   -> 200 {"status":"ready"}
   GET /metrics -> 404 not found (refusé par le proxy, pas de métriques)
 
-WSS public (client Node ws, lookup forcé vers 176.58.90.46, SNI hostname):
+WSS public (client Node ws, lookup forcé vers $FUNNEL_PUBLIC_IP, SNI hostname):
   /ws?serverId=synthetic-r3b-public&role=server&v=2 -> 101
   /ws?serverId=synthetic-r3b-public&role=client&v=2 -> 101
   /ws?serverId=synthetic-r3b-public&role=server&v=1 -> 400

@@ -7,7 +7,7 @@ wss://all.taildc7886.ts.net:8443, proxy 127.0.0.1:4400, relais
 atlas-paseo-relay:r3a sur 127.0.0.1:4402, FastAPI réel sur 127.0.0.1:8100
 avec ATLAS_AGENT_ADAPTER=openclaw, OpenClaw personnel existant sur
 127.0.0.1:18789 (aucune modification de configuration), client Noise public
-avec résolution forcée vers l'IP publique 176.58.90.46.
+avec résolution forcée vers l'IP publique $FUNNEL_PUBLIC_IP.
 
 Commande (les secrets sont lus depuis l'environnement/fichiers 0600, jamais
 affichés) :
@@ -15,7 +15,7 @@ affichés) :
   ATLAS_E2E_PUBLIC_KEY=<clé publique X25519 existante>
   ATLAS_E2E_DEVICE_ID=<uuid synthétique appairé avec coach.chat>
   ATLAS_E2E_TOKEN_FILE=<fichier 0600 synthétique>
-  ATLAS_E2E_PUBLIC_IP=176.58.90.46
+  ATLAS_E2E_PUBLIC_IP=$FUNNEL_PUBLIC_IP
   ATLAS_E2E_CHAT_MESSAGE='<message synthétique unique>'
   node scripts/r3b-public-e2e.mjs
 
