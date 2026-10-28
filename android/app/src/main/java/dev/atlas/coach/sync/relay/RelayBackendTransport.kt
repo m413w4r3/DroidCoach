@@ -67,6 +67,7 @@ class RelayBackendTransport internal constructor(
     private var negotiatedResponseLimit = AtlasRemoteProtocol.MAX_RESPONSE_BYTES
     private var negotiatedCapabilities = emptySet<String>()
     private var capabilityNegotiationComplete = false
+    private var coachChatCapabilityFailureReported = false
     private var started = false
 
     fun state(): RelayConnectionState = connectionState
@@ -243,38 +244,48 @@ class RelayBackendTransport internal constructor(
     private fun handleHelloOk(envelope: JSONObject) {
         val session = envelope.optString("session_id")
         val caps = envelope.optJSONArray("capabilities") ?: JSONArray()
-        val capSet = (0 until caps.length()).mapNotNull { caps.optString(it).takeIf(String::isNotEmpty) }.toSet()
-        val missing = config.requestedCapabilities - capSet
-        synchronized(lock) {
-            negotiatedCapabilities = capSet
-            capabilityNegotiationComplete = true
-        }
-        if (missing.isNotEmpty()) {
-            synchronized(lock) {
-                appSessionId = null
-                appSessionExpiry = null
-                setStateLocked(RelayConnectionState.ERROR)
-                val waiting = queue.toList()
-                queue.clear()
-                waiting.forEach { completeLocked(it, unavailableCapability(missing.first())) }
+        val serverCapabilities = (0 until caps.length())
+            .mapNotNull { caps.optString(it).takeIf(String::isNotEmpty) }
+            .toSet()
+        var reportMissingCoachChat = false
+        val accepted = synchronized(lock) {
+            if (appSessionId != null || !started) {
+                false
+            } else {
+                negotiatedCapabilities = serverCapabilities.intersect(config.requestedCapabilities)
+                capabilityNegotiationComplete = true
+                appSessionId = session
+                appSessionExpiry = Instant.now().plusSeconds(envelope.optLong("expires_in_seconds"))
+                heartbeatNonce = null
+                heartbeatSentAtNanos = 0L
+                negotiatedRequestLimit = minOf(AtlasRemoteProtocol.MAX_REQUEST_BYTES, envelope.optInt("max_request_bytes"))
+                negotiatedResponseLimit = minOf(AtlasRemoteProtocol.MAX_RESPONSE_BYTES, envelope.optInt("max_response_bytes"))
+
+                val unsupported = queue.mapNotNull { pending ->
+                    AtlasRemoteProtocol.requiredCapability(pending.operation)
+                        ?.takeIf { it !in negotiatedCapabilities }
+                        ?.let { capability -> pending to capability }
+                }
+                unsupported.forEach { (pending, capability) ->
+                    queue.remove(pending)
+                    completeLocked(pending, unavailableCapability(capability))
+                }
+
+                if ("coach.chat" in config.requestedCapabilities &&
+                    "coach.chat" !in negotiatedCapabilities && !coachChatCapabilityFailureReported
+                ) {
+                    coachChatCapabilityFailureReported = true
+                    reportMissingCoachChat = true
+                }
+                setStateLocked(RelayConnectionState.RELAY_CONNECTED)
+                true
             }
-            if ("coach.chat" in missing) reportFailure(RelayFailure.of(RelayFailureKind.CAPABILITY_UNAVAILABLE))
-            client.abort(4003, "requested capability unavailable")
-            return
         }
-        if (synchronized(lock) { appSessionId != null || !started }) {
+        if (!accepted) {
             failProtocol(RelayProtocolException("unexpected hello_ok"))
             return
         }
-        synchronized(lock) {
-            appSessionId = session
-            appSessionExpiry = Instant.now().plusSeconds(envelope.optLong("expires_in_seconds"))
-            heartbeatNonce = null
-            heartbeatSentAtNanos = 0L
-            negotiatedRequestLimit = minOf(AtlasRemoteProtocol.MAX_REQUEST_BYTES, envelope.optInt("max_request_bytes"))
-            negotiatedResponseLimit = minOf(AtlasRemoteProtocol.MAX_RESPONSE_BYTES, envelope.optInt("max_response_bytes"))
-            setStateLocked(RelayConnectionState.RELAY_CONNECTED)
-        }
+        if (reportMissingCoachChat) reportFailure(RelayFailure.of(RelayFailureKind.CAPABILITY_UNAVAILABLE))
         pump()
     }
 

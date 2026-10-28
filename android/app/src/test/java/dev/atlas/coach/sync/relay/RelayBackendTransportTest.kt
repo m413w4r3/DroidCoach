@@ -35,7 +35,7 @@ class RelayBackendTransportTest {
     }
 
     @Test
-    fun requestsConfiguredCapabilitiesAndRejectsMissingCoachChatWithoutSending() {
+    fun requestsConfiguredCapabilitiesAndRejectsMissingCoachChatWithoutClosingSession() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(staticPair)
         val transport = RelayBackendTransport(
@@ -53,11 +53,12 @@ class RelayBackendTransportTest {
             assertEquals(setOf("coach.chat", "plan.revision"),
                 (0 until sockets.appHellos.single().getJSONArray("capabilities").length())
                     .map { sockets.appHellos.single().getJSONArray("capabilities").getString(it) }.toSet())
-            assertEquals(RelayConnectionState.ERROR, transport.state())
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
             val result = transport.execute("coach.chat.request", JSONObject().put("message", "synthetic"))
             assertEquals("OPERATION_UNAVAILABLE", (result as RelayCallResult.RemoteError).code)
             assertTrue(result.message.contains("Réappairez"))
             assertTrue("chat must not be dispatched without the negotiated capability", sockets.requests.isEmpty())
+            assertTrue("a missing capability must not close the relay session", sockets.sockets.single().closedCode == null)
         } finally { transport.close() }
     }
 
