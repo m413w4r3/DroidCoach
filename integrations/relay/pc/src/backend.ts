@@ -7,6 +7,7 @@ export interface BackendConfig {
   baseUrl: string;
   serviceToken?: string;
   timeoutMs?: number;
+  chatTimeoutMs?: number;
   fetcher?: FetchLike;
 }
 
@@ -24,6 +25,7 @@ export class BackendRequestError extends RemoteError {
 }
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+const DEFAULT_CHAT_TIMEOUT_MS = 55_000;
 
 export function assertLoopbackHttpUrl(value: string): URL {
   let url: URL;
@@ -42,11 +44,16 @@ export class BackendClient {
   readonly baseUrl: URL;
   private readonly fetcher: FetchLike;
   private readonly timeoutMs: number;
+  private readonly chatTimeoutMs: number;
 
   constructor(private readonly config: BackendConfig) {
     this.baseUrl = assertLoopbackHttpUrl(config.baseUrl);
     this.fetcher = config.fetcher ?? fetch;
     this.timeoutMs = config.timeoutMs ?? 5_000;
+    this.chatTimeoutMs = config.chatTimeoutMs ?? DEFAULT_CHAT_TIMEOUT_MS;
+    if (!Number.isInteger(this.chatTimeoutMs) || this.chatTimeoutMs < 1 || this.chatTimeoutMs > DEFAULT_CHAT_TIMEOUT_MS) {
+      throw new Error(`chat timeout must be an integer between 1 and ${DEFAULT_CHAT_TIMEOUT_MS} ms`);
+    }
   }
 
   async execute(operation: Operation, payload: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
@@ -57,7 +64,9 @@ export class BackendClient {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (route.auth && this.config.serviceToken) headers.Authorization = `Bearer ${this.config.serviceToken}`;
     if (route.body) headers["Content-Type"] = "application/json";
-    const combinedSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs);
+    const timeoutMs = operation === "coach.chat.request" ? this.chatTimeoutMs : this.timeoutMs;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const init: RequestInit = { method: route.method, headers, signal: combinedSignal, redirect: "error" };
     if (route.body) init.body = JSON.stringify(route.body);
     let response: Response;

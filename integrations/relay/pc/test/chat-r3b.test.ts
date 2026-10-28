@@ -33,6 +33,29 @@ const CHAT_RESULT = {
 };
 const CHAT_CAPABILITY: Capability = "coach.chat";
 
+function delayedJsonFetcher(delayMs: number, onCall: () => void = () => {}): FetchLike {
+  return async (_input, init) => {
+    onCall();
+    return await new Promise<Response>((resolve, reject) => {
+      const signal = init?.signal;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const abort = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        reject(new DOMException("synthetic backend request aborted", "AbortError"));
+      };
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      timer = setTimeout(() => {
+        signal?.removeEventListener("abort", abort);
+        resolve(new Response(JSON.stringify(CHAT_RESULT), { status: 200, headers: { "content-type": "application/json" } }));
+      }, delayMs);
+      signal?.addEventListener("abort", abort, { once: true });
+    });
+  };
+}
+
 async function openChatSession(
   context: Awaited<ReturnType<typeof makeContext>>,
   capabilities: Capability[] = [CHAT_CAPABILITY],
@@ -74,6 +97,60 @@ function lastError(channel: FakeSecureChannel) {
 }
 
 describe("R3-B relayed coach chat", () => {
+  it("uses the longer chat timeout while keeping the short timeout for other operations", async () => {
+    const calls: string[] = [];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      serviceToken: SERVICE_TOKEN,
+      timeoutMs: 20,
+      chatTimeoutMs: 300,
+      fetcher: async (input, init) => {
+        calls.push(String(input));
+        return await delayedJsonFetcher(80)(input, init);
+      },
+    });
+
+    await expect(backend.execute("coach.status", {})).rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE", retryable: true });
+    await expect(backend.execute("coach.chat.request", CHAT_PAYLOAD)).resolves.toEqual(CHAT_RESULT);
+    expect(calls).toEqual([
+      "http://127.0.0.1:8100/v2/agent/status",
+      "http://127.0.0.1:8100/v2/agent/chat",
+    ]);
+  });
+
+  it("marks a timed-out chat uncertain and blocks a second backend call", async () => {
+    const journalDir = await mkdtemp(join(tmpdir(), "atlas-chat-r3b-timeout-"));
+    const journalPath = join(journalDir, "operations.json");
+    let calls = 0;
+    const fetcher = delayedJsonFetcher(120, () => { calls += 1; });
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      serviceToken: SERVICE_TOKEN,
+      timeoutMs: 20,
+      chatTimeoutMs: 60,
+      fetcher,
+    });
+    const executor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+    const deviceId = "synthetic-chat-timeout-device";
+    const sessionId = "ad64ed44-c498-4a20-b042-dcbf2ad8dc99";
+    const chat = chatRequest(sessionId, CHAT_PAYLOAD, { idempotency_key: "chat-r3b-timeout-key" });
+    try {
+      await expect(executor.execute(deviceId, sessionId, chat)).rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE", retryable: false });
+      const retry = { ...chat, request_id: randomUUID() };
+      await expect(executor.execute(deviceId, sessionId, retry)).rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE", retryable: false });
+
+      const restarted = new OperationExecutor(new BackendClient({
+        baseUrl: "http://127.0.0.1:8100", serviceToken: SERVICE_TOKEN,
+        chatTimeoutMs: 60,
+        fetcher: delayedJsonFetcher(120, () => { calls += 1; }),
+      }), STATE, Date.now, journalPath);
+      await expect(restarted.execute(deviceId, sessionId, retry)).rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE", retryable: false });
+      expect(calls).toBe(1);
+    } finally {
+      await rm(journalDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects the operation when the authenticated session lacks coach.chat", async () => {
     const context = await makeContext();
     try {
