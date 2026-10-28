@@ -329,7 +329,7 @@ test('WebSocket upgrade forwards routing headers and preserves text and binary f
     opened = await openWebSocket(
       port,
       `/ws?serverId=${queryMarker}&role=client&v=2&connectionId=synthetic-connection`,
-      'X-Private-Header: do-not-forward',
+      'Content-Length: 0\r\nX-Private-Header: do-not-forward',
     );
   } catch (error) {
     assert.fail(`${error.message}; upstream=${JSON.stringify(upstreamRequest)}; logs=${JSON.stringify(capturedLogs)}`);
@@ -392,6 +392,30 @@ test('WebSocket query rejects legacy, missing, duplicate, unknown, malformed, an
     assert.equal(parseResponse(buffer).status, 400, target);
   }
   assert.equal(upstreamUpgrades, 0);
+});
+
+test('WebSocket upgrades with an HTTP body are rejected before contacting upstream', async (t) => {
+  let upstreamUpgrades = 0;
+  const upstream = await startUpstream((_req, res) => res.writeHead(404).end(), (_req, socket) => {
+    upstreamUpgrades += 1;
+    socket.destroy();
+  });
+  const { proxy, port } = await startProxy(upstream.port);
+  t.after(async () => {
+    await closeProxy(proxy);
+    await upstream.close();
+  });
+
+  const target = '/ws?serverId=synthetic&role=server&v=2';
+  const bodyRequests = [
+    { headers: 'Content-Length: 1', body: 'x' },
+    { headers: 'Transfer-Encoding: chunked', body: '1\r\nx\r\n0\r\n\r\n' },
+  ];
+  for (const { headers, body } of bodyRequests) {
+    const response = await rawExchange(port, websocketRequest(target, headers) + body);
+    assert.equal(parseResponse(response).status, 400, headers);
+    assert.equal(upstreamUpgrades, 0, headers);
+  }
 });
 
 test('bounded failures cover header, response, connection, and timeout limits', async (t) => {

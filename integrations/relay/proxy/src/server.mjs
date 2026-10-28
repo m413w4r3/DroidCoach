@@ -432,6 +432,7 @@ export function createProxy(options = {}) {
 
     if (req.method !== 'GET') return fail(405, 'method');
     if (!isWebSocketTarget(req.url)) return fail(404, 'path');
+    if (isRequestBodyPresent(req)) return fail(400, 'request_body');
     const parsedQuery = parseWsQuery(req.url, limits.maxTargetBytes);
     if (parsedQuery.error) return fail(400, 'query');
     const handshake = validateUpgradeHeaders(req, limits.maxForwardedHeaderBytes);

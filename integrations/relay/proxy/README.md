@@ -18,6 +18,8 @@ nom DNS, chemin, query ou identifiant.
 - `/metrics`, les autres chemins et les méthodes autres que GET sont refusés.
   Une requête HTTP normale vers `/ws` reçoit `426`; une query invalide reçoit
   `400`; un chemin inconnu reçoit `404`.
+- Un upgrade `/ws` avec `Transfer-Encoding` ou un `Content-Length` non nul est
+  refusé avec `400`; `Content-Length: 0` reste accepté.
 
 Les clés de query autorisées sont exactement `serverId`, `role`, `v` et
 `connectionId`. Les doublons, clés inconnues, identifiants vides ou de plus de
