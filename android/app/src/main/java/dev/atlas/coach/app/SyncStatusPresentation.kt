@@ -22,17 +22,47 @@ internal fun syncStatusPresentation(
     val observedState = backendObservation.stateAt(nowUtcMillis)
     val hasPriorObservation = backendObservation.checkedAtUtcMillis != null ||
         backendObservation.lastSuccessfulContactAtUtcMillis != null
+    val readinessNotes = buildList {
+        if (!hasConsent) add("Aucune catégorie n'est consentie.")
+        if (!backendUrlConfigured) add("URL backend manquante.")
+        if (!tokenConfigured) add("Jeton Bearer manquant.")
+    }.joinToString(" ")
+    fun withReadinessNotes(detail: String): String =
+        if (readinessNotes.isBlank()) detail else "$detail $readinessNotes"
+
+    // Keep a current transport/authentication failure visible even when a consent
+    // or configuration change would otherwise select an earlier generic state.
+    if (enabled && status == SyncStatus.AUTH_REQUIRED) {
+        return SyncStatusPresentation(
+            label = "Authentification requise",
+            detail = withReadinessNotes(statusMessage.ifBlank { "Le jeton manque ou a été refusé; les données restent locales." }),
+        )
+    }
+    if (enabled && status in setOf(SyncStatus.CONTRACT_ERROR, SyncStatus.PROTOCOL_ERROR, SyncStatus.REJECTED)) {
+        return SyncStatusPresentation(
+            label = "Erreur de synchronisation",
+            detail = withReadinessNotes(statusMessage.ifBlank { "La dernière réponse n'a pas pu être validée; les données restent locales." }),
+        )
+    }
+    if (enabled && (status == SyncStatus.RETRY_SCHEDULED || observedState == AgentBackendState.UNAVAILABLE)) {
+        return SyncStatusPresentation(
+            label = "Hors ligne",
+            detail = withReadinessNotes(statusMessage.ifBlank {
+                if (pendingCount == 0) "Le dernier contact backend a échoué." else "$pendingCount événement(s) restent en attente sur cet appareil."
+            }),
+        )
+    }
 
     if (!enabled) {
         return SyncStatusPresentation(
             label = "Désactivée",
-            detail = "La file reste sur cet appareil; aucune connexion ne sera ouverte.",
+            detail = "La file reste sur cet appareil; aucune connexion n'est ouverte.",
         )
     }
     if (!hasConsent) {
         return SyncStatusPresentation(
             label = "Activée · aucune catégorie consentie",
-            detail = "Choisissez une catégorie pour autoriser l'envoi correspondant.",
+            detail = "Choisissez une catégorie pour autoriser son envoi.",
         )
     }
     if (!backendUrlConfigured || !tokenConfigured) {
@@ -49,37 +79,17 @@ internal fun syncStatusPresentation(
         return SyncStatusPresentation("Contact en cours", "La requête est en cours; les événements restent en file locale jusqu'à confirmation.")
     }
 
-    if (status == SyncStatus.RETRY_SCHEDULED || observedState == AgentBackendState.UNAVAILABLE) {
-        return SyncStatusPresentation(
-            label = "Hors ligne",
-            detail = statusMessage.ifBlank {
-                if (pendingCount == 0) "Le dernier contact backend a échoué." else "$pendingCount événement(s) restent en attente sur cet appareil."
-            },
-        )
-    }
-    if (status == SyncStatus.AUTH_REQUIRED) {
-        return SyncStatusPresentation(
-            label = "Authentification requise",
-            detail = statusMessage.ifBlank { "Le jeton Bearer est manquant ou a été refusé; les données restent locales." },
-        )
-    }
-    if (status in setOf(SyncStatus.CONTRACT_ERROR, SyncStatus.PROTOCOL_ERROR, SyncStatus.REJECTED)) {
-        return SyncStatusPresentation(
-            label = "Erreur de synchronisation",
-            detail = statusMessage.ifBlank { "La dernière réponse n'a pas pu être validée; les données restent locales." },
-        )
-    }
     if (observedState == AgentBackendState.REACHABLE) {
         return SyncStatusPresentation(
             label = "Backend joignable",
-            detail = if (pendingCount == 0) "Un contact backend a réussi au cours des cinq dernières minutes."
+            detail = if (pendingCount == 0) "Un contact backend a réussi récemment."
             else "$pendingCount événement(s) restent en attente de confirmation.",
         )
     }
     if (hasPriorObservation) {
         return SyncStatusPresentation(
             label = "Activée · contact à vérifier",
-            detail = "L'observation précédente a expiré; un nouveau contact confirmera l'état.",
+            detail = "L'observation a expiré; un nouveau contact confirmera l'état.",
         )
     }
     return SyncStatusPresentation(
