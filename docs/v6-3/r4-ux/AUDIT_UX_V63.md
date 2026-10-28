@@ -5,7 +5,7 @@
 - **Branche de travail** : `feat/atlas-v6-3-ux-daily-use`
 - **Appareil de recette** : Pixel 9 Pro XL physique, Android 17 / API 37, `dev.atlas.coach` 0.1.0
 - **Rôle HOME au pré-vol** : `com.google.android.apps.nexuslauncher` — **aucun changement de rôle HOME** dans cette passe.
-- **Captures avant** : `docs/v6-3/r4-ux/preuves/captures/avant/` (à expurger avant publication).
+- **Captures** : `docs/captures/v6-3-r4/avant/` et `docs/captures/v6-3-r4/apres/` (expurgées).
 
 ## 1. Méthode
 
@@ -68,7 +68,7 @@
 
 ### 2.6 Launcher HOME `LauncherHomeScreen` (rôle HOME actif sur le Pixel)
 
-Le propriétaire a explicitement activé ATLAS comme application d'accueil pendant la passe. L'écran réel a été capturé (`16-launcher-actuel.png`) et le tiroir d'applications (`17-launcher-apps-actuel.png`).
+Le propriétaire a explicitement activé ATLAS comme application d'accueil pendant la passe. L'écran réel a été capturé (`docs/captures/v6-3-r4/avant/16-launcher.png`) et le tiroir d'applications n'est pas publié (noms d'applications personnelles).
 
 | Constat | Effet | Décision |
 |---|---|---|

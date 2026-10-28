@@ -1,0 +1,14 @@
+ATLAS V6.3 R4 — Pré-vol Pixel physique
+Date: 2026-10-28 (Europe/Paris)
+Base Git: 566668ac9cd0778f43d7f4d90a93c6a45645935c (origin/main)
+Branche de travail: feat/atlas-v6-3-ux-daily-use
+
+Appareil: Pixel 9 Pro XL (komodo), Android 17 / API 37
+Package: dev.atlas.coach, versionCode 1, versionName 0.1.0, debug
+Rôle HOME: dev.atlas.coach (activé explicitement par le propriétaire pendant la passe)
+Sauvegarde app-only: ~/atlas-backups/r4/pixel-app-backup-pre-r4.tar
+  mode 0600, SHA-256 30cca099a1498cc9c6afcf85f965ddd61aab640ddf0b1fab8e404cdabdbe050c
+  fichiers inclus: 16; vérification d'extraction locale PASS
+  empreintes des fichiers applicatifs: ~/atlas-backups/r4/pixel-app-files-before.sha256 (0600)
+Aucun pm clear, aucune désinstallation, aucun changement de permission sensible,
+aucune suppression de données pendant la passe.
