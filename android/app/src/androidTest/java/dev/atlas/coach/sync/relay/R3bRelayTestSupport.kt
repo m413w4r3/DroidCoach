@@ -188,9 +188,12 @@ internal fun assertR3bTokenNotPlaintext(context: Context, token: String) {
     assertFalse("The Keystore credential value equals the clear token", encryptedToken == token)
 }
 
-internal fun r3bRelayKeystoreAliasPresent(): Boolean = runCatching {
+internal fun r3bRelayKeystoreAliasPresent(): Boolean = try {
     KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias("atlas_relay_device_v1")
-}.getOrDefault(false)
+} catch (error: Exception) {
+    // Fail closed: an unreadable Keystore must never make the absence assertion pass.
+    throw AssertionError("Unable to inspect the Android Keystore relay alias", error)
+}
 
 internal fun assertR3bCredentialRemoved(context: Context) {
     val preferences = context.getSharedPreferences(

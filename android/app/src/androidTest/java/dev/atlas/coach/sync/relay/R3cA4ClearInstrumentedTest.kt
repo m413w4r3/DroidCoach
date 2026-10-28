@@ -26,6 +26,7 @@ class R3cA4ClearInstrumentedTest {
         val controller = (context.applicationContext as AtlasApplication).controller
         var configuredBefore = false
         var deviceIdBefore = ""
+        assertTrue("The paired credential has no readable Keystore alias", r3bRelayKeystoreAliasPresent())
         instrumentation.runOnMainSync {
             configuredBefore = controller.relaySettings.credentialsConfigured
             deviceIdBefore = controller.relaySettings.deviceId
