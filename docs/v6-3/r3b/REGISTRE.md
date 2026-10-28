@@ -20,9 +20,9 @@ actifs, dont trois implémentations.
 
 | Ticket | Vague | Statut | Propriétaire / scope exclusif | Oracle principal |
 |---|---|---|---|---|
-| `R3B-NET-01` | A | READY | `integrations/relay/proxy/**` (nouveau), `docs/v6-3/r3b/preuves/net-01*.txt` | Proxy filtrant `4400 -> 4402` : `/health` et `/ready` proxifiés, `/metrics` refusé, upgrade `/ws` v2 réel, tests négatifs |
-| `R3B-PC-01` | A | READY | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
-| `R3B-CHAT-01` | A | READY | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
+| `R3B-NET-01` | A | RUNNING | `integrations/relay/proxy/**` (nouveau), `docs/v6-3/r3b/preuves/net-01*.txt` | Proxy filtrant `4400 -> 4402` : `/health` et `/ready` proxifiés, `/metrics` refusé, upgrade `/ws` v2 réel, tests négatifs |
+| `R3B-PC-01` | A | RUNNING | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
+| `R3B-CHAT-01` | A | RUNNING | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
 | `R3B-CHAT-WIRE-01` | B | BLOCKED (dépend de CHAT-01 intégré) | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
 | `R3B-ANDROID-01` | B | BLOCKED (dépend de CHAT-WIRE-01 intégré) | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
 | `R3B-QA-C` | C | BLOCKED (dépend de B) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
@@ -42,6 +42,22 @@ acceptation.
   tests Pixel sous autorisation de l'utilisateur, régressions et accessibilité.
 - **Vague D** : corrections, rejeu sur SHA intégré, revue indépendante,
   nettoyage, handoff et verdict.
+
+## Sessions enfants — vague A
+
+Modèle/effort vérifiés dans les métadonnées Paseo : `provider=codex`,
+`model=gpt-6-luna`, `thinkingOptionId=xhigh`, `effectiveThinkingOptionId=xhigh`,
+mode `auto-review`. Aucune sous-délégation.
+
+| Ticket | Agent ID | Worktree | Branche |
+|---|---|---|---|
+| `R3B-NET-01` | `180017b9-b399-4a47-aa9a-43bb83cf8b65` | `/home/nill/.paseo/worktrees/073527gm/r3b-net-01` | `feat/r3b-net-01` |
+| `R3B-PC-01` | `c8f7868c-7bc8-4280-83bb-bed8d00ed0bb` | `/home/nill/.paseo/worktrees/073527gm/r3b-pc-01` | `feat/r3b-pc-01` |
+| `R3B-CHAT-01` | `92f6e6fe-dda5-4fd7-98b3-ddeeffb0e565` | `/home/nill/.paseo/worktrees/073527gm/r3b-chat-01` | `feat/r3b-chat-01` |
+
+Reprise : si une session est interrompue, relire son commit, son diff et ses
+preuves ; ne pas rejouer une tâche terminée. Une notification de fin n'est pas
+une acceptation.
 
 ## Autorisations et limites
 
