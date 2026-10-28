@@ -277,7 +277,9 @@ class RelaySettingsController(
         }
         val failureListener: (RelayFailure) -> Unit = { failure ->
             mainHandler.post {
-                if (generation == transportGeneration) lastError = failure.message
+                if (generation == transportGeneration) {
+                    lastError = RelaySettingsErrorPolicy.afterFailure(state, failure, lastError)
+                }
             }
         }
         val created = try {
@@ -320,24 +322,43 @@ class RelaySettingsController(
                 val now = clock()
                 lastConnectedAtUtcMillis = now
                 settingsStore.updateLastConnected(now)
-                lastError = null
+                lastError = RelaySettingsErrorPolicy.afterStateChange(newState, lastError)
             }
-            RelayConnectionState.OFFLINE -> if (lastError == null) lastError = "Relais indisponible"
-            RelayConnectionState.AUTH_REQUIRED -> if (lastError == null) {
-                lastError = RelayFailure.fromRemoteCode("AUTH_REQUIRED").message
+            RelayConnectionState.OFFLINE,
+            RelayConnectionState.AUTH_REQUIRED,
+            RelayConnectionState.REVOKED,
+            RelayConnectionState.ERROR,
+            RelayConnectionState.PAIRING_REQUIRED -> {
+                lastError = RelaySettingsErrorPolicy.afterStateChange(newState, lastError)
             }
-            RelayConnectionState.REVOKED -> if (lastError == null) {
-                lastError = RelayFailure.fromRemoteCode("DEVICE_REVOKED").message
-            }
-            RelayConnectionState.ERROR -> if (lastError == null) {
-                lastError = RelayFailure.of(RelayFailureKind.UNKNOWN).message
-            }
-            RelayConnectionState.PAIRING_REQUIRED -> if (lastError == null) lastError = "Appairage requis"
             RelayConnectionState.RELAY_CONNECTING, RelayConnectionState.LOCAL -> Unit
         }
     }
 
     private companion object {
         const val MIN_START_INTERVAL_MILLIS = 5_000L
+    }
+}
+
+/** Keeps terminal revocation presentation stable when close/network failures arrive later. */
+internal object RelaySettingsErrorPolicy {
+    fun afterStateChange(state: RelayConnectionState, current: String?): String? = when (state) {
+        RelayConnectionState.RELAY_CONNECTED -> null
+        RelayConnectionState.OFFLINE -> current ?: "Relais indisponible"
+        RelayConnectionState.AUTH_REQUIRED -> current ?: RelayFailure.fromRemoteCode("AUTH_REQUIRED").message
+        RelayConnectionState.REVOKED -> RelayFailure.fromRemoteCode("DEVICE_REVOKED").message
+        RelayConnectionState.ERROR -> current ?: RelayFailure.of(RelayFailureKind.UNKNOWN).message
+        RelayConnectionState.PAIRING_REQUIRED -> current ?: "Appairage requis"
+        RelayConnectionState.RELAY_CONNECTING, RelayConnectionState.LOCAL -> current
+    }
+
+    fun afterFailure(
+        currentState: RelayConnectionState,
+        failure: RelayFailure,
+        current: String?,
+    ): String? = if (currentState == RelayConnectionState.REVOKED && failure.kind != RelayFailureKind.REVOKED) {
+        current
+    } else {
+        failure.message
     }
 }
