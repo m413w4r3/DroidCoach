@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.sizeIn
@@ -44,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.invisibleToUser
@@ -246,6 +248,7 @@ fun AtlasScreenFrame(
         }
     }
     val fontScale = LocalDensity.current.fontScale
+    val narrowWidth = LocalConfiguration.current.screenWidthDp <= 360
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -255,20 +258,22 @@ fun AtlasScreenFrame(
         bottomBar = {
             Column(modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
                     AtlasRule(color = androidx.compose.material3.MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
-                    if (fontScale >= 1.6f) {
+                    if (fontScale >= 1.5f || narrowWidth) {
                         Row(Modifier.fillMaxWidth()) {
-                            AtlasNavItem("Tableau", AtlasRoutes.HOME, activeDestination, onNavigate)
-                            AtlasNavItem("Focus", AtlasRoutes.FOCUS, activeDestination, onNavigate)
+                            AtlasNavItem("Accueil", AtlasRoutes.HOME, activeDestination, onNavigate)
+                            AtlasNavItem("Plan", AtlasRoutes.PLAN, activeDestination, onNavigate)
+                            AtlasNavItem("Coach", AtlasRoutes.COACH, activeDestination, onNavigate)
                         }
                         Row(Modifier.fillMaxWidth()) {
-                            AtlasNavItem("Habitudes", AtlasRoutes.HABITS, activeDestination, onNavigate)
+                            AtlasNavItem("Focus", AtlasRoutes.FOCUS, activeDestination, onNavigate)
                             AtlasNavItem("Plus", AtlasRoutes.MORE, activeDestination, onNavigate)
                         }
                     } else {
                         Row(Modifier.fillMaxWidth()) {
-                            AtlasNavItem("Tableau", AtlasRoutes.HOME, activeDestination, onNavigate)
+                            AtlasNavItem("Accueil", AtlasRoutes.HOME, activeDestination, onNavigate)
+                            AtlasNavItem("Plan", AtlasRoutes.PLAN, activeDestination, onNavigate)
+                            AtlasNavItem("Coach", AtlasRoutes.COACH, activeDestination, onNavigate)
                             AtlasNavItem("Focus", AtlasRoutes.FOCUS, activeDestination, onNavigate)
-                            AtlasNavItem("Habitudes", AtlasRoutes.HABITS, activeDestination, onNavigate)
                             AtlasNavItem("Plus", AtlasRoutes.MORE, activeDestination, onNavigate)
                         }
                     }
@@ -371,6 +376,8 @@ private fun EmergencyPauseButton(emergencyPaused: Boolean, onEmergencyPause: () 
 
 object AtlasRoutes {
     const val HOME = "home"
+    const val PLAN = "plan"
+    const val COACH = "coach"
     const val FOCUS = "focus"
     const val HABITS = "habits"
     const val MORE = "more"
@@ -380,11 +387,12 @@ object AtlasRoutes {
 private fun RowScope.AtlasNavItem(label: String, destination: String, active: String, onNavigate: (String) -> Unit) {
     TextButton(
         onClick = { onNavigate(destination) },
-        modifier = Modifier.weight(1f).sizeIn(minHeight = 56.dp).semantics {
+        modifier = Modifier.weight(1f).sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
             contentDescription = "Ouvrir $label"
             role = Role.Tab
             selected = active == destination
         },
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurface),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {

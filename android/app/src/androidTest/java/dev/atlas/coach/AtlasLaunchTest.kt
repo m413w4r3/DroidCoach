@@ -82,13 +82,13 @@ class AtlasLaunchTest {
         composeRule.activityRule.scenario.recreate()
     }
 
-    private fun openHome() = composeRule.onNodeWithContentDescription("Ouvrir Tableau").performClick()
+    private fun openHome() = composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
     private fun openFocus() = composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
-    private fun openHabits() = composeRule.onNodeWithContentDescription("Ouvrir Habitudes").performClick()
+    private fun openHabits() { openMore(); composeRule.onNodeWithText("Habitudes").performScrollTo().performClick() }
     private fun openMore() = composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
     private fun openSettings() { openMore(); composeRule.onNodeWithText("Usage quotidien").performScrollTo().performClick() }
     private fun openLibrary() { openMore(); composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick() }
-    private fun openCoach() { openMore(); composeRule.onNodeWithText("Coach").performScrollTo().performClick() }
+    private fun openCoach() = composeRule.onNodeWithContentDescription("Ouvrir Coach").performClick()
 
     @Test
     fun backReturnsFromDailySettingsToMoreAndTabsSelectTheirRoot() {
@@ -101,12 +101,12 @@ class AtlasLaunchTest {
         openFocus()
         composeRule.onNodeWithTag("focus_task_title").assertIsDisplayed()
         openHome()
-        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
+        composeRule.onNodeWithText("Directive du coach").performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun directiveFocusHabitSimulatorAndLibraryJourneysWorkOffline() {
-        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
+        composeRule.onNodeWithText("Aujourd'hui").assertIsDisplayed()
         composeRule.onNodeWithText("Lis/avance 10 min").assertIsDisplayed()
 
         composeRule.onNodeWithText("Commencer").performClick()
@@ -264,7 +264,7 @@ class AtlasLaunchTest {
         openMore()
         composeRule.onAllNodesWithText("Accueil et applications favorites").assertCountEquals(0)
         openHome()
-        composeRule.onNodeWithText("La prochaine étape").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Directive du coach").performScrollTo().assertIsDisplayed()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertTrue(AndroidLauncherCatalog(context).list().none { it.appPackage == context.packageName })
     }
@@ -331,7 +331,7 @@ class AtlasLaunchTest {
             "Controller should expose the quarantined invalid-substate notice; actual=$recoveryMessage",
             recoveryMessage?.contains("sous-états invalides") == true,
         )
-        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
+        composeRule.onNodeWithText("Aujourd'hui").assertIsDisplayed()
         composeRule.onNodeWithText("sous-états invalides", substring = true).performScrollTo().assertIsDisplayed()
     }
 
@@ -356,7 +356,7 @@ class AtlasLaunchTest {
         val persisted = org.json.JSONObject(checkNotNull(prefs.getString("state_v1", null)))
         assertEquals(1, persisted.getInt("schemaVersion"))
         assertEquals(1, persisted.getJSONObject("goals").getInt("schema_version"))
-        composeRule.onNodeWithText("Tableau de bord").assertIsDisplayed()
+        composeRule.onNodeWithText("Aujourd'hui").assertIsDisplayed()
         composeRule.onNodeWithText("version de schéma inconnue", substring = true).performScrollTo().assertIsDisplayed()
     }
 

@@ -44,6 +44,7 @@ fun AtlasApp(
     var showHabitExport by remember { mutableStateOf(false) }
     var showLinkChoices by remember { mutableStateOf(false) }
     var selectedHabit by remember { mutableStateOf<Habit?>(null) }
+    var dismissedLatestMessage by remember(controller) { mutableStateOf<String?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val mobilityStatus by MobilitySessionStatusStore.status.collectAsState()
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -111,13 +112,19 @@ fun AtlasApp(
 
     val activeDestination = when (controller.navigationState.current) {
         AtlasScreenId.HOME -> AtlasRoutes.HOME
+        AtlasScreenId.PLAN -> AtlasRoutes.PLAN
+        AtlasScreenId.COACH -> AtlasRoutes.COACH
         AtlasScreenId.FOCUS, AtlasScreenId.FOCUS_STATS -> AtlasRoutes.FOCUS
-        AtlasScreenId.HABITS -> AtlasRoutes.HABITS
+        AtlasScreenId.HABITS -> AtlasRoutes.MORE
         else -> AtlasRoutes.MORE
     }
     val screenTitle = when (controller.navigationState.current) {
-        AtlasScreenId.HOME -> "Tableau de bord"
-        AtlasScreenId.PLAN -> "Plan du jour"
+        AtlasScreenId.HOME -> "Aujourd'hui"
+        AtlasScreenId.PLAN -> "Planning"
+        AtlasScreenId.COACH -> "Coach"
+        AtlasScreenId.FOCUS -> "Focus"
+        AtlasScreenId.HABITS -> "Habitudes"
+        AtlasScreenId.MORE -> "Plus"
         AtlasScreenId.SPORT -> "Sport"
         AtlasScreenId.AGENT_SETTINGS -> "Mandat du Coach"
         AtlasScreenId.AGENT_SHARING -> "Données partagées"
@@ -140,8 +147,10 @@ fun AtlasApp(
         onNavigate = { route ->
             val destination = when (route) {
                 AtlasRoutes.HOME -> AtlasScreenId.HOME
+                AtlasRoutes.PLAN -> AtlasScreenId.PLAN
+                AtlasRoutes.COACH -> AtlasScreenId.COACH
                 AtlasRoutes.FOCUS -> AtlasScreenId.FOCUS
-                AtlasRoutes.HABITS -> AtlasScreenId.HABITS
+                AtlasRoutes.MORE -> AtlasScreenId.MORE
                 else -> AtlasScreenId.MORE
             }
             controller.navigationState.selectTab(destination)
@@ -191,7 +200,9 @@ fun AtlasApp(
             AtlasScreenId.ABOUT -> AboutLicensesScreen(context)
             else -> MoreScreen(controller)
         }
-        controller.latestMessage?.let { NoticeCard(it) }
+        controller.latestMessage?.takeIf { it != dismissedLatestMessage }?.let { message ->
+            NoticeCard(message, onDismiss = { dismissedLatestMessage = message })
+        }
     }
 
     if (showLinkChoices && controller.capabilities[AtlasController.CAP_HABITS] == true) {

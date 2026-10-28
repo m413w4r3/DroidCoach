@@ -34,6 +34,29 @@ class AtlasNavigationStateTest {
     }
 
     @Test
+    fun allFivePrimaryTabsSelectTheirOwnRoot() {
+        val navigation = AtlasNavigationState()
+        val tabs = listOf(
+            AtlasScreenId.HOME,
+            AtlasScreenId.PLAN,
+            AtlasScreenId.COACH,
+            AtlasScreenId.FOCUS,
+            AtlasScreenId.MORE,
+        )
+
+        tabs.forEach { tab ->
+            assertEquals(tab, navigation.selectTab(tab))
+            assertEquals(tab, navigation.current)
+            if (tab == AtlasScreenId.HOME) {
+                assertFalse(navigation.canGoBack)
+            } else {
+                assertTrue(navigation.canGoBack)
+                assertEquals(AtlasScreenId.HOME, navigation.back())
+            }
+        }
+    }
+
+    @Test
     fun navigatingToExistingRoutePopsBackToIt() {
         val navigation = AtlasNavigationState()
         navigation.navigate(AtlasScreenId.MORE)

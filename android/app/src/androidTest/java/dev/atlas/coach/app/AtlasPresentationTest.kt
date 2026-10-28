@@ -29,6 +29,7 @@ import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import org.junit.Assert.assertEquals
 
 @RunWith(AndroidJUnit4::class)
 class AtlasPresentationTest {
@@ -75,8 +76,14 @@ class AtlasPresentationTest {
     }
 
     @Test
-    fun homeHasOnePrimaryActionAndSecondaryNegotiationMenu() {
+    fun homeShowsDateAndQuickActionsWithoutScrolling() {
         setHome(fontScale = 1f)
+        composeRule.onNodeWithTag("home_datetime").assertIsDisplayed()
+        composeRule.onNodeWithTag("home_plan_hero").assertIsDisplayed()
+        composeRule.onNodeWithText("Parler au coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Voir le planning").assertIsDisplayed()
+        composeRule.onNodeWithText("Démarrer un focus").assertIsDisplayed()
+        composeRule.onNodeWithText("Directive du coach").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Commencer").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Discuter").assertCountEquals(0)
         composeRule.onAllNodesWithText("Alternative").assertCountEquals(0)
@@ -104,7 +111,8 @@ class AtlasPresentationTest {
         composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
         composeRule.onNodeWithText("Commencer").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Activer la pause d'urgence de 30 minutes").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Ouvrir Habitudes").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Coach").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsDisplayed()
     }
 
     @Test
@@ -128,14 +136,34 @@ class AtlasPresentationTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Plan").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Coach").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
+
+        composeRule.onNodeWithText("Voir le planning").performClick()
+        composeRule.onNodeWithContentDescription("Ouvrir Plan").assertIsSelected()
+        composeRule.onNodeWithText("Planning").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
+        composeRule.onNodeWithText("Parler au coach").performClick()
+        composeRule.onNodeWithContentDescription("Ouvrir Coach").assertIsSelected()
+        composeRule.onNodeWithText("Coach").assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsSelected()
-        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsNotSelected()
         composeRule.onNodeWithTag("focus_pomodoro_start").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsSelected()
+        composeRule.onNodeWithText("Partage backend").performScrollTo().performClick()
+        composeRule.onNodeWithText("Partage backend").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
+        composeRule.onNodeWithText("Connexion relayée").performScrollTo().performClick()
+        composeRule.onNodeWithText("Dernière connexion", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Plus").performClick()
+        composeRule.onNodeWithText("Habitudes").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Bibliothèque").performScrollTo().performClick()
         composeRule.onNodeWithText("Aucun lien vidéo ajouté.").assertIsDisplayed()
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
@@ -143,9 +171,37 @@ class AtlasPresentationTest {
         composeRule.onNodeWithText("Bibliothèque").performScrollTo().assertIsDisplayed()
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsSelected()
+        composeRule.onNodeWithText("Directive du coach").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
+    }
+
+    @Test
+    fun controllerNoticeCanBeDismissedLocally() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val stateContext = isolatedContext()
+        lateinit var controller: AtlasController
+        composeRule.runOnUiThread {
+            stateContext.getSharedPreferences("atlas_local_state", Context.MODE_PRIVATE).edit().clear().commit()
+            controller = AtlasController(stateContext)
+            controller.reportMessage("Notice temporaire de test")
+        }
+        composeRule.setContent {
+            AtlasTheme {
+                AtlasApp(
+                    controller = controller,
+                    planController = PlanController(File(context.cacheDir, "v63-notice-presentation")),
+                    context = context,
+                    requestHomeRole = {},
+                    openSystemHome = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Notice temporaire de test").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Fermer").performScrollTo().performClick()
+        composeRule.onAllNodesWithText("Notice temporaire de test").assertCountEquals(0)
+        assertEquals("Notice temporaire de test", controller.latestMessage)
     }
 
     private fun shell(command: String): String =

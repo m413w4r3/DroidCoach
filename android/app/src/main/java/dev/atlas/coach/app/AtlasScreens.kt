@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -76,7 +77,6 @@ import dev.atlas.coach.habits.HabitScheduleKind
 import dev.atlas.coach.content.ContentItem
 import dev.atlas.coach.content.ContentKind
 import dev.atlas.coach.app.ui.AtlasPrimaryButton
-import dev.atlas.coach.app.ui.AtlasRule
 import dev.atlas.coach.app.ui.AtlasSettingRow
 import dev.atlas.coach.app.ui.AtlasSection
 import dev.atlas.coach.app.ui.AtlasSpacing
@@ -84,12 +84,15 @@ import dev.atlas.coach.app.ui.AtlasSecondaryButton
 import dev.atlas.coach.app.ui.AtlasStatus
 import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.app.ui.AtlasTertiaryButton
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.delay
 
 @Composable
@@ -150,26 +153,79 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
     val focus = controller.focusSession
     val checkedToday = controller.checkedHabitIds.size
     val totalHabits = controller.activeHabits.size
+    val canStartDirective = controller.capabilities[AtlasController.CAP_COACH] == true &&
+        controller.capabilities[AtlasController.CAP_FOCUS] == true && !controller.isCoachPaused
+    val homeDateTime = remember(homeNow) {
+        DateTimeFormatter.ofPattern("EEEE d MMMM · HH:mm", Locale.FRENCH)
+            .format(homeNow)
+            .replaceFirstChar { it.titlecase(Locale.FRENCH) }
+    }
+    val focusStateLabel = when (focus?.status) {
+        FocusStatus.RUNNING -> "En cours · ${focus.phase.focusPhaseLabel()}"
+        FocusStatus.PAUSED -> "En pause"
+        FocusStatus.FINISHED -> "Dernière session terminée"
+        FocusStatus.CANCELLED, FocusStatus.IDLE, null -> "Prêt à démarrer"
+    }
+    val focusActionLabel = when (focus?.status) {
+        FocusStatus.PAUSED -> "Reprendre le focus"
+        FocusStatus.RUNNING -> "Voir le focus"
+        else -> "Démarrer un focus"
+    }
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("La prochaine étape", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            AtlasRule()
-            Text(controller.directive.title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-            Text(controller.directive.reason, style = MaterialTheme.typography.bodyLarge)
-            AtlasStatus("Proposition locale · disponible hors ligne", AtlasStatusKind.SIMULATED)
-            val canStartDirective = controller.capabilities[AtlasController.CAP_COACH] == true &&
-                controller.capabilities[AtlasController.CAP_FOCUS] == true && !controller.isCoachPaused
-            AtlasPrimaryButton(
-                label = when {
-                    canStartDirective -> "Commencer"
-                    controller.capabilities[AtlasController.CAP_FOCUS] == true -> "Voir l'état du Focus"
-                    else -> "Activer Focus"
-                },
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            homeDateTime,
+            modifier = Modifier.testTag("home_datetime"),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        HomePlanHero(nextAction, nextActionGoalTitle) {
+            controller.navigationState.selectTab(AtlasScreenId.PLAN)
+        }
+
+        AtlasPrimaryButton(
+            label = "Parler au coach",
+            onClick = { controller.navigationState.selectTab(AtlasScreenId.COACH) },
+            modifier = Modifier.testTag("home_shortcut_coach"),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(AtlasSpacing.small), verticalAlignment = Alignment.Top) {
+            AtlasSecondaryButton(
+                label = "Voir le planning",
+                onClick = { controller.navigationState.selectTab(AtlasScreenId.PLAN) },
+                modifier = Modifier.weight(1f).testTag("home_shortcut_plan"),
+            )
+            HomeFocusQuickCard(
+                stateLabel = focusStateLabel,
+                actionLabel = focusActionLabel,
+                onClick = { controller.navigationState.selectTab(AtlasScreenId.FOCUS) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        AtlasSection("Directive du coach") {
+            Text(
+                controller.directive.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                controller.directive.reason,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (controller.relaySettings.mode == RelayTransportMode.OFFLINE) {
+                Text("Local · hors ligne", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            AtlasSecondaryButton(
+                label = if (canStartDirective) "Commencer" else "Ouvrir le coach",
                 onClick = {
                     if (canStartDirective) controller.respond(DirectiveChoice.START)
-                    else if (controller.capabilities[AtlasController.CAP_FOCUS] == true) controller.navigationState.selectTab(AtlasScreenId.FOCUS)
-                    else controller.navigationState.navigate(AtlasScreenId.SETTINGS)
+                    else controller.navigationState.selectTab(AtlasScreenId.COACH)
                 },
             )
             AtlasTertiaryButton(
@@ -192,42 +248,75 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
             }
         }
 
-        HomeNextActionCard(nextAction, nextActionGoalTitle)
-
-        AtlasSection("Concentration") {
-            val focusLabel = when (focus?.status) {
-                FocusStatus.RUNNING -> "Session en cours · ${focus.phase.focusPhaseLabel()}"
-                FocusStatus.PAUSED -> "Session en pause · reprise disponible"
-                FocusStatus.FINISHED -> "Dernière session terminée"
-                FocusStatus.CANCELLED -> "Aucune session en cours"
-                FocusStatus.IDLE -> "Prochaine session · 25 min de concentration, minuteur local"
-                null -> "Prochaine session · 25 min de concentration, minuteur local"
-            }
-            AtlasStatus(
-                label = focusLabel,
-                kind = if (focus?.status == FocusStatus.RUNNING) AtlasStatusKind.ACTIVE else AtlasStatusKind.SIMULATED,
-            )
-            AtlasSecondaryButton("Voir l'état du focus", onClick = { controller.navigationState.selectTab(AtlasScreenId.FOCUS) })
-        }
-
-        AtlasSection("Habitudes du jour") {
-            Text(
-                if (totalHabits == 0) "Aucune habitude active pour aujourd'hui."
-                else "$checkedToday sur $totalHabits validée${if (checkedToday == 1) "" else "s"} aujourd'hui",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (totalHabits > 0) {
-                controller.activeHabits.take(2).forEach { habit ->
+        if (totalHabits > 0) {
+            AtlasSection("Habitudes du jour") {
+                Text("$checkedToday sur $totalHabits", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                controller.activeHabits.take(3).forEach { habit ->
                     val checked = habit.id in controller.checkedHabitIds
-                    AtlasTertiaryButton(
-                        label = "${if (checked) "✓" else "○"} ${habit.name}",
-                        onClick = { controller.toggleHabitToday(habit) },
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = checked, onCheckedChange = { controller.toggleHabitToday(habit) })
+                        Text(habit.name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                AtlasTertiaryButton("Voir les habitudes", onClick = { controller.navigationState.navigate(AtlasScreenId.HABITS) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeFocusQuickCard(
+    stateLabel: String,
+    actionLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Focus", style = MaterialTheme.typography.labelLarge)
+            Text(stateLabel, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            AtlasSecondaryButton(actionLabel, onClick, modifier = Modifier.fillMaxWidth().testTag("home_shortcut_focus"))
+        }
+    }
+}
+
+@Composable
+private fun HomePlanHero(
+    state: HomeNextActionState,
+    goalTitle: String?,
+    onPlan: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("home_plan_hero"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Prochaine activité", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when (state) {
+                HomeNextActionState.Neutral, HomeNextActionState.NonePlanned -> {
+                    Text("Aucune activité planifiée", style = MaterialTheme.typography.bodyLarge)
+                    AtlasSecondaryButton("Planifier ma journée", onPlan)
+                }
+                is HomeNextActionState.Selected -> {
+                    val activity = state.activity
+                    Text(activity.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "${PlanController.timeLabel(activity.scheduledLocal.startMinute)} – " +
+                            "${PlanController.endTimeLabel(activity.scheduledLocal.startMinute, activity.scheduledLocal.durationMinutes)} · " +
+                            "${activity.scheduledLocal.durationMinutes} min",
+                        style = MaterialTheme.typography.bodyMedium,
                     )
+                    Text("Priorité ${homePriorityLabel(activity.priority)}", style = MaterialTheme.typography.bodySmall)
+                    if (activity.status == dev.atlas.coach.plan.ActivityStatus.IN_PROGRESS) {
+                        Text("En cours", style = MaterialTheme.typography.labelMedium)
+                    }
+                    goalTitle?.let { Text("Objectif · $it", style = MaterialTheme.typography.bodySmall) }
                 }
             }
-            AtlasTertiaryButton("Voir les habitudes", onClick = { controller.navigationState.selectTab(AtlasScreenId.HABITS) })
         }
-
     }
 }
 
@@ -498,8 +587,13 @@ internal fun MoreScreen(controller: AtlasController) {
         Text("Autres espaces", style = MaterialTheme.typography.headlineSmall)
         AtlasSection("Programme") {
             AtlasSecondaryButton("Plan du jour", onClick = { controller.navigationState.navigate(AtlasScreenId.PLAN) })
+            AtlasSecondaryButton("Habitudes", onClick = { controller.navigationState.navigate(AtlasScreenId.HABITS) })
             AtlasSecondaryButton("Sport", onClick = { controller.navigationState.navigate(AtlasScreenId.SPORT) })
             AtlasSecondaryButton("Diagnostic calendrier", onClick = { controller.navigationState.navigate(AtlasScreenId.CALENDAR_DIAGNOSTIC) })
+        }
+        AtlasSection("Connexion") {
+            AtlasSecondaryButton("Partage backend", onClick = { controller.navigationState.navigate(AtlasScreenId.SYNC_SETTINGS) })
+            AtlasSecondaryButton("Connexion relayée", onClick = { controller.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) })
         }
         AtlasSection("Bibliothèque et journal") {
             AtlasSecondaryButton("Bibliothèque", onClick = { controller.navigationState.navigate(AtlasScreenId.LIBRARY) })
@@ -531,7 +625,7 @@ internal fun SettingsScreen(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Usage quotidien", style = MaterialTheme.typography.headlineSmall)
-        Text("Choisissez les fonctions utiles. Chaque capacité peut être activée ou désactivée séparément; ATLAS ne bloque pas les autres applications.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Activez séparément les fonctions utiles. ATLAS ne bloque pas les autres applications.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         AtlasSection("Fonctions locales") {
             CapabilityRow("Focus", controller, AtlasController.CAP_FOCUS)
             CapabilityRow("Habitudes", controller, AtlasController.CAP_HABITS)
@@ -560,7 +654,7 @@ internal fun SettingsScreen(
             AtlasStatus(homeRoleLabel, if (controller.launcherState.homeRoleHeld == true) AtlasStatusKind.ACTIVE else AtlasStatusKind.AUTHORIZED)
             AtlasSecondaryButton("Choisir ATLAS comme accueil…", onClick = requestHomeRole)
             AtlasTertiaryButton("Gérer ou retirer le rôle Accueil", onClick = openSystemHome)
-            Text("HOME est l'écran d'accueil Android : il ouvre vos applications favorites. Ce tableau de bord coach reste dans l'application ATLAS et regroupe Focus, Habitudes, Observation, Sync et les paramètres. Android conserve le choix final du launcher.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("HOME est le launcher Android pour vos favoris. Le tableau de bord reste dans ATLAS ; Android garde le choix final.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AtlasSection("Données et diagnostic") {
             AtlasSecondaryButton("Exporter les données locales", onClick = onExport)
@@ -678,9 +772,15 @@ internal fun SimulatorScreen(controller: AtlasController, @Suppress("UNUSED_PARA
 }
 
 @Composable
-internal fun NoticeCard(message: String) {
+internal fun NoticeCard(message: String, onDismiss: (() -> Unit)? = null) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Text(message, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onSurface)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, top = 6.dp, end = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(message, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+            if (onDismiss != null) TextButton(onClick = onDismiss) { Text("Fermer") }
+        }
     }
 }
 

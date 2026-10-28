@@ -116,12 +116,19 @@ class AtlasVisualCaptureTest {
         val night = mutableIntStateOf(Configuration.UI_MODE_NIGHT_NO)
         val fontScale = mutableStateOf(1f)
         show(controller, screen, night, fontScale)
-        composeRule.onNodeWithContentDescription("Ouvrir Tableau").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Accueil").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Plan").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Coach").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Ouvrir Focus").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Ouvrir Plus").assertIsNotSelected()
-        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
+        composeRule.onNodeWithTag("home_datetime").assertIsDisplayed()
+        composeRule.onNodeWithText("Parler au coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Voir le planning").assertIsDisplayed()
+        composeRule.onNodeWithText("Démarrer un focus").assertIsDisplayed()
+        composeRule.onNodeWithText("Directive du coach").assertIsDisplayed()
         capture("G-home-light.png")
         composeRule.runOnUiThread { night.intValue = Configuration.UI_MODE_NIGHT_YES }
-        composeRule.onNodeWithText("La prochaine étape").assertIsDisplayed()
+        composeRule.onNodeWithText("Directive du coach").assertIsDisplayed()
         capture("G-home-dark.png")
         composeRule.runOnUiThread { fontScale.value = 2f }
         composeRule.onNodeWithText("ATLAS").assertIsDisplayed()
@@ -237,7 +244,7 @@ private enum class CaptureScreen(val title: String) {
         get() = when (this) {
             HOME, LAUNCHER -> AtlasRoutes.HOME
             FOCUS -> AtlasRoutes.FOCUS
-            HABITS -> AtlasRoutes.HABITS
+            HABITS -> AtlasRoutes.MORE
             else -> AtlasRoutes.MORE
         }
 }
