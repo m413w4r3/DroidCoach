@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `R3B-NET-01 / READY` |
+| TASK_ID / statut | `R3B-NET-01 / INTEGRATED` (2026-10-28) |
 | Vague | A |
 | BASE_SHA | `5795d378d38b3e86ce99f1551c41d5044cd4a81c` |
 | Profil obligatoire | `codex:gpt-6-luna`, effort `xhigh`, session vérifiée par le parent |
@@ -105,3 +105,12 @@ pas dépendre d'un état personnel.
 - Toute fuite de secret, de payload ou de frame dans un log : `STOP`.
 - Toute tentative de contourner l'épinglage du relais ou d'accepter `v=1` :
   `STOP`.
+
+## Clôture — 2026-10-28
+
+Statut final : **INTEGRATED**. Tests proxy 18/18 sur l'arbre final `dc8f55e`,
+intégration relais réel incluse ; qualification publique initiale PASS ; proxy
+et relais redémarrés, `/health`/`/ready` 200 et `/metrics` 404 en local et via
+MagicDNS. Limite : recontrôle public final empêché par la connectivité
+Tailscale du PC (R-18). Preuves : `preuves/net-01.txt`,
+`preuves/funnel-public.txt`, MATRICE NET-01/NET-11/NET-15.

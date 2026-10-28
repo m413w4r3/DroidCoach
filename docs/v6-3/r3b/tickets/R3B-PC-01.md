@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `R3B-PC-01 / READY` |
+| TASK_ID / statut | `R3B-PC-01 / INTEGRATED` (2026-10-28) |
 | Vague | A |
 | BASE_SHA | `5795d378d38b3e86ce99f1551c41d5044cd4a81c` |
 | Profil obligatoire | `codex:gpt-6-luna`, effort `xhigh`, session vérifiée par le parent |
@@ -101,3 +101,11 @@ preuves doivent inclure le SHA source et l'environnement.
   donnée réelle : `BLOCKED_AUTHORIZATION`.
 - Fuite de token ou de payload : `STOP`.
 - Rejeu automatique d'un POST incertain ou doublon observé : `STOP`.
+
+## Clôture — 2026-10-28
+
+Statut final : **INTEGRATED**. Suite Node 74/74 sur l'arbre final, harnais de
+résilience 14 scénarios, SIGTERM/SIGKILL, reconnexion relais, redémarrage réel
+FastAPI (`BACKEND_UNAVAILABLE` puis `ok`), identité/registre conservés, aucun
+doublon de POST incertain. Preuves : `preuves/pc-01-validation.txt`,
+`preuves/fastapi-restart-public.txt`.

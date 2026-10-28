@@ -190,3 +190,24 @@ hors ligne, police agrandie, rotation, TalkBack. Aucune refonte générale.
 6. Consigner SHA, versions, journaux et limites.
 
 Ne jamais utiliser `pm clear` ni `uninstall` comme moyen de rollback.
+
+## 11. État final de la campagne R3-B (2026-10-28)
+
+- APK principal installé : `b55776a9…` (code Android `8eb4845`, tests
+  test-only ensuite).
+- A3 : appairage Keystore réel, force-stop, redémarrage Android, identité et
+  token chiffré conservés — PASS.
+- A4 : révocation PC, `DEVICE_REVOKED`, fermeture 4001, état `REVOKED`,
+  effacement explicite, relance `PAIRING_REQUIRED`, réappairage explicite —
+  PASS. Le connecteur attend 200 ms bornés avant la fermeture 4001
+  (`dc8f55e`).
+- Chat relayé : réponse OpenClaw via PC, provenance, aucun fallback direct,
+  proposition non exécutée sans confirmation, brouillon et historique après
+  rotation — PASS.
+- Réseau : coupure mode avion et reprise, Wi-Fi → LTE/5G → Wi-Fi, redémarrage
+  connecteur — PASS ; NET-07 PARTIAL car l'état observé est `ERROR`, pas
+  `OFFLINE`.
+- Données finales : 5/5 hashes d'avant campagne, calendriers 12, événements 91,
+  aucun fichier de test. Voir `preuves/pixel-restore-final.txt`.
+- Limites : TalkBack, police agrandie, Doze/H24, saisie manuelle du token,
+  retour HOME et mode OFFLINE Pixel non qualifiés.

@@ -192,3 +192,27 @@ node integrations/relay/pc/scripts/diagnose-network.mjs \
 
 Le PC éteint rend le service indisponible : le Funnel n'apporte aucune haute
 disponibilité.
+
+## 12. État final de la campagne R3-B (2026-10-28)
+
+- Code intégré : `dc8f55e` ; connecteur reconstruit depuis ce source.
+- APK Android principal : `b55776a9…` ; APK androidTest final : `025fd62e…`.
+- Gates finales : backend 196/1, Node 74/74, proxy 18/18, JVM 688 tests,
+  lint 0 erreur/71 avertissements, builds PASS.
+- E2E final via Funnel/MagicDNS : 7/7 PASS, `agent_status=connected`.
+- Le recontrôle public par IP a échoué à 15:15 parce que `tailscaled` ne
+  joignait plus le plan de contrôle Tailscale (`network is unreachable`) ;
+  aucune configuration Tailscale n'a été modifiée. Vérifier avant tout usage
+  distant :
+  ```sh
+  tailscale status
+  tailscale funnel status
+  curl -sS -o /dev/null -w '%{http_code}\n' https://all.taildc7886.ts.net:8443/health
+  ```
+  Si le contrôle Tailscale est injoignable, le Funnel public ne peut pas servir
+  l'ingress public ; le chemin MagicDNS peut rester localement disponible.
+- Les services de test (proxy, relais, connecteur, FastAPI isolé) sont arrêtés
+  en fin de campagne ; le Funnel existant n'est pas modifié et pointe toujours
+  vers `127.0.0.1:4400`. Les appareils synthétiques sont révoqués et leurs
+  tokens supprimés.
+- Lire `RAPPORT_FINAL.md` et `HANDOFF.md` pour les limites avant toute reprise.

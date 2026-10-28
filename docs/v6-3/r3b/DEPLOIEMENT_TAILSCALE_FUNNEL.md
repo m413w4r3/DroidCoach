@@ -279,3 +279,21 @@ journalctl --user -u atlas-relay.service -n 50 --no-pager 2>/dev/null
 
 Le Funnel existant n'est pas modifié par ce rollback : il continue de pointer
 vers `127.0.0.1:4400`, qui n'écoute plus.
+
+## 13. Recontrôle public final R3-B (2026-10-28)
+
+La qualification publique initiale (DNS, certificat Let's Encrypt, TLS 1.3,
+`/health`, `/ready`, WSS 101, Noise protégé, refus `/metrics`) est PASS. Le
+recontrôle final par IP publique a échoué au TLS parce que `tailscaled` ne
+joignait plus le plan de contrôle (`network is unreachable`) ; la configuration
+Funnel n'a pas été modifiée. Le rejeu final via MagicDNS a réussi les sept
+contrôles E2E. Avant un usage distant, vérifier en lecture seule :
+
+```sh
+tailscale status
+tailscale funnel status
+tailscale netcheck
+```
+
+Ne pas modifier la configuration Tailscale pour contourner une panne de
+connectivité du plan de contrôle.

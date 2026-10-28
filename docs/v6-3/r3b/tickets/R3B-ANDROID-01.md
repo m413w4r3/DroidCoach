@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `R3B-ANDROID-01 / BLOCKED` (dépend de `R3B-CHAT-WIRE-01` intégré) |
+| TASK_ID / statut | `R3B-ANDROID-01 / INTEGRATED` (2026-10-28) |
 | Vague | B |
 | BASE_SHA | SHA d'intégration de `R3B-CHAT-WIRE-01` |
 | Profil obligatoire | `codex:gpt-6-luna`, effort `xhigh`, session vérifiée par le parent |
@@ -163,3 +163,12 @@ expurgée. Une phase non exécutée est `NOT_RUN`, jamais `PASS`.
   `STOP`.
 - Jeton en clair dans un fichier non privé, un argument, un log ou une preuve :
   `STOP`.
+
+## Clôture — 2026-10-28
+
+Statut final : **INTEGRATED**. A3 pairing/persistence et A4
+révocation/after-clear/repair PASS sur Pixel API 37. Le délai borné de 200 ms
+avant fermeture 4001 (commit `dc8f55e`) laisse le relais router
+`DEVICE_REVOKED`. Restauration finale : 5/5 hashes, calendriers 12/91, aucun
+artefact. Preuves : `preuves/pixel-instrumentation-final.txt`,
+`preuves/pixel-restore-final.txt`.

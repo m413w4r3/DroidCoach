@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `R3B-CHAT-WIRE-01 / BLOCKED` (dépend de `R3B-CHAT-01` intégré) |
+| TASK_ID / statut | `R3B-CHAT-WIRE-01 / INTEGRATED` (2026-10-28) |
 | Vague | B |
 | BASE_SHA | SHA d'intégration de `R3B-CHAT-01` sur `feat/atlas-v6-3-r3b-remote-openclaw` |
 | Profil obligatoire | `codex:gpt-6-luna`, effort `xhigh`, session vérifiée par le parent |
@@ -109,3 +109,12 @@ verts ; aucun test instrumenté n'est exécuté par cet agent.
 - Fallback HTTP silencieux en RELAY, double envoi, proposition exécutée sans
   confirmation, fuite de token/message : `STOP`.
 - Tests instrumentés ou ADB nécessaires : parent uniquement.
+
+## Clôture — 2026-10-28
+
+Statut final : **INTEGRATED**. JVM 688 tests sur l'arbre final ; test Pixel
+`R3bRelayChatInstrumentedTest` OK : réponse OpenClaw réelle via le PC, état
+RELAY_CONNECTED, provenance « OpenClaw via PC », aucun token/URL backend
+direct, aucune proposition exécutée sans confirmation, brouillon et historique
+conservés après rotation. APK principal `b55776a9…`. Preuve :
+`preuves/pixel-instrumentation-final.txt` et `preuves/chat-wire-01-android.txt`.

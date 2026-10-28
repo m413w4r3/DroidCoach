@@ -1,0 +1,37 @@
+ATLAS V6.3 R3-B — Preuve de restauration finale des données Pixel
+Date: 2026-10-28
+Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
+
+Sauvegarde utilisée:
+  ~/atlas-backups/r3b/pixel-app-backup-pre-r3b.tar (0600, hors dépôt)
+  sha256 fbca987ad521f99bdc4c626b35367a1a9de674da12fdfc4fcf42c5417696aabd
+
+Procédure:
+  adb shell am force-stop dev.atlas.coach
+  adb shell 'run-as dev.atlas.coach sh -c "rm -rf shared_prefs files databases no_backup cache code_cache app_dxmaker_cache"'
+  adb shell 'run-as dev.atlas.coach tar -xf -' < sauvegarde
+  (aucun pm clear, aucune désinstallation, aucune permission modifiée)
+
+Hashes après restauration (5/5 identiques à pixel-preflight.txt):
+  6e72d8b2d8462d72310db02a505f5051b16e097e9aa53ecfa56e1d1f7724b9a5  shared_prefs/atlas_local_state.xml
+  745038187c38bbc4907268bf002d8d7fd24d357fd46613f1d643005506508742  shared_prefs/atlas_sync_configuration.xml
+  edcfba43fe11ddccea1273e8e0749b31e0fd9b36db257dd3b8a8ef348fece6a6  shared_prefs/atlas_agent_revocation_barrier.xml
+  c5a1f5ed484e57d8470fae0c02e420591230ac451a17d625198e26a6d9bf7c5d  files/atlas_agent_inbox_v2.json
+  fc003a7f8734de958a8aa97d6d0c204d404d39b22c420e75192ba2800863af3d  files/plans/day-plan-2026-10-26.json
+
+Calendrier (compteurs seulement):
+  calendriers: 12
+  événements: 91
+
+Artefacts de test absents:
+  shared_prefs/atlas_relay_configuration.xml
+  shared_prefs/atlas_global_usage_identity_v1.xml
+  files/r3b-* (marqueurs A3/réseau)
+  files/atlas_agent_effects_v1.json
+
+Limites:
+  - La sauvegarde est app-only (run-as tar), pas une image système.
+  - La clé Keystore de l'app n'est pas dans la sauvegarde et n'a pas été
+    supprimée; l'identité appareil reste celle d'avant campagne.
+  - Les données calendrier sont vérifiées par compteurs, pas par contenu
+    nominatif (aucune donnée personnelle recopiée dans les preuves).

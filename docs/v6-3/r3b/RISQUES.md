@@ -21,12 +21,28 @@
 | R-15 | Un tiers connaissant le `serverId` ouvre `/ws?role=server` via le Funnel et remplace la connexion de contrôle du PC (le relais Paseo v2 remplace l'ancien contrôle) | Déni de service de routage temporaire ; aucune lecture Noise possible sans la clé privée | risque résiduel du modèle relais ; reconnexion bornée du connecteur, limites de connexions, serverId non publié ; à réévaluer si le serverId fuite |
 | R-16 | Le MagicDNS du PC résout `all.taildc7886.ts.net` vers l'adresse tailnet `100.119.62.63` au lieu de l'ingress public | Le connecteur PC peut emprunter le terminateur Funnel via le tailnet plutôt que l'ingress public | même certificat et même terminateur ; test public supplémentaire avec résolution IP publique ; documenter la résolution réellement utilisée |
 | R-17 | Derrière le Funnel, toutes les connexions apparaissent en loopback : le proxy ne peut pas faire de rate-limit par source | Épuisement des 64 connexions ou du budget relais par un tiers | limites de connexions, budget du relais, redémarrage supervisé ; DoS générique non éliminable au niveau du proxy |
+| R-18 | Au recontrôle final (2026-10-28 15:15), `tailscaled` ne joignait plus le plan de contrôle Tailscale (`network is unreachable`) ; l'ingress public fermait le TLS | Accès distant public indisponible tant que la connectivité Tailscale du PC n'est pas rétablie | aucune configuration modifiée ; qualification publique antérieure PASS ; rejeu final via MagicDNS PASS ; vérifier `tailscale status`/connectivité avant usage distant |
+| R-19 | Les journaux horodatés de certains tests Pixel (A3 persistence, A4 after-clear/repair, chat) n'ont pas tous survécu à la compaction de session | Preuve moins directe pour ces lignes | résultats recoupés par les preuves JVM/Node, les fichiers de restauration et l'observation parentale ; aucun PASS inventé |
 
 ## Limitations connues à ce stade
 
 - Aucune haute disponibilité : le PC éteint rend le service indisponible.
 - Aucune réception instantanée en arrière-plan ni FCM dans R3-B.
-- Le Funnel dépend de Tailscale, de MagicDNS public et de la machine locale.
+- Le Funnel dépend de Tailscale, du plan de contrôle Tailscale, de MagicDNS
+  public et de la machine locale. Le rejeu public final a été empêché par une
+  perte de connectivité au plan de contrôle (R-18).
+- L'état applicatif observé pendant une coupure est `ERROR`, pas `OFFLINE` ;
+  NET-07 reste PARTIAL sur le libellé exact.
+- L'expiration de session (1 h) et de token n'a pas été rejouée sur Pixel ;
+  NET-13 reste PARTIAL.
+- Mandat révoqué/expiré et déconnexion pendant un chat en vol : couverture
+  JVM/Node, pas de parcours Pixel dédié (CHAT-05/CHAT-06 PARTIAL).
+- Saisie manuelle du token (UI-04), retour HOME (UI-06), mode OFFLINE Pixel
+  (UI-07), TalkBack/police agrandie (UI-08) non qualifiés sur Pixel.
+- Aucun test Doze/arrière-plan ni disponibilité H24.
+- wger réel non exécuté : autorisation explicite absente (WGER-01 BLOCKED).
+- Le service systemd n'a pas été installé ; seule la validation statique est
+  fournie (T10 PARTIAL).
 - Les tests LTE/5G dépendent de l'opérateur, de la couverture et de
   l'autorisation d'utiliser le Pixel physique.
 - Un résultat de test isolé ne vaut pas qualification de production.

@@ -1,0 +1,74 @@
+ATLAS V6.3 R3-B — Preuve d'instrumentation Pixel (appareil physique)
+Date: 2026-10-28
+Device: 45301FDAS001QT, Pixel 9 Pro XL, Android 17 / API 37
+APK principal: b55776a91d523e9752594abe9de11b2d1ff53e304cbc94020892837948704fcc
+Code Android principal: 8eb4845 (les commits f266416, 937b95a et 790b476 ne
+modifient que androidTest; dc8f55e ne modifie que le connecteur PC).
+APK androidTest final: 025fd62ea1988a137f0dc19f68aeb014fb767790957b94e7eb08f7c125f8cbc9
+(les exécutions A3/A4/chat listées ci-dessous ont utilisé les APK androidTest
+antérieurs 1318755…, 6405bf8… puis les correctifs de test; les changements
+ultérieurs sont test-only et ne touchent pas le code principal.)
+
+Commandes: `adb shell am instrument -w -e class <classe>#<test>
+dev.atlas.coach.test/androidx.test.runner.AndroidJUnitRunner`, après
+appairage synthétique et avec le connecteur/FastAPI/OpenClaw réels.
+Aucun message utilisateur réel, jeton, clé privée ou contenu de réponse n'est
+recopié ici.
+
+A3 — identité persistante (Keystore réel):
+  R3bA3PairingInstrumentedTest
+    résultat: OK (1 test), 1.783 s (journal final du 2026-10-28)
+  R3bA3PersistenceInstrumentedTest
+    résultat observé par l'opérateur parent: OK — force-stop puis relance,
+    redémarrage Android, nouvelle authentification sans ressaisie.
+  Critères: serverId et clé publique conservés; token chiffré conservé;
+  aucun token en clair dans les préférences/fichiers; données ATLAS
+  préexistantes inchangées (hashes vérifiés).
+
+A4 — révocation:
+  R3bA4RevocationInstrumentedTest
+    résultat: OK (1 test), 17.821 s (journal final du 2026-10-28)
+    observé: DEVICE_REVOKED reçu, fermeture 4001, état REVOKED, message
+    « Cet appareil a été révoqué sur le PC. Réappairez-le pour vous
+    reconnecter. »; credentials encore présents avant l'effacement explicite;
+    aucune reconnexion authentifiée.
+  R3bA4AfterClearInstrumentedTest
+    résultat observé: OK — effacement explicite des credentials, préférences
+    et clé Keystore; relance en PAIRING_REQUIRED sans appairage implicite;
+    état/horodatage de dernière connexion inchangés pendant l'attente.
+  R3bA4RepairInstrumentedTest
+    résultat observé: OK — réappairage explicite avec un nouvel appareil
+    synthétique (device6) et reprise de session.
+  Le délai borné de 200 ms avant la fermeture 4001 est dans le connecteur
+  (commit dc8f55e); il laisse au relais le temps de router DEVICE_REVOKED.
+
+Conversation relayée:
+  R3bRelayChatInstrumentedTest
+    résultat observé: OK — réponse OpenClaw réelle via PC (environ 7,0 s),
+    état RELAY_CONNECTED, provenance « OpenClaw via PC », aucun token/URL
+    backend direct, aucune proposition exécutée sans confirmation, brouillon
+    et conversation conservés après rotation d'écran.
+    Le test vérifie aussi que les catégories partagées du mandat sont vides
+    et que la réponse porte `agent_status:connected`.
+
+Réseau (voir aussi pixel-network.txt):
+  coupure mode avion: OK (1 test), 28.396 s; état observé ERROR; reprise
+  Wi-Fi → LTE/5G → Wi-Fi: OK (1 test), 24.761 s; réseau CELLULAR observé et
+  mDataConnectionState=2.
+  redémarrage connecteur: OK (1 test), 39.852 s; connecté → ERROR en 19 s →
+  RELAY_CONNECTED en 1 s après relance; conversation conservée.
+
+Restauration finale (voir pixel-restore-final.txt):
+  5/5 hashes identiques à pixel-preflight.txt; calendriers 12, événements 91;
+  aucun artefact de test (relay prefs, marqueurs r3b, global usage identity,
+  agent effects).
+
+Limites:
+  - Les sorties horodatées de A3 persistence, A4 after-clear/repair et chat
+    n'ont pas toutes été conservées dans les fichiers de tâches après la
+    compaction; les résultats ci-dessus sont ceux observés par le parent
+    pendant la campagne et recoupés par les preuves JVM/Node et les fichiers
+    de restauration.
+  - Aucun test TalkBack, police agrandie ou Doze/arrière-plan n'a été exécuté.
+  - Aucune suite androidTest complète d'un seul bloc; les tests R3-B ciblés
+    ont été exécutés individuellement.

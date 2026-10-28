@@ -24,9 +24,9 @@ actifs, dont trois implémentations.
 | `R3B-PC-01` | A | INTEGRATED | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
 | `R3B-CHAT-01` | A | INTEGRATED | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
 | `R3B-CHAT-WIRE-01` | B | INTEGRATED | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
-| `R3B-ANDROID-01` | B | READY | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
-| `R3B-QA-C` | C | BLOCKED (dépend de B) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
-| `R3B-REVIEW-01` | D | BLOCKED (dépend de C) | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final |
+| `R3B-ANDROID-01` | B | INTEGRATED | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
+| `R3B-QA-C` | C | ACCEPTED (limites documentées) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
+| `R3B-REVIEW-01` | D | RUNNING | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final |
 
 États : `READY -> RUNNING -> REVIEW_REQUIRED -> ACCEPTED -> INTEGRATED`, ou
 `CORRECTION_REQUIRED / BLOCKED`. Une notification de fin n'est pas une
@@ -77,6 +77,22 @@ interne « GPT-6 » ; le parent a fourni la métadonnée Paseo vérifiée
 (`model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`) et l'a débloqué sans
 changer de modèle.
 
+### Vague B — Android A3/A4 (intégration et tests Pixel)
+
+| Élément | Valeur |
+|---|---|
+| Implémentation / hooks de test | commits `c916ab8`, `7be0599` ; correctif produit A4 `c5e1bea` (`RelaySettingsErrorPolicy`) |
+| Correctif connecteur de révocation | `dc8f55e` — délai borné 200 ms avant fermeture 4001 |
+| Corrections test-only | `f266416`, `937b95a`, `790b476` (sélecteurs Compose, historique long, état `RELAY_CONNECTING`) |
+| APK principal | `b55776a9…`, code Android `8eb4845` |
+| Opérateur ADB | parent unique ; aucun autre opérateur Pixel/ADB simultané |
+| Modèle des sous-agents | `codex/gpt-6-luna`, `xhigh` effectif pour les sessions enfants de la vague A/B ; les corrections d'intégration et les tests Pixel ont été opérés par le parent |
+
+Les tests Pixel A3, A4, chat et réseau ont tous été exécutés sur l'appareil
+physique `45301FDAS001QT`, avec sauvegarde app-only préalable et restauration
+finale. Voir `preuves/pixel-instrumentation-final.txt` et
+`preuves/pixel-network.txt`.
+
 ## Qualification publique PC (SHA `2548673`)
 
 | Preuve | Statut |
@@ -94,6 +110,44 @@ changer de modèle.
 | Refus de chat sans capacité `coach.chat` | PASS — `OPERATION_UNAVAILABLE` |
 | Arrêt/redémarrage réel FastAPI via Funnel | PASS — `BACKEND_UNAVAILABLE` puis `ok` |
 | Redémarrage connecteur / reconnexion relais | PASS |
+
+## Qualification Pixel (appareil physique)
+
+| Preuve | Statut |
+|---|---|
+| A3 appairage Keystore réel | PASS — `R3bA3PairingInstrumentedTest` OK |
+| A3 force-stop, redémarrage, identité et token chiffré conservés | PASS — `R3bA3PersistenceInstrumentedTest` |
+| A4 session active, révocation PC, `DEVICE_REVOKED`, `4001`, `REVOKED` | PASS — `R3bA4RevocationInstrumentedTest` (17,821 s) après grâce 200 ms |
+| A4 effacement explicite et relance sans appairage implicite | PASS — `R3bA4AfterClearInstrumentedTest` |
+| A4 réappairage explicite | PASS — `R3bA4RepairInstrumentedTest` (device6) |
+| Chat relayé OpenClaw, provenance, aucun fallback direct, brouillon/rotation | PASS — `R3bRelayChatInstrumentedTest` |
+| Coupure mode avion et reprise | PASS — 28,396 s ; état observé ERROR |
+| Wi-Fi → LTE/5G → Wi-Fi | PASS — 24,761 s ; réseau CELLULAR et `mDataConnectionState=2` |
+| Redémarrage connecteur avec session Pixel | PASS — 39,852 s ; ERROR 19 s puis RELAY_CONNECTED 1 s |
+| Restauration finale des données | PASS — 5/5 hashes, calendriers 12/91, aucun artefact |
+
+## Vérifications finales du code intégré `dc8f55e`
+
+| Gate | Résultat |
+|---|---|
+| Backend pytest | 196 passed, 1 skipped |
+| Node connecteur | 74/74, 15 fichiers |
+| Proxy filtrant | 18/18 |
+| JVM Android | 688 tests, 97 suites, 0 échec |
+| Lint | 0 erreur, 71 avertissements |
+| Builds | APK principal `b55776a9…`, androidTest `025fd62e…` |
+| E2E final via Funnel/MagicDNS | 7/7 PASS, `agent_status=connected` |
+| Proxy + relais redémarrés | `/health`/`/ready` 200, `/metrics` 404 |
+
+## Limite de recontrôle public final
+
+Le 2026-10-28 à 15:15, le recontrôle par l'IP publique du Funnel a échoué au
+TLS : `tailscaled` ne joignait plus le plan de contrôle Tailscale
+(`network is unreachable`). Aucune configuration Tailscale n'a été modifiée.
+La qualification publique de 13:00 reste la preuve de l'ingress public ; le
+rejeu final a été effectué via le nom Funnel résolu par MagicDNS et a réussi
+sur les sept contrôles. Cette limite est reportée en R-18 et dans le rapport
+final.
 
 Reprise : si une session est interrompue, relire son commit, son diff et ses
 preuves ; ne pas rejouer une tâche terminée. Une notification de fin n'est pas

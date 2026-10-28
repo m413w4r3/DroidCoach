@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `R3B-CHAT-01 / READY` |
+| TASK_ID / statut | `R3B-CHAT-01 / INTEGRATED` (2026-10-28) |
 | Vague | A |
 | BASE_SHA | `5795d378d38b3e86ce99f1551c41d5044cd4a81c` |
 | Profil obligatoire | `codex:gpt-6-luna`, effort `xhigh`, session vérifiée par le parent |
@@ -152,3 +152,11 @@ Tests supplémentaires obligatoires (Node) :
   secret ou de message : `STOP`.
 - Rejeu automatique d'un POST incertain ou second effet : `STOP`.
 - Toute proposition exécutée sans confirmation : `STOP`.
+
+## Clôture — 2026-10-28
+
+Statut final : **INTEGRATED**. Backend 196 passed/1 skipped, Node 74/74, chat
+12/12, timeout chat 55 s, route fixe `POST /v2/agent/chat`, idempotence et
+rejeu non automatique. E2E final via Funnel/MagicDNS 7/7 PASS avec
+`agent_status=connected`. Preuves : `preuves/chat-01.txt`,
+`preuves/openclaw-public.txt`.
