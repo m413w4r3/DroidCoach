@@ -9,6 +9,7 @@ export const CACHE_TTL_MS = 10 * 60_000;
 
 export const CAPABILITIES = [
   "plan.revision",
+  "coach.chat",
   "coach.status",
   "plan.today",
   "sport.plan",
@@ -18,6 +19,7 @@ export type Capability = (typeof CAPABILITIES)[number];
 
 export const OPERATIONS = [
   "backend.health",
+  "coach.chat.request",
   "coach.status",
   "plan.today.read",
   "plan.revision.request",
@@ -185,6 +187,10 @@ export function validatePayload(operation: Operation, payload: Record<string, un
     validatePlanRevision(payload);
     return;
   }
+  if (operation === "coach.chat.request") {
+    validateCoachChat(payload);
+    return;
+  }
   throw new RemoteError("UNKNOWN_OPERATION");
 }
 
@@ -201,7 +207,7 @@ function assertObject(value: unknown, required: readonly string[], optional: rea
 }
 
 function assertString(value: unknown, min: number, max: number, pattern?: RegExp): asserts value is string {
-  if (typeof value !== "string" || value.trim() !== value || value.length < min || value.length > max || /[\u0000-\u001f]/.test(value) || (pattern && !pattern.test(value))) invalid();
+  if (typeof value !== "string" || value.trim() !== value || [...value].length < min || [...value].length > max || /[\u0000-\u001f]/.test(value) || (pattern && !pattern.test(value))) invalid();
 }
 
 function assertInt(value: unknown, min: number, max: number): asserts value is number {
@@ -220,6 +226,7 @@ function assertTimezone(value: unknown): asserts value is string {
 const PLAN_UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const ACTIONS = ["home.set_directive", "home.reorder_cards", "focus.propose", "focus.plan", "focus.start", "focus.pause", "habit.suggest", "app_policy.propose", "app_policy.adjust", "content.recommend"];
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const CONTEXT_CATEGORIES = ["focus", "habit", "content", "coach_interaction", "app_usage_summary", "goals", "location_summary", "projects", "availability", "preferences", "package_names", "urls", "habit_titles"];
 
 function validatePlanRevision(value: Record<string, unknown>): void {
   assertObject(value, ["schema_version", "request_id", "conversation_id", "message", "plan_context_consented", "mandate_summary", "plan"]);
@@ -277,6 +284,68 @@ function validatePlanRevision(value: Record<string, unknown>): void {
   }
 }
 
+function validateCoachChat(value: Record<string, unknown>): void {
+  assertObject(value, ["conversation_id", "message", "shared_context", "mandate_summary"]);
+  assertString(value.conversation_id, 1, 120);
+  assertString(value.message, 1, 2000);
+
+  const sharedContext = value.shared_context;
+  assertObject(sharedContext, ["consented_categories", "categories"]);
+  const consented = sharedContext.consented_categories;
+  if (!Array.isArray(consented) || consented.length > CONTEXT_CATEGORIES.length ||
+    new Set(consented).size !== consented.length ||
+    !consented.every((category) => typeof category === "string" && CONTEXT_CATEGORIES.includes(category))) invalid();
+  const categories = sharedContext.categories;
+  if (!isRecord(categories) || Object.keys(categories).length > CONTEXT_CATEGORIES.length ||
+    Object.keys(categories).some((category) => !CONTEXT_CATEGORIES.includes(category))) invalid();
+
+  const minimized: Record<string, string[]> = {};
+  for (const [category, rawItems] of Object.entries(categories)) {
+    if (!Array.isArray(rawItems) || rawItems.length > 10 || rawItems.some((item) => typeof item !== "string" || [...item].length > 200)) invalid();
+    if (!consented.includes(category)) continue;
+    const values = (rawItems as string[]).map((item) => item.trim()).filter(Boolean);
+    if (values.length) minimized[category] = values;
+  }
+  if (Buffer.byteLength(JSON.stringify({ consented_categories: consented, categories: minimized }), "utf8") > 8192) {
+    throw new RemoteError("PAYLOAD_TOO_LARGE");
+  }
+
+  validateMandateSummary(value.mandate_summary);
+}
+
+function validateMandateSummary(value: unknown): void {
+  assertObject(value, ["id", "version"], ["allowed_actions", "mode", "focus_window", "app_policy_bounds"]);
+  assertString(value.id, 1, 80);
+  assertInt(value.version, 1, Number.MAX_SAFE_INTEGER);
+  if (value.mode !== undefined && value.mode !== "proposals_only" && value.mode !== "preauthorized") invalid();
+  if (value.allowed_actions !== undefined) {
+    if (!Array.isArray(value.allowed_actions) || value.allowed_actions.length > 10 ||
+      new Set(value.allowed_actions).size !== value.allowed_actions.length ||
+      !value.allowed_actions.every((action) => ACTIONS.includes(action as string))) invalid();
+  }
+  if (value.app_policy_bounds !== undefined) {
+    if (!isRecord(value.app_policy_bounds) || Object.keys(value.app_policy_bounds).length > 50) invalid();
+    for (const bounds of Object.values(value.app_policy_bounds)) {
+      if (!isRecord(bounds)) invalid();
+      for (const bound of Object.values(bounds)) {
+        if (typeof bound !== "string" && !Number.isSafeInteger(bound)) invalid();
+      }
+    }
+  }
+  if (value.focus_window !== undefined && value.focus_window !== null) {
+    const window = value.focus_window;
+    assertObject(window, ["days", "starts_at", "ends_at", "timezone", "max_minutes_per_session", "max_sessions_per_day"]);
+    if (!Array.isArray(window.days) || window.days.length < 1 || window.days.length > 7 ||
+      new Set(window.days).size !== window.days.length || !window.days.every((day) => DAYS.includes(day as string))) invalid();
+    assertString(window.starts_at, 5, 5, /^(?:[01]\d|2[0-3]):[0-5]\d$/);
+    assertString(window.ends_at, 5, 5, /^(?:[01]\d|2[0-3]):[0-5]\d$/);
+    assertTimezone(window.timezone);
+    assertInt(window.max_minutes_per_session, 1, 180);
+    assertInt(window.max_sessions_per_day, 1, 8);
+    if (window.starts_at >= window.ends_at) invalid();
+  }
+}
+
 export function decodeAppString(value: string | ArrayBuffer): string {
   if (typeof value === "string") return value;
   return new TextDecoder("utf-8", { fatal: true }).decode(value);
@@ -285,4 +354,13 @@ export function decodeAppString(value: string | ArrayBuffer): string {
 export function assertSmallResponse(value: unknown): asserts value is Record<string, unknown> {
   if (!isRecord(value)) throw new RemoteError("BACKEND_REJECTED");
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_RESPONSE_BYTES) throw new RemoteError("PAYLOAD_TOO_LARGE");
+}
+
+export function assertCoachChatResponse(value: unknown): asserts value is Record<string, unknown> {
+  if (!isRecord(value) || !hasExactKeys(value, ["reply", "proposals", "agent_status"]) ||
+    typeof value.reply !== "string" || [...value.reply].length > 4000 ||
+    !Array.isArray(value.proposals) || value.proposals.length > 5 || !value.proposals.every(isRecord) ||
+    !["mock", "connected", "unavailable"].includes(String(value.agent_status))) {
+    throw new RemoteError("BACKEND_REJECTED");
+  }
 }

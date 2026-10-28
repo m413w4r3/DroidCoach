@@ -1,0 +1,59 @@
+ATLAS V6.3 R3-B — preuve R3B-CHAT-01
+Date : 2026-10-28
+Branche : feat/r3b-chat-01
+Base déclarée : 5795d378d38b3e86ce99f1551c41d5044cd4a81c
+HEAD initial : b4b164658f9858c10fae258075daab1f39e2ac26 (parent = base déclarée)
+Profil Paseo vérifié : codex / gpt-6-luna / xhigh
+
+Environnement
+-------------
+Python 3.12.3 (interpréteur backend fourni par la mission)
+Node v24.18.0 / npm 11.16.0
+OpenJDK 21.0.12.1
+Relais Paseo local : ws://127.0.0.1:4402, /health -> HTTP 200
+
+Commandes et résultats
+----------------------
+
+`node scripts/verify-artifact.mjs`
+PASS — artefact Paseo Relay 0.13.1 vérifié depuis le paquet local.
+
+`npm run build`
+PASS — TypeScript compilé.
+
+`npx vitest run test/chat-r3b.test.ts`
+PASS — 10/10 tests chat : capacité, route fixe et Bearer de service, payload exact,
+limites 8 KiB/32 KiB, rejeu durable, conflit, révocation, résultat incertain,
+journal corrompu, annulation, réponse invalide/surdimensionnée et absence de logs sensibles.
+
+`ATLAS_TEST_RELAY_URL=ws://127.0.0.1:4402 npm run test:unit`
+PASS — 14 fichiers, 71/71 tests.
+
+`ATLAS_TEST_RELAY_URL=ws://127.0.0.1:4402 npm test`
+PARTIEL — 14 fichiers réussis, 71/72 tests réussis. L’unique échec est
+`test/relay.integration.test.ts:154`, dont le probe santé reste codé en dur sur
+`http://127.0.0.1:4400/health`; cette mission fournit le relais sur 4402. Le
+test de handshake configuré sur 4402 passe. Aucun relais n’a été redémarré.
+
+`/home/nill/perso/AndroCoach/atlas-preparation/backend/.venv/bin/python -m pytest -q`
+(cwd `backend`)
+PASS — 196 passed, 1 skipped, 1 avertissement de dépréciation Starlette, 8.07 s.
+
+`python -m json.tool contracts/atlas-remote-v1.schema.json` et `git diff --check`
+PASS.
+
+Installation Node
+-----------------
+`npm ci --offline` a échoué lors du script d’installation esbuild avec `EPERM`.
+`npm ci --offline --ignore-scripts` a installé le lockfile hors réseau ; le script
+de vérification de l’artefact a ensuite été exécuté directement et a réussi.
+
+Limites
+-------
+La suite Node complète conserve un échec hors scope dû au port santé 4400 codé en
+dur. Le fichier d’intégration concerné n’a pas été modifié car il ne fait pas
+partie du scope d’écriture CHAT-01. Aucun test Android/Pixel n’est requis par ce
+ticket ; aucun appareil ni ADB n’a été utilisé.
+
+Toutes les fixtures utilisent des valeurs synthétiques. Aucun secret réel ni
+donnée personnelle n’est inclus dans cette preuve.
