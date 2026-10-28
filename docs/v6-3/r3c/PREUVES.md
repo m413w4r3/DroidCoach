@@ -11,8 +11,10 @@ résultat observé, statut, limites. Les horodatages sont locaux
   `~/atlas-backups/r3c/pixel-serial.txt` (0600).
 - `$FUNNEL_PUBLIC_IP` : adresse publique résolue par DoH, conservée hors
   dépôt dans `~/atlas-backups/r3c/funnel-public-ip.txt` (0600).
-- L'IP physique du PC et son interface sont conservées hors dépôt
-  (`pc-physical-ip.txt`) ; l'IP publique du PC n'est pas publiée.
+- `$PC_PHYSICAL_IP` et `$PC_INTERFACE` : IP et interface physiques du PC,
+  conservées hors dépôt dans `~/atlas-backups/r3c/pc-physical-ip.txt`
+  (0600) ; `$PC_PUBLIC_IP` (IP publique du PC) n'est pas publiée.
+  Exporter ces variables avant d'exécuter les commandes qui les utilisent.
 - Le hostname Funnel `all.taildc7886.ts.net` est l'infrastructure **imposée
   par la mission** et n'est pas un secret ; il reste nécessaire aux commandes
   d'exploitation. Aucun token, clé privée ou contenu personnel n'est publié.
@@ -78,7 +80,7 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Commande | `tailscale status` ; `tailscale funnel status --json` ; `tailscale netcheck` ; `systemctl is-active tailscaled` |
 | Horodatage | 2026-10-28T16:52+01:00 |
 | Attendu | Distinguer panne réseau, backend arrêté, proxy/relais/connecteur, TLS |
-| Observé | `Self.Online=true`, `Health=[]` ; Funnel `8443 → 127.0.0.1:4400`, `AllowFunnel=true` ; netcheck UDP OK, IPv4 publique `IP publique du PC (hors dépôt)`, DERP Francfort ; `tailscaled` actif |
+| Observé | `Self.Online=true`, `Health=[]` ; Funnel `8443 → 127.0.0.1:4400`, `AllowFunnel=true` ; netcheck UDP OK, IPv4 publique `$PC_PUBLIC_IP` (hors dépôt), DERP Francfort ; `tailscaled` actif |
 | Statut | **PASS (diagnostic)** |
 | Limites | Le plan de contrôle était injoignable en R3-B ; il est de nouveau joignable. Aucune configuration Tailscale modifiée |
 
@@ -134,10 +136,10 @@ résultat observé, statut, limites. Les horodatages sont locaux
 
 | Champ | Valeur |
 |---|---|
-| Environnement | PC, interface `interface physique (hors dépôt)`, IP source `IP physique du PC (hors dépôt)`, IP publique du Funnel `$FUNNEL_PUBLIC_IP` |
-| Commande | `curl --interface IP physique du PC (hors dépôt) --resolve all.taildc7886.ts.net:8443:$FUNNEL_PUBLIC_IP …` ; tests TCP vers `4400/4401/4402/8100` |
+| Environnement | PC, interface `$PC_INTERFACE`, IP source `$PC_PHYSICAL_IP`, IP publique du Funnel `$FUNNEL_PUBLIC_IP` (valeurs hors dépôt) |
+| Commande | `curl --interface "$PC_PHYSICAL_IP" --resolve all.taildc7886.ts.net:8443:"$FUNNEL_PUBLIC_IP" …` ; tests TCP vers `4400/4401/4402/8100` |
 | Horodatage | 2026-10-28T17:13+01:00 |
-| Observé | `health_http=200`, `local_ip=IP physique du PC (hors dépôt)` (donc hors `tailscale0`) ; ports `4400`, `4401`, `4402`, `8100` **closed** sur l'IP publique |
+| Observé | `health_http=200`, `local_ip=$PC_PHYSICAL_IP` (donc hors `tailscale0`) ; ports `4400`, `4401`, `4402`, `8100` **closed** sur l'IP publique |
 | Statut | **PASS** |
 | Limites | Le PC reste sur le même réseau domestique ; ce n'est pas un réseau mobile indépendant |
 
@@ -251,13 +253,13 @@ résultat observé, statut, limites. Les horodatages sont locaux
 
 | Champ | Valeur |
 |---|---|
-| SHA source | `d2419b3` |
-| Environnement | build debug, API 37 |
-| Commande | `sha256sum` ; `apksigner verify --print-certs` ; `aapt2 dump badging` |
-| Horodatage | 2026-10-28T17:10+01:00 |
-| Observé | APK principal `8332afd921f879a50261f8c6a60693ad2637bee7ae3165ee1cb8861e37bf1621` ; APK androidTest `5aef13210dc2760fb03fbf757f58b040a2cb2e20838e444427cec211dab70f04` (sources instrumentation inchangées, artefact byte-identique) ; signature debug `da301466…` ; `versionCode=1`, `versionName=0.1.0` |
-| Statut | **PASS (build)** |
-| Limites | APK **non installé** sur Pixel ; l'APK androidTest sera reconstruit après `clean` au gel final pour lever toute ambiguïté d'incrémentalité |
+| SHA source | code Android `d2419b3` (inchangé par les commits docs suivants) ; arbre de build `d51525f` |
+| Environnement | build debug **propre** (`./gradlew clean`), API 37 |
+| Commande | `./gradlew clean :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1` ; `sha256sum` ; `apksigner verify --print-certs` ; `aapt2 dump badging` |
+| Horodatage | 2026-10-28T17:25+01:00 |
+| Observé | APK principal `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` ; APK androidTest `143aae62cba4eef4eca1579be36a8ca40be57a98a97fe1388b271e3546b8df43` ; signature debug `da301466…` ; `versionCode=1`, `versionName=0.1.0`, compileSdk 37 |
+| Statut | **PASS (build propre)** |
+| Limites | APK **non installé** sur Pixel ; aucune preuve Pixel pour ce couple. Les hashes diffèrent du build incrémental précédent (artefact debug non reproductible bit-à-bit) ; seuls ces hashes du build propre font foi |
 
 ## P-HARNESS-01 — Relais isolé reproductible
 
