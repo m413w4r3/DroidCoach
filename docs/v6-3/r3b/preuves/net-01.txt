@@ -62,6 +62,9 @@ Couverture de la suite locale
 - WebSocket: le serveur synthétique vérifie les en-têtes de handshake, puis
   renvoie les octets TCP des frames. Les frames texte et binaire reviennent
   octet pour octet. Les en-têtes Authorization et privés ne sont pas transmis.
+  `Content-Length: 0` reste accepté; `Content-Length: 1` avec un octet et
+  `Transfer-Encoding: chunked` sont refusés avec 400 avant tout upgrade amont
+  (`upstreamUpgrades` reste à 0).
 - Query: v=1, v absent, rôle invalide, serverId absent, clé inconnue, doublons,
   échappement invalide, caractères de contrôle et limites de taille sont refusés.
 - Erreurs/limites: amont indisponible, dépassement de corps, délai HTTP, délai
@@ -82,4 +85,9 @@ Limites configurées dans le proxy: en-têtes 8 KiB, cible 2 KiB, 64 connexions,
 connexion amont 2 s, réponse HTTP 5 s, handshake 3 s, inactivité WebSocket
 60 s, corps amont 64 KiB, en-tête WebSocket retransmis 2 KiB.
 
-Le SHA final du commit local est fourni dans le compte rendu de tâche.
+Vérification de correction: depuis `integrations/relay/proxy`, Node v24.18.0,
+`node --test test` donne 18 tests réussis, 0 échec, 0 ignoré; `git diff --check`
+termine avec le code 0. Le commit local de la correction applicative est
+`f9fd3af756280c3333b45cb5b4af66e4d2047cf5`
+(`Reject HTTP bodies on WebSocket upgrades`). Le SHA du commit final,
+qui inclut cette preuve, est fourni dans le compte rendu de tâche.
