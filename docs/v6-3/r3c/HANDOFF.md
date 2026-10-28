@@ -8,15 +8,15 @@ Code Android final : `d2419b3`
 Infrastructure finale : `e3a9867`
 Commit de clôture : voir `git rev-parse HEAD` (docs + test androidTest)
 Push : effectué sur la branche de campagne, **aucune PR ni merge**.
-CI distante : **success** sur `a72ba9e` (run `40733692711`) ; dernier run requis
-après le commit de clôture.
+CI distante : **success** sur `a6a5602` (run `40744237164`) ; dernier run requis
+après le correctif fail-closed du contrôle d'alias.
 
 ## 1. Où en est le système
 
 - Les trois correctifs de la vague A sont intégrés et testés : NET-01
   (`OFFLINE`/`ERROR`), COMPAT-01 (anciens appairages), RACE-01 (courses).
 - Le couple APK R3-C est **installé sur le Pixel**, utilisateur 0 :
-  `365bd84a…` / `09ecfd7a…`.
+  `365bd84a…` / `d79031f8…`.
 - **A3 PASS** : appairage Keystore, force-stop, redémarrage Android, identité
   et token conservés, reconnexion sans ressaisie.
 - **A4 partiel** : `DEVICE_REVOKED`, `REVOKED`, aucune reconnexion, effacement
@@ -40,7 +40,7 @@ après le commit de clôture.
 | Élément | Valeur |
 |---|---|
 | APK principal | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
-| APK androidTest | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` |
+| APK androidTest | `d79031f8c96c409bada82f1fcb25fe80c99218a2352b23067f6af17185fb3706` |
 | Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Version | `versionCode=1`, `versionName=0.1.0`, compileSdk 37 |
 | APK principal sur disque | `android/app/build/outputs/apk/debug/app-debug.apk` |
@@ -88,8 +88,9 @@ n'a pas été modifié. Aucune promesse H24.
 
 ## 5. Fixtures et sécurité
 
-- Appareils synthétiques actifs : `r3c-pixel-chat` (utilisé par le Pixel) et
-  `r3c-pixel-a4-repair` ; les autres appareils de test sont révoqués.
+- Appareil synthétique actif : `r3c-pixel-chat` uniquement (1 actif / 17) ;
+  l'appareil A4 de réparation a été révoqué. Le Pixel est au premier plan avec
+  `relay_connected=true` et `active_sessions=1`.
 - Tokens temporaires consommés ou supprimés ; aucun token en clair.
 - Marqueurs de test synthétiques dans `files/` (`r3b-a3-marker.json`,
   `r3b-a4-cleared-marker.json`, `r3b-net-*.marker`) ; ils ne contiennent

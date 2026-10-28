@@ -204,7 +204,7 @@ résultat observé, statut, limites. Les horodatages sont locaux
 |---|---|
 | SHA source Android | `d2419b3` |
 | APK principal | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
-| APK androidTest | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` (inclut le test R3-C d'effacement) |
+| APK androidTest | `d79031f8c96c409bada82f1fcb25fe80c99218a2352b23067f6af17185fb3706` (contrôle d'alias fail-closed) |
 | Environnement | Pixel 9 Pro XL `PIXEL_SERIAL`, Android 17/API 37, utilisateur 0 |
 | Commande | `adb install -r --user 0 …` ; hash du `base.apk` installé |
 | Horodatage | 2026-10-28T18:16+01:00 |
@@ -230,9 +230,9 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Environnement | Pixel API 37, appareils synthétiques dédiés |
 | Commande | `R3bA4RevocationInstrumentedTest` avec révocation PC sur marqueur ; `R3cA4ClearInstrumentedTest` ; force-stop + `R3bA4AfterClearInstrumentedTest` ; `R3bA4RepairInstrumentedTest` |
 | Horodatage | 2026-10-28T18:25–18:59+01:00 |
-| Observé | `DEVICE_REVOKED` reçu, état `REVOKED`, erreur de révocation, aucune reconnexion authentifiée : **PASS** ; effacement explicite credential + alias Keystore et `PAIRING_REQUIRED` : **PASS (0,284 s)** ; relance sans reconnexion : **PASS (1,122 s)** ; réappairage explicite : **PASS (2,386 s)** ; **mais** `lastCloseCode` n'est pas `4001` : le relais ferme avec **1012 « Server disconnected »** |
+| Observé | `DEVICE_REVOKED` reçu, état `REVOKED`, erreur de révocation, aucune reconnexion authentifiée : **PASS** ; effacement explicite credential + alias Keystore et `PAIRING_REQUIRED` : **PASS (0,192 s, contrôle d'alias fail-closed)** ; relance sans reconnexion : **PASS (1,122 s)** ; réappairage explicite : **PASS (2,386 s)** ; **mais** `lastCloseCode` n'est pas `4001` : le relais ferme avec **1012 « Server disconnected »** |
 | Statut | **FAIL A4-4 / PASS A4-5..A4-10** |
-| Limites | Le relais épinglé ne propage pas le code 4001 du connecteur ; trois probes (public, proxy local, relais direct) observent 1012. Le test échoue à l'assertion 4001 avant l'effacement UI ; l'effacement a été validé par le même chemin de production `clearCredentials()`, pas par le clic UI. Détail dans `CORRECTIFS.md` et `RISQUES_RESIDUELS.md` |
+| Limites | Le relais épinglé ne propage pas le code 4001 du connecteur ; trois probes (public, proxy local, relais direct) observent 1012. Le test échoue à l'assertion 4001 avant l'effacement UI ; l'effacement a été validé par le même chemin de production `clearCredentials()`, avec un contrôle d'alias Keystore fail-closed (alias présent avant, absent après), pas par le clic UI. Détail dans `CORRECTIFS.md` et `RISQUES_RESIDUELS.md` |
 
 ## P-PIXEL-CHAT-01 — Chat réel Android via OpenClaw
 
@@ -285,9 +285,31 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Environnement | Pixel API 37, utilisateur 0 |
 | Commande | hash `atlas_local_state.xml` avant/après HOME ; assertions du test réseau sur `agentConversation.size` ; marqueur A3 après reboot |
 | Horodatage | 2026-10-28T18:17–19:08+01:00 |
-| Observé | hash local identique après HOME/relance ; conversation conservée pendant OFFLINE et handover ; marqueur A3 conservé après reboot ; credentials effacés uniquement sur action explicite |
+| Observé | hash local identique après HOME/relance ; conversation conservée pendant OFFLINE et handover ; marqueur A3 conservé après reboot ; credentials effacés uniquement sur action explicite. Hashes finaux (données synthétiques) : `atlas_local_state.xml` `a8d9ab0b…`, `atlas_relay_configuration.xml` `e3bceb6b…`, `atlas_agent_inbox_v2.json` `1921e405…` |
 | Statut | **PASS (périmètre R3-C)** |
 | Limites | Aucune donnée R3-B pour l'utilisateur 0 au pré-vol ; les hashes R3-B restent des témoins historiques |
+
+## P-PIXEL-SESSION-01 — État final fonctionnel
+
+| Champ | Valeur |
+|---|---|
+| Environnement | Pixel API 37, connecteur actif, FastAPI OpenClaw |
+| Commande | `am start -n dev.atlas.coach/.app.MainActivity` ; `curl 127.0.0.1:4401/metrics` |
+| Horodatage | 2026-10-28T19:22+01:00 |
+| Observé | app au premier plan ; `relay_connected=true`, `active_sessions=1` ; appareil final `r3c-pixel-final` (`f4315995-…`), credentials et conversation conservés après nettoyage des marqueurs |
+| Statut | **PASS** |
+| Limites | Session de test synthétique ; aucune promesse H24 |
+
+## P-CLEANUP-02 — Nettoyage final des fixtures
+
+| Champ | Valeur |
+|---|---|
+| Environnement | connecteur, Pixel user 0 |
+| Commande | révocation de `r3c-pixel-a4-repair` ; suppression des marqueurs `r3b-*.marker` et des jetons `r3c-*-device.json` ; suppression des tokens hôtes `/tmp/atlas-r3c` |
+| Horodatage | 2026-10-28T19:21+01:00 |
+| Observé | 18 appareils au total, **1 actif** (`r3c-pixel-final`), 17 révoqués ; marqueurs et jetons supprimés ; conversation synthétique conservée ; aucun token en clair |
+| Statut | **PASS** |
+| Limites | L'appareil de chat reste actif pour que le Pixel demeure utilisable ; il peut être révoqué à tout moment |
 
 ## P-COMPAT-01 — Ancien appairage sans `coach.chat`
 
@@ -359,7 +381,7 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Environnement | build debug **propre** (`./gradlew clean`), API 37 |
 | Commande | `./gradlew clean :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1` ; `sha256sum` ; `apksigner verify --print-certs` ; `aapt2 dump badging` |
 | Horodatage | 2026-10-28T17:25+01:00 |
-| Observé | APK principal `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` ; APK androidTest `143aae62cba4eef4eca1579be36a8ca40be57a98a97fe1388b271e3546b8df43` ; signature debug `da301466…` ; `versionCode=1`, `versionName=0.1.0`, compileSdk 37 |
+| Observé | APK principal `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` ; APK androidTest `d79031f8c96c409bada82f1fcb25fe80c99218a2352b23067f6af17185fb3706` ; signature debug `da301466…` ; `versionCode=1`, `versionName=0.1.0`, compileSdk 37 |
 | Statut | **PASS (build propre)** |
 | Limites | APK **non installé** sur Pixel ; aucune preuve Pixel pour ce couple. Les hashes diffèrent du build incrémental précédent (artefact debug non reproductible bit-à-bit) ; seuls ces hashes du build propre font foi |
 
@@ -395,8 +417,8 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Commande | workflow `CI`, jobs `verify` et `relay-node` |
 | Horodatage | préparation 2026-10-28T17:04+01:00 |
 | Attendu | Android + backend + Node + proxy |
-| Observé | run `40730173153` : `verify` PASS, `relay-node` FAIL (`stale-client-timeout.test.ts`, relais réel absent). Correctif : `test:unit` exclut les deux tests à relais réel. Run `40733692711` sur `a72ba9e` : **success**, `verify` et `relay-node` PASS. Le workflow compile désormais aussi `assembleDebugAndroidTest`. Dernier run requis après le commit de clôture. |
-| Statut | **PASS sur `a72ba9e` ; dernier run en attente** |
+| Observé | run `40730173153` : `verify` PASS, `relay-node` FAIL (`stale-client-timeout.test.ts`, relais réel absent). Correctif : `test:unit` exclut les deux tests à relais réel. Run `40733692711` sur `a72ba9e` : **success**. Run `40744237164` sur `a6a5602` : **success**, `verify` et `relay-node` PASS, `assembleDebugAndroidTest` compilé. Dernier run requis après le correctif fail-closed du contrôle d'alias. |
+| Statut | **PASS sur `a6a5602` ; dernier run en attente** |
 | Limites | Aucun PASS CI pour le commit de clôture tant que son run n'est pas terminé avec `success` |
 
 ## P-CI-02 — Reproduction locale du job `relay-node`

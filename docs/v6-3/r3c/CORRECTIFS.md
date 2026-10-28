@@ -155,6 +155,13 @@ reconnexion authentifiée, effacement explicite, `PAIRING_REQUIRED`,
 réappairage). A4-5 à A4-10 sont PASS. Seule l'assertion diagnostique 4001
 échoue.
 
+**Contrôle d'effacement fail-closed.** Le test R3-C d'effacement vérifie
+l'alias Keystore **avant** et **après** `clearCredentials()`. Le helper
+`r3bRelayKeystoreAliasPresent()` lève désormais une `AssertionError` si le
+Keystore est illisible, au lieu de retourner `false` et de faire passer
+l'assertion d'absence à tort. Rejeu : **PASS (0,192 s)**, alias présent avant,
+absent après, credential et préférence chiffrée supprimés, `PAIRING_REQUIRED`.
+
 **Options.** Corriger la propagation du code de fermeture dans le relais
 épinglé (nécessite la source amont et une revue, hors périmètre R3-C), ou
 accepter explicitement 1012 comme fermeture de transport après révocation et

@@ -17,7 +17,7 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | T2 | JVM Android | PASS 691 | **PASS** — 100 suites, 712 tests, 0 échec | `d2419b3` |
 | T3 | Lint Android | PASS 0/71 | **PASS** — 0 erreur, 71 avertissements | `d2419b3` |
 | T4 | Build APK principal | PASS | **PASS** — `365bd84a…` (build propre) | code `d2419b3`, non installé |
-| T5 | Build APK androidTest | PASS | **PASS** — `09ecfd7a…` (inclut le test R3-C d'effacement) | reconstruit et installé |
+| T5 | Build APK androidTest | PASS | **PASS** — `d79031f8…` (inclut le test R3-C d'effacement) | reconstruit et installé |
 | T6 | Instrumentation API 37 | PARTIAL | **PARTIAL** — A3, chat réel, NET-07/09, UI-06/07/08 PASS sur Pixel ; A4-4 FAIL (relais 1012 au lieu de 4001) | binaire R3-C installé `365bd84a…` |
 | T7 | Node connecteur | PASS 77 | **PASS** — 15 fichiers, 79 tests sans relais ; 17 fichiers, 81 tests avec relais | `d2419b3` |
 | T8 | Relais épinglé | PASS | **PASS** — image `atlas-paseo-relay:r3a`, ID `sha256:75d68fd8…` | |
@@ -86,7 +86,7 @@ pas preuve publique ; une preuve PC ne vaut pas preuve Pixel.
 | A4-5 | État Android `REVOKED` | PASS | **PASS** | |
 | A4-6 | Absence de reconnexion authentifiée | PASS | **PASS** | |
 | A4-7 | Suppression explicite des identifiants | PASS | **PASS** — chemin production `clearCredentials()` | clic UI non rejoué après l'échec A4-4 |
-| A4-8 | Effacement credential + alias Keystore | PARTIAL | **PASS** | test R3-C dédié |
+| A4-8 | Effacement credential + alias Keystore | PARTIAL | **PASS** — contrôle fail-closed, alias présent avant / absent après (0,192 s) | test R3-C dédié |
 | A4-9 | Relance sans réappairage implicite | PASS | **PASS (1,122 s)** | |
 | A4-10 | Nouvel appairage explicite | PASS | **PASS (2,386 s)** | |
 

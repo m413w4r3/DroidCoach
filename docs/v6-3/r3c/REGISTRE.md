@@ -78,15 +78,15 @@ ci-dessus a été rejouée sur le SHA intégré.
 | Dernier commit de documentation/test androidTest | voir `git rev-parse HEAD` (clôture) |
 | Gates locales | Android 712 tests / 0 échec, lint 0/71, backend 196/1, Node 81/81, proxy 18/18 |
 | APK principal | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
-| APK androidTest | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` |
+| APK androidTest | `d79031f8c96c409bada82f1fcb25fe80c99218a2352b23067f6af17185fb3706` |
 | Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | État Pixel | **installé et testé** : A3 PASS, chat réel PASS, NET-07/09 PASS, A4 partiel (A4-4 FAIL 1012) |
-| État CI distante | **success** sur `a72ba9e` (run `40733692711`) ; dernier run requis après clôture |
+| État CI distante | **success** sur `a6a5602` (run `40744237164`) ; dernier run requis après le correctif fail-closed |
 
 ## 4bis. Qualification Pixel R3-C
 
 Pixel 9 Pro XL, Android 17 / API 37, utilisateur 0, APK `365bd84a…` /
-androidTest `09ecfd7a…`.
+androidTest `d79031f8…`.
 
 | Test | Résultat |
 |---|---|

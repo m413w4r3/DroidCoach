@@ -59,7 +59,7 @@ Le chemin public a été rétabli sans modifier Tailscale :
 
 ## 3bis. Qualification Pixel sur le binaire R3-C
 
-APK principal `365bd84a…`, androidTest `09ecfd7a…`, utilisateur 0, Android 17 /
+APK principal `365bd84a…`, androidTest `d79031f8…`, utilisateur 0, Android 17 /
 API 37.
 
 | Domaine | Résultat |
@@ -87,13 +87,13 @@ API 37.
 | Android JVM | **100 suites, 712 tests, 0 échec/erreur/ignoré** |
 | Android lint | **0 erreur, 71 avertissements** |
 | Build APK principal (propre) | `365bd84a14ab05a35e2333688c57addb825b42aede8e7e2e1a11b7e0079cd4f3` |
-| Build APK androidTest (propre) | `09ecfd7a3d527e98351e224d70b5f44b81c276e7e514300cd9fd859c99ac8c98` (inclut le test R3-C d'effacement) |
+| Build APK androidTest (propre) | `d79031f8c96c409bada82f1fcb25fe80c99218a2352b23067f6af17185fb3706` (inclut le test R3-C d'effacement) |
 | Signature | debug `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Version | `versionCode=1`, `versionName=0.1.0`, compileSdk 37 |
 | Backend | **196 passed, 1 skipped** |
 | Node connecteur | **17 fichiers, 81 tests PASS** (dont relais réel) |
 | Proxy filtrant | **18/18 PASS** |
-| CI distante | **success** sur `a72ba9e` (run `40733692711`) ; dernier run requis après le commit final |
+| CI distante | **success** sur `a6a5602` (run `40744237164`) ; dernier run requis après le correctif fail-closed |
 
 ## 5. Revue indépendante
 

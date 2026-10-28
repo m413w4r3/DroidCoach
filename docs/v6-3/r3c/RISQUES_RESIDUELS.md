@@ -75,10 +75,10 @@ lecture seule ou préchauffés).
 
 La CI a été poussée après autorisation. Le premier run `40730173153` a échoué
 sur `stale-client-timeout.test.ts` (relais réel absent du runner). Après
-séparation des tests, le run `40733692711` sur `a72ba9e` est **success**
-(`verify` et `relay-node`). Un dernier run est requis après le commit final
-(test androidTest + documentation) ; aucun PASS CI n'est déclaré avant ce run.
-Le workflow inclut désormais la compilation de l'APK androidTest.
+séparation des tests, le run `40733692711` sur `a72ba9e` est **success**,
+puis le run `40744237164` sur `a6a5602` est **success** (`verify` et
+`relay-node`, compilation androidTest incluse). Un dernier run est requis
+après le correctif fail-closed du contrôle d'alias.
 
 ## R-25 — OpenClaw réel
 
