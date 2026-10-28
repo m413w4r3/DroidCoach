@@ -23,7 +23,7 @@ actifs, dont trois implémentations.
 | `R3B-NET-01` | A | INTEGRATED | `integrations/relay/proxy/**` (nouveau), `docs/v6-3/r3b/preuves/net-01*.txt` | Proxy filtrant `4400 -> 4402` : `/health` et `/ready` proxifiés, `/metrics` refusé, upgrade `/ws` v2 réel, tests négatifs |
 | `R3B-PC-01` | A | INTEGRATED | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
 | `R3B-CHAT-01` | A | INTEGRATED | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
-| `R3B-CHAT-WIRE-01` | B | READY | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
+| `R3B-CHAT-WIRE-01` | B | RUNNING | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
 | `R3B-ANDROID-01` | B | BLOCKED (dépend de CHAT-WIRE-01 intégré) | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
 | `R3B-QA-C` | C | BLOCKED (dépend de B) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
 | `R3B-REVIEW-01` | D | BLOCKED (dépend de C) | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final |
@@ -49,7 +49,7 @@ acceptation.
 |---|---|---|---|---|
 | `R3B-PC-01` | `0a96281f29b78031b2ecb792bebcc7239d35f3f7` | `0a96281` | `dcf3309` | harnais 14 scénarios PASS ; `npm test` 72/72 avec proxy sur 4400 |
 | `R3B-NET-01` | `4363d8f0102002350a8b846a00575d6a91a16774` | `4363d8f` | `bb5bb99` | 18/18 tests proxy PASS ; systemd-analyze PASS ; Funnel public TLS/HTTP/WSS PASS |
-| `R3B-CHAT-01` | `1b2e8f485000dc4f0e2743b32c2ad19b5b60a15a` | `1b2e8f4` | `dfe6da3` | backend 196/1 ; chat 10/10 ; Node 72/72 ; intégration Noise publique PASS |
+| `R3B-CHAT-01` | `6ded055cdd68327466a320fcc54e8db8ea4dfe61` | `6ded055` | `2548673` | backend 196/1 ; chat 12/12 ; Node 73/73 ; timeout chat 55 s ; OpenClaw réel public PASS |
 
 Aucune notification de fin n'a été acceptée sans rejeu parent. Les trois tickets
 restent liés à leurs preuves dans `docs/v6-3/r3b/preuves/`.
@@ -65,6 +65,35 @@ mode `auto-review`. Aucune sous-délégation.
 | `R3B-NET-01` | `180017b9-b399-4a47-aa9a-43bb83cf8b65` | `/home/nill/.paseo/worktrees/073527gm/r3b-net-01` | `feat/r3b-net-01` |
 | `R3B-PC-01` | `c8f7868c-7bc8-4280-83bb-bed8d00ed0bb` | `/home/nill/.paseo/worktrees/073527gm/r3b-pc-01` | `feat/r3b-pc-01` |
 | `R3B-CHAT-01` | `92f6e6fe-dda5-4fd7-98b3-ddeeffb0e565` | `/home/nill/.paseo/worktrees/073527gm/r3b-chat-01` | `feat/r3b-chat-01` |
+
+### Vague B — session active
+
+| Ticket | Agent ID | Worktree | Branche | Modèle vérifié |
+|---|---|---|---|---|
+| `R3B-CHAT-WIRE-01` | `25c4a326-e19a-47f4-8303-5d8abeb20803` | `/home/nill/.paseo/worktrees/073527gm/r3b-chat-wire-01` | `feat/r3b-chat-wire-01` | `codex/gpt-6-luna`, `xhigh` effectif |
+
+Note de reprise : l'agent s'est d'abord bloqué sur son auto-identification
+interne « GPT-6 » ; le parent a fourni la métadonnée Paseo vérifiée
+(`model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`) et l'a débloqué sans
+changer de modèle.
+
+## Qualification publique PC (SHA `2548673`)
+
+| Preuve | Statut |
+|---|---|
+| DNS public, certificat Let's Encrypt, TLS 1.3, SNI/SAN | PASS |
+| `/health` et `/ready` publics | PASS |
+| `/metrics` public et upgrade `/metrics` | PASS — 404 |
+| WSS public `role=server`/`role=client` v2 | PASS — 101 |
+| Refus `v=1`, query inconnue, `serverId` absent | PASS — 400 |
+| Noise NK `protected` + auth appareil via IP publique | PASS |
+| `backend.health` via Funnel | PASS |
+| `sync.status` via Funnel | PASS |
+| Chat mock relayé, rejeu sans doublon | PASS |
+| Chat OpenClaw personnel réel relayé | PASS — `agent_status=connected`, 1 proposition, max 4 295 ms |
+| Refus de chat sans capacité `coach.chat` | PASS — `OPERATION_UNAVAILABLE` |
+| Arrêt/redémarrage réel FastAPI via Funnel | PASS — `BACKEND_UNAVAILABLE` puis `ok` |
+| Redémarrage connecteur / reconnexion relais | PASS |
 
 Reprise : si une session est interrompue, relire son commit, son diff et ses
 preuves ; ne pas rejouer une tâche terminée. Une notification de fin n'est pas
