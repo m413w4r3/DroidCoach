@@ -12,10 +12,10 @@ preuve.
 | ID | Gate | Commande / environnement | Statut initial |
 |---|---|---|---|
 | T1 | Backend complet | `backend/.venv/bin/python -m pytest -q` | **PASS** — 196 passed, 1 skipped sur `dfe6da3` |
-| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | NOT_RUN |
-| T3 | Lint Android | `android/gradlew :app:lintDebug` | NOT_RUN |
-| T4 | Build debug | `android/gradlew :app:assembleDebug` | NOT_RUN |
-| T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | NOT_RUN |
+| T2 | JVM Android complète | `android/gradlew :app:testDebugUnitTest --rerun-tasks --max-workers=1` | **PASS** — 96 fichiers, 685 tests, 0 échec/erreur/ignoré sur `3ecccad` |
+| T3 | Lint Android | `android/gradlew :app:lintDebug` | **PASS** — 0 erreur, 71 avertissements sur `3ecccad` |
+| T4 | Build debug | `android/gradlew :app:assembleDebug` | **PASS** — APK `bf72c735…` sur `3ecccad`, signature debug `da301466…` |
+| T5 | Build androidTest | `android/gradlew :app:assembleDebugAndroidTest` | **PASS** — APK androidTest `cd83bac8…` sur `3ecccad` |
 | T6 | Instrumentation API 37 | Pixel physique / émulateur API 37 | NOT_RUN |
 | T7 | Tests Node connecteur | `integrations/relay/pc: npm test` avec relais réel | **PASS** — 15 fichiers, 72 tests sur `dfe6da3`, proxy 4400 actif |
 | T8 | Image relais épinglée | `atlas-paseo-relay:r3a`, `/health` loopback | **PASS** — image locale vérifiée, `/health` 200 sur 127.0.0.1:4402 |

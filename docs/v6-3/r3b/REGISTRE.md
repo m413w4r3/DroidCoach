@@ -23,8 +23,8 @@ actifs, dont trois implémentations.
 | `R3B-NET-01` | A | INTEGRATED | `integrations/relay/proxy/**` (nouveau), `docs/v6-3/r3b/preuves/net-01*.txt` | Proxy filtrant `4400 -> 4402` : `/health` et `/ready` proxifiés, `/metrics` refusé, upgrade `/ws` v2 réel, tests négatifs |
 | `R3B-PC-01` | A | INTEGRATED | `integrations/relay/pc/scripts/r3b-*`, `integrations/relay/pc/test/r3b-*`, `integrations/relay/pc/systemd/**`, `docs/v6-3/r3b/preuves/pc-01*.txt` | Résilience réelle : démarrage, arrêt, SIGKILL, reconnexion, FastAPI arrêté/relancé, état et identité conservés, aucun doublon |
 | `R3B-CHAT-01` | A | INTEGRATED | `backend/**`, `contracts/**`, `integrations/relay/pc/src/{protocol,operations,backend,session}.ts`, `test/chat-r3b*`, `docs/v6-3/r3b/preuves/chat-01*.txt` | `coach.chat` + `coach.chat.request` validés, route fixe `POST /v2/agent/chat`, limites, mandats, erreurs, rejeu non automatique |
-| `R3B-CHAT-WIRE-01` | B | RUNNING | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
-| `R3B-ANDROID-01` | B | BLOCKED (dépend de CHAT-WIRE-01 intégré) | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
+| `R3B-CHAT-WIRE-01` | B | INTEGRATED | `android/app/src/main/java/dev/atlas/coach/sync/relay/**`, `sync/agent/coach/**`, `app/RelaySettingsController.kt`, `app/AtlasController.kt`, `app/RelaySettingsScreen.kt`, `app/AgentCoachScreen.kt`, tests JVM | Conversation RELAY réelle, mode local distingué, états UI, annulation, accessibilité, tests JVM |
+| `R3B-ANDROID-01` | B | READY | `android/app/src/androidTest/**`, hooks de test explicitement validés par le parent | A3 Keystore réel après force-stop/redémarrage ; A4 révocation → `REVOKED` → effacement explicite → relance sans réappairage |
 | `R3B-QA-C` | C | BLOCKED (dépend de B) | parent (opérateur ADB unique) | Tests transport/chat, API 37, Funnel public, réseau réel, Pixel, régressions |
 | `R3B-REVIEW-01` | D | BLOCKED (dépend de C) | relecteur indépendant lecture seule | Aucun P0/P1 sur le SHA final |
 
@@ -70,7 +70,7 @@ mode `auto-review`. Aucune sous-délégation.
 
 | Ticket | Agent ID | Worktree | Branche | Modèle vérifié |
 |---|---|---|---|---|
-| `R3B-CHAT-WIRE-01` | `25c4a326-e19a-47f4-8303-5d8abeb20803` | `/home/nill/.paseo/worktrees/073527gm/r3b-chat-wire-01` | `feat/r3b-chat-wire-01` | `codex/gpt-6-luna`, `xhigh` effectif |
+| `R3B-CHAT-WIRE-01` | `25c4a326-e19a-47f4-8303-5d8abeb20803` | `/home/nill/.paseo/worktrees/073527gm/r3b-chat-wire-01` | `feat/r3b-chat-wire-01` | `codex/gpt-6-luna`, `xhigh` effectif — intégré `3ecccad`, code `7f15ad4`, 685 tests JVM |
 
 Note de reprise : l'agent s'est d'abord bloqué sur son auto-identification
 interne « GPT-6 » ; le parent a fourni la métadonnée Paseo vérifiée
