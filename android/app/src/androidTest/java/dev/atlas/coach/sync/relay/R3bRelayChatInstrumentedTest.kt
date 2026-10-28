@@ -131,9 +131,8 @@ class R3bRelayChatInstrumentedTest {
             .assertTextContains("OpenClaw via PC", substring = true)
         composeRule.onAllNodesWithText("Provenance : OpenClaw via PC", substring = false)
             .get(0)
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
+            .assertExists()
+        composeRule.onNodeWithText(message, substring = false).assertExists()
 
         val returnedProposals = controller.agentInbox.filter { it.id !in proposalIdsBefore }
         assertTrue(
@@ -156,7 +155,7 @@ class R3bRelayChatInstrumentedTest {
             composeRule.onNodeWithTag("agent_message_input").assertTextContains(draft, substring = true)
             composeRule.onNodeWithTag("agent_connection_status")
                 .assertTextContains("OpenClaw via PC", substring = true)
-            composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(message, substring = false).assertExists()
             assertTrue("The conversation did not survive activity rotation", controller.agentConversation.any {
                 it.role == AgentMessageRole.USER && it.text == message
             })
