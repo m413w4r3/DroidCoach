@@ -122,7 +122,7 @@ private fun SportDetails(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Details", style = MaterialTheme.typography.titleSmall)
+            Text("Détails", style = MaterialTheme.typography.titleSmall)
             Text(if (expanded) "Masquer" else "Afficher", style = MaterialTheme.typography.labelMedium)
         }
     }

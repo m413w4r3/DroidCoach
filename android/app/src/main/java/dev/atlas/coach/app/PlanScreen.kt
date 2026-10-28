@@ -144,7 +144,10 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     }
 
     val coachReady = isCoachRequestReady(atlasController)
-    val nextActivity = plan?.let { PlanUiLogic.nextActivity(it.activities, currentMinute) }
+    // Tomorrow is entirely ahead of the current clock: do not mark its morning
+    // activities as "past" just because today's clock is late.
+    val displayMinute = if (selectedTomorrow) 0 else currentMinute
+    val nextActivity = plan?.let { PlanUiLogic.nextActivity(it.activities, displayMinute) }
     val activitiesById = plan?.activities?.associateBy(PlanActivity::activityId).orEmpty()
     val editing = editingId?.let(activitiesById::get)
     val moving = movingId?.let(activitiesById::get)
@@ -245,7 +248,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                 } else {
                     PlanActivityList(
                         activities = plan.activities,
-                        nowMinute = currentMinute,
+                        nowMinute = displayMinute,
                         onMove = { movingId = it.activityId },
                         onEdit = { editingId = it.activityId },
                         onStatus = { changingStatusId = it.activityId },

@@ -33,6 +33,7 @@ import dev.atlas.coach.plan.LocalSchedule
 import dev.atlas.coach.plan.OverlapWarning
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanChange
+import dev.atlas.coach.plan.PlanClock
 import dev.atlas.coach.plan.PlanOrigin
 import dev.atlas.coach.plan.PlanPreview
 import dev.atlas.coach.plan.PlanRevision
@@ -45,6 +46,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -73,6 +76,50 @@ class PlanScreenInstrumentationTest {
         composeRule.onNodeWithTag("plan_day_tomorrow").performClick()
         composeRule.onNodeWithText("Créer le programme de demain").assertIsDisplayed()
         composeRule.onAllNodesWithText("Créer le programme du jour").assertCountEquals(0)
+    }
+
+    @Test
+    fun tomorrowMorningActivitiesAreNotMarkedPastWhenTodayIsLate() {
+        val context = isolatedContext()
+        val directory = File(
+            InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
+            "plan-ui-tomorrow-activity-${UUID.randomUUID()}",
+        )
+        assertTrue(directory.mkdirs() || directory.isDirectory)
+        val today = LocalDate.of(2027, 1, 15)
+        val tomorrow = today.plusDays(1)
+        val fixedNow = 1_800_000_000_000L
+        val zone = ZoneId.of("Europe/Paris")
+        val tomorrowController = PlanController(
+            directory = directory,
+            clock = PlanClock { fixedNow },
+            zoneIdProvider = { zone },
+            todayProvider = { tomorrow },
+        )
+        assertTrue(tomorrowController.createTodayPlan())
+        assertTrue(
+            tomorrowController.addActivity(
+                title = "Réviser le chapitre",
+                kind = ActivityKind.FOCUS,
+                startMinute = 9 * 60,
+                durationMinutes = 45,
+                priority = Priority.IMPORTANT,
+            ),
+        )
+        assertTrue(tomorrowController.confirmPreview())
+
+        val todayController = PlanController(
+            directory = directory,
+            clock = PlanClock { fixedNow },
+            zoneIdProvider = { zone },
+            todayProvider = { today },
+        )
+        setPlanScreen(todayController, context)
+
+        composeRule.onNodeWithTag("plan_day_tomorrow").performClick()
+        composeRule.onNodeWithTag("plan_next_activity_card").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Réviser le chapitre").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Passée").assertCountEquals(0)
     }
 
     @Test
