@@ -15,9 +15,12 @@ npm run build
 npm run test:unit
 ```
 
-The full `npm test` suite also runs an integration case that requires the real
-Relay health endpoint at `127.0.0.1:4400`. Start the test relay before running
-that full suite. This is **not Android end-to-end evidence**.
+The full `npm test` suite also runs relay-dependent cases (the real Relay
+integration test and the stale-client handshake test) that require a live
+Relay at `ATLAS_TEST_RELAY_URL` (default `ws://127.0.0.1:4400`). Start the
+test relay before running that full suite. For a reproducible pinned relay,
+use `scripts/run-isolated-relay-tests.sh`. This is **not Android end-to-end
+evidence**.
 
 For a host installation with an external environment file and restricted
 configuration checks, follow
@@ -64,7 +67,7 @@ is the expected race with a concurrent release.
 | `ATLAS_SERVICE_TOKEN` | Bearer token used for authenticated FastAPI routes. It is read from the environment and never persisted or logged. |
 | `ATLAS_ALLOW_LOOPBACK_WS` | Set to `1` only for explicit local loopback `ws://` development; default deny. |
 | `ATLAS_METRICS_PORT` | Loopback metrics port; defaults to `4401`. |
-| `ATLAS_TEST_RELAY_URL` | Optional loopback Relay URL used by the real-relay integration test. |
+| `ATLAS_TEST_RELAY_URL` | Optional loopback Relay URL used by the real-relay integration and stale-client tests. |
 
 Do not place token values in command arguments, checked-in files, or logs.
 

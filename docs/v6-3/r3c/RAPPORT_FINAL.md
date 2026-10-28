@@ -16,8 +16,10 @@ chemin public Funnel est réellement qualifié avec TLS, Noise, authentification
 chat mock et chat OpenClaw réel, et les corrections NET-01, COMPAT-01, RACE-01
 sont intégrées et testées. La qualification Pixel du nouveau binaire reste
 **`BLOCKED_DEVICE`** : aucun appareil n'était connecté en ADB et aucun mandat
-d'installation n'a été exercé. La CI distante R3-C reste **`NOT_RUN`** faute
-de push autorisé.
+d'installation n'a été exercé. La CI distante a été poussée après autorisation :
+le premier run a échoué sur un test Node exigeant un relais réel ; le correctif
+de séparation est poussé et le rejeu est en attente. Aucun PASS CI n'est
+revendiqué avant un run terminé avec `success`.
 
 Aucun `GO_REMOTE_WITH_LIMITATIONS` ni `GO_V63` n'est revendiqué.
 
@@ -63,7 +65,7 @@ Le chemin public a été rétabli sans modifier Tailscale :
 | Backend | **196 passed, 1 skipped** |
 | Node connecteur | **17 fichiers, 81 tests PASS** (dont relais réel) |
 | Proxy filtrant | **18/18 PASS** |
-| CI distante | **NOT_RUN** — aucun push autorisé |
+| CI distante | **FAIL (run 1) → correctif poussé, rejeu en attente** |
 
 ## 5. Revue indépendante
 

@@ -79,18 +79,23 @@ reproduction sur Pixel d'une coupure pendant un chat en vol reste
 
 - Nouveau job `relay-node` (Node 24) : `npm ci`, `npm run test:unit`
   (connecteur, sans relais externe), `node --test integrations/relay/proxy/test`.
-- Le test d'intégration à relais réel n'est pas lancé sur le runner hébergé :
-  l'image épinglée `atlas-paseo-relay:r3a` n'y est pas disponible.
+- `test:unit` exclut explicitement les deux tests qui exigent un relais réel :
+  `relay.integration.test.ts` et `stale-client-timeout.test.ts`. Le premier run
+  CI (`40730173153`) a échoué sur ce dernier, absent du runner ; le correctif
+  rend le job déterministe sans relais.
+- Le test d'intégration à relais réel et le test stale-client sont couverts par
+  le harnais local épinglé.
 - Harnais reproductible local :
   `integrations/relay/pc/scripts/run-isolated-relay-tests.sh` démarre l'image
   épinglée sur un port loopback libre, lance la suite complète
   (`ATLAS_TEST_RELAY_URL`), puis supprime le conteneur.
-- Preuve locale : suite complète 16 fichiers / 78 tests PASS avec le relais
-  réel sur `127.0.0.1:4402`.
+- Preuves locales : `test:unit` **15 fichiers / 79 tests PASS** sans relais ;
+  suite complète **17 fichiers / 81 tests PASS** avec le relais réel sur
+  `127.0.0.1:4402`.
 
-**Limite.** La CI distante n'a pas encore été exécutée sur la branche R3-C ;
-elle reste `NOT_RUN` jusqu'à un run terminé avec `success`. Un push exige une
-autorisation explicite.
+**Limite.** La CI distante a échoué une première fois sur
+`stale-client-timeout.test.ts` ; le rejeu après correctif doit être terminé
+avec `success` avant tout PASS. Un push supplémentaire est nécessaire.
 
 ## R3C-ANDROID-NET-01 — OFFLINE / ERROR
 

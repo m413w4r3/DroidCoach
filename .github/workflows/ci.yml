@@ -50,8 +50,8 @@ jobs:
         run: python -m pytest -q
 
   # Node connectors and the filtering proxy are covered without external
-  # services. The real-relay integration test needs the pinned local Docker
-  # image and runs on the supervised PC through
+  # services. The real-relay integration and stale-client tests need the
+  # pinned local Docker image and run on the supervised PC through
   # integrations/relay/pc/scripts/run-isolated-relay-tests.sh.
   relay-node:
     runs-on: ubuntu-24.04

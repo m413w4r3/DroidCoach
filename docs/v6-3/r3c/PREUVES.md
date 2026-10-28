@@ -304,9 +304,9 @@ résultat observé, statut, limites. Les horodatages sont locaux
 | Commande | workflow `CI`, jobs `verify` et `relay-node` |
 | Horodatage | préparation 2026-10-28T17:04+01:00 |
 | Attendu | Android + backend + Node + proxy |
-| Observé | YAML valide ; suite Node locale 81/81 ; proxy local 18/18 ; harnais relais réel 81/81. **Aucun run CI distant déclaré avant exécution terminée** |
-| Statut | **NOT_RUN (distant)** |
-| Limites | Un push est nécessaire pour déclencher la CI distante ; il exige une autorisation explicite. En attendant, le statut reste `NOT_RUN`, pas `PASS` |
+| Observé | run distant `40730173153` : job `verify` **PASS**, job `relay-node` **FAIL** — `stale-client-timeout.test.ts` exige un relais réel absent du runner. Correctif : `test:unit` exclut `relay.integration.test.ts` et `stale-client-timeout.test.ts` ; le harnais local épinglé couvre ces deux tests. Rejeu après push. |
+| Statut | **FAIL (run 1) → rejeu en attente** |
+| Limites | Aucun PASS CI tant que le workflow de rejeu n'est pas terminé avec `success` |
 
 ## P-CI-02 — Reproduction locale du job `relay-node`
 
@@ -314,9 +314,9 @@ résultat observé, statut, limites. Les horodatages sont locaux
 |---|---|
 | SHA source | `c5ec1f4` (code `d2419b3`) |
 | Environnement | Node 24.18.0, `integrations/relay/pc` |
-| Commande | `npm ci` puis `npm run test:unit` |
-| Horodatage | 2026-10-28T17:16+01:00 |
-| Observé | `npm ci` PASS (artefact relais vérifié) ; `test:unit` **16 fichiers, 80 tests PASS** (exclut l'intégration relais réel, comme la CI) |
+| Commande | `npm ci` puis `ATLAS_TEST_RELAY_URL=ws://127.0.0.1:9 npm run test:unit` ; `ATLAS_TEST_RELAY_URL=ws://127.0.0.1:4402 npm test` |
+| Horodatage | 2026-10-28T18:06+01:00 |
+| Observé | sans relais : **15 fichiers, 79 tests PASS** ; avec relais : **17 fichiers, 81 tests PASS** |
 | Statut | **PASS (local)** |
 | Limites | Ce n'est pas le runner GitHub ; le job distant reste `NOT_RUN` |
 
