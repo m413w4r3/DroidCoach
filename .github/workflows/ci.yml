@@ -39,9 +39,9 @@ jobs:
       - name: Install Android compile SDK
         run: sdkmanager 'platform-tools' 'platforms;android-37.2' 'build-tools;37.0.0'
 
-      - name: Run JVM tests, lint and debug build
+      - name: Run JVM tests, lint, debug build and androidTest build
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
 
       - name: Install backend test dependencies
         run: python -m pip install -r backend/requirements.txt
