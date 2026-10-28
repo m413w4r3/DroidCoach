@@ -1,0 +1,26 @@
+ATLAS V6.3 R3-B — Arrêt/redémarrage réel de FastAPI via Funnel public
+Date: 2026-10-28
+SHA code intégré: dfe6da3109b32bc46dfc2a611db37c65b3436e88
+Environnement: connecteur personnel sur wss://all.taildc7886.ts.net:8443,
+relais 127.0.0.1:4402, proxy 127.0.0.1:4400, FastAPI réel (uvicorn) sur
+127.0.0.1:8100, adaptateur mock, client Noise public avec IP 176.58.90.46.
+Commande: integrations/relay/pc/scripts/r3b-public-e2e.mjs, mode
+ATLAS_E2E_ONLY=health, device synthétique avec coach.chat.
+
+Séquence:
+1. FastAPI démarré, /health local 200 {"status":"ok","mode":"mock"}.
+   E2E public -> backend_health_via_funnel PASS, health_status=ok.
+2. Arrêt réel du processus uvicorn (SIGTERM) ; port 8100 libéré.
+   E2E public -> backend_health_via_funnel PASS, kind=error,
+   health_status=BACKEND_UNAVAILABLE (erreur explicite, aucune réponse inventée).
+3. Redémarrage réel de FastAPI ; /health local 200.
+   E2E public -> backend_health_via_funnel PASS, health_status=ok.
+
+Le handshake Noise protégé et l'authentification de l'appareil sont PASS dans
+les trois exécutions. Aucun token, message ou secret n'est affiché.
+
+Limites:
+- Adaptateur FastAPI mock dans cette preuve ; le chat OpenClaw réel relayé est
+  une preuve séparée.
+- Le redémarrage du connecteur et du relais est couvert par pc-01-validation.txt
+  et par le test d'intégration public.

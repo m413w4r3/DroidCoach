@@ -97,17 +97,17 @@ preuve.
 
 | ID | Cas | Statut initial |
 |---|---|---|
-| PC-01 | Démarrage supervisé | NOT_RUN |
-| PC-02 | Arrêt propre SIGTERM | NOT_RUN |
-| PC-03 | SIGKILL et redémarrage | NOT_RUN |
-| PC-04 | Reconnexion au relais | NOT_RUN |
-| PC-05 | Identité et registre conservés | NOT_RUN |
-| PC-06 | Absence de fuite de token | NOT_RUN |
-| PC-07 | Redémarrage réel de FastAPI | NOT_RUN |
-| PC-08 | Erreur explicite pendant l'indisponibilité FastAPI | NOT_RUN |
-| PC-09 | Réussite après restauration | NOT_RUN |
-| PC-10 | Absence de duplication des requêtes incertaines | NOT_RUN |
-| PC-11 | Rollback et intégrité de l'état | NOT_RUN |
+| PC-01 | Démarrage supervisé | **PASS** — harnais `r3b-resilience.mjs`, métriques 200 |
+| PC-02 | Arrêt propre SIGTERM | **PASS** — code 0, port libéré |
+| PC-03 | SIGKILL et redémarrage | **PASS** — même identité, même registre |
+| PC-04 | Reconnexion au relais | **PASS** — relais 4402 et Funnel public |
+| PC-05 | Identité et registre conservés | **PASS** — empreinte et hash stables |
+| PC-06 | Absence de fuite de token | **PASS** — scan stdout/stderr du harnais |
+| PC-07 | Redémarrage réel de FastAPI | **PASS** — uvicorn arrêté/redémarré, preuve publique |
+| PC-08 | Erreur explicite pendant l'indisponibilité FastAPI | **PASS** — `BACKEND_UNAVAILABLE` via Funnel |
+| PC-09 | Réussite après restauration | **PASS** — `health_status=ok` après redémarrage |
+| PC-10 | Absence de duplication des requêtes incertaines | **PASS** — un seul POST, rejeu bloqué après restart |
+| PC-11 | Rollback et intégrité de l'état | **PASS** — manifeste et empreinte vérifiés |
 
 ## 7. Vérifications complémentaires
 

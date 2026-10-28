@@ -30,6 +30,8 @@ const CAPABILITIES = (process.env.ATLAS_E2E_CAPABILITIES ??
   "coach.chat,coach.status,plan.revision,plan.today,sport.plan,sync.status")
   .split(",").map((value) => value.trim()).filter(Boolean);
 const EXPECT_CHAT_UNAVAILABLE = process.env.ATLAS_E2E_EXPECT_CHAT_UNAVAILABLE === "1";
+const ONLY = process.env.ATLAS_E2E_ONLY || "";
+const EXPECT_HEALTH = process.env.ATLAS_E2E_EXPECT_HEALTH || "ok";
 
 const results = [];
 let failure = null;
@@ -229,8 +231,23 @@ async function main() {
     record("noise_protected_and_device_auth", "PASS", { session_id_present: typeof sessionId === "string", capabilities: Array.isArray(helloOk.capabilities) });
 
     const health = await exchange(client, request(sessionId, "backend.health", {}), "backend.health");
-    record("backend_health_via_funnel", health.kind === "response" && health.result?.status === "ok" ? "PASS" : "FAIL",
-      { kind: health.kind, health_status: health.result?.status ?? health.error?.code });
+    const healthObserved = health.kind === "response" ? health.result?.status : health.error?.code;
+    const healthOk = EXPECT_HEALTH === "ok"
+      ? health.kind === "response" && health.result?.status === "ok"
+      : health.kind === "error" && health.error?.code === EXPECT_HEALTH;
+    record("backend_health_via_funnel", healthOk ? "PASS" : "FAIL",
+      { kind: health.kind, health_status: healthObserved, expected: EXPECT_HEALTH });
+    if (ONLY === "health") {
+      console.log(JSON.stringify({
+        url: URL_BASE,
+        public_ip_override: Boolean(PUBLIC_IP),
+        only: "health",
+        expected: EXPECT_HEALTH,
+        results,
+      }, null, 2));
+      if (failure) process.exitCode = 1;
+      return;
+    }
 
     const sync = await exchange(client, request(sessionId, "sync.status", {}), "sync.status");
     record("sync_status_via_funnel", sync.kind === "response" && sync.result?.relay_connected === true ? "PASS" : "FAIL",
