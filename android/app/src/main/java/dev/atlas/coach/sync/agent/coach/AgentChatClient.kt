@@ -178,62 +178,53 @@ class RelayAgentChatClient(
     ): AgentChatResponse {
         require(message.isNotBlank() && message.length <= 2_000)
         require(idempotencyKey.isNotBlank() && idempotencyKey.length <= 160)
-        var dispatchMandate: AgentMandate? = null
-        var dispatchSnapshot: AgentContextSnapshot? = null
-        var dispatchFailure: AgentChatException? = null
+        val dispatchMandate: AgentMandate
+        val dispatchSnapshot: AgentContextSnapshot
+        try {
+            if (!runCatching(requestAllowed).getOrDefault(false)) {
+                throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "L'accès au Coach n'est plus autorisé.")
+            }
+            val fresh = freshRequestContext(context)
+                ?: throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "Le mandat du Coach n'est plus actif.")
+            dispatchMandate = fresh.mandate
+            if (dispatchMandate.revoked || dispatchMandate.suspended ||
+                fresh.nowUtcMillis >= dispatchMandate.expiresAtUtcMillis
+            ) {
+                throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "Le mandat du Coach est révoqué, suspendu ou expiré.")
+            }
+            dispatchSnapshot = fresh.minimizedSnapshot()
+            if (!onContextWritten(dispatchSnapshot)) {
+                throw AgentChatException(
+                    AgentChatFailureKind.POLICY_DENIED,
+                    "L'audit local du contexte n'a pas pu être enregistré. Aucun message relayé n'a été envoyé.",
+                )
+            }
+        } catch (error: AgentChatException) {
+            throw error
+        } catch (error: Exception) {
+            throw AgentChatException(
+                AgentChatFailureKind.POLICY_DENIED,
+                "Impossible de préparer le mandat et le contexte avant l'envoi relayé.",
+                cause = error,
+            )
+        }
 
         val result = executor.execute(
             timeoutMillis = RELAY_CHAT_TIMEOUT_MILLIS,
             idempotencyKey = idempotencyKey,
             beforeDispatch = {
-                try {
-                    if (!runCatching(requestAllowed).getOrDefault(false)) {
-                        throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "L'accès au Coach n'est plus autorisé.")
-                    }
-                    val fresh = freshRequestContext(context)
-                        ?: throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "Le mandat du Coach n'est plus actif.")
-                    val currentMandate = fresh.mandate
-                    if (currentMandate.revoked || currentMandate.suspended ||
-                        fresh.nowUtcMillis >= currentMandate.expiresAtUtcMillis
-                    ) {
-                        throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "Le mandat du Coach est révoqué, suspendu ou expiré.")
-                    }
-                    val snapshot = fresh.minimizedSnapshot()
-                    if (!onContextWritten(snapshot)) {
-                        throw AgentChatException(
-                            AgentChatFailureKind.POLICY_DENIED,
-                            "L'audit local du contexte n'a pas pu être enregistré. Aucun message relayé n'a été envoyé.",
-                        )
-                    }
-                    dispatchMandate = currentMandate
-                    dispatchSnapshot = snapshot
-                    true
-                } catch (error: AgentChatException) {
-                    dispatchFailure = error
-                    false
-                } catch (error: Exception) {
-                    dispatchFailure = AgentChatException(
-                        AgentChatFailureKind.POLICY_DENIED,
-                        "Impossible de vérifier le mandat avant l'envoi relayé.",
-                        cause = error,
-                    )
-                    false
-                }
+                runCatching(requestAllowed).getOrDefault(false) &&
+                    !dispatchMandate.revoked && !dispatchMandate.suspended &&
+                    System.currentTimeMillis() < dispatchMandate.expiresAtUtcMillis
             },
             payloadFactory = {
-                val currentMandate = checkNotNull(dispatchMandate)
-                val snapshot = checkNotNull(dispatchSnapshot)
-                AgentChatRequestBody.build(conversationId, message, currentMandate, snapshot)
+                AgentChatRequestBody.build(conversationId, message, dispatchMandate, dispatchSnapshot)
             },
         )
 
         when (result) {
             is RelayCallResult.Success -> {
-                val snapshot = dispatchSnapshot ?: throw AgentChatException(
-                    AgentChatFailureKind.POLICY_DENIED,
-                    "Le contexte relayé n'a pas été préparé.",
-                )
-                return AgentChatResponseParser.parse(result.result, snapshot)
+                return AgentChatResponseParser.parse(result.result, dispatchSnapshot)
             }
             is RelayCallResult.RemoteError -> {
                 val kind = if (result.code == "OPERATION_UNAVAILABLE") {
@@ -242,7 +233,6 @@ class RelayAgentChatClient(
                 throw AgentChatException(kind, result.message, result.code)
             }
             is RelayCallResult.Failure -> {
-                dispatchFailure?.let { throw it }
                 val (kind, message) = when (result.reason) {
                     RelayCallResult.Failure.Reason.TIMEOUT -> AgentChatFailureKind.RESULT_UNCERTAIN to
                         "Le résultat du message relayé est incertain. ATLAS ne le renverra pas automatiquement."
