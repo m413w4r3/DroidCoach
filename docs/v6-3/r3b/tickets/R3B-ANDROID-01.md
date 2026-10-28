@@ -102,6 +102,32 @@ vrai store Keystore et le vrai contrôleur.
   de jeton.
 - L'agent ne lance aucun ADB ; il fournit les classes et les commandes exactes.
 
+## Test instrumenté de conversation relayée (en plus de A3/A4)
+
+Ajouter une classe `R3bRelayChatInstrumentedTest` qui prouve la conversation
+Android réelle via le Funnel, sans backend HTTP direct :
+
+1. Effacer tout jeton backend direct (`clearSyncToken`, `saveSyncConfiguration("", null)`).
+2. Lire le jeton synthétique `filesDir/r3b-pixel-device.json` (0600), sans
+   l'afficher, puis `relaySettings.saveConfiguration(relayUrl, serverId, clé
+   publique, deviceId, token)` et `selectMode(RELAY)`/`connect()`.
+3. Attendre `RELAY_CONNECTED` (≤ 25 s) et vérifier
+   `syncTokenConfigured == false` (aucun fallback direct).
+4. `enableAgent()`, `setCapability(CAP_AGENT, true)`, `setCapability(CAP_COACH, true)`,
+   mode `PROPOSALS_ONLY`, actions autorisées limitées, catégories partagées
+   désactivées, fenêtre de focus valide.
+5. Ouvrir COACH, saisir un message synthétique, cliquer Envoyer.
+6. Attendre ≤ 75 s une réponse ASSISTANT et `AgentStatus.CONNECTED` ; vérifier
+   la provenance « OpenClaw via PC » et la présence du message utilisateur.
+7. Vérifier qu'aucune proposition n'est exécutée sans confirmation (état
+   `proposed`/`pending_confirmation`).
+8. Vérifier que le message et le brouillon survivent à une rotation, et que
+   l'état relayé est visible.
+
+Arguments d'instrumentation non secrets : `relay_url`, `server_id`,
+`server_public_key`, `device_token_file` (nom du fichier, pas le jeton).
+Le jeton n'apparaît jamais dans un argument, un log ou une preuve.
+
 ## Oracle
 
 L'agent produit les classes instrumentées et documente les commandes exactes.
