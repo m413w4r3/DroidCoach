@@ -151,6 +151,7 @@ class R3bRelayChatInstrumentedTest {
             }
             composeRule.onNodeWithTag("agent_message_input").assertTextEquals(draft)
             composeRule.onNodeWithTag("agent_connection_status").assertTextContains("OpenClaw via PC")
+            composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
             assertTrue("The conversation did not survive activity rotation", controller.agentConversation.any {
                 it.role == AgentMessageRole.USER && it.text == message
             })
