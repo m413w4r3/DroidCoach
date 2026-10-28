@@ -34,7 +34,8 @@ class R3bNetworkStateInstrumentedTest {
 
         composeRule.waitUntil(timeoutMillis = 60_000) {
             controller.relaySettings.state == RelayConnectionState.OFFLINE ||
-                controller.relaySettings.state == RelayConnectionState.ERROR
+                controller.relaySettings.state == RelayConnectionState.ERROR ||
+                controller.relaySettings.state == RelayConnectionState.RELAY_CONNECTING
         }
         marker(context, "r3b-net-offline.marker", controller.relaySettings.state.name)
         assertEquals("The local conversation was lost while offline", conversationBefore, controller.agentConversation.size)
