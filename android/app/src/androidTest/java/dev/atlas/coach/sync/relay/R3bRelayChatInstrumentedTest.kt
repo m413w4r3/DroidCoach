@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -31,6 +32,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.UUID
 
 /** Full app conversation over the Funnel-backed relay, with direct bearer auth removed. */
 @RunWith(BackendArgumentsAwareRunner::class)
@@ -102,7 +104,8 @@ class R3bRelayChatInstrumentedTest {
         composeRule.waitForIdle()
         val assistantCountBefore = controller.agentConversation.count { it.role == AgentMessageRole.ASSISTANT }
         val proposalIdsBefore = controller.agentInbox.mapTo(mutableSetOf()) { it.id }
-        val message = "Quelle est une prochaine étape simple pour reprendre une tâche après une courte pause ?"
+        val message = "R3B relay chat ${UUID.randomUUID()} : Quelle est une prochaine étape simple " +
+            "pour reprendre une tâche après une courte pause ?"
         composeRule.onNodeWithTag("agent_message_input").performScrollTo().performTextInput(message)
         val sendButton = composeRule.onNodeWithTag("agent_send_message")
         sendButton.performScrollTo()
@@ -126,7 +129,8 @@ class R3bRelayChatInstrumentedTest {
         )
         composeRule.onNodeWithTag("agent_connection_status")
             .assertTextContains("OpenClaw via PC", substring = true)
-        composeRule.onNodeWithText("Provenance : OpenClaw via PC", substring = false)
+        composeRule.onAllNodesWithText("Provenance : OpenClaw via PC", substring = false)
+            .onFirst()
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithText(message, substring = false).performScrollTo().assertIsDisplayed()
