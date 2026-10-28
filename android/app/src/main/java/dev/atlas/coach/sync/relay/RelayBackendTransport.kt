@@ -22,7 +22,7 @@ sealed interface RelayCallResult {
  * survive a reconnect.
  */
 class RelayBackendTransport internal constructor(
-    config: RelayConfig,
+    private val config: RelayConfig,
     private val credentialStore: RelayCredentialStore,
     socketFactory: RelaySocketFactory = OkHttpRelaySocketFactory(config),
     private val scheduler: java.util.concurrent.ScheduledExecutorService =
@@ -61,6 +61,8 @@ class RelayBackendTransport internal constructor(
     private var heartbeatSentAtNanos: Long = 0L
     private var negotiatedRequestLimit = AtlasRemoteProtocol.MAX_REQUEST_BYTES
     private var negotiatedResponseLimit = AtlasRemoteProtocol.MAX_RESPONSE_BYTES
+    private var negotiatedCapabilities = emptySet<String>()
+    private var capabilityNegotiationComplete = false
     private var started = false
 
     fun state(): RelayConnectionState = connectionState
@@ -84,8 +86,35 @@ class RelayBackendTransport internal constructor(
         idempotencyKey: String = AtlasRemoteProtocol.newUuid(),
         beforeDispatch: () -> Boolean = { true },
     ): RelayCallResult {
+        val payloadSnapshot = JSONObject(payload.toString())
+        return executeDeferred(
+            operation = operation,
+            timeoutMillis = timeoutMillis,
+            idempotencyKey = idempotencyKey,
+            payloadFactory = { JSONObject(payloadSnapshot.toString()) },
+            beforeDispatch = beforeDispatch,
+        )
+    }
+
+    /** Defers payload assembly until the request is leaving the queue for dispatch. */
+    fun executeDeferred(
+        operation: String,
+        timeoutMillis: Long = DEFAULT_REQUEST_TIMEOUT_MILLIS,
+        idempotencyKey: String = AtlasRemoteProtocol.newUuid(),
+        payloadFactory: () -> JSONObject,
+        beforeDispatch: () -> Boolean = { true },
+    ): RelayCallResult {
         if (operation !in AtlasRemoteProtocol.OPERATIONS || timeoutMillis <= 0) {
             return RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)
+        }
+        val requiredCapability = AtlasRemoteProtocol.requiredCapability(operation)
+        if (requiredCapability != null && requiredCapability !in config.requestedCapabilities) {
+            return unavailableCapability(requiredCapability)
+        }
+        synchronized(lock) {
+            if (requiredCapability != null && capabilityNegotiationComplete && requiredCapability !in negotiatedCapabilities) {
+                return unavailableCapability(requiredCapability)
+            }
         }
         val now = Instant.now()
         val boundedTimeout = minOf(timeoutMillis, AtlasRemoteProtocol.MAX_REQUEST_TTL_SECONDS * 1000)
@@ -95,7 +124,7 @@ class RelayBackendTransport internal constructor(
             requestId = AtlasRemoteProtocol.newUuid(),
             operation = operation,
             idempotencyKey = idempotencyKey,
-            payload = JSONObject(payload.toString()),
+            payloadFactory = payloadFactory,
             createdAt = now,
             expiresAt = now.plusSeconds(ttlSeconds),
             deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(boundedTimeout),
@@ -160,6 +189,8 @@ class RelayBackendTransport internal constructor(
             started = false
             appSessionId = null
             appSessionExpiry = null
+            negotiatedCapabilities = emptySet()
+            capabilityNegotiationComplete = false
             heartbeatTask?.cancel(false)
             heartbeatTask = null
             heartbeatNonce = null
@@ -167,7 +198,7 @@ class RelayBackendTransport internal constructor(
             failures = (queue.toList() + inFlight.values).distinct()
             queue.clear()
             inFlight.clear()
-            failures.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.CANCELLED)) }
+            failures.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)) }
         }
         client.stop()
     }
@@ -178,7 +209,10 @@ class RelayBackendTransport internal constructor(
             setState(RelayConnectionState.PAIRING_REQUIRED)
             return
         }
-        val hello = try { AtlasRemoteProtocol.hello(credentials, CLIENT_VERSION).toString().toByteArray(Charsets.UTF_8) }
+        val hello = try {
+            AtlasRemoteProtocol.hello(credentials, CLIENT_VERSION, config.requestedCapabilities)
+                .toString().toByteArray(Charsets.UTF_8)
+        }
         catch (_: Exception) {
             setState(RelayConnectionState.AUTH_REQUIRED)
             reportFailure(RelayFailure.fromRemoteCode("AUTH_FAILED"))
@@ -206,8 +240,22 @@ class RelayBackendTransport internal constructor(
         val session = envelope.optString("session_id")
         val caps = envelope.optJSONArray("capabilities") ?: JSONArray()
         val capSet = (0 until caps.length()).mapNotNull { caps.optString(it).takeIf(String::isNotEmpty) }.toSet()
-        if ("plan.revision" !in capSet) {
-            failProtocol(RelayProtocolException("server did not authorize plan.revision"))
+        val missing = config.requestedCapabilities - capSet
+        synchronized(lock) {
+            negotiatedCapabilities = capSet
+            capabilityNegotiationComplete = true
+        }
+        if (missing.isNotEmpty()) {
+            synchronized(lock) {
+                appSessionId = null
+                appSessionExpiry = null
+                setStateLocked(RelayConnectionState.ERROR)
+                val waiting = queue.toList()
+                queue.clear()
+                waiting.forEach { completeLocked(it, unavailableCapability(missing.first())) }
+            }
+            if ("coach.chat" in missing) reportFailure(RelayFailure.of(RelayFailureKind.CAPABILITY_UNAVAILABLE))
+            client.abort(4003, "requested capability unavailable")
             return
         }
         if (synchronized(lock) { appSessionId != null || !started }) {
@@ -394,6 +442,10 @@ class RelayBackendTransport internal constructor(
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.EXPIRED))
                     continue
                 }
+                val payload = try { pending.payloadFactory() } catch (_: Exception) {
+                    completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
+                    continue
+                }
                 val request = try {
                     AtlasRemoteProtocol.request(
                         requestId = pending.requestId,
@@ -402,7 +454,7 @@ class RelayBackendTransport internal constructor(
                         idempotencyKey = pending.idempotencyKey,
                         createdAt = pending.createdAt,
                         expiresAt = pending.expiresAt,
-                        payload = pending.payload,
+                        payload = payload,
                     )
                 } catch (_: Exception) {
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
@@ -564,6 +616,16 @@ class RelayBackendTransport internal constructor(
         pending.done.countDown()
     }
 
+    private fun unavailableCapability(capability: String): RelayCallResult.RemoteError = RelayCallResult.RemoteError(
+        "OPERATION_UNAVAILABLE",
+        if (capability == "coach.chat") {
+            "L'appareil appairé ne prend pas en charge coach.chat. Réappairez-le pour utiliser le chat relayé."
+        } else {
+            "Cette opération n'est pas autorisée par la session relayée."
+        },
+        false,
+    )
+
     private fun rememberTimedOutLocked(requestId: String) {
         timedOutIds[requestId] = System.currentTimeMillis()
         while (timedOutIds.size > MAX_TIMED_OUT_IDS) timedOutIds.remove(timedOutIds.keys.first())
@@ -582,7 +644,7 @@ class RelayBackendTransport internal constructor(
         val requestId: String,
         val operation: String,
         val idempotencyKey: String,
-        val payload: JSONObject,
+        val payloadFactory: () -> JSONObject,
         val createdAt: Instant,
         val expiresAt: Instant,
         val deadlineNanos: Long,
@@ -594,7 +656,7 @@ class RelayBackendTransport internal constructor(
 
     companion object {
         const val DEFAULT_REQUEST_TIMEOUT_MILLIS = 30_000L
-        private const val CLIENT_VERSION = "0.1.0-r3a"
+        private const val CLIENT_VERSION = "0.1.0-r3b"
         private const val MAX_TIMED_OUT_IDS = 256
     }
 }

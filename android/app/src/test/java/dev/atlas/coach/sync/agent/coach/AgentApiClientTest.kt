@@ -242,13 +242,13 @@ class AgentApiClientTest {
                 BearerTokenProvider { "test-token" },
             )
             val mandate = AgentMandate.default()
-            val answer = client.chat("conversation-1", "Aide-moi a demarrer", mandate)
             val context = AgentContextAssembler().assemble(
                 mandate,
                 emptyMap(),
                 AgentContextDomainViews(),
                 1_800_000_000_000L,
             )
+            val answer = client.chat("conversation-1", "Aide-moi a demarrer", mandate, context)
             val planAnswer = client.plan(
                 "conversation-1",
                 mandate,
@@ -274,6 +274,10 @@ class AgentApiClientTest {
             assertEquals(5, requests.size)
             assertTrue(requests[0].requestLine.startsWith("POST /v2/agent/chat "))
             assertEquals("Bearer test-token", requests[0].authorization)
+            assertEquals(
+                AgentChatRequestBody.build("conversation-1", "Aide-moi a demarrer", mandate, context).toString(),
+                requests[0].body,
+            )
             val sentChat = JSONObject(requests[0].body)
             assertEquals("Aide-moi a demarrer", sentChat.getString("message"))
             val sharedContext = sentChat.getJSONObject("shared_context")

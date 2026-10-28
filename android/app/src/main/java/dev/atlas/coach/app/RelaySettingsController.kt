@@ -8,6 +8,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.atlas.coach.plan.PlanRevisionProposalClient
+import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
+import dev.atlas.coach.sync.agent.coach.AgentChatClient
+import dev.atlas.coach.sync.agent.coach.AgentRequestContext
+import dev.atlas.coach.sync.agent.coach.RelayAgentChatClient
 import dev.atlas.coach.sync.relay.AndroidRelaySettingsStore
 import dev.atlas.coach.sync.relay.KeystoreRelayCredentialStore
 import dev.atlas.coach.sync.relay.RelayBackendTransport
@@ -20,6 +24,7 @@ import dev.atlas.coach.sync.relay.RelayFailure
 import dev.atlas.coach.sync.relay.RelayFailureKind
 import dev.atlas.coach.sync.relay.RelayPlanRevisionClient
 import dev.atlas.coach.sync.relay.RelaySettings
+import dev.atlas.coach.sync.agent.coach.RelayChatRequestExecutor
 import dev.atlas.coach.sync.relay.RelayTransportMode
 import java.util.Base64
 
@@ -195,6 +200,25 @@ class RelaySettingsController(
         return RelayPlanRevisionClient(active, requestAllowed)
     }
 
+    /** Non-null only for a connected, authenticated RELAY session. */
+    fun relayAgentChatClient(
+        freshRequestContext: (AgentContextSnapshot) -> AgentRequestContext?,
+        onContextWritten: (AgentContextSnapshot) -> Boolean,
+        requestAllowed: () -> Boolean,
+    ): AgentChatClient? {
+        if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
+        val active = transport ?: return null
+        val executor = RelayChatRequestExecutor { idempotencyKey, payloadFactory, beforeDispatch ->
+            active.executeDeferred(
+                operation = "coach.chat.request",
+                idempotencyKey = idempotencyKey,
+                payloadFactory = payloadFactory,
+                beforeDispatch = beforeDispatch,
+            )
+        }
+        return RelayAgentChatClient(executor, freshRequestContext, onContextWritten, requestAllowed)
+    }
+
     fun close() {
         stopTransport()
     }
@@ -236,6 +260,8 @@ class RelaySettingsController(
                 maxReconnectAttempts = 8,
                 maxQueuedRequests = 16,
                 maxConcurrentRequests = 4,
+                // An older paired device without coach.chat must be paired again before relay chat.
+                requestedCapabilities = setOf("plan.revision", "coach.chat"),
             )
         } catch (_: Exception) {
             state = RelayConnectionState.ERROR

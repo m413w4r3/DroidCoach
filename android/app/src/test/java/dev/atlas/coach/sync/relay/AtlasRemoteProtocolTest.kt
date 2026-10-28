@@ -32,6 +32,29 @@ class AtlasRemoteProtocolTest {
     }
 
     @Test
+    fun helloCanRequestChatAlongsidePlanAndOldOverloadRemainsPlanOnly() {
+        val (credentials, _) = testCredentials()
+        val now = Instant.parse("2026-10-26T12:00:00Z")
+        val oldHello = AtlasRemoteProtocol.hello(credentials, "0.1.0-r3a", now)
+        assertEquals(listOf("plan.revision"), (0 until oldHello.getJSONArray("capabilities").length())
+            .map { oldHello.getJSONArray("capabilities").getString(it) })
+
+        val chatHello = AtlasRemoteProtocol.hello(credentials, "0.1.0-r3b", setOf("plan.revision", "coach.chat"), now)
+        assertEquals(setOf("plan.revision", "coach.chat"), (0 until chatHello.getJSONArray("capabilities").length())
+            .map { chatHello.getJSONArray("capabilities").getString(it) }.toSet())
+        val request = AtlasRemoteProtocol.request(
+            requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            operation = "coach.chat.request",
+            idempotencyKey = "chat-send-001",
+            createdAt = now,
+            expiresAt = now.plusSeconds(30),
+            payload = JSONObject().put("message", "synthetic"),
+        )
+        assertEquals("coach.chat.request", AtlasRemoteProtocol.parse(AtlasRemoteProtocol.encode(request)).getString("operation"))
+    }
+
+    @Test
     fun rejectsUnknownFieldsInvalidTypesAndClosedEnums() {
         val valid = JSONObject()
             .put("protocol", AtlasRemoteProtocol.PROTOCOL).put("kind", "ping").put("nonce", "n1")
@@ -67,6 +90,28 @@ class AtlasRemoteProtocolTest {
         assertThrows(RelayProtocolException::class.java) { request(now.plusSeconds(1), tooLarge) }
         assertEquals(32_768, AtlasRemoteProtocol.MAX_REQUEST_BYTES)
         assertEquals(262_144, AtlasRemoteProtocol.MAX_RESPONSE_BYTES)
+    }
+
+    @Test
+    fun rejectsOversizedChatPayloadAndUnsupportedProtocolVersion() {
+        val now = Instant.parse("2026-10-26T12:00:00Z")
+        assertThrows(RelayProtocolException::class.java) {
+            AtlasRemoteProtocol.request(
+                requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                operation = "coach.chat.request",
+                idempotencyKey = "chat-large-1",
+                createdAt = now,
+                expiresAt = now.plusSeconds(30),
+                payload = JSONObject().put("message", "x".repeat(33_000)),
+            )
+        }
+
+        val wrongVersion = JSONObject()
+            .put("protocol", "atlas.remote.v2")
+            .put("kind", "ping")
+            .put("nonce", "synthetic")
+        assertThrows(RelayProtocolException::class.java) { AtlasRemoteProtocol.parse(wrongVersion.toString().toByteArray()) }
     }
 
     @Test

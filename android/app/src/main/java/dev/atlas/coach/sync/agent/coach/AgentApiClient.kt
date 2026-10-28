@@ -65,7 +65,7 @@ class AgentApiClient(
     private val freshRequestContext: ((AgentContextSnapshot) -> AgentRequestContext?)? = null,
     private val onContextWritten: ((AgentContextSnapshot) -> Unit)? = null,
     private val requestAllowed: () -> Boolean = { true },
-) {
+) : AgentChatClient {
     private val base = baseUrl.trimEnd('/')
 
     /** Test-only pause at the ACK body boundary, after requestAllowed and before its epoch check. */
@@ -101,6 +101,15 @@ class AgentApiClient(
         mandate = mandate,
         context = context,
     )
+
+    @Suppress("UNUSED_PARAMETER")
+    override fun chat(
+        conversationId: String?,
+        message: String,
+        mandate: AgentMandate,
+        context: AgentContextSnapshot,
+        idempotencyKey: String,
+    ): AgentChatResponse = chat(conversationId, message, mandate, context)
 
     fun plan(
         conversationId: String,
@@ -176,17 +185,11 @@ class AgentApiClient(
             val snapshot = requestContext?.minimizedSnapshot() ?: context
             sentSnapshot = snapshot
             RequestBody(
-                json = chatBody(conversationId, message, currentMandate, snapshot),
+                json = AgentChatRequestBody.build(conversationId, message, currentMandate, snapshot),
                 afterWrite = { onContextWritten?.invoke(snapshot) },
             )
         })
-        val reply = result.optString("reply")
-        require(reply.length <= MAX_REPLY_LENGTH) { "Agent reply is too long" }
-        val rawProposals = result.optJSONArray("proposals") ?: error("Agent response has no proposals array")
-        require(rawProposals.length() <= MAX_PROPOSALS)
-        val proposals = (0 until rawProposals.length()).map { ProposalV2.parse(rawProposals.getJSONObject(it).toString()) }
-        val status = AgentStatus.parse(result.optString("agent_status")) ?: error("Unknown agent_status")
-        return AgentChatResponse(reply, proposals, status, sentSnapshot.toJsonString())
+        return AgentChatResponseParser.parse(result, sentSnapshot)
     }
 
     fun pullInbox(after: String?): AgentInboxResponse {
@@ -294,8 +297,6 @@ class AgentApiClient(
         const val DEFAULT_READ_TIMEOUT_MILLIS = 65_000L
         const val DEFAULT_HTTP_TRANSPORT_TIMEOUT_BUDGET_MILLIS =
             DEFAULT_CONNECT_TIMEOUT_MILLIS + DEFAULT_READ_TIMEOUT_MILLIS
-        private const val MAX_REPLY_LENGTH = 4_000
-        private const val MAX_PROPOSALS = 5
         private const val MAX_PROPOSALS_PER_PULL = 100
         const val PLANNED_REQUEST = "Que dois-je faire maintenant ?"
 
@@ -326,50 +327,9 @@ class AgentApiClient(
                 nowUtcMillis = System.currentTimeMillis().coerceAtLeast(1L),
             )
 
-        private fun chatBody(
-            conversationId: String?,
-            message: String,
-            mandate: AgentMandate,
-            context: AgentContextSnapshot,
-        ): JSONObject = JSONObject()
-            .put("conversation_id", conversationId ?: JSONObject.NULL)
-            .put("message", message)
-            .put("shared_context", JSONObject(context.toJsonString()))
-            .put("mandate_summary", JSONObject()
-                .put("id", mandate.id)
-                .put("version", mandate.version)
-                .put("mode", mandate.mode.wireValue)
-                .put("allowed_actions", JSONArray(mandate.allowedActions.sorted()))
-                .put("focus_window", JSONObject()
-                    .put("days", JSONArray(mandate.focusWindow.days.sorted().map(::weekdayName)))
-                    .put("starts_at", mandate.focusWindow.start)
-                    .put("ends_at", mandate.focusWindow.end)
-                    .put("timezone", mandate.focusWindow.timezone)
-                    .put("max_minutes_per_session", mandate.focusWindow.maxMinutesPerSession)
-                    .put("max_sessions_per_day", mandate.focusWindow.maxSessionsPerDay))
-                .put("app_policy_bounds", JSONObject().also { bounds ->
-                    mandate.appPolicyBounds.toSortedMap().forEach { (packageRef, bound) ->
-                        bounds.put(packageRef, JSONObject()
-                            .put("min_limit_minutes", bound.minLimitMinutes)
-                            .put("max_mode", bound.maxMode)
-                            .put("max_valid_days", bound.maxValidDays))
-                    }
-                }))
-
         private data class RequestBody(
             val json: JSONObject,
             val afterWrite: (() -> Unit)? = null,
         )
-
-        private fun weekdayName(day: Int): String = when (day) {
-            1 -> "monday"
-            2 -> "tuesday"
-            3 -> "wednesday"
-            4 -> "thursday"
-            5 -> "friday"
-            6 -> "saturday"
-            7 -> "sunday"
-            else -> error("Invalid weekday in local focus mandate")
-        }
     }
 }

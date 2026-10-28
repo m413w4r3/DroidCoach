@@ -116,6 +116,7 @@ import dev.atlas.coach.sync.SyncStatus
 import dev.atlas.coach.plan.PlanRevisionApiClient
 import dev.atlas.coach.plan.PlanRevisionProposalClient
 import dev.atlas.coach.sync.relay.RelayTransportMode
+import dev.atlas.coach.sync.relay.RelayConnectionState
 import dev.atlas.coach.training.SportPlanClient
 import dev.atlas.coach.training.SportPlanUiState
 import dev.atlas.coach.training.SyncState
@@ -149,6 +150,11 @@ import dev.atlas.coach.sync.agent.dispatch.cooldownHistoryByActionType
 import dev.atlas.coach.sync.agent.withRemoteDirective
 import dev.atlas.coach.sync.agent.coach.AgentApiClient
 import dev.atlas.coach.sync.agent.coach.AgentApiException
+import dev.atlas.coach.sync.agent.coach.AgentChatClient
+import dev.atlas.coach.sync.agent.coach.AgentChatException
+import dev.atlas.coach.sync.agent.coach.AgentChatFailureKind
+import dev.atlas.coach.sync.agent.coach.AgentChatSendState
+import dev.atlas.coach.sync.agent.coach.LocalMockAgentChatClient
 import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.coach.AgentConversationMessage
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
@@ -195,6 +201,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Future
 import org.json.JSONObject
 
 /** Owns the small, synchronous local graph used by the Compose demo. */
@@ -380,7 +387,10 @@ class AtlasController @JvmOverloads constructor(
     )
     private var agentConversationId: String? = restored["agentConversationId"] as? String
     @Volatile private var agentApiClient: AgentApiClient? = null
+    private val localMockAgentChatClient = LocalMockAgentChatClient(clock::nowMillis)
     private val agentRequestGeneration = AtomicLong(0L)
+    private val agentChatGeneration = AtomicLong(0L)
+    @Volatile private var activeAgentChatJob: Future<*>? = null
     private val agentAuthorizationCommitInProgress = AtomicBoolean(false)
     private val agentConsentMigrationReady = AtomicBoolean(restored.containsKey(KEY_AGENT_CONTEXT_CONSENT_DATES))
     private val agentVerifier = MandateVerifier()
@@ -437,6 +447,10 @@ class AtlasController @JvmOverloads constructor(
     var agentStatus by mutableStateOf(AgentStatus.UNAVAILABLE)
         private set
     var agentStatusMessage by mutableStateOf("Agent indisponible — fonctions locales actives")
+        private set
+    var agentChatSendState by mutableStateOf(AgentChatSendState.IDLE)
+        private set
+    var agentChatStatusMessage by mutableStateOf<String?>(null)
         private set
     val launcherPinnedPackages: Set<String> get() = launcherState.pinnedPackages
     var historyDays by mutableIntStateOf(7)
@@ -1378,32 +1392,9 @@ class AtlasController @JvmOverloads constructor(
                 tokenProvider = syncTokenStore,
                 freshRequestContext = agentContextCoordinator::requestContext,
                 onContextWritten = { snapshot ->
-                    check(runOnMainAndWait {
-                        val categoriesStillAllowed = agentContextCoordinator.preview().authorizedCategories.toSet()
-                        var payloadJson = snapshot.toJsonString()
-                        snapshot.consentedCategories.filterNot { it in categoriesStillAllowed }.forEach { revoked ->
-                            payloadJson = LastContextDisclosureAudit.purgePayloadCategory(payloadJson, revoked) ?: ""
-                        }
-                        lastSharedAgentContextJsonSnapshot = payloadJson.takeIf {
-                            it.isNotEmpty() && categoriesStillAllowed.isNotEmpty() && isAgentContextVisible()
-                        }
-                        lastContextDisclosureAuditSnapshot = LastContextDisclosureAudit(
-                            sentAtUtcMillis = clock.nowMillis().coerceAtLeast(1L),
-                            categoryNames = snapshot.consentedCategories,
-                            status = LastContextDisclosureStatus.SUCCESS,
-                        )
-                        try {
-                            persistOrThrow("agent.shared_context")
-                            true
-                        } catch (_: Exception) {
-                            lastContextDisclosureAuditSnapshot = lastContextDisclosureAuditSnapshot?.copy(
-                                status = LastContextDisclosureStatus.ATTEMPTED,
-                            )
-                            latestMessage = "Le contexte a été écrit vers le backend, mais son audit local n'a pas pu être enregistré. Une copie distante peut exister."
-                            touch()
-                            false
-                        }
-                    }) { "Could not persist the context disclosure audit" }
+                    check(recordAgentContextWritten(snapshot, requireCurrentConsent = false)) {
+                        "Could not persist the context disclosure audit"
+                    }
                 },
                 requestAllowed = ::isAgentRequestAllowed,
             )
@@ -1411,6 +1402,44 @@ class AtlasController @JvmOverloads constructor(
         if (!configured || agentApiClient == null) {
             agentStatus = AgentStatus.UNAVAILABLE
             agentStatusMessage = "Agent indisponible — fonctions locales actives"
+        }
+    }
+
+    /** Persists one context disclosure audit at the transport's final pre-dispatch boundary. */
+    private fun recordAgentContextWritten(
+        snapshot: AgentContextSnapshot,
+        requireCurrentConsent: Boolean = true,
+    ): Boolean = runOnMainAndWait {
+        val categoriesStillAllowed = agentContextCoordinator.preview().authorizedCategories.toSet()
+        if (requireCurrentConsent &&
+            (!isAgentRequestAllowed() || snapshot.consentedCategories.any { it !in categoriesStillAllowed })
+        ) {
+            latestMessage = "Le mandat ou un consentement a changé avant l'envoi. Aucun message relayé ne sera envoyé."
+            touch()
+            return@runOnMainAndWait false
+        }
+        var payloadJson = snapshot.toJsonString()
+        snapshot.consentedCategories.filterNot { it in categoriesStillAllowed }.forEach { revoked ->
+            payloadJson = LastContextDisclosureAudit.purgePayloadCategory(payloadJson, revoked) ?: ""
+        }
+        lastSharedAgentContextJsonSnapshot = payloadJson.takeIf {
+            it.isNotEmpty() && categoriesStillAllowed.isNotEmpty() && isAgentContextVisible()
+        }
+        lastContextDisclosureAuditSnapshot = LastContextDisclosureAudit(
+            sentAtUtcMillis = clock.nowMillis().coerceAtLeast(1L),
+            categoryNames = snapshot.consentedCategories,
+            status = LastContextDisclosureStatus.SUCCESS,
+        )
+        try {
+            persistOrThrow("agent.shared_context")
+            true
+        } catch (_: Exception) {
+            lastContextDisclosureAuditSnapshot = lastContextDisclosureAuditSnapshot?.copy(
+                status = LastContextDisclosureStatus.ATTEMPTED,
+            )
+            latestMessage = "L'audit local du contexte n'a pas pu être enregistré; vérifiez l'état de l'envoi avant de réessayer."
+            touch()
+            false
         }
     }
 
@@ -1635,11 +1664,15 @@ class AtlasController @JvmOverloads constructor(
         request: ProactivePlanRequest,
         authorization: ProactivePublicationAuthorization,
     ): ProactivePlanResponse? {
+        if (relaySettings.mode != RelayTransportMode.DIRECT) return null
         if (authorization.triggers != request.triggers || !isProactivePublicationAuthorized(authorization)) return null
         val client = agentApiClient ?: return null
         val mandate = agentMandateStore.current()
         val context = agentContextCoordinator.assembleCurrent()
-        val requestStillAuthorized = { agentApiClient === client && isProactivePublicationAuthorized(authorization) }
+        val requestStillAuthorized = {
+            relaySettings.mode == RelayTransportMode.DIRECT && agentApiClient === client &&
+                isProactivePublicationAuthorized(authorization)
+        }
         val response = try {
             proactivePlanTransportForTesting?.invoke(request, requestStillAuthorized) ?: client.plan(
                 conversationId = agentConversationId ?: UUID.randomUUID().toString().also { agentConversationId = it },
@@ -1803,6 +1836,22 @@ class AtlasController @JvmOverloads constructor(
             touch()
             return
         }
+        when (relaySettings.mode) {
+            RelayTransportMode.RELAY -> {
+                agentStatus = AgentStatus.UNAVAILABLE
+                agentStatusMessage = relaySettings.lastError ?: "OpenClaw via PC — boîte de réception indisponible en R3-B."
+                latestMessage = "En mode relais, aucune boîte HTTP directe n'est appelée. Les propositions reçues dans la conversation restent locales."
+                touch()
+                return
+            }
+            RelayTransportMode.OFFLINE -> {
+                agentStatus = AgentStatus.MOCK
+                agentStatusMessage = "Démonstration locale (mock)"
+                touch()
+                return
+            }
+            RelayTransportMode.DIRECT -> Unit
+        }
         val client = agentApiClient
         if (client == null) {
             agentStatus = AgentStatus.UNAVAILABLE
@@ -1816,7 +1865,9 @@ class AtlasController @JvmOverloads constructor(
         syncWorker.execute {
             runCatching { client.pullInbox(agentInboxRepository.cursor()) }
                 .onSuccess { response -> mainHandler.post {
-                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
+                        relaySettings.mode != RelayTransportMode.DIRECT
+                    ) return@post
                     agentInboxRepository.mergePulled(response.proposals, response.cursor)
                     recordBackendContactSucceeded(inboxAlreadyMarked = true)
                     agentStatus = AgentStatus.CONNECTED
@@ -1826,6 +1877,7 @@ class AtlasController @JvmOverloads constructor(
                     syncWorker.execute { sendPendingAgentAcks(client) }
                 } }
                 .onFailure { mainHandler.post {
+                    if (relaySettings.mode != RelayTransportMode.DIRECT) return@post
                     recordBackendContactFailed()
                     agentStatus = AgentStatus.UNAVAILABLE
                     agentStatusMessage = "Agent indisponible — fonctions locales actives"
@@ -1834,20 +1886,50 @@ class AtlasController @JvmOverloads constructor(
         }
     }
 
-    fun sendAgentMessage(rawMessage: String) {
+    fun sendAgentMessage(rawMessage: String): Boolean {
         val message = rawMessage.trim()
         if (message.isEmpty() || message.length > MAX_AGENT_MESSAGE_LENGTH) {
             latestMessage = "Le message du coach doit contenir au plus 2 000 caractères."
             touch()
-            return
+            return false
         }
         if (!isAgentEnabled) {
             latestMessage = "Agent désactivé. Réactivez-le dans Mandat et autonomie."
             touch()
-            return
+            return false
         }
+        if (agentChatSendState == AgentChatSendState.SENDING) return false
+
+        val mode = relaySettings.mode
+        val client: AgentChatClient? = when (mode) {
+            RelayTransportMode.OFFLINE -> null
+            RelayTransportMode.DIRECT -> agentApiClient
+            RelayTransportMode.RELAY -> relaySettings.relayAgentChatClient(
+                freshRequestContext = agentContextCoordinator::requestContext,
+                onContextWritten = { snapshot -> recordAgentContextWritten(snapshot) },
+                requestAllowed = ::isAgentRequestAllowed,
+            )
+        }
+        if (mode != RelayTransportMode.OFFLINE && client == null) {
+            agentChatSendState = if (mode == RelayTransportMode.RELAY && relaySettings.state == RelayConnectionState.OFFLINE) {
+                AgentChatSendState.OFFLINE
+            } else AgentChatSendState.ERROR
+            agentChatStatusMessage = when (mode) {
+                RelayTransportMode.RELAY -> relaySettings.lastError
+                    ?: "Le relais n'est pas connecté. Votre brouillon est conservé; aucun envoi HTTP direct ne sera tenté."
+                RelayTransportMode.DIRECT -> "Le backend direct n'est pas configuré. Votre brouillon est conservé."
+                RelayTransportMode.OFFLINE -> null
+            }
+            latestMessage = agentChatStatusMessage
+            agentStatus = AgentStatus.UNAVAILABLE
+            agentStatusMessage = agentChatStatusMessage ?: "Agent indisponible"
+            touch()
+            return false
+        }
+
         val previousConversationId = agentConversationId
         val conversationId = previousConversationId ?: UUID.randomUUID().toString().also { agentConversationId = it }
+        val idempotencyKey = UUID.randomUUID().toString()
         addAgentConversationMessage(AgentConversationMessage(
             role = AgentMessageRole.USER,
             text = message,
@@ -1858,63 +1940,145 @@ class AtlasController @JvmOverloads constructor(
             agentConversationId = previousConversationId
             latestMessage = "Impossible d'enregistrer votre message; aucune requête agent n'a été envoyée."
             touch()
-            return
+            return false
         }
-        val client = agentApiClient
-        if (client == null) {
-            agentStatus = AgentStatus.UNAVAILABLE
-            agentStatusMessage = "Agent indisponible — fonctions locales actives"
-            addLocalAgentReply(conversationId)
+
+        if (mode == RelayTransportMode.OFFLINE) {
+            val mandate = agentMandateStore.current()
+            val response = localMockAgentChatClient.chat(
+                conversationId,
+                message,
+                mandate,
+                agentContextCoordinator.assembleCurrent(),
+                idempotencyKey,
+            )
+            agentStatus = response.status
+            agentStatusMessage = agentStatusLabel(response.status, mode)
+            agentChatSendState = AgentChatSendState.IDLE
+            agentChatStatusMessage = null
+            response.proposals.forEach(agentInboxRepository::insertLocal)
+            addAgentConversationMessage(AgentConversationMessage(
+                role = AgentMessageRole.ASSISTANT,
+                text = response.reply,
+                createdAtUtcMillis = clock.nowMillis(),
+                contextSources = listOf(agentStatusProvenance(response.status), "Aucune donnée partagée (mode hors ligne)", "Adaptateur local déterministe"),
+            ))
             persist()
-            return
+            return true
         }
+
         val mandate = agentMandateStore.current()
         val initialContext = agentContextCoordinator.assembleCurrent()
         val requestGeneration = agentRequestGeneration.get()
-        syncWorker.execute {
-            runCatching { client.chat(conversationId, message, mandate, initialContext) }
+        val chatGeneration = agentChatGeneration.incrementAndGet()
+        agentChatSendState = AgentChatSendState.SENDING
+        agentChatStatusMessage = if (mode == RelayTransportMode.RELAY) {
+            "Envoi via le relais…"
+        } else {
+            "Envoi direct… L'annulation HTTP n'est pas garantie."
+        }
+        val job = syncWorker.submit {
+            runCatching { requireNotNull(client).chat(conversationId, message, mandate, initialContext, idempotencyKey) }
                 .onSuccess { response -> mainHandler.post {
-                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
+                    if (chatGeneration != agentChatGeneration.get() || requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
+                    activeAgentChatJob = null
+                    agentChatSendState = AgentChatSendState.IDLE
+                    agentChatStatusMessage = null
                     agentStatus = response.status
-                    agentStatusMessage = if (response.status == AgentStatus.CONNECTED) "Agent connecté"
-                        else "Agent indisponible — fonctions locales actives"
+                    agentStatusMessage = agentStatusLabel(response.status, mode)
                     agentInboxRepository.mergePulled(response.proposals, null)
                     recordBackendContactSucceeded(inboxAlreadyMarked = true)
-                    addAgentConversationMessage(AgentConversationMessage(
-                        role = AgentMessageRole.ASSISTANT,
-                        text = response.reply,
-                        createdAtUtcMillis = clock.nowMillis(),
-                        contextSources = response.proposals.flatMap(::agentProposalContextSources).distinct().ifEmpty {
-                            listOf(sharedDataSummary(mandate))
-                        },
-                    ))
+                    val sentContextSummary = sharedDataSummary(response.sharedContextJson)
+                    if (response.reply.isNotBlank()) addAgentConversationMessage(AgentConversationMessage(
+                            role = AgentMessageRole.ASSISTANT,
+                            text = response.reply,
+                            createdAtUtcMillis = clock.nowMillis(),
+                            contextSources = listOf(agentStatusProvenance(response.status)) +
+                                response.proposals.flatMap { agentProposalContextSources(it, sentContextSummary) }.distinct().ifEmpty {
+                                    listOf(sentContextSummary)
+                                },
+                        ))
                     if (!dispatchPreauthorizedInbox()) return@post
                     persist()
-                    syncWorker.execute { sendPendingAgentAcks(client) }
+                    if (mode == RelayTransportMode.DIRECT) {
+                        agentApiClient?.let { direct -> syncWorker.execute { sendPendingAgentAcks(direct) } }
+                    }
+                    touch()
                 } }
                 .onFailure { error -> mainHandler.post {
-                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
+                    if (chatGeneration != agentChatGeneration.get() || requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
                         (error as? AgentApiException)?.statusCode == 403
                     ) return@post
-                    val statusCode = (error as? dev.atlas.coach.sync.agent.coach.AgentApiException)?.statusCode ?: 0
-                    android.util.Log.w(
-                        "ATLAS_AGENT",
-                        "V2 chat failed; error_type=${error.javaClass.simpleName}, http_status=$statusCode",
-                    )
+                    activeAgentChatJob = null
+                    val chatError = error as? AgentChatException
+                    agentChatSendState = when (chatError?.kind) {
+                        AgentChatFailureKind.OFFLINE -> AgentChatSendState.OFFLINE
+                        AgentChatFailureKind.RESULT_UNCERTAIN -> AgentChatSendState.RESULT_UNCERTAIN
+                        AgentChatFailureKind.CANCELLED -> AgentChatSendState.CANCELLED
+                        else -> AgentChatSendState.ERROR
+                    }
+                    agentChatStatusMessage = chatError?.message ?: when (mode) {
+                        RelayTransportMode.RELAY -> "La requête relayée a échoué. Aucun envoi HTTP direct ni renvoi automatique ne sera tenté."
+                        RelayTransportMode.DIRECT -> "La requête directe a échoué. Aucun mock local n'a été substitué."
+                        RelayTransportMode.OFFLINE -> "La démonstration locale est indisponible."
+                    }
+                    latestMessage = agentChatStatusMessage
                     agentStatus = AgentStatus.UNAVAILABLE
-                    agentStatusMessage = "Agent indisponible — fonctions locales actives"
+                    agentStatusMessage = when (mode) {
+                        RelayTransportMode.RELAY -> relaySettings.lastError ?: "OpenClaw via PC indisponible"
+                        RelayTransportMode.DIRECT -> "Agent direct indisponible"
+                        RelayTransportMode.OFFLINE -> "Démonstration locale (mock)"
+                    }
                     recordBackendContactFailed()
-                    addLocalAgentReply(conversationId)
-                    persist()
+                    touch()
                 } }
         }
+        activeAgentChatJob = job
+        return true
     }
+
+    fun cancelAgentChat() {
+        if (agentChatSendState != AgentChatSendState.SENDING) return
+        if (relaySettings.mode != RelayTransportMode.RELAY) {
+            agentChatStatusMessage = "L'annulation de la requête HTTP directe n'est pas garantie."
+            latestMessage = agentChatStatusMessage
+            touch()
+            return
+        }
+        agentChatGeneration.incrementAndGet()
+        activeAgentChatJob?.cancel(true)
+        activeAgentChatJob = null
+        agentChatSendState = AgentChatSendState.CANCELLED
+        agentChatStatusMessage = "Requête relayée annulée. Aucun renvoi automatique ne sera tenté."
+        latestMessage = agentChatStatusMessage
+        touch()
+    }
+
+    private fun agentStatusLabel(status: AgentStatus, mode: RelayTransportMode): String = when (status) {
+        AgentStatus.MOCK -> "Démonstration locale (mock)"
+        AgentStatus.CONNECTED -> if (mode == RelayTransportMode.RELAY) "OpenClaw via PC" else "Agent connecté"
+        AgentStatus.UNAVAILABLE -> "Agent indisponible — fonctions locales actives"
+    }
+
+    private fun agentStatusProvenance(status: AgentStatus): String = "agent_status:${status.wireValue}"
 
     /** Requests a programmatic plan without adding an artificial message to chat history. */
     fun requestAgentPlan() {
         if (!isAgentEnabled) {
             agentPlanReply = "Réactivez le Coach et son mandat pour demander un plan."
             touch()
+            return
+        }
+        if (relaySettings.mode == RelayTransportMode.RELAY) {
+            agentPlanReply = "La demande de plan via le relais n'est pas disponible en R3-B."
+            latestMessage = agentPlanReply
+            touch()
+            return
+        }
+        if (relaySettings.mode == RelayTransportMode.OFFLINE) {
+            agentPlanReply = nextPriorityGoalAction?.let { "Prochaine étape locale : $it" }
+                ?: "Aucune prochaine étape prioritaire n'est définie."
+            persist()
             return
         }
         val mandate = agentMandateStore.current()
@@ -1933,7 +2097,9 @@ class AtlasController @JvmOverloads constructor(
         syncWorker.execute {
             runCatching { client.plan(conversationId, mandate, context) }
                 .onSuccess { response -> mainHandler.post {
-                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
+                    if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
+                        relaySettings.mode != RelayTransportMode.DIRECT
+                    ) return@post
                     agentPlanReply = response.reply
                     agentStatus = response.status
                     agentStatusMessage = if (response.status == AgentStatus.CONNECTED) "Agent connecté"
@@ -1946,6 +2112,7 @@ class AtlasController @JvmOverloads constructor(
                 } }
                 .onFailure { error -> mainHandler.post {
                     if (requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
+                        relaySettings.mode != RelayTransportMode.DIRECT ||
                         (error as? AgentApiException)?.statusCode == 403
                     ) return@post
                     agentPlanReply = nextPriorityGoalAction?.let { "Prochaine étape locale : $it" }
@@ -1958,46 +2125,31 @@ class AtlasController @JvmOverloads constructor(
         }
     }
 
-    private fun addLocalAgentReply(conversationId: String) {
-        val now = clock.nowMillis()
-        val mandate = agentMandateStore.current()
-        val proposal = ProposalV2(
-            schemaVersion = 2,
-            proposalId = UUID.randomUUID().toString(),
-            idempotencyKey = "local-${UUID.randomUUID()}",
-            conversationId = conversationId,
-            mandateId = mandate.id,
-            mandateVersion = mandate.version,
-            contextVersion = "local-demo-v1",
-            createdAtUtcMillis = now,
-            expiresAtUtcMillis = now + ProposalV2.MAX_TTL_MILLIS,
-            actionType = AgentActionType.FOCUS_PROPOSE.wireValue,
-            parameters = mapOf("focus_minutes" to 10, "break_minutes" to 2, "cycles" to 1, "label" to "Prochaine étape"),
-            reason = "Une courte session locale est une prochaine étape simple.",
-            requiredLevel = ProposalLevel.CONFIRM,
-        )
-        agentInboxRepository.insertLocal(proposal)
-        addAgentConversationMessage(AgentConversationMessage(
-            role = AgentMessageRole.ASSISTANT,
-            text = "Je peux vous proposer une session de focus de 10 minutes. Cette démonstration fonctionne localement et n'envoie aucune donnée.",
-            createdAtUtcMillis = now,
-            contextSources = listOf(sharedDataSummary(mandate), "Adaptateur local déterministe"),
-        ))
-    }
-
     private fun addAgentConversationMessage(message: AgentConversationMessage) {
         agentConversationSnapshot = (agentConversationSnapshot + message).takeLast(MAX_AGENT_CONVERSATION_MESSAGES)
     }
 
-    private fun agentProposalContextSources(proposal: ProposalV2): List<String> = listOf(
+    private fun agentProposalContextSources(
+        proposal: ProposalV2,
+        sharedContextSummary: String = sharedDataSummary(agentMandateStore.current()),
+    ): List<String> = listOf(
         "Version de contexte ${proposal.contextVersion}",
-        sharedDataSummary(agentMandateStore.current()),
+        sharedContextSummary,
     )
 
     private fun sharedDataSummary(mandate: AgentMandate): String = if (mandate.sharedDataCategories.isEmpty()) {
         "Aucune donnée locale partagée"
     } else {
         "Catégories consenties : ${mandate.sharedDataCategories.sorted().joinToString(", ")}"
+    }
+
+    private fun sharedDataSummary(sharedContextJson: String?): String {
+        val categories = runCatching {
+            val values = JSONObject(sharedContextJson ?: "{}").optJSONArray("consented_categories") ?: return@runCatching emptyList()
+            (0 until values.length()).mapNotNull { values.optString(it).takeIf(String::isNotBlank) }
+        }.getOrDefault(emptyList())
+        return if (categories.isEmpty()) "Aucune donnée locale partagée"
+        else "Catégories consenties : ${categories.sorted().joinToString(", ")}"
     }
 
     private fun dispatchPreauthorizedInbox(
@@ -2064,10 +2216,13 @@ class AtlasController @JvmOverloads constructor(
         client: AgentApiClient,
         authorization: ProactivePublicationAuthorization? = null,
     ) {
+        if (relaySettings.mode != RelayTransportMode.DIRECT) return
         val proactiveAuthorizationAllowed: (() -> Boolean)? = authorization?.let { captured ->
-            { agentApiClient === client && isProactivePublicationAuthorized(captured) }
+            { relaySettings.mode == RelayTransportMode.DIRECT && agentApiClient === client && isProactivePublicationAuthorized(captured) }
         }
-        val authorizationIsCurrent = proactiveAuthorizationAllowed ?: { isAgentRequestAllowed() }
+        val authorizationIsCurrent = proactiveAuthorizationAllowed ?: {
+            relaySettings.mode == RelayTransportMode.DIRECT && isAgentRequestAllowed()
+        }
         if (!authorizationIsCurrent()) return
         agentInboxRepository.pendingAcks().forEach { entry ->
             if (!authorizationIsCurrent()) return
@@ -2604,6 +2759,13 @@ class AtlasController @JvmOverloads constructor(
     }
 
     private fun cancelPendingAgentWork(reason: String) {
+        agentChatGeneration.incrementAndGet()
+        activeAgentChatJob?.cancel(true)
+        activeAgentChatJob = null
+        if (agentChatSendState == AgentChatSendState.SENDING) {
+            agentChatSendState = AgentChatSendState.CANCELLED
+            agentChatStatusMessage = reason
+        }
         agentHomeStateSnapshot.focusProposal?.let { card ->
             if (card.state in setOf(AgentFocusCardState.PROPOSED, AgentFocusCardState.PLANNED, AgentFocusCardState.RUNNING, AgentFocusCardState.PAUSED)) {
                 cancelAgentFocusProposal(card.proposalId)

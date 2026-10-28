@@ -34,6 +34,58 @@ class RelayBackendTransportTest {
     }
 
     @Test
+    fun requestsConfiguredCapabilitiesAndRejectsMissingCoachChatWithoutSending() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(staticPair)
+        val transport = RelayBackendTransport(
+            config = RelayConfig(
+                "ws://127.0.0.1:4400",
+                "atlas-test",
+                maxReconnectAttempts = 0,
+                requestedCapabilities = setOf("plan.revision", "coach.chat"),
+            ),
+            credentialStore = InMemoryRelayCredentialStore(credentials),
+            socketFactory = sockets,
+        )
+        try {
+            transport.start()
+            assertEquals(setOf("coach.chat", "plan.revision"),
+                (0 until sockets.appHellos.single().getJSONArray("capabilities").length())
+                    .map { sockets.appHellos.single().getJSONArray("capabilities").getString(it) }.toSet())
+            assertEquals(RelayConnectionState.ERROR, transport.state())
+            val result = transport.execute("coach.chat.request", JSONObject().put("message", "synthetic"))
+            assertEquals("OPERATION_UNAVAILABLE", (result as RelayCallResult.RemoteError).code)
+            assertTrue(result.message.contains("Réappairez"))
+            assertTrue("chat must not be dispatched without the negotiated capability", sockets.requests.isEmpty())
+        } finally { transport.close() }
+    }
+
+    @Test
+    fun deferredPayloadIsBuiltAtDispatchAndUsesStableIdempotencyKey() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            result = JSONObject().put("accepted", true),
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = setOf("plan.revision", "coach.chat"))
+        val order = mutableListOf<String>()
+        try {
+            transport.start()
+            val result = transport.executeDeferred(
+                operation = "coach.chat.request",
+                idempotencyKey = "chat-send-001",
+                beforeDispatch = { order += "beforeDispatch"; true },
+                payloadFactory = { order += "payload"; JSONObject().put("message", "synthetic") },
+            )
+            assertTrue(result is RelayCallResult.Success)
+            assertEquals(listOf("beforeDispatch", "payload"), order)
+            assertEquals("chat-send-001", sockets.requests.single().getString("idempotency_key"))
+            assertEquals("synthetic", sockets.requests.single().getJSONObject("payload").getString("message"))
+        } finally { transport.close() }
+    }
+
+    @Test
     fun correlatesResponsesAndKeepsIdempotencyKeyAcrossCallerRetries() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(staticPair, result = JSONObject().put("status", "ok"))
@@ -81,6 +133,43 @@ class RelayBackendTransportTest {
     }
 
     @Test
+    fun disconnectDuringChatDoesNotReplayAfterReconnect() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val transport = RelayBackendTransport(
+            config = RelayConfig(
+                "ws://127.0.0.1:4400",
+                "atlas-test",
+                maxReconnectAttempts = 2,
+                requestedCapabilities = setOf("plan.revision", "coach.chat"),
+            ),
+            credentialStore = InMemoryRelayCredentialStore(credentials),
+            socketFactory = sockets,
+        )
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            transport.start()
+            val pending = executor.submit<RelayCallResult> {
+                transport.execute("coach.chat.request", JSONObject().put("message", "synthetic"), timeoutMillis = 4_000,
+                    idempotencyKey = "chat-send-stable-1")
+            }
+            assertTrue(sockets.requestCaptured.await(2, TimeUnit.SECONDS))
+            sockets.sockets.first().remoteClose()
+            assertEquals(RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE), pending.get(2, TimeUnit.SECONDS))
+            assertTrue("relay did not reconnect", sockets.secondConnection.await(3, TimeUnit.SECONDS))
+            assertEquals("sent chat is not replayed after reconnect", 1, sockets.requests.size)
+            assertEquals("chat-send-stable-1", sockets.requests.single().getString("idempotency_key"))
+        } finally {
+            transport.close()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun expiresTimedOutRequestAndSendsOnlyBestEffortCancel() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(staticPair, dropRequestResponses = true)
@@ -93,6 +182,32 @@ class RelayBackendTransportTest {
             assertEquals(1, sockets.cancels.size)
             assertEquals(sockets.requests.single().getString("request_id"), sockets.cancels.single().getString("target_request_id"))
         } finally { transport.close() }
+    }
+
+    @Test
+    fun interruptingCallerCancelsInFlightChatWaitAndSendsBestEffortCancel() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = setOf("plan.revision", "coach.chat"))
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            transport.start()
+            val pending = executor.submit {
+                transport.execute("coach.chat.request", JSONObject().put("message", "synthetic"), timeoutMillis = 5_000)
+            }
+            assertTrue(sockets.requestCaptured.await(2, TimeUnit.SECONDS))
+            pending.cancel(true)
+            assertTrue("interrupt should send a best-effort relay cancel", sockets.cancelCaptured.await(2, TimeUnit.SECONDS))
+            assertEquals(1, sockets.requests.size)
+            assertEquals(sockets.requests.single().getString("request_id"), sockets.cancels.single().getString("target_request_id"))
+        } finally {
+            transport.close()
+            executor.shutdownNow()
+        }
     }
 
     @Test
@@ -289,8 +404,15 @@ class RelayBackendTransportTest {
         credentials: RelayCredentials,
         sockets: FakeRelaySocketFactory,
         maxQueuedRequests: Int = 16,
+        requestedCapabilities: Set<String> = setOf("plan.revision"),
     ) = RelayBackendTransport(
-        config = RelayConfig("ws://127.0.0.1:4400", "atlas-test", maxReconnectAttempts = 0, maxQueuedRequests = maxQueuedRequests),
+        config = RelayConfig(
+            "ws://127.0.0.1:4400",
+            "atlas-test",
+            maxReconnectAttempts = 0,
+            maxQueuedRequests = maxQueuedRequests,
+            requestedCapabilities = requestedCapabilities,
+        ),
         credentialStore = InMemoryRelayCredentialStore(credentials),
         socketFactory = sockets,
     )

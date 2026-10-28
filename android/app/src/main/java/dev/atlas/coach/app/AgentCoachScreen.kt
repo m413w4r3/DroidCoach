@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +48,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,6 +59,7 @@ import dev.atlas.coach.sync.agent.AgentMode
 import dev.atlas.coach.coach.proactive.ProactiveEngagementMode
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
+import dev.atlas.coach.sync.agent.coach.AgentChatSendState
 import dev.atlas.coach.sync.agent.inbox.AgentInboxEntry
 import dev.atlas.coach.sync.agent.dispatch.AgentEffectRecord
 import java.util.Locale
@@ -87,12 +92,29 @@ private val dataCategoryLabels = linkedMapOf(
     "location_summary" to "Résumé de zone approximative",
 )
 
-private fun readableProvenanceLabel(contextSources: List<String>, fallback: String): String {
+internal fun readableProvenanceLabel(contextSources: List<String>, fallback: String): String {
     val sources = contextSources.map { it.lowercase(Locale.ROOT) }
     return when {
-        sources.any { "local-demo" in it || "adaptateur local" in it || "démonstration locale" in it } -> "Local"
-        sources.any { it.startsWith("version de contexte ") } -> "Coach connecté"
+        "agent_status:mock" in sources || sources.any { "local-demo" in it || "adaptateur local" in it || "démonstration locale" in it } ->
+            "Démonstration locale (mock)"
+        "agent_status:unavailable" in sources -> "Agent indisponible"
+        "agent_status:connected" in sources || sources.any { it.startsWith("version de contexte ") } -> "OpenClaw via PC"
         else -> fallback
+    }
+}
+
+private fun visibleConnectionLabel(controller: AtlasController, fallback: String): String = when (controller.relaySettings.mode) {
+    dev.atlas.coach.sync.relay.RelayTransportMode.OFFLINE -> "Démonstration locale (mock)"
+    dev.atlas.coach.sync.relay.RelayTransportMode.DIRECT -> controller.agentStatusMessage.ifBlank { fallback }
+    dev.atlas.coach.sync.relay.RelayTransportMode.RELAY -> when (controller.relaySettings.state) {
+        dev.atlas.coach.sync.relay.RelayConnectionState.RELAY_CONNECTED -> "OpenClaw via PC · relais connecté"
+        dev.atlas.coach.sync.relay.RelayConnectionState.RELAY_CONNECTING -> "Connexion au relais…"
+        dev.atlas.coach.sync.relay.RelayConnectionState.REVOKED -> "Appareil révoqué · réappairage requis"
+        dev.atlas.coach.sync.relay.RelayConnectionState.OFFLINE -> "Hors ligne · aucun renvoi automatique"
+        dev.atlas.coach.sync.relay.RelayConnectionState.AUTH_REQUIRED -> "Authentification relayée requise"
+        dev.atlas.coach.sync.relay.RelayConnectionState.PAIRING_REQUIRED -> "Appairage relayé requis"
+        dev.atlas.coach.sync.relay.RelayConnectionState.ERROR -> controller.relaySettings.lastError ?: "Connexion relayée indisponible"
+        dev.atlas.coach.sync.relay.RelayConnectionState.LOCAL -> "Relais local inactif"
     }
 }
 
@@ -115,7 +137,7 @@ internal fun AgentCoachScreen(
     pullOnOpen: Boolean = true,
     revision: Int = controller.revision,
 ) {
-    var message by remember { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("") }
     var editing by remember { mutableStateOf<AgentInboxEntry?>(null) }
     val pendingProposals = remember(controller, revision) { controller.visibleAgentProposals }
     val notificationProposal = remember(controller, revision) {
@@ -126,6 +148,7 @@ internal fun AgentCoachScreen(
     val latestProvenance = remember(controller, revision) {
         HomeAgentState.localDefault(controller).directiveStatusLabel()
     }
+    val connectionLabel = visibleConnectionLabel(controller, latestProvenance)
 
     LaunchedEffect(pullOnOpen) {
         if (pullOnOpen) controller.pullAgentInbox()
@@ -142,10 +165,10 @@ internal fun AgentCoachScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            latestProvenance,
+            connectionLabel,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.testTag("agent_connection_status"),
+            modifier = Modifier.testTag("agent_connection_status").semantics { liveRegion = LiveRegionMode.Polite },
         )
         if (controller.capabilities[AtlasController.CAP_COACH] != true) {
             Text("Coach local désactivé dans les paramètres.")
@@ -191,9 +214,28 @@ internal fun AgentCoachScreen(
                 )
                 Button(
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_send_message"),
-                    onClick = { controller.sendAgentMessage(message); message = "" },
-                    enabled = message.isNotBlank() && controller.isAgentEnabled,
+                    onClick = { if (controller.sendAgentMessage(message)) message = "" },
+                    enabled = message.isNotBlank() && controller.isAgentEnabled &&
+                        controller.agentChatSendState != AgentChatSendState.SENDING,
                 ) { Text("Envoyer") }
+                if (controller.agentChatStatusMessage != null) {
+                    Text(
+                        controller.agentChatStatusMessage.orEmpty(),
+                        modifier = Modifier.testTag("agent_chat_send_status").semantics { liveRegion = LiveRegionMode.Polite },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (controller.agentChatSendState == AgentChatSendState.SENDING) {
+                    val relayMode = controller.relaySettings.mode == dev.atlas.coach.sync.relay.RelayTransportMode.RELAY
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_cancel_send"),
+                        enabled = relayMode,
+                        onClick = controller::cancelAgentChat,
+                    ) {
+                        Text(if (relayMode) "Annuler l'envoi relayé" else "Annulation indisponible en mode direct")
+                    }
+                }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
