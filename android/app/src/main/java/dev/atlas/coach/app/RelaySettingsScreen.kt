@@ -66,7 +66,7 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Connexion relayée", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "État de la liaison avec le PC et gestion de l'appairage.",
+            "État et appairage du PC.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -81,14 +81,6 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
             ) {
                 AtlasStatus(connection.label, relay.state.statusKind())
                 Text(humanDetail, style = MaterialTheme.typography.bodySmall)
-                Text(
-                    "Dernière connexion : ${relay.lastConnectedAtUtcMillis?.let(::formatInstant) ?: "jamais"}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "Identité d'appareil : ${if (relay.credentialsConfigured) "enregistrée" else "absente"}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
                 if (technicalError != null) {
                     TextButton(onClick = { showTechnicalDetail = !showTechnicalDetail }) {
                         Text(if (showTechnicalDetail) "Masquer le détail technique" else "Détail technique")
@@ -157,34 +149,9 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
         } else {
             AtlasSection("Appairer ce téléphone") {
                 Text(
-                    "Créez un appareil sur le PC, puis saisissez le jeton remis une seule fois.",
+                    "Créez l'appareil sur le PC ; son jeton à usage unique se saisit dans Avancé.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = token,
-                    onValueChange = { token = it },
-                    label = { Text("Jeton d'appareil") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                )
-                AtlasPrimaryButton(
-                    label = "Enregistrer l'appairage",
-                    onClick = {
-                        val result = relay.saveConfiguration(
-                            relayUrl,
-                            serverId,
-                            serverPublicKey,
-                            deviceId,
-                            token.ifBlank { null },
-                        )
-                        message = result.exceptionOrNull()?.message
-                            ?: "Appairage enregistré. Le jeton n'est plus affiché."
-                        if (result.isSuccess) token = ""
-                    },
-                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
                 )
             }
         }
@@ -219,6 +186,14 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                     "Ces valeurs servent au diagnostic et à la configuration de la liaison.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Dernière connexion : ${relay.lastConnectedAtUtcMillis?.let(::formatInstant) ?: "jamais"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Identité d'appareil : ${if (relay.credentialsConfigured) "enregistrée" else "absente"}",
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -288,9 +263,34 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                     }
                 } else {
                     Text(
-                        "Le jeton d'appareil se saisit dans la carte d'appairage; sa valeur n'est jamais réaffichée.",
+                        "La valeur du jeton n'est jamais réaffichée.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = token,
+                        onValueChange = { token = it },
+                        label = { Text("Jeton d'appareil") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    )
+                    AtlasPrimaryButton(
+                        label = "Enregistrer l'appairage",
+                        onClick = {
+                            val result = relay.saveConfiguration(
+                                relayUrl,
+                                serverId,
+                                serverPublicKey,
+                                deviceId,
+                                token.ifBlank { null },
+                            )
+                            message = result.exceptionOrNull()?.message
+                                ?: "Appairage enregistré. Le jeton n'est plus affiché."
+                            if (result.isSuccess) token = ""
+                        },
+                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
                     )
                 }
                 technicalError?.let {

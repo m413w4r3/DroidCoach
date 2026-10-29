@@ -71,6 +71,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     val controller = if (selectedTomorrow) tomorrowController else sourceController
     val plan = controller.plan
     var showAdd by rememberSaveable { mutableStateOf(false) }
+    var emptyDetailsExpanded by rememberSaveable { mutableStateOf(false) }
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showCoachRequest by rememberSaveable { mutableStateOf(false) }
     var agentMessage by rememberSaveable { mutableStateOf("Propose une organisation de ma journée.") }
@@ -210,14 +211,21 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             if (controller.corruption == null) Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(AtlasSpacing.medium), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(if (selectedTomorrow) "Préparer demain" else "Préparer la journée", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
                     AtlasPrimaryButton(
                         if (selectedTomorrow) "Créer le programme de demain" else "Créer le programme du jour",
                         onClick = { controller.createTodayPlan() },
                     )
+                    TextButton(
+                        onClick = { emptyDetailsExpanded = !emptyDetailsExpanded },
+                        modifier = Modifier.sizeIn(minHeight = 48.dp),
+                    ) { Text(if (emptyDetailsExpanded) "Masquer les détails" else "Détails") }
+                    if (emptyDetailsExpanded) {
+                        Text(
+                            "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         } else {

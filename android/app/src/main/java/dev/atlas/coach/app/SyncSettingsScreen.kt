@@ -49,7 +49,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Partage backend facultatif", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
         Text(
-            "ATLAS reste local par défaut. La connexion demande l'activation de Sync et le choix d'une catégorie.",
+            "ATLAS reste local par défaut ; le partage exige l'activation de Sync et le choix d'une catégorie.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column(
@@ -119,12 +119,6 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             onClick = { controller.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) },
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
         )
-        Text(
-            "Le relais chiffré joint le PC sans VPN; le mode direct reste disponible.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
         OutlinedButton(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
             onClick = { advancedExpanded = !advancedExpanded },
@@ -182,6 +176,11 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
                 ) { Text("Désactiver et purger") }
                 Text(
                     "Le jeton est chiffré avec Android Keystore. HTTP n'est permis qu'en debug vers 10.0.2.2, 127.0.0.1 ou localhost; les builds release exigent HTTPS.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Le relais chiffré joint le PC sans VPN ; le mode direct reste disponible.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

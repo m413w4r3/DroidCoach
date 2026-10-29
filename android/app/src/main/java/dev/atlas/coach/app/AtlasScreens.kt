@@ -629,7 +629,7 @@ internal fun SettingsScreen(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Usage quotidien", style = MaterialTheme.typography.headlineSmall)
-        Text("Activez séparément les fonctions utiles. ATLAS ne bloque pas les autres applications.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Activez les fonctions utiles ; ATLAS ne bloque pas les autres applications.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         AtlasSection("Fonctions locales") {
             CapabilityRow("Focus", controller, AtlasController.CAP_FOCUS)
             CapabilityRow("Habitudes", controller, AtlasController.CAP_HABITS)
@@ -658,7 +658,7 @@ internal fun SettingsScreen(
             AtlasStatus(homeRoleLabel, if (controller.launcherState.homeRoleHeld == true) AtlasStatusKind.ACTIVE else AtlasStatusKind.AUTHORIZED)
             AtlasSecondaryButton("Choisir ATLAS comme accueil…", onClick = requestHomeRole)
             AtlasTertiaryButton("Gérer ou retirer le rôle Accueil", onClick = openSystemHome)
-            Text("HOME est le launcher Android pour vos favoris. Le tableau de bord reste dans ATLAS ; Android garde le choix final.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("HOME lance vos favoris ; le tableau de bord reste dans ATLAS et Android garde le choix final.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AtlasSection("Données et diagnostic") {
             AtlasSecondaryButton("Exporter les données locales", onClick = onExport)

@@ -57,10 +57,24 @@ internal fun SportScreen(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Sport", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Text(
-                "Séances prévues et résultats déclarés restent distincts.",
+                "Une séance prévue n'est pas un résultat déclaré.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val statusColor = when {
+                screenState.syncState == SyncState.STALE -> LocalAtlasSemanticColors.current.warning.onContainer
+                screenState.syncState == SyncState.MISMATCH -> MaterialTheme.colorScheme.error
+                screenState.syncState == SyncState.FRESH && screenState.hasPlannedSession() -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Text(
+                sportStatusLabel(screenState),
+                style = MaterialTheme.typography.titleSmall,
+                color = statusColor,
+            )
+            message?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -77,20 +91,6 @@ internal fun SportScreen(
                     label = { Text("Démo") },
                 )
             }
-            message?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            }
-            val statusColor = when {
-                screenState.syncState == SyncState.STALE -> LocalAtlasSemanticColors.current.warning.onContainer
-                screenState.syncState == SyncState.MISMATCH -> MaterialTheme.colorScheme.error
-                screenState.syncState == SyncState.FRESH && screenState.hasPlannedSession() -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            Text(
-                sportStatusLabel(screenState),
-                style = MaterialTheme.typography.titleSmall,
-                color = statusColor,
-            )
         }
 
         val plan = screenState.plan
