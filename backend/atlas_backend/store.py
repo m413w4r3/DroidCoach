@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import hashlib
 import sqlite3
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 
 _V4_MIGRATION_V1_STATEMENTS = (
@@ -35,17 +37,76 @@ _V4_MIGRATION_V2_STATEMENTS = (
     "ALTER TABLE activity_status_events_v4 ADD COLUMN received_at TEXT",
 )
 
+_V4_MIGRATION_V3_STATEMENTS = (
+    "CREATE TABLE IF NOT EXISTS consent_states_v4 (device_ref TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('DAY_PLAN','ACTIVITY_STATUS','USAGE_SUMMARY','GOAL_PROGRESS','TRAINING_PLAN')), consent_version INTEGER NOT NULL CHECK(consent_version > 0), state TEXT NOT NULL CHECK(state IN ('GRANTED','REVOKED','UNKNOWN')), updated_at TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(device_ref, category))",
+    "CREATE TRIGGER IF NOT EXISTS consent_states_v4_no_delete BEFORE DELETE ON consent_states_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent state tombstone cannot be deleted'); END",
+    "CREATE TRIGGER IF NOT EXISTS consent_states_v4_monotonic_update BEFORE UPDATE ON consent_states_v4 WHEN NEW.consent_version <= OLD.consent_version BEGIN SELECT RAISE(ABORT, 'V4 consent version must increase'); END",
+    "CREATE TABLE IF NOT EXISTS consent_state_events_v4 (idempotency_key TEXT PRIMARY KEY, device_ref TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('DAY_PLAN','ACTIVITY_STATUS','USAGE_SUMMARY','GOAL_PROGRESS','TRAINING_PLAN')), consent_version INTEGER NOT NULL CHECK(consent_version > 0), state TEXT NOT NULL CHECK(state IN ('GRANTED','REVOKED','UNKNOWN')), updated_at TEXT NOT NULL, source TEXT NOT NULL, body_hash TEXT NOT NULL)",
+    "CREATE TRIGGER IF NOT EXISTS consent_state_events_v4_no_update BEFORE UPDATE ON consent_state_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent events are immutable'); END",
+    "CREATE TRIGGER IF NOT EXISTS consent_state_events_v4_no_delete BEFORE DELETE ON consent_state_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent events are immutable'); END",
+)
+
+
+class _BorrowedConnection:
+    """Nested store calls borrow an outer transaction without committing it."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def __enter__(self) -> sqlite3.Connection:
+        return self._connection
+
+    def __exit__(self, exc_type, exc, traceback) -> bool:
+        return False
+
+    def close(self) -> None:
+        return None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connection, name)
+
+
 class SQLiteStore:
     def __init__(self, path: str | Path, *, clock: Callable[[], datetime] | None = None) -> None:
         self.path = Path(path)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self._transaction_connection: ContextVar[sqlite3.Connection | None] = ContextVar(
+            f"atlas_sqlite_transaction_{id(self)}", default=None
+        )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize()
 
-    def connect(self) -> sqlite3.Connection:
+    def connect(self) -> sqlite3.Connection | _BorrowedConnection:
+        active = self._transaction_connection.get()
+        if active is not None:
+            return _BorrowedConnection(active)
         connection = sqlite3.connect(self.path, timeout=5)
         connection.row_factory = sqlite3.Row
         return connection
+
+    @contextmanager
+    def transaction(self, *, immediate: bool = True, timeout: float = 5.0) -> Iterator[sqlite3.Connection]:
+        if self._transaction_connection.get() is not None:
+            raise RuntimeError("SQLiteStore transactions cannot be nested")
+        connection = sqlite3.connect(self.path, timeout=timeout)
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+            token = self._transaction_connection.set(connection)
+            try:
+                yield connection
+                connection.commit()
+            except BaseException:
+                connection.rollback()
+                raise
+            finally:
+                self._transaction_connection.reset(token)
+        finally:
+            connection.close()
+
+    def begin_immediate(self, connection: sqlite3.Connection) -> None:
+        if self._transaction_connection.get() is not connection:
+            connection.execute("BEGIN IMMEDIATE")
 
     def initialize(self) -> None:
         with self.connect() as connection:
@@ -116,6 +177,7 @@ class SQLiteStore:
         migrations = (
             (1, "v4_core_projections", _V4_MIGRATION_V1_STATEMENTS),
             (2, "v4_status_received_at", _V4_MIGRATION_V2_STATEMENTS),
+            (3, "v4_explicit_consent_states", _V4_MIGRATION_V3_STATEMENTS),
         )
         checksums = {
             version: hashlib.sha256(

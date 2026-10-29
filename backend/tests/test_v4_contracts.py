@@ -356,7 +356,17 @@ def fixtures() -> dict[str, list[dict]]:
         },
     ]
     sync_caps = ["day_plan.snapshot.write", "activity_status.write", "usage_summary.write", "goal_progress.write", "training_plan.write"]
-    sync_fixtures = []
+    sync_fixtures = [{
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": UUID_A,
+        "capability": "consent.state.write",
+        "sent_at": LATER,
+        "category": "DAY_PLAN",
+        "consent_version": 3,
+        "state": "GRANTED",
+        "idempotency_key": UUID_D,
+    }]
     for capability, data in zip(sync_caps, sync_data):
         item = {**sync_base, "capability": capability, "data": data, "idempotency_key": UUID_D}
         sync_fixtures.append(item)
@@ -639,10 +649,12 @@ def test_chat_requires_sent_at_and_capability():
         ("tool-requests.schema.json", 3, ("arguments", "window_start")),
         ("tool-results.schema.json", 0, ("request_id",)),
         ("tool-results.schema.json", 0, ("data", "plan", "plan_id")),
-        ("sync.schema.json", 0, ("request_id",)),
-        ("sync.schema.json", 0, ("data", "plan_id")),
-        ("sync.schema.json", 1, ("data", "event_id")),
-        ("sync.schema.json", 1, ("idempotency_key",)),
+        ("sync.schema.json", 0, ("category",)),
+        ("sync.schema.json", 0, ("idempotency_key",)),
+        ("sync.schema.json", 1, ("request_id",)),
+        ("sync.schema.json", 1, ("data", "plan_id")),
+        ("sync.schema.json", 2, ("data", "event_id")),
+        ("sync.schema.json", 2, ("idempotency_key",)),
         ("sync-receipts.schema.json", 0, ("result_code",)),
         ("sync-receipts.schema.json", 1, ("items", 0, "event_id")),
         ("proposal-inbox-ack.schema.json", 0, ("proposal_id",)),
@@ -782,15 +794,21 @@ def test_required_fields_types_enums_formats_and_bounds_are_rejected():
     result.pop("plan_id")
     assert_invalid("tool-results.schema.json", result)
 
-    sync = copy.deepcopy(FIXTURES["sync.schema.json"][0])
+    sync = copy.deepcopy(FIXTURES["sync.schema.json"][1])
     sync["sent_at"] = "29 October"
     assert_invalid("sync.schema.json", sync)
     sync["sent_at"] = LATER
     sync["data"]["activities"][0]["scheduled_local"]["start_minute"] = 1440
     assert_invalid("sync.schema.json", sync)
-    sync = copy.deepcopy(FIXTURES["sync.schema.json"][0])
+    sync = copy.deepcopy(FIXTURES["sync.schema.json"][1])
     sync["data"]["activities"] *= 33
     assert_invalid("sync.schema.json", sync)
+    consent = copy.deepcopy(FIXTURES["sync.schema.json"][0])
+    consent["state"] = "DENIED"
+    assert_invalid("sync.schema.json", consent)
+    consent = copy.deepcopy(FIXTURES["sync.schema.json"][0])
+    consent["consent_version"] = 0
+    assert_invalid("sync.schema.json", consent)
 
     receipt = copy.deepcopy(FIXTURES["sync-receipts.schema.json"][0])
     receipt["accepted"] = "yes"

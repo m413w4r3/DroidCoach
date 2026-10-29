@@ -1,5 +1,39 @@
 {
   "$defs": {
+    "consent_state_update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {"type": "integer", "const": 4},
+        "schema_version": {"type": "integer", "const": 4},
+        "request_id": {"type": "string", "minLength": 36, "maxLength": 36, "format": "uuid"},
+        "capability": {"type": "string", "const": "consent.state.write"},
+        "sent_at": {"type": "string", "minLength": 20, "maxLength": 40, "format": "date-time", "pattern": "Z$"},
+        "category": {"type": "string", "enum": ["DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"]},
+        "consent_version": {"type": "integer", "minimum": 1},
+        "state": {"type": "string", "enum": ["GRANTED", "REVOKED", "UNKNOWN"]},
+        "idempotency_key": {"type": "string", "minLength": 36, "maxLength": 36, "format": "uuid"}
+      },
+      "required": ["contract_version", "schema_version", "request_id", "capability", "sent_at", "category", "consent_version", "state", "idempotency_key"]
+    },
+    "consent_state_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {"type": "integer", "const": 4},
+        "schema_version": {"type": "integer", "const": 4},
+        "request_id": {"type": "string", "minLength": 36, "maxLength": 36, "format": "uuid"},
+        "capability": {"type": "string", "const": "consent.state.write"},
+        "category": {"type": "string", "enum": ["DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"]},
+        "consent_version": {"type": "integer", "minimum": 1},
+        "state": {"type": "string", "enum": ["GRANTED", "REVOKED", "UNKNOWN"]},
+        "updated_at": {"type": "string", "minLength": 20, "maxLength": 40, "format": "date-time", "pattern": "Z$"},
+        "source": {"type": "string", "const": "ANDROID_SYNC"},
+        "replayed": {"type": "boolean"},
+        "result_code": {"type": "string", "enum": ["ACCEPTED", "DUPLICATE"]}
+      },
+      "required": ["contract_version", "schema_version", "request_id", "capability", "category", "consent_version", "state", "updated_at", "source", "replayed", "result_code"]
+    },
     "day_plan_snapshot": {
       "type": "object",
       "additionalProperties": false,
@@ -1018,6 +1052,9 @@
   },
   "oneOf": [
     {
+      "$ref": "#/$defs/consent_state_update"
+    },
+    {
       "$ref": "#/$defs/day_plan_snapshot"
     },
     {
@@ -1037,6 +1074,17 @@
   "$id": "https://atlas.invalid/contracts/v4/sync.schema.json",
   "title": "ATLAS V4 sync",
   "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "capability": "consent.state.write",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "category": "DAY_PLAN",
+      "consent_version": 3,
+      "state": "GRANTED",
+      "idempotency_key": "00000000-0000-4000-8000-000000000104"
+    },
     {
       "contract_version": 4,
       "schema_version": 4,
