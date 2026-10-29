@@ -269,11 +269,11 @@ class CoreV4SyncClientTest {
         val statusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
 
         val initialPlan = store.prepareProjection(
-            sourceKey = "plan:$PLAN_ID:consent:1",
+            sourceKey = "plan:$PLAN_ID:consent:${dayConsent.version}",
             sourceVersion = 1,
             sourceFingerprint = "2".repeat(64),
             category = CoreV4Category.DAY_PLAN,
-            consentVersion = 1,
+            consentVersion = dayConsent.version,
             data = planData(),
             client = client,
             nowUtc = NOW,
@@ -317,7 +317,7 @@ class CoreV4SyncClientTest {
         val revisedPlan = approvedPlan().copy(version = revisedPlanVersion)
         val revisedData = CoreV4SyncClient.planData(revisedPlan, emptyList(), observedAt = "2026-10-29T12:02:00Z")
         val revisedPending = store.prepareProjection(
-            sourceKey = "plan:$PLAN_ID:consent:1",
+            sourceKey = "plan:$PLAN_ID:consent:${dayConsent.version}",
             sourceVersion = revisedPlanVersion,
             sourceFingerprint = "4".repeat(64),
             category = CoreV4Category.DAY_PLAN,
