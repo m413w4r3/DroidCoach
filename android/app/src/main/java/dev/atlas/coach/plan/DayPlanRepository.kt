@@ -1,5 +1,13 @@
 package dev.atlas.coach.plan
 
+import dev.atlas.coach.plan.v4.PlanReportReceipt
+import dev.atlas.coach.plan.v4.PlanV4JsonCodec
+import dev.atlas.coach.plan.v4.PlanV4StoreDocument
+import java.security.MessageDigest
+import java.time.Instant
+import java.util.UUID
+import org.json.JSONObject
+
 internal data class PlanStoreDocument(
     val dayPlan: DayPlan,
     val appliedRevisions: List<PlanRevision> = emptyList(),
@@ -51,6 +59,42 @@ sealed interface PlanApplyResult {
     data class Corrupt(val reason: String, val quarantine: PlanQuarantineMetadata?) : PlanApplyResult
 }
 
+enum class PlanReportRejection {
+    PLAN_NOT_FOUND,
+    PLAN_NOT_MODIFIABLE,
+    PLAN_ID_MISMATCH,
+    STALE_VERSION,
+    CROSS_DATE_UNSUPPORTED,
+    ACTIVITY_NOT_FOUND,
+    TERMINAL_ACTIVITY,
+    INVALID_SLOT,
+    CONFLICT,
+    IDEMPOTENCY_CONFLICT,
+    STORAGE_FAILURE,
+}
+
+sealed interface PlanReportResult {
+    data class Reported(
+        val plan: DayPlan,
+        val revision: PlanRevision,
+        val replacement: PlanActivity,
+        val statusEvent: PlanStatusEvent,
+        val effectIds: List<String>,
+        val scopeHash: String,
+    ) : PlanReportResult
+
+    data class Replayed(
+        val plan: DayPlan,
+        val revisionId: String,
+        val replacementActivityId: String,
+        val planVersion: Int,
+        val scopeHash: String,
+    ) : PlanReportResult
+
+    data class Rejected(val reason: PlanReportRejection) : PlanReportResult
+    data class Corrupt(val reason: String, val quarantine: PlanQuarantineMetadata?) : PlanReportResult
+}
+
 /** Local, synchronous repository. All successful mutations are durable before they return. */
 class DayPlanRepository(
     private val backend: PlanStateBackend,
@@ -59,14 +103,14 @@ class DayPlanRepository(
 ) {
     fun load(): PlanLoadResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanLoadResult.Missing
-        is InternalRead.Loaded -> PlanLoadResult.Loaded(loaded.document.dayPlan)
+        is InternalRead.Loaded -> PlanLoadResult.Loaded(loaded.document.store.dayPlan)
         is InternalRead.Corrupt -> PlanLoadResult.Corrupt(loaded.reason, loaded.quarantine)
     }
 
     fun create(plan: DayPlan): PlanWriteResult {
         if (plan.version != 1) return PlanWriteResult.Rejected(PlanRejectionReason.NON_MONOTONE_VERSION)
         return when (val loaded = readDocument()) {
-            InternalRead.Missing -> persist(PlanStoreDocument(plan)).asWriteResult()
+            InternalRead.Missing -> persist(PlanV4StoreDocument(PlanStoreDocument(plan))).asWriteResult()
             is InternalRead.Loaded -> PlanWriteResult.Rejected(PlanRejectionReason.PLAN_ALREADY_EXISTS)
             is InternalRead.Corrupt -> PlanWriteResult.Corrupt(loaded.reason, loaded.quarantine)
         }
@@ -76,7 +120,7 @@ class DayPlanRepository(
         InternalRead.Missing -> PlanWriteResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
         is InternalRead.Corrupt -> PlanWriteResult.Corrupt(loaded.reason, loaded.quarantine)
         is InternalRead.Loaded -> {
-            val current = loaded.document.dayPlan
+            val current = loaded.document.store.dayPlan
             when {
                 plan.planId != current.planId -> PlanWriteResult.Rejected(PlanRejectionReason.PLAN_ID_MISMATCH)
                 plan == current -> PlanWriteResult.Saved(current)
@@ -84,7 +128,7 @@ class DayPlanRepository(
                 plan.version != current.version + 1 -> PlanWriteResult.Rejected(PlanRejectionReason.VERSION_CONFLICT)
                 plan.createdAt != current.createdAt || plan.updatedAt < current.updatedAt ->
                     PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
-                else -> persist(loaded.document.copy(dayPlan = plan)).asWriteResult()
+                else -> persist(loaded.document.copy(store = loaded.document.store.copy(dayPlan = plan))).asWriteResult()
             }
         }
     }
@@ -92,29 +136,69 @@ class DayPlanRepository(
     fun preview(revision: PlanRevision): PlanPreviewResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanPreviewResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
         is InternalRead.Corrupt -> PlanPreviewResult.Corrupt(loaded.reason, loaded.quarantine)
-        is InternalRead.Loaded -> when (val preview = buildPreview(loaded.document.dayPlan, revision)) {
+        is InternalRead.Loaded -> when (val preview = buildPreview(loaded.document.store.dayPlan, revision)) {
             is PreviewBuild.Ready -> PlanPreviewResult.Ready(preview.preview)
             is PreviewBuild.Rejected -> PlanPreviewResult.Rejected(preview.reason)
         }
     }
 
-    fun apply(revision: PlanRevision, confirmation: PlanConfirmation): PlanApplyResult =
+    fun apply(
+        revision: PlanRevision,
+        confirmation: PlanConfirmation,
+        statusEventDraft: StatusEventDraft? = null,
+    ): PlanApplyResult =
         when (val loaded = readDocument()) {
             InternalRead.Missing -> PlanApplyResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
             is InternalRead.Corrupt -> PlanApplyResult.Corrupt(loaded.reason, loaded.quarantine)
-            is InternalRead.Loaded -> applyToDocument(loaded.document, revision, confirmation)
+            is InternalRead.Loaded -> applyToDocument(loaded.document, revision, confirmation, statusEventDraft)
         }
 
+    fun statusEvents(): List<PlanStatusEvent> = when (val loaded = readDocument()) {
+        is InternalRead.Loaded -> loaded.document.statusEvents
+        else -> emptyList()
+    }
+
+    fun reportActivity(request: ReportActivityRequest): PlanReportResult = when (val loaded = readDocument()) {
+        InternalRead.Missing -> PlanReportResult.Rejected(PlanReportRejection.PLAN_NOT_FOUND)
+        is InternalRead.Corrupt -> PlanReportResult.Corrupt(loaded.reason, loaded.quarantine)
+        is InternalRead.Loaded -> reportInDocument(loaded.document, request)
+    }
+
     private fun applyToDocument(
-        document: PlanStoreDocument,
+        document: PlanV4StoreDocument,
         revision: PlanRevision,
         confirmation: PlanConfirmation,
+        statusEventDraft: StatusEventDraft?,
     ): PlanApplyResult {
-        val previouslyApplied = document.appliedRevisions.firstOrNull { it.revisionId == revision.revisionId }
+        val statusChanges = revision.changes.filterIsInstance<PlanChange.StatusChanged>()
+        if ((statusChanges.isNotEmpty() && statusEventDraft == null) ||
+            (statusEventDraft != null && statusChanges.size != 1)
+        ) return PlanApplyResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+        if (statusEventDraft != null && statusChanges.singleOrNull()?.let { change ->
+                PlanStatusPolicy.provenanceRejection(change.from, change.to, statusEventDraft.provenance, statusEventDraft.source) != null
+            } != false
+        ) return PlanApplyResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+        if (statusEventDraft != null) {
+            val transition = statusChanges.single()
+            val activity = document.store.dayPlan.activities.firstOrNull { it.activityId == transition.activityId }
+                ?: return PlanApplyResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+            if (PlanStatusPolicy.rejection(
+                    from = transition.from,
+                    to = transition.to,
+                    nowUtcMillis = clock.nowUtcMillis(),
+                    schedule = activity.scheduledLocal,
+                    engine = engine,
+                    provenance = statusEventDraft.provenance,
+                    source = statusEventDraft.source,
+                ) != null
+            ) return PlanApplyResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+        }
+
+        val previouslyApplied = document.store.appliedRevisions.firstOrNull { it.revisionId == revision.revisionId }
         if (previouslyApplied != null) {
             return if (sameRevisionIgnoringStatus(previouslyApplied, revision)) {
                 PlanApplyResult.AlreadyApplied(
-                    plan = document.dayPlan,
+                    plan = document.store.dayPlan,
                     revision = previouslyApplied,
                     effectIds = engine.effectIds(previouslyApplied.changes, previouslyApplied.revisionId),
                 )
@@ -123,7 +207,7 @@ class DayPlanRepository(
             }
         }
 
-        val preview = when (val result = buildPreview(document.dayPlan, revision)) {
+        val preview = when (val result = buildPreview(document.store.dayPlan, revision)) {
             is PreviewBuild.Ready -> result.preview
             is PreviewBuild.Rejected -> return PlanApplyResult.Rejected(result.reason)
         }
@@ -136,7 +220,7 @@ class DayPlanRepository(
         if (confirmation.consumedAt != null) {
             return PlanApplyResult.Rejected(PlanRejectionReason.CONFIRMATION_ALREADY_CONSUMED)
         }
-        if (document.confirmations.any { it.confirmationId == confirmation.confirmationId }) {
+        if (document.store.confirmations.any { it.confirmationId == confirmation.confirmationId }) {
             return PlanApplyResult.Rejected(PlanRejectionReason.INVALID_CONFIRMATION)
         }
         if (confirmation.expiresAt <= now) {
@@ -148,10 +232,27 @@ class DayPlanRepository(
 
         val appliedRevision = revision.copy(status = RevisionStatus.APPLIED)
         val consumedConfirmation = confirmation.copy(consumedAt = now)
+        val statusEvent = statusEventDraft?.let { draft ->
+            val transition = statusChanges.single()
+            val finalActivity = preview.after.activities.first { it.activityId == transition.activityId }
+            statusEventFor(
+                planId = preview.after.planId,
+                activityId = transition.activityId,
+                continuityId = finalActivity.continuityId,
+                from = transition.from,
+                to = transition.to,
+                draft = draft,
+                atUtcMillis = now,
+                planVersion = preview.after.version,
+            )
+        }
         val updatedDocument = document.copy(
-            dayPlan = preview.after,
-            appliedRevisions = document.appliedRevisions + appliedRevision,
-            confirmations = document.confirmations + consumedConfirmation,
+            store = document.store.copy(
+                dayPlan = preview.after,
+                appliedRevisions = document.store.appliedRevisions + appliedRevision,
+                confirmations = document.store.confirmations + consumedConfirmation,
+            ),
+            statusEvents = document.statusEvents + listOfNotNull(statusEvent),
         )
         return when (persist(updatedDocument)) {
             is PersistResult.Failed -> PlanApplyResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
@@ -163,6 +264,200 @@ class DayPlanRepository(
             )
         }
     }
+
+    private fun reportInDocument(
+        document: PlanV4StoreDocument,
+        request: ReportActivityRequest,
+    ): PlanReportResult {
+        val current = document.store.dayPlan
+        val fingerprint = reportFingerprint(request)
+        document.reportReceipts.firstOrNull { it.idempotencyKey == request.idempotencyKey }?.let { receipt ->
+            return if (receipt.requestFingerprint == fingerprint) {
+                PlanReportResult.Replayed(
+                    plan = current,
+                    revisionId = receipt.revisionId,
+                    replacementActivityId = receipt.replacementActivityId,
+                    planVersion = receipt.planVersion,
+                    scopeHash = receipt.scopeHash,
+                )
+            } else {
+                PlanReportResult.Rejected(PlanReportRejection.IDEMPOTENCY_CONFLICT)
+            }
+        }
+        if (request.planId != current.planId) return PlanReportResult.Rejected(PlanReportRejection.PLAN_ID_MISMATCH)
+        if (request.targetLocalDate != current.localDate) {
+            return PlanReportResult.Rejected(PlanReportRejection.CROSS_DATE_UNSUPPORTED)
+        }
+        if (current.state == PlanState.ARCHIVED || current.state == PlanState.SUPERSEDED) {
+            return PlanReportResult.Rejected(PlanReportRejection.PLAN_NOT_MODIFIABLE)
+        }
+        if (request.baseVersion != current.version) return PlanReportResult.Rejected(PlanReportRejection.STALE_VERSION)
+        val original = current.activities.firstOrNull { it.activityId == request.activityId }
+            ?: return PlanReportResult.Rejected(PlanReportRejection.ACTIVITY_NOT_FOUND)
+        if (original.status in setOf(ActivityStatus.DONE, ActivityStatus.MISSED, ActivityStatus.CANCELLED, ActivityStatus.POSTPONED)) {
+            return PlanReportResult.Rejected(PlanReportRejection.TERMINAL_ACTIVITY)
+        }
+        if (request.targetStartMinute + request.targetDurationMinutes > 1440) {
+            return PlanReportResult.Rejected(PlanReportRejection.INVALID_SLOT)
+        }
+
+        val nextActivityId = UUID.randomUUID().toString()
+        val revisionId = UUID.randomUUID().toString()
+        val continuityId = original.continuityId ?: UUID.randomUUID().toString()
+        val replacement = original.copy(
+            activityId = nextActivityId,
+            status = ActivityStatus.PLANNED,
+            scheduledLocal = original.scheduledLocal.copy(
+                localDate = current.localDate,
+                startMinute = request.targetStartMinute,
+                durationMinutes = request.targetDurationMinutes,
+            ),
+            createdRevisionId = revisionId,
+            lastRevisionId = revisionId,
+            actualMinutes = null,
+            trainingRef = original.trainingRef?.let { reference ->
+                reference.copy(activityId = if (reference.activityId == null) null else nextActivityId)
+            },
+            continuityId = continuityId,
+            supersedesActivityId = original.activityId,
+        )
+        val replacementStart = replacement.scheduledLocal.startMinute
+        val replacementEnd = replacementStart + replacement.scheduledLocal.durationMinutes
+        val collision = current.activities
+            .filter { it.activityId != original.activityId && it.status in setOf(ActivityStatus.PLANNED, ActivityStatus.IN_PROGRESS) }
+            .any { existing ->
+                val existingStart = existing.scheduledLocal.startMinute
+                val existingEnd = existingStart + existing.scheduledLocal.durationMinutes
+                replacementStart < existingEnd && existingStart < replacementEnd
+            }
+        if (collision) return PlanReportResult.Rejected(PlanReportRejection.CONFLICT)
+
+        val now = clock.nowUtcMillis()
+        val revision = PlanRevision(
+            revisionId = revisionId,
+            planId = current.planId,
+            baseVersion = current.version,
+            newVersion = current.version + 1,
+            origin = RevisionOrigin.USER,
+            changes = listOf(
+                PlanChange.StatusChanged(original.activityId, original.status, ActivityStatus.POSTPONED),
+                PlanChange.SlotAdded(replacement),
+            ),
+            summary = "Report : ${request.reason.take(220)}",
+            createdAt = now,
+            expiresAt = now + REPORT_CONFIRMATION_TTL_MILLIS,
+            status = RevisionStatus.PROPOSED,
+        )
+        val appliedActivities = when (val applied = engine.applyChanges(current, revision)) {
+            is ChangeApplicationResult.Applied -> applied.activities
+            is ChangeApplicationResult.Rejected -> return PlanReportResult.Rejected(PlanReportRejection.INVALID_SLOT)
+        }
+        val updatedPlan = try {
+            current.copy(
+                version = revision.newVersion,
+                currentRevisionId = revision.revisionId,
+                state = PlanState.APPROVED,
+                activities = appliedActivities,
+                updatedAt = maxOf(current.updatedAt, now),
+                approvedAt = maxOf(now, current.createdAt, current.approvedAt ?: current.createdAt),
+            )
+        } catch (_: IllegalArgumentException) {
+            return PlanReportResult.Rejected(PlanReportRejection.INVALID_SLOT)
+        }
+        val effects = engine.effectIds(revision.changes, revision.revisionId)
+            .filterNot { it == "PLAN_APPLY:${revision.revisionId}" }
+        val scopeHash = engine.scopeHash(effects, revision.changes)
+        val appliedRevision = revision.copy(status = RevisionStatus.APPLIED)
+        val consumedConfirmation = PlanConfirmation(
+            confirmationId = UUID.randomUUID().toString(),
+            revisionId = revisionId,
+            effectIds = effects,
+            scopeHash = scopeHash,
+            approvedAt = now,
+            expiresAt = now + REPORT_CONFIRMATION_TTL_MILLIS,
+            consumedAt = now,
+        )
+        val statusEvent = statusEventFor(
+            planId = current.planId,
+            activityId = original.activityId,
+            continuityId = continuityId,
+            from = original.status,
+            to = ActivityStatus.POSTPONED,
+            draft = StatusEventDraft(StatusProvenance.CONFIRMED, StatusSource.USER_UI, request.consentVersion),
+            atUtcMillis = now,
+            planVersion = updatedPlan.version,
+        )
+        val receipt = PlanReportReceipt(
+            idempotencyKey = request.idempotencyKey,
+            requestFingerprint = fingerprint,
+            revisionId = revisionId,
+            originalActivityId = original.activityId,
+            replacementActivityId = replacement.activityId,
+            planVersion = updatedPlan.version,
+            scopeHash = scopeHash,
+            reason = request.reason,
+        )
+        val updatedDocument = document.copy(
+            store = document.store.copy(
+                dayPlan = updatedPlan,
+                appliedRevisions = document.store.appliedRevisions + appliedRevision,
+                confirmations = document.store.confirmations + consumedConfirmation,
+            ),
+            statusEvents = document.statusEvents + statusEvent,
+            reportReceipts = document.reportReceipts + receipt,
+        )
+        return when (persist(updatedDocument)) {
+            PersistResult.Failed -> PlanReportResult.Rejected(PlanReportRejection.STORAGE_FAILURE)
+            is PersistResult.Succeeded -> PlanReportResult.Reported(
+                plan = updatedPlan,
+                revision = appliedRevision,
+                replacement = updatedPlan.activities.first { it.activityId == replacement.activityId },
+                statusEvent = statusEvent,
+                effectIds = effects,
+                scopeHash = scopeHash,
+            )
+        }
+    }
+
+    private fun reportFingerprint(request: ReportActivityRequest): String {
+        val canonical = listOf(
+            request.planId,
+            request.activityId,
+            request.baseVersion.toString(),
+            request.targetLocalDate,
+            request.targetStartMinute.toString(),
+            request.targetDurationMinutes.toString(),
+            request.reason,
+            request.consentVersion.toString(),
+        ).joinToString("|") { value -> "${value.length}:$value" }
+        return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    private fun statusEventFor(
+        planId: String,
+        activityId: String,
+        continuityId: String?,
+        from: ActivityStatus,
+        to: ActivityStatus,
+        draft: StatusEventDraft,
+        atUtcMillis: Long,
+        planVersion: Int,
+    ) = PlanStatusEvent(
+        statusEventId = UUID.randomUUID().toString(),
+        planId = planId,
+        activityId = activityId,
+        continuityId = continuityId,
+        fromStatus = from,
+        toStatus = to,
+        provenance = draft.provenance,
+        source = draft.source,
+        decidedAt = Instant.ofEpochMilli(atUtcMillis).toString(),
+        observedAt = Instant.ofEpochMilli(atUtcMillis).toString(),
+        planVersion = planVersion,
+        consentVersion = draft.consentVersion,
+        focusSessionId = draft.focusSessionId,
+    )
 
     private fun buildPreview(current: DayPlan, revision: PlanRevision): PreviewBuild {
         val now = clock.nowUtcMillis()
@@ -221,20 +516,31 @@ class DayPlanRepository(
             return InternalRead.Corrupt("local plan storage could not be read", null)
         } ?: return InternalRead.Missing
         return try {
-            InternalRead.Loaded(PlanJsonCodec.decodeStore(raw))
+            val root = JSONObject(raw)
+            val version = root.opt("schema_version") as? Int
+                ?: throw IllegalArgumentException("schema_version must be an integer")
+            val document = when (version) {
+                PlanJsonCodec.SCHEMA_VERSION -> PlanV4StoreDocument(
+                    store = PlanJsonCodec.decodeStore(raw),
+                    schema3Original = raw,
+                )
+                PlanV4JsonCodec.SCHEMA_VERSION -> PlanV4JsonCodec.decodeStore(raw)
+                else -> throw IllegalArgumentException("unsupported plan schema version $version")
+            }
+            InternalRead.Loaded(document)
         } catch (_: Exception) {
             val quarantine = try {
-                backend.quarantine(raw, "invalid schema-version-3 plan document", clock.nowUtcMillis())
+                backend.quarantine(raw, "invalid or unsupported local plan schema; preserved for recovery", clock.nowUtcMillis())
             } catch (_: Exception) {
                 null
             }
-            InternalRead.Corrupt("invalid schema-version-3 plan document", quarantine)
+            InternalRead.Corrupt("invalid or unsupported local plan schema", quarantine)
         }
     }
 
-    private fun persist(document: PlanStoreDocument): PersistResult = try {
-        backend.write(PlanJsonCodec.encodeStore(document))
-        PersistResult.Succeeded(document.dayPlan)
+    private fun persist(document: PlanV4StoreDocument): PersistResult = try {
+        backend.write(PlanV4JsonCodec.encodeStore(document))
+        PersistResult.Succeeded(document.store.dayPlan)
     } catch (_: Exception) {
         PersistResult.Failed
     }
@@ -249,7 +555,7 @@ class DayPlanRepository(
 
     private sealed interface InternalRead {
         data object Missing : InternalRead
-        data class Loaded(val document: PlanStoreDocument) : InternalRead
+        data class Loaded(val document: PlanV4StoreDocument) : InternalRead
         data class Corrupt(val reason: String, val quarantine: PlanQuarantineMetadata?) : InternalRead
     }
 
@@ -261,5 +567,9 @@ class DayPlanRepository(
     private sealed interface PersistResult {
         data class Succeeded(val plan: DayPlan) : PersistResult
         data object Failed : PersistResult
+    }
+
+    private companion object {
+        const val REPORT_CONFIRMATION_TTL_MILLIS = 60_000L
     }
 }

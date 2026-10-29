@@ -4,6 +4,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.security.MessageDigest
+import dev.atlas.coach.plan.v4.PlanV4JsonCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -120,7 +121,7 @@ class DayPlanRepositoryTest {
         assertTrue(second is PlanApplyResult.AlreadyApplied)
         assertEquals(2, (restarted.load() as PlanLoadResult.Loaded).plan.version)
         assertEquals(2, backend.writes)
-        val persisted = PlanJsonCodec.decodeStore(backend.value!!)
+        val persisted = PlanV4JsonCodec.decodeStore(backend.value!!).store
         assertEquals(NOW, persisted.confirmations.single().consumedAt)
     }
 

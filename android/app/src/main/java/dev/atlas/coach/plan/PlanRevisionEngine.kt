@@ -149,6 +149,8 @@ class PlanRevisionEngine {
         activity.lastRevisionId,
         activity.notes,
         activity.trainingRef?.let(::canonicalTrainingReference),
+        activity.continuityId,
+        activity.supersedesActivityId,
     ).joinToString(separator = "|") { encodeField(it) }
 
     private fun canonicalTrainingReference(reference: TrainingPlanReference): String = listOf(
@@ -187,6 +189,8 @@ class PlanRevisionEngine {
             return ChangeApplicationResult.Rejected(PlanRejectionReason.STALE_REVISION)
         }
         if (revision.changes.isEmpty()) return ChangeApplicationResult.Rejected(PlanRejectionReason.EMPTY_CHANGESET)
+
+        val reportBundle = isAtomicReportBundle(current, revision.changes)
 
         val byId = current.activities.associateBy { it.activityId }.toMutableMap()
         val grouped = revision.changes.groupBy(::changeActivityId)
@@ -248,7 +252,8 @@ class PlanRevisionEngine {
                     status.activityId != activityId ||
                         status.from != existing.status ||
                         status.to == status.from ||
-                        PlanStatusPolicy.structuralRejection(status.from, status.to) != null
+                        (PlanStatusPolicy.structuralRejection(status.from, status.to) != null &&
+                            !(reportBundle && status.to == ActivityStatus.POSTPONED))
                     )
             ) {
                 return ChangeApplicationResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
@@ -270,6 +275,11 @@ class PlanRevisionEngine {
                 trainingRef = if (edit != null) edit.after.trainingRef else existing.trainingRef,
                 scheduledLocal = move?.to ?: existing.scheduledLocal,
                 status = status?.to ?: existing.status,
+                continuityId = if (reportBundle && status?.to == ActivityStatus.POSTPONED) {
+                    revision.changes.filterIsInstance<PlanChange.SlotAdded>().single().activity.continuityId
+                } else {
+                    existing.continuityId
+                },
                 lastRevisionId = revision.revisionId,
             )
             if (!activityFitsPlan(current, updated)) return ChangeApplicationResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
@@ -278,9 +288,39 @@ class PlanRevisionEngine {
         return ChangeApplicationResult.Applied(byId.values.sortedBy { it.activityId })
     }
 
+    private fun isAtomicReportBundle(current: DayPlan, changes: List<PlanChange>): Boolean {
+        if (changes.size != 2) return false
+        val status = changes.filterIsInstance<PlanChange.StatusChanged>().singleOrNull() ?: return false
+        val addition = changes.filterIsInstance<PlanChange.SlotAdded>().singleOrNull() ?: return false
+        val original = current.activities.firstOrNull { it.activityId == status.activityId } ?: return false
+        val replacement = addition.activity
+        val continuity = replacement.continuityId ?: return false
+        val expectedTrainingReference = original.trainingRef?.let { reference ->
+            reference.copy(activityId = if (reference.activityId == null) null else replacement.activityId)
+        }
+        return status.from == original.status &&
+            status.to == ActivityStatus.POSTPONED &&
+            status.from !in setOf(ActivityStatus.CANCELLED, ActivityStatus.DONE, ActivityStatus.MISSED, ActivityStatus.POSTPONED) &&
+            replacement.status == ActivityStatus.PLANNED &&
+            replacement.activityId != original.activityId &&
+            replacement.supersedesActivityId == original.activityId &&
+            (original.continuityId == null || original.continuityId == continuity) &&
+            replacement.kind == original.kind &&
+            replacement.title == original.title &&
+            replacement.priority == original.priority &&
+            replacement.goalId == original.goalId &&
+            replacement.subGoalId == original.subGoalId &&
+            replacement.estimateMinutes == original.estimateMinutes &&
+            replacement.actualMinutes == null &&
+            replacement.notes == original.notes &&
+            replacement.trainingRef == expectedTrainingReference &&
+            replacement.scheduledLocal.localDate == current.localDate &&
+            replacement.scheduledLocal.timezone == current.timezone
+    }
+
     fun overlapWarnings(activities: List<PlanActivity>): List<OverlapWarning> {
         val considered = activities
-            .filter { it.status == ActivityStatus.PLANNED || it.status == ActivityStatus.IN_PROGRESS || it.status == ActivityStatus.POSTPONED }
+            .filter { it.status == ActivityStatus.PLANNED || it.status == ActivityStatus.IN_PROGRESS }
             .sortedBy { it.activityId }
         val warnings = mutableListOf<OverlapWarning>()
         for (leftIndex in considered.indices) {

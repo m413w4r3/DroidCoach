@@ -94,7 +94,8 @@ internal object PlanUiLogic {
         .replaceFirstChar { first -> first.titlecase(Locale.FRENCH) }
 
     private fun ActivityStatus.isTerminalForNextActivity(): Boolean =
-        this == ActivityStatus.DONE || this == ActivityStatus.MISSED || this == ActivityStatus.CANCELLED
+        this == ActivityStatus.DONE || this == ActivityStatus.MISSED ||
+            this == ActivityStatus.CANCELLED || this == ActivityStatus.POSTPONED
 }
 
 @Composable

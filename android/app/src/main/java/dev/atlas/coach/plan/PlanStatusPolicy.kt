@@ -5,6 +5,8 @@ enum class StatusTransitionRejection {
     SAME_STATUS,
     TERMINAL_STATUS,
     POSTPONED_UNSUPPORTED,
+    MEASURED_STATUS_CANNOT_TRANSITION,
+    USER_DECISION_REQUIRED,
     MISSED_BEFORE_END,
     INVALID_TRANSITION,
 }
@@ -55,12 +57,39 @@ object PlanStatusPolicy {
         nowUtcMillis: Long,
         schedule: LocalSchedule,
         engine: PlanRevisionEngine = PlanRevisionEngine(),
+        provenance: StatusProvenance = StatusProvenance.DECLARED,
+        source: StatusSource = StatusSource.USER_UI,
     ): StatusTransitionRejection? {
+        provenanceRejection(from, to, provenance, source)?.let { return it }
         structuralRejection(from, to)?.let { return it }
         if (to == ActivityStatus.MISSED) {
             val end = engine.localToInstant(schedule)
                 .plusSeconds(schedule.durationMinutes.toLong() * 60L)
             if (nowUtcMillis < end.toEpochMilli()) return StatusTransitionRejection.MISSED_BEFORE_END
+        }
+        return null
+    }
+
+    /** A sensor or timer observation can be recorded as a measurement, never as a status decision. */
+    fun provenanceRejection(
+        from: ActivityStatus,
+        to: ActivityStatus,
+        provenance: StatusProvenance,
+        source: StatusSource,
+    ): StatusTransitionRejection? {
+        if (provenance == StatusProvenance.MEASURED && from != to) {
+            return StatusTransitionRejection.MEASURED_STATUS_CANNOT_TRANSITION
+        }
+        if (source == StatusSource.FOCUS_TIMER && provenance != StatusProvenance.MEASURED) {
+            return StatusTransitionRejection.USER_DECISION_REQUIRED
+        }
+        if (provenance == StatusProvenance.UNKNOWN) {
+            return StatusTransitionRejection.USER_DECISION_REQUIRED
+        }
+        if (to in setOf(ActivityStatus.DONE, ActivityStatus.MISSED, ActivityStatus.CANCELLED) &&
+            (source != StatusSource.USER_UI || provenance !in setOf(StatusProvenance.DECLARED, StatusProvenance.CONFIRMED))
+        ) {
+            return StatusTransitionRejection.USER_DECISION_REQUIRED
         }
         return null
     }

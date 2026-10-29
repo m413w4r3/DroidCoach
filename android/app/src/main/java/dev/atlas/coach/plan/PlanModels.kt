@@ -72,6 +72,61 @@ enum class ActivityStatus {
     POSTPONED,
 }
 
+enum class StatusProvenance {
+    DECLARED,
+    MEASURED,
+    CONFIRMED,
+    UNKNOWN,
+}
+
+enum class StatusSource {
+    USER_UI,
+    FOCUS_TIMER,
+    USAGE_STATS,
+    WGER_READ,
+    CORE_IMPORT,
+}
+
+data class StatusEventDraft(
+    val provenance: StatusProvenance,
+    val source: StatusSource,
+    val consentVersion: Int = 0,
+    val focusSessionId: String? = null,
+) {
+    init {
+        require(consentVersion >= 0) { "consentVersion must not be negative" }
+        focusSessionId?.let { requireCanonicalUuid(it, "focusSessionId") }
+    }
+}
+
+data class PlanStatusEvent(
+    val statusEventId: String,
+    val planId: String,
+    val activityId: String,
+    val continuityId: String?,
+    val fromStatus: ActivityStatus,
+    val toStatus: ActivityStatus,
+    val provenance: StatusProvenance,
+    val source: StatusSource,
+    val decidedAt: String,
+    val observedAt: String,
+    val planVersion: Int,
+    val consentVersion: Int,
+    val focusSessionId: String? = null,
+) {
+    init {
+        requireCanonicalUuid(statusEventId, "statusEventId")
+        requireCanonicalUuid(planId, "planId")
+        requireCanonicalUuid(activityId, "activityId")
+        continuityId?.let { requireCanonicalUuid(it, "continuityId") }
+        requireTimestamp(decidedAt, "decidedAt")
+        requireTimestamp(observedAt, "observedAt")
+        require(planVersion >= 1) { "planVersion must be >= 1" }
+        require(consentVersion >= 0) { "consentVersion must not be negative" }
+        focusSessionId?.let { requireCanonicalUuid(it, "focusSessionId") }
+    }
+}
+
 enum class Priority {
     REQUIRED,
     IMPORTANT,
@@ -159,6 +214,8 @@ data class PlanActivity(
     val lastRevisionId: String,
     val notes: String? = null,
     val trainingRef: TrainingPlanReference? = null,
+    val continuityId: String? = null,
+    val supersedesActivityId: String? = null,
 ) {
     init {
         requireCanonicalUuid(activityId, "activityId")
@@ -171,12 +228,43 @@ data class PlanActivity(
         requireCanonicalUuid(createdRevisionId, "createdRevisionId")
         requireCanonicalUuid(lastRevisionId, "lastRevisionId")
         notes?.let { require(it.length <= 280) { "notes must be at most 280 characters" } }
+        continuityId?.let { requireCanonicalUuid(it, "continuityId") }
+        supersedesActivityId?.let {
+            requireCanonicalUuid(it, "supersedesActivityId")
+            require(it != activityId) { "an activity cannot supersede itself" }
+            require(continuityId != null) { "a superseding activity must carry a continuityId" }
+        }
         trainingRef?.let { reference ->
             require(reference.planId == planId) { "trainingRef belongs to a different plan" }
             require(reference.activityId == null || reference.activityId == activityId) {
                 "trainingRef belongs to a different activity"
             }
         }
+    }
+}
+
+data class ReportActivityRequest(
+    val planId: String,
+    val activityId: String,
+    val baseVersion: Int,
+    val targetLocalDate: String,
+    val targetStartMinute: Int,
+    val targetDurationMinutes: Int,
+    val reason: String,
+    val idempotencyKey: String,
+    val consentVersion: Int = 0,
+) {
+    init {
+        requireCanonicalUuid(planId, "planId")
+        requireCanonicalUuid(activityId, "activityId")
+        requireCanonicalUuid(idempotencyKey, "idempotencyKey")
+        require(baseVersion >= 1) { "baseVersion must be >= 1" }
+        requireCanonicalDate(targetLocalDate)
+        require(targetStartMinute in 0..1439) { "targetStartMinute must be in 0..1439" }
+        require(targetDurationMinutes in 1..1440) { "targetDurationMinutes must be in 1..1440" }
+        require(targetStartMinute + targetDurationMinutes <= 1440) { "target slot must remain in the day" }
+        require(reason.isNotBlank() && reason.length <= 280) { "reason must contain 1..280 characters" }
+        require(consentVersion >= 0) { "consentVersion must not be negative" }
     }
 }
 

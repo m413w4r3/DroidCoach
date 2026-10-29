@@ -30,8 +30,14 @@ import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.PlanStatusPolicy
 import dev.atlas.coach.plan.PlanWriteResult
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.plan.ReportActivityRequest
+import dev.atlas.coach.plan.PlanReportResult
 import dev.atlas.coach.plan.RevisionOrigin
+import dev.atlas.coach.plan.StatusEventDraft
+import dev.atlas.coach.plan.StatusProvenance
+import dev.atlas.coach.plan.StatusSource
 import dev.atlas.coach.sync.agent.AgentMandate
+import dev.atlas.coach.plan.v4.PlanV4JsonCodec
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,6 +46,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
+import org.json.JSONObject
 
 /**
  * UI-facing owner of the local day plan. It never talks to the network and never
@@ -60,6 +67,7 @@ class PlanController(
     private var loadedDate: String? = null
     private var pendingRevision: PlanRevision? = null
     private var pendingPreview: PlanPreview? = null
+    private var pendingStatusEventDraft: StatusEventDraft? = null
 
     var plan by mutableStateOf<DayPlan?>(null)
         private set
@@ -96,7 +104,13 @@ class PlanController(
         val file = File(directory, "day-plan-$date.json")
         if (!file.isFile) return null
         val rawDocument = runCatching { file.readText(Charsets.UTF_8) }.getOrNull() ?: return null
-        return runCatching { PlanJsonCodec.decodeStore(rawDocument).dayPlan }
+        return runCatching {
+            when (JSONObject(rawDocument).opt("schema_version")) {
+                PlanJsonCodec.SCHEMA_VERSION -> PlanJsonCodec.decodeStore(rawDocument).dayPlan
+                PlanV4JsonCodec.SCHEMA_VERSION -> PlanV4JsonCodec.decodeStore(rawDocument).store.dayPlan
+                else -> null
+            }
+        }
             .getOrNull()
             ?.takeIf { it.localDate == date.toString() }
     }
@@ -264,14 +278,72 @@ class PlanController(
             nowUtcMillis = clock.nowUtcMillis(),
             schedule = target.scheduledLocal,
             engine = engine,
+            provenance = if (status == ActivityStatus.DONE) StatusProvenance.CONFIRMED else StatusProvenance.DECLARED,
+            source = StatusSource.USER_UI,
         )
         if (rejection != null) return fail(statusRejectionLabel(rejection))
         val changed = target.copy(status = status)
         return propose(
             current.activities.map { if (it.activityId == activityId) changed else it },
             "Statut : ${target.title} → ${statusLabel(status)}",
+            statusEventDraft = StatusEventDraft(
+                provenance = if (status == ActivityStatus.DONE) StatusProvenance.CONFIRMED else StatusProvenance.DECLARED,
+                source = StatusSource.USER_UI,
+            ),
         )
     }
+
+    /** Applies the explicit same-day report transaction, including its status event and replacement slot. */
+    fun reportActivity(
+        activityId: String,
+        targetLocalDate: String,
+        targetStartMinute: Int,
+        targetDurationMinutes: Int,
+        reason: String,
+        baseVersion: Int = plan?.version ?: 0,
+        idempotencyKey: String = UUID.randomUUID().toString(),
+    ): Boolean {
+        val current = plan ?: return fail("Aucun plan chargé.")
+        if (preview != null) return fail("Confirmez ou annulez l'aperçu courant avant le report.")
+        val request = try {
+            ReportActivityRequest(
+                planId = current.planId,
+                activityId = activityId,
+                baseVersion = baseVersion,
+                targetLocalDate = targetLocalDate,
+                targetStartMinute = targetStartMinute,
+                targetDurationMinutes = targetDurationMinutes,
+                reason = reason,
+                idempotencyKey = idempotencyKey,
+            )
+        } catch (_: IllegalArgumentException) {
+            return fail("Les informations du report sont invalides.")
+        }
+        return when (val result = requireRepository().reportActivity(request)) {
+            is PlanReportResult.Reported -> {
+                plan = result.plan
+                clearPreview()
+                corruption = null
+                message = "Activité reportée dans la même révision (v${result.plan.version})."
+                revision++
+                true
+            }
+            is PlanReportResult.Replayed -> {
+                plan = result.plan
+                clearPreview()
+                message = "Ce report avait déjà été appliqué ; aucun doublon."
+                revision++
+                true
+            }
+            is PlanReportResult.Rejected -> fail(reportRejectionLabel(result.reason))
+            is PlanReportResult.Corrupt -> {
+                corruption = result.reason
+                false
+            }
+        }
+    }
+
+    fun statusEvents() = requireRepository().statusEvents()
 
     /** Statuses that the local rules currently allow for this activity. */
     fun allowedStatuses(activity: PlanActivity): List<ActivityStatus> =
@@ -307,7 +379,7 @@ class PlanController(
             approvedAt = now,
             expiresAt = now + CONFIRMATION_TTL_MILLIS,
         )
-        return when (val result = requireRepository().apply(revisionToApply, confirmation)) {
+        return when (val result = requireRepository().apply(revisionToApply, confirmation, pendingStatusEventDraft)) {
             is PlanApplyResult.Applied -> {
                 plan = result.plan
                 lastAppliedSummary = revisionToApply.summary
@@ -508,6 +580,7 @@ class PlanController(
         proposedActivities: List<PlanActivity>,
         summary: String,
         origin: RevisionOrigin = RevisionOrigin.USER,
+        statusEventDraft: StatusEventDraft? = null,
     ): Boolean {
         val current = plan ?: return fail("Aucun plan chargé.")
         val now = clock.nowUtcMillis()
@@ -529,6 +602,7 @@ class PlanController(
                 pendingRevision = revisionToPreview
                 pendingPreview = result.preview
                 preview = result.preview
+                pendingStatusEventDraft = statusEventDraft
                 message = null
                 true
             }
@@ -543,6 +617,7 @@ class PlanController(
     private fun clearPreview() {
         pendingRevision = null
         pendingPreview = null
+        pendingStatusEventDraft = null
         preview = null
     }
 
@@ -608,6 +683,10 @@ class PlanController(
                 "Ce statut est terminal ; aucune transition locale n'est proposée."
             dev.atlas.coach.plan.StatusTransitionRejection.POSTPONED_UNSUPPORTED ->
                 "Le report sera disponible quand une replanification réelle pourra être confirmée."
+            dev.atlas.coach.plan.StatusTransitionRejection.MEASURED_STATUS_CANNOT_TRANSITION ->
+                "Une mesure Focus ne change pas le statut ; confirmez-le explicitement."
+            dev.atlas.coach.plan.StatusTransitionRejection.USER_DECISION_REQUIRED ->
+                "Cette transition demande une décision explicite dans ATLAS."
             dev.atlas.coach.plan.StatusTransitionRejection.MISSED_BEFORE_END ->
                 "Une activité ne peut être marquée manquée qu'après la fin de son créneau."
             dev.atlas.coach.plan.StatusTransitionRejection.INVALID_TRANSITION ->
@@ -648,6 +727,20 @@ class PlanController(
             PlanRejectionReason.REVISION_ID_CONFLICT -> "Identifiant de révision déjà utilisé pour un autre contenu."
             PlanRejectionReason.CORRUPT_STATE -> "Le stockage local du programme est illisible."
             PlanRejectionReason.STORAGE_FAILURE -> "L'écriture locale a échoué ; aucun effet n'a été appliqué."
+        }
+
+        private fun reportRejectionLabel(reason: dev.atlas.coach.plan.PlanReportRejection): String = when (reason) {
+            dev.atlas.coach.plan.PlanReportRejection.PLAN_NOT_FOUND -> "Aucun programme local n'est enregistré pour cette date."
+            dev.atlas.coach.plan.PlanReportRejection.PLAN_NOT_MODIFIABLE -> "Ce programme n'est plus modifiable."
+            dev.atlas.coach.plan.PlanReportRejection.PLAN_ID_MISMATCH -> "Le report vise un autre programme."
+            dev.atlas.coach.plan.PlanReportRejection.STALE_VERSION -> "Le programme a changé ; rechargez-le avant de reporter."
+            dev.atlas.coach.plan.PlanReportRejection.CROSS_DATE_UNSUPPORTED -> "Le report vers une autre date n'est pas encore disponible."
+            dev.atlas.coach.plan.PlanReportRejection.ACTIVITY_NOT_FOUND -> "Activité introuvable."
+            dev.atlas.coach.plan.PlanReportRejection.TERMINAL_ACTIVITY -> "Une activité terminale ne peut pas être reportée."
+            dev.atlas.coach.plan.PlanReportRejection.INVALID_SLOT -> "Le créneau du report est invalide."
+            dev.atlas.coach.plan.PlanReportRejection.CONFLICT -> "Le nouveau créneau entre en conflit avec une autre activité."
+            dev.atlas.coach.plan.PlanReportRejection.IDEMPOTENCY_CONFLICT -> "Cette clé de report est déjà associée à une autre demande."
+            dev.atlas.coach.plan.PlanReportRejection.STORAGE_FAILURE -> "L'écriture locale a échoué ; aucun effet n'a été appliqué."
         }
     }
 }

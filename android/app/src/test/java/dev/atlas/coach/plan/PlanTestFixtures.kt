@@ -122,6 +122,7 @@ internal fun confirmationFor(
 internal class MemoryPlanBackend(var value: String? = null) : PlanStateBackend {
     var writes = 0
     var quarantinedMetadata: PlanQuarantineMetadata? = null
+    var quarantinedRaw: String? = null
 
     override fun read(): String? = value
 
@@ -140,6 +141,7 @@ internal class MemoryPlanBackend(var value: String? = null) : PlanStateBackend {
                 .joinToString("") { "%02x".format(it) },
         )
         quarantinedMetadata = metadata
+        quarantinedRaw = rawValue
         return metadata
     }
 }
