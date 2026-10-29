@@ -655,7 +655,10 @@ internal fun flushSupersededStatusRequestsBeforePlan(
     return true
 }
 
-/** Enqueues only connected work; periodic work supplies eventual delivery after offline periods. */
+/**
+ * Enqueues connected work with a retry policy. WorkManager scheduling is best effort;
+ * neither immediate nor periodic work guarantees eventual delivery.
+ */
 object CoreV4SyncScheduler {
     const val IMMEDIATE_WORK = "atlas_core_v4_push_now"
     const val PERIODIC_WORK = "atlas_core_v4_push_periodic"

@@ -97,9 +97,11 @@ class SharedPreferencesBearerTokenStore(context: Context) : BearerTokenProvider 
     }
 }
 
+/** Serializes V4 read-modify-write operations inside this process only. */
 private val CORE_V4_STATE_LOCK = Any()
 
 object AndroidSyncStorage {
+    /** Cached per process; neither this singleton nor its lock coordinates other app processes. */
     @Volatile private var processV4Store: AndroidCoreV4SyncStore? = null
 
     fun outbox(context: Context): EventOutbox = DurableEventOutbox(
@@ -196,7 +198,9 @@ private class SharedPreferencesCoreV4SyncPersistence(context: Context) : CoreV4S
 
 /**
  * Versioned V4 state is isolated from the V1 outbox. Exact request bodies stay local
- * for retries; revoked status requests are discarded with their unaccepted sequences.
+ * for retries. Revoked status requests remain pending with their sequence so they can
+ * be replayed idempotently after an explicit regrant; the lock protects this JSON
+ * read-modify-write only within the current process.
  */
 class AndroidCoreV4SyncStore internal constructor(
     private val persistence: CoreV4SyncPersistence,

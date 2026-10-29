@@ -36,6 +36,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** JVM protocol tests use in-memory persistence and simulated transports, not SharedPreferences or WorkManager. */
 class CoreV4SyncClientTest {
     @Test
     fun consentOffDoesNotReachTransport() {
