@@ -14,6 +14,8 @@ V4 désigne ici le protocole des outils et des projections Android→Core. Il ne
 - Les outils sont exactement : atlas_get_day_plan, atlas_get_activity_status, atlas_propose_plan_revision, atlas_get_usage_summary, atlas_get_goal_progress, atlas_get_training_plan.
 - Les permissions et consentements restent déterminés par Android. Un booléen reçu du modèle ou du Core ne peut ni donner ni agrandir un consentement.
 - Les routes tools privées sont fixes, loopback seulement, authentifiées par un secret distinct du Gateway token. Le modèle ne fournit jamais une URL, un hôte, un chemin, un header, une méthode ou un nom d’opération.
+- Le Core ATLAS audité est `127.0.0.1:8100` (Core 2.0.0) ; le port 8000 est CTI Bulletin AutoWork, sans rapport. Les essais d’intégration avec écriture utilisent un Core isolé sur port/base dédiés ; une vérification de 8100 est authentifiée et en lecture seule, jamais d’écriture dans la base live.
+- L’endpoint OpenAI compatible porte un bearer à droit opérateur complet : accès privé/loopback seulement, jamais dans le dépôt. L’incident de secret d’infrastructure signalé recommande une rotation hors dépôt ; aucune valeur n’est consignée ici.
 - Limites communes proposées : message/tool payload ≤64 KiB ; sortie utile ≤256 KiB ; 6 appels d’outil par tour ; 1 création de proposition par tour ; délai de connexion 2 s, de réponse 5 s, total chat 20 s.
 - Les erreurs sont expurgées et n’incluent ni trace, token, URL privée, nom de package privé, titre d’activité ni texte de chat.
 
@@ -241,7 +243,7 @@ Erreurs : CAPABILITY_UNAVAILABLE, CONSENT_REQUIRED, CONFIG_REQUIRED, AUTH_REQUIR
 
 ## 3. Enveloppes V4 de sync Android → Core
 
-Enveloppe commune :
+Enveloppe commune (avec `idempotency_key` pour les routes à idempotence de requête ; l’événement de statut utilise l’exception ci-dessous) :
 
 ~~~json
 {
@@ -257,6 +259,8 @@ Enveloppe commune :
 ~~~
 
 device_ref vient de la session relais authentifiée, pas du JSON. capability doit appartenir à l’opération routée. Chaque catégorie de partage correspond à une autorisation Android distincte. Une révocation bloque l’émission suivante ; une valeur de consentement ancienne est refusée.
+
+Pour `activity-status-events`, le `request_id` identifie l’enveloppe de transport ; `event_id` identifie chaque événement immuable et sert de clé d’idempotence par item. Cette route n’exige pas d’`idempotency_key` distincte, ce qui permet de rejouer les items non acquittés d’un lot sans réappliquer les autres.
 
 ### 3.1 Snapshot de plan synthétique
 
@@ -347,7 +351,7 @@ Reçu Core synthétique :
 }
 ~~~
 
-La valeur DONE est acceptable ici uniquement parce que la personne a confirmé dans l’UI. FOCUS_TIMER seul produit une mesure, pas une transition DONE. Réponse d’item : ACCEPTED, DUPLICATE, STALE_EVENT ou REJECTED, avec last_synced_at et result_code. Un même event_id avec un contenu différent vaut EVENT_ID_CONFLICT.
+La valeur DONE est acceptable ici uniquement parce que la personne a confirmé dans l’UI. FOCUS_TIMER seul produit une mesure, pas une transition DONE. Réponse d’item : ACCEPTED, DUPLICATE, STALE_EVENT ou REJECTED, avec last_synced_at et result_code. Un même event_id avec un contenu différent vaut EVENT_ID_CONFLICT. Exception d’idempotence statut : `event_id` identifie l’événement immuable et constitue sa clé d’idempotence par item ; `request_id` identifie l’envoi d’enveloppe. Aucun `idempotency_key` supplémentaire n’est requis par événement. Rejouer le même event_id et le même hash renvoie le reçu déjà stocké ; même event_id avec autre contenu est refusé.
 
 ### 3.3 Usage, goals et training
 
@@ -468,7 +472,8 @@ Négociation :
     "plan_revision.propose": true,
     "usage_summary.read": false,
     "goal_progress.read": false,
-    "training_plan.read": true
+    "training_plan.read": true,
+    "coach.chat": true
   },
   "limits": {
     "max_tool_calls_per_turn": 6,
@@ -483,7 +488,7 @@ Les flags ci-dessus sont un exemple synthétique, pas un état live. Le relais V
 
 ### 5.1 Contrat du chat V4
 
-Le chat Android passe par POST /v4/agent/chat, en plus des routes historiques qui restent inchangées. L’application transmet uniquement le texte et les catégories explicitement partagées. Le Core lit les projections via les six outils quand c’est nécessaire ; le plan entier n’est pas copié dans le message.
+Le chat Android passe par POST /v4/agent/chat, en plus des routes historiques qui restent inchangées. L’application transmet uniquement le texte et les catégories explicitement partagées. Le Core lit les projections via les six outils quand c’est nécessaire ; le plan entier n’est pas copié dans le message. OpenClaw 2026.10.5 prend en charge `tools`, `tool_choice`, `message.tool_calls` et les retours `role:"tool"` avec `tool_call_id`, mais `/v1/chat/completions` est désactivé par défaut et suit un run normal d’agent. Le chemin reste BLOCKED jusqu’à une preuve runtime sur instance Gateway isolée, avec découverte des outils et absence de double dispatch. Deux modes sont possibles : (a) fonctions client fournies par l’adapter, recommandées pour le dispatch déterministe Android ; (b) outils internes du plugin exposés par la policy d’agent, seulement après preuve runtime. L’adapter actuel n’envoie pas `tools` et lit une fois `message.content`; il faut une boucle bornée de validation, quota, timeout, idempotence, appel Core, continuation et parse JSON final. La preuve finale vient du parcours Android réel, pas d’un curl direct. Le bearer OpenAI compatible a un droit opérateur complet et reste privé/loopback.
 
 Entrée stricte :
 
@@ -491,11 +496,13 @@ Entrée stricte :
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "schema_version", "request_id", "conversation_id", "message", "consent_version", "shared_categories"],
+  "required": ["contract_version", "schema_version", "request_id", "capability", "sent_at", "conversation_id", "message", "consent_version", "shared_categories"],
   "properties": {
     "contract_version": {"const": 4},
     "schema_version": {"const": 4},
     "request_id": {"type": "string", "format": "uuid"},
+    "capability": {"const": "coach.chat"},
+    "sent_at": {"type": "string", "format": "date-time"},
     "conversation_id": {"type": "string", "minLength": 1, "maxLength": 80},
     "message": {"type": "string", "minLength": 1, "maxLength": 4000},
     "consent_version": {"type": "integer", "minimum": 1},
@@ -506,6 +513,22 @@ Entrée stricte :
       "items": {"enum": ["DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"]}
     }
   }
+}
+~~~
+
+Exemple d’instance conforme à ce schéma :
+
+~~~json
+{
+  "contract_version": 4,
+  "schema_version": 4,
+  "request_id": "00000000-0000-4000-8000-000000000902",
+  "capability": "coach.chat",
+  "sent_at": "2026-10-29T09:02:00Z",
+  "conversation_id": "demo-conversation-01",
+  "message": "Puis-je déplacer cette activité ?",
+  "consent_version": 3,
+  "shared_categories": ["DAY_PLAN", "ACTIVITY_STATUS"]
 }
 ~~~
 
@@ -628,6 +651,12 @@ V1 sync et ses six types d’événements ne changent pas ; les snapshots/statut
 Le nouveau client compare les capabilities avant l’appel. Sans V4, il continue uniquement une interaction V2 qui n’a pas besoin des outils ou du DayPlan V4 ; sinon il affiche service incompatible/indisponible. Il ne transforme pas un échec V4 en appel V3 sans consentement explicite du flux, et ne prend jamais le mock /v1/plan/today pour un plan Android.
 
 Chaque handler refuse les destinations hors loopback et utilise la même route fixe. Les outils de lecture ne changent rien. Le seul outil de mutation crée une entrée de proposition ; le Core n’a aucun endpoint tool qui applique une PlanRevision. L’application passe exclusivement par Android et les règles locales A0/A1/A2. Les appels sont limités, les paramètres/retours expurgés, les données externes non fiables et les journaux ne conservent pas le contenu.
+
+Liaison OpenClaw proposée : installer le plugin local par `openclaw plugins install <path>` ou `-l`, avec un manifeste racine contenant `id` et `configSchema`; Gateway actif, installation sans redémarrage. `atlas_core_tools` déclare les six outils par `defineToolPlugin`, TypeBox et `execute`. `deny` gagne sur toute autorisation, `deny:["*"]` bloque tout et aucune syntaxe `!outil` n’existe ; `allow` et `alsoAllow` ne se combinent pas dans une même portée. Configuration candidate à vérifier avec `/tools verbose` : atlas `profile:"minimal"`, `deny:["gateway","session_status"]`, `alsoAllow` contenant exactement les six outils ATLAS ; aucun outil de recherche. Les 42 plugins demeurent chargés globalement : une policy d’agent filtre les outils mais n’est pas un sandbox, et le stockage d’un plugin peut être partagé. Une isolation runtime complète exige un Gateway séparé.
+
+Option de délégation Bridge désactivée par défaut : seulement sur Gateway isolé, agent `atlas-research` en profil minimal, refus `gateway`/`session_status`, seul `atlas_chatgpt_research` dans `alsoAllow`, `subagents.allowAgents:["atlas-research"]`, `maxSpawnDepth:1`; l’agent atlas n’expose `sessions_spawn`/`sessions_yield` que pour ce seul agent et l’essai vérifie avec `/tools verbose` l’absence d’héritage. Si la cible ou l’isolation de policy ne peut être prouvée, la délégation reste désactivée. Ce n’est jamais un sandbox système.
+
+Le proxy local de relais doit préserver le contrat 4001 ; l’image amont `atlas-paseo-relay:r3a` le transforme en 1012 et reste BLOCKED jusqu’à correction. Les garanties TLS/Noise et le contrat de révocation ne sont pas affaiblis. Intégrer un test de proxy isolé. Pour toute intégration : Core isolé avec port/DB dédiés, ou 8100 avec authentification explicite strictement en lecture seule ; jamais d’écriture dans la DB live. Aucun arrêt/redémarrage sans autorisation ciblée des services live 8100, 4400, 4401, 4402, 18789. Les cas négatifs utilisent des mocks/faux services ; OpenClaw, relais réel et Pixel requièrent une autorisation ciblée.
 
 ## 9. Cas synthétiques de compatibilité et d’erreur
 
