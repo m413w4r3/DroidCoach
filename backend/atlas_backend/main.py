@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as datetime_time
 from pathlib import Path
@@ -33,10 +36,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .agent import AgentAdapter, MockAgentAdapter, ProposedAction
-from .content import DEMO_CONTENT
 from .config import resolve_wger_auth_mode
+from .content import DEMO_CONTENT
 from .integrations.wger import ApiTokenWgerAuth, WgerClient, WgerError, WgerLimits
-from .integrations.wger_plan import empty_sport_plan, read_sport_plan, wger_error_to_sync_state
+from .integrations.wger_plan import (
+    empty_sport_plan,
+    read_sport_plan,
+    wger_error_to_sync_state,
+)
 from .models_v2 import (
     AckRequest,
     AgentChatRequest,
@@ -49,12 +56,16 @@ from .policy import MANDATE, PolicyEngine, configured_capabilities
 from .store import (
     EventIdConflict,
     InvalidProposalTransition,
-    SQLiteStore,
     PlanRevisionIdempotencyConflict,
+    SQLiteStore,
     UnknownProposal,
     UnknownProposalCursor,
 )
-from .v4_router import create_v4_router
+from .v4_router import (
+    CHAT_CACHE_CLEANUP_INTERVAL_SECONDS,
+    cleanup_v4_chat_cache,
+    create_v4_router,
+)
 
 MAX_REQUEST_BYTES = 65_536
 API_CONTRACT_VERSION = 1
@@ -62,6 +73,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 V2_PROPOSAL_ADAPTER = TypeAdapter(ProposalV2)
 DEMO_DIRECTIVE_ID = "demo-focus-001"
 DIRECTIVE_CHOICES = ("start", "discuss", "alternative", "postpone", "pause")
+_LOGGER = logging.getLogger(__name__)
 CHOICE_ACTIONS = {
     "start": "start_focus_session",
     "discuss": "discuss",
@@ -280,6 +292,26 @@ def create_app(
     legacy_agent = active_agent if active_agent.status().adapter == "mock" else MockAgentAdapter()
     bearer = HTTPBearer(scheme_name="bearerAuth", auto_error=False)
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        async def maintain_chat_cache() -> None:
+            while True:
+                try:
+                    await asyncio.to_thread(cleanup_v4_chat_cache, store)
+                except Exception:  # noqa: BLE001 - cache maintenance must not stop the API
+                    _LOGGER.warning("V4 chat cache cleanup failed")
+                await asyncio.sleep(CHAT_CACHE_CLEANUP_INTERVAL_SECONDS)
+
+        cleanup_task = asyncio.create_task(maintain_chat_cache())
+        try:
+            yield
+        finally:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
+
     app = FastAPI(
         title="ATLAS Core",
         version="2.0.0",
@@ -290,11 +322,12 @@ def create_app(
             "Backend optionnel de démonstration. Les agents produisent des propositions; "
             "les règles de policy les valident et aucune action Android n'est exécutée ici."
         ),
+        lifespan=lifespan,
     )
     app.state.store = store
     app.state.policy = policy
     app.state.agent = active_agent
-    v4_router = create_v4_router(store, android_token=token)
+    v4_router = create_v4_router(store, android_token=token, agent=active_agent)
     app.include_router(v4_router)
     app.state.v4_tool_service = v4_router._v4_tool_service
 
