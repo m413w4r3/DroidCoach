@@ -562,7 +562,7 @@ class OpenClawAgentAdapter(AgentAdapter):
         self,
         payload: dict[str, Any],
         *,
-        started_at: float,
+        deadline: float,
         tool_call_count: int,
         completed_calls: int,
         proposal_ids: list[str],
@@ -575,7 +575,7 @@ class OpenClawAgentAdapter(AgentAdapter):
                 proposal_ids=proposal_ids,
             )
 
-        remaining = CHAT_V4_DEADLINE_SECONDS - (self.clock() - started_at)
+        remaining = deadline - self.clock()
         if remaining <= 0:
             raise failure("TIMEOUT")
         try:
@@ -597,7 +597,11 @@ class OpenClawAgentAdapter(AgentAdapter):
             raise failure("QUOTA_EXCEEDED" if status.quota.get("limited") else "UPSTREAM_UNAVAILABLE")
 
         attempt_finished = False
-        timeout = min(max(0.1, self.timeout_s), remaining)
+        remaining = deadline - self.clock()
+        if remaining <= 0:
+            self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=True)
+            raise failure("TIMEOUT")
+        timeout = min(max(0.001, self.timeout_s), remaining)
         try:
             with self._client.stream(
                 "POST",
@@ -606,6 +610,10 @@ class OpenClawAgentAdapter(AgentAdapter):
                 content=encoded,
                 timeout=timeout,
             ) as response:
+                if self.clock() >= deadline:
+                    self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=True)
+                    attempt_finished = True
+                    raise failure("TIMEOUT")
                 if response.status_code == 429:
                     self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=False)
                     attempt_finished = True
@@ -632,7 +640,7 @@ class OpenClawAgentAdapter(AgentAdapter):
                 chunks: list[bytes] = []
                 size = 0
                 for chunk in response.iter_bytes():
-                    if self.clock() - started_at >= CHAT_V4_DEADLINE_SECONDS:
+                    if self.clock() >= deadline:
                         self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=True)
                         attempt_finished = True
                         raise failure("TIMEOUT")
@@ -642,7 +650,7 @@ class OpenClawAgentAdapter(AgentAdapter):
                         attempt_finished = True
                         raise failure("PAYLOAD_TOO_LARGE")
                     chunks.append(chunk)
-            if self.clock() - started_at >= CHAT_V4_DEADLINE_SECONDS:
+            if self.clock() >= deadline:
                 self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=True)
                 attempt_finished = True
                 raise failure("TIMEOUT")
@@ -650,6 +658,10 @@ class OpenClawAgentAdapter(AgentAdapter):
             result = _strict_json_loads(raw)
             if not isinstance(result, dict):
                 raise TypeError("provider response must be an object")
+            if self.clock() >= deadline:
+                self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=True)
+                attempt_finished = True
+                raise failure("TIMEOUT")
         except ChatOrchestrationFailure:
             raise
         except httpx.TimeoutException:
@@ -675,21 +687,25 @@ class OpenClawAgentAdapter(AgentAdapter):
                 and prompt_tokens >= 0 and completion_tokens >= 0
             ):
                 tokens_used = prompt_tokens + completion_tokens
+        if self.clock() >= deadline:
+            self._finish_attempt(reservation, tokens_used=reservation, success=False, breaker_failure=True)
+            raise failure("TIMEOUT")
         self._finish_attempt(reservation, tokens_used=tokens_used, success=True, breaker_failure=False)
         return result
 
     def chat_v4(
         self,
         *,
+        deadline: float,
         conversation_id: str,
         message: str,
         shared_categories: list[str],
         validate_tool: Callable[[str], None],
         execute_tool: Callable[[str, dict[str, Any], str], dict[str, Any]],
         validate_chat: Callable[[], None],
+        on_tool_start: Callable[[str], None],
     ) -> dict[str, Any]:
         """Run one V4 chat turn with only the six fixed local tools and no retries."""
-        started_at = self.clock()
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": CHAT_V4_SYSTEM_PROMPT},
             {
@@ -712,7 +728,7 @@ class OpenClawAgentAdapter(AgentAdapter):
         seen_call_ids: set[str] = set()
 
         while True:
-            if self.clock() - started_at >= CHAT_V4_DEADLINE_SECONDS:
+            if self.clock() >= deadline:
                 raise ChatOrchestrationFailure(
                     "TIMEOUT", tool_call_count=tool_call_count,
                     tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
@@ -735,11 +751,16 @@ class OpenClawAgentAdapter(AgentAdapter):
                     "max_tokens": self.output_token_limit,
                     "temperature": 0,
                 },
-                started_at=started_at,
+                deadline=deadline,
                 tool_call_count=tool_call_count,
                 completed_calls=completed_calls,
                 proposal_ids=proposal_ids,
             )
+            if self.clock() >= deadline:
+                raise ChatOrchestrationFailure(
+                    "TIMEOUT", tool_call_count=tool_call_count,
+                    tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
+                )
             choices = result.get("choices")
             if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
                 raise ChatOrchestrationFailure(
@@ -762,6 +783,11 @@ class OpenClawAgentAdapter(AgentAdapter):
             calls = assistant.get("tool_calls")
             if calls is None:
                 reply = assistant.get("content")
+                if self.clock() >= deadline:
+                    raise ChatOrchestrationFailure(
+                        "TIMEOUT", tool_call_count=tool_call_count,
+                        tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
+                    )
                 if choice.get("finish_reason") != "stop" or not isinstance(reply, str) or not reply.strip() or len(reply) > 4000:
                     raise ChatOrchestrationFailure(
                         "UPSTREAM_UNAVAILABLE", tool_call_count=tool_call_count,
@@ -866,15 +892,16 @@ class OpenClawAgentAdapter(AgentAdapter):
             ]
             messages.append({"role": "assistant", "content": assistant.get("content"), "tool_calls": assistant_calls})
             for call_id, name, arguments in parsed_calls:
-                if self.clock() - started_at >= CHAT_V4_DEADLINE_SECONDS:
+                if self.clock() >= deadline:
                     raise ChatOrchestrationFailure(
                         "TIMEOUT", tool_call_count=tool_call_count,
                         tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
                     )
-                tool_call_count += 1
-                if name == "atlas_propose_plan_revision":
-                    proposal_count += 1
                 try:
+                    on_tool_start(name)
+                    tool_call_count += 1
+                    if name == "atlas_propose_plan_revision":
+                        proposal_count += 1
                     tool_result = execute_tool(name, arguments, call_id)
                     if not isinstance(tool_result, dict):
                         raise ChatToolFailure("INTERNAL", uncertain=True)

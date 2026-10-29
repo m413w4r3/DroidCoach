@@ -3,17 +3,17 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
 import pytest
-from jsonschema import Draft202012Validator, FormatChecker
-
 from atlas_backend.main import create_app
 from atlas_backend.openclaw_adapter import OpenClawAgentAdapter
 from atlas_backend.v4_tool_service import V4ToolError, V4ToolService
+from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = ROOT / "contracts" / "v4"
@@ -44,6 +44,27 @@ class ASGITestClient:
             async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 return await client.post(url, **kwargs)
         return asyncio.run(send())
+
+    def post_timed(self, url: str, **kwargs):
+        async def send():
+            transport = httpx.ASGITransport(app=self.app, client=("127.0.0.1", 51400))
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                started_at = time.monotonic()
+                response = await client.post(url, **kwargs)
+                return response, time.monotonic() - started_at
+        return asyncio.run(send())
+
+
+class SlowBodyStream(httpx.SyncByteStream):
+    def __init__(self, body: bytes, delay_s: float, phases: list[str]):
+        self.body = body
+        self.delay_s = delay_s
+        self.phases = phases
+
+    def __iter__(self):
+        self.phases.append("body")
+        time.sleep(self.delay_s)
+        yield self.body
 
 
 def stamp() -> str:
@@ -325,6 +346,52 @@ def test_provider_timeout_quota_and_response_size_are_bounded(
     assert response.status_code == expected_status
     validate("error.schema.json", response.json())
     assert response.json()["error"]["code"] == expected_code
+
+
+def test_wall_deadline_covers_slow_provider_phases_and_blocks_late_tools(
+    tmp_path, monkeypatch
+):
+    from atlas_backend import v4_router
+
+    monkeypatch.setattr(v4_router, "CHAT_V4_DEADLINE_SECONDS", 0.4)
+    phases = []
+    tool_dispatches = []
+    original_get_day_plan = V4ToolService.atlas_get_day_plan
+
+    def observed_get_day_plan(service, device: str, arguments: dict) -> dict:
+        tool_dispatches.append("atlas_get_day_plan")
+        return original_get_day_plan(service, device, arguments)
+
+    monkeypatch.setattr(V4ToolService, "atlas_get_day_plan", observed_get_day_plan)
+
+    def provider(_request: httpx.Request) -> httpx.Response:
+        phases.append("connect")
+        time.sleep(0.12)
+        phases.append("headers")
+        time.sleep(0.12)
+        body = json.dumps(response_with_tool_calls(
+            tool_call("call-after-deadline", "atlas_get_day_plan", "{}")
+        ), separators=(",", ":")).encode()
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            stream=SlowBodyStream(body, 0.6, phases),
+        )
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    seed_day_plan(app)
+    response, elapsed = ASGITestClient(app).post_timed(
+        "/v4/agent/chat",
+        headers={"Authorization": f"Bearer {ANDROID_TOKEN}"},
+        json=chat_body(shared_categories=["DAY_PLAN"]),
+    )
+
+    assert response.status_code == 504
+    validate("error.schema.json", response.json())
+    assert response.json()["error"]["code"] == "TIMEOUT"
+    assert elapsed < 0.58
+    assert phases == ["connect", "headers", "body"]
+    assert tool_dispatches == []
 
 
 def test_chat_capability_and_requested_consent_are_required_before_provider(tmp_path, monkeypatch):
@@ -610,3 +677,50 @@ def test_cache_finalization_failure_keeps_request_pending_without_redispatch(tmp
     assert "synthetic-secret-phrase" not in caplog.text
     assert "synthetic-provider-token" not in caplog.text
     assert "synthetic cache failure" not in caplog.text
+
+
+def test_chat_cache_is_stable_for_24_hours_then_expires_and_cleans_old_rows(tmp_path, monkeypatch):
+    provider_count = 0
+
+    def provider(_request: httpx.Request) -> httpx.Response:
+        nonlocal provider_count
+        provider_count += 1
+        return httpx.Response(200, json=final_response())
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    base_time = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    current_time = [base_time]
+    app.state.store.clock = lambda: current_time[0]
+    body = chat_body(request_id="00000000-0000-4000-8000-000000000111")
+    client = ASGITestClient(app)
+    cache_key = "v4-chat:" + device_ref() + ":" + body["request_id"]
+
+    first = post_chat(client, body)
+    with app.state.store.connect() as connection:
+        original_expiry = connection.execute(
+            "SELECT expires_at FROM agent_chat_cache WHERE cache_key=?", (cache_key,)
+        ).fetchone()["expires_at"]
+    assert original_expiry == "2030-01-02T00:00:00Z"
+    current_time[0] = base_time + timedelta(hours=23, minutes=59, seconds=59)
+    replay = post_chat(client, body)
+    assert first.status_code == replay.status_code == 200
+    assert replay.json() == first.json()
+    assert provider_count == 1
+
+    with app.state.store.connect() as connection:
+        connection.execute(
+            "INSERT INTO agent_chat_cache(cache_key,response_json,expires_at) VALUES(?,?,?)",
+            ("v4-chat:expired-synthetic", json.dumps({"state": "complete"}), "2029-12-31T23:59:59Z"),
+        )
+    current_time[0] = base_time + timedelta(days=1, seconds=1)
+    expired_replay = post_chat(client, body)
+    assert expired_replay.status_code == 200, f"provider_count={provider_count}"
+    assert expired_replay.json() == first.json()
+    assert provider_count == 2
+    with app.state.store.connect() as connection:
+        rows = connection.execute(
+            "SELECT cache_key,expires_at FROM agent_chat_cache WHERE cache_key LIKE 'v4-chat:%'"
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["cache_key"] == cache_key
+    assert rows[0]["expires_at"] == "2030-01-03T00:00:01Z"
