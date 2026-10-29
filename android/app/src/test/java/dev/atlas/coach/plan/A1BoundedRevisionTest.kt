@@ -305,6 +305,60 @@ class A1BoundedRevisionTest {
     }
 
     @Test
+    fun separateRepositoriesSerializeA1CommitsForTheSameBackend() {
+        val storedBackend = MemoryPlanBackend()
+        val current = dayPlan()
+        configure(repository(storedBackend), current)
+        val concurrentWriters = CountDownLatch(2)
+        val backend = object : PlanStateBackend {
+            override fun read(): String? = storedBackend.read()
+
+            override fun write(value: String) {
+                concurrentWriters.countDown()
+                concurrentWriters.await(1, TimeUnit.SECONDS)
+                storedBackend.write(value)
+            }
+
+            override fun quarantine(rawValue: String, reason: String, atUtcMillis: Long) =
+                storedBackend.quarantine(rawValue, reason, atUtcMillis)
+        }
+        val repositories = listOf(repository(backend), repository(backend))
+        val proposals = listOf(
+            proposal(current, moved(current, 10 * 60), number = 31),
+            proposal(current, moved(current, 11 * 60), number = 32),
+        )
+        val start = CountDownLatch(1)
+        val done = CountDownLatch(proposals.size)
+        val results = Collections.synchronizedList(mutableListOf<A1ApplyResult>())
+        proposals.forEachIndexed { index, item ->
+            thread {
+                start.await()
+                results += repositories[index].applyA1(item, userApproved = true)
+                done.countDown()
+            }
+        }
+        val writesBeforeCommit = storedBackend.writes
+
+        start.countDown()
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+
+        val applied = results.filterIsInstance<A1ApplyResult.Applied>().single()
+        assertEquals(
+            A1ApplyResult.Rejected(A1PolicyRejection.STALE_VERSION),
+            results.single { it is A1ApplyResult.Rejected },
+        )
+        val persisted = PlanV5JsonCodec.decodeStore(storedBackend.value!!)
+        assertEquals(applied.plan, persisted.store.dayPlan)
+        assertEquals(listOf(applied.receipt), persisted.a1State.receipts)
+        val quotaDate = java.time.Instant.ofEpochMilli(NOW)
+            .atZone(java.time.ZoneId.of(current.timezone))
+            .toLocalDate()
+            .toString()
+        assertEquals(1, persisted.a1State.quotaByLocalDate[quotaDate])
+        assertEquals(writesBeforeCommit + 1, storedBackend.writes)
+    }
+
+    @Test
     fun failedStorageWriteLeavesPlanReceiptAndQuotaUntouched() {
         val backend = MemoryPlanBackend()
         val setup = repository(backend)
@@ -392,6 +446,73 @@ class A1BoundedRevisionTest {
             assertFalse(upgraded.a1State.policyFor(ACTIVITY_ID).unlocked)
             assertEquals(plan, upgraded.store.dayPlan)
         }
+    }
+
+    @Test
+    fun populatedV4HistorySurvivesUpgradeToV5() {
+        val current = dayPlan(
+            activities = listOf(
+                activity(),
+                activity(id = SECOND_ACTIVITY_ID, scheduled = schedule(13 * 60)),
+            ),
+        )
+        val backend = MemoryPlanBackend()
+        val repository = repository(backend)
+        assertTrue(repository.create(current) is PlanWriteResult.Saved)
+        val revision = PlanRevisionEngine().createRevision(
+            current = current,
+            proposedActivities = current.activities.map { activity ->
+                if (activity.activityId == ACTIVITY_ID) {
+                    activity.copy(scheduledLocal = activity.scheduledLocal.copy(startMinute = 10 * 60))
+                } else {
+                    activity
+                }
+            },
+            revisionId = "30000000-0000-4000-8000-000000000021",
+            origin = RevisionOrigin.USER,
+            summary = "Déplacer un créneau local",
+            createdAt = NOW - 1_000L,
+        )
+        val preview = repository.preview(revision) as PlanPreviewResult.Ready
+        val confirmation = PlanConfirmation(
+            confirmationId = "40000000-0000-4000-8000-000000000021",
+            revisionId = revision.revisionId,
+            effectIds = preview.preview.effectIds,
+            scopeHash = preview.preview.scopeHash,
+            approvedAt = NOW,
+            expiresAt = NOW + 60_000L,
+        )
+        assertTrue(repository.apply(revision, confirmation) is PlanApplyResult.Applied)
+        val afterRevision = (repository.load() as PlanLoadResult.Loaded).plan
+        assertTrue(
+            repository.reportActivity(
+                ReportActivityRequest(
+                    planId = current.planId,
+                    activityId = SECOND_ACTIVITY_ID,
+                    baseVersion = afterRevision.version,
+                    targetLocalDate = current.localDate,
+                    targetStartMinute = 16 * 60,
+                    targetDurationMinutes = 45,
+                    reason = "Imprévu synthétique pour vérifier la migration",
+                    idempotencyKey = "80000000-0000-4000-8000-000000000021",
+                ),
+            ) is PlanReportResult.Reported,
+        )
+
+        val populatedV4 = PlanV4JsonCodec.decodeStore(backend.value!!)
+        assertEquals(2, populatedV4.store.appliedRevisions.size)
+        assertEquals(2, populatedV4.store.confirmations.size)
+        assertEquals(1, populatedV4.statusEvents.size)
+        assertEquals(1, populatedV4.reportReceipts.size)
+        assertTrue(repository.setA1Consent(true) is A1SettingsResult.Updated)
+        val upgradedV5 = PlanV5JsonCodec.decodeStore(backend.value!!)
+
+        assertEquals(populatedV4.store.dayPlan, upgradedV5.store.dayPlan)
+        assertEquals(populatedV4.store.appliedRevisions, upgradedV5.store.appliedRevisions)
+        assertEquals(populatedV4.store.confirmations, upgradedV5.store.confirmations)
+        assertEquals(populatedV4.statusEvents, upgradedV5.statusEvents)
+        assertEquals(populatedV4.reportReceipts, upgradedV5.reportReceipts)
+        assertEquals(populatedV4.schema3Original, upgradedV5.schema3Original)
     }
 
     @Test

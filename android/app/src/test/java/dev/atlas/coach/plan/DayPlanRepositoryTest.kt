@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -93,6 +94,18 @@ class DayPlanRepositoryTest {
             val restarted = DayPlanRepository(backend, FixedPlanClock(NOW))
 
             assertEquals(PlanLoadResult.Loaded(dayPlan()), restarted.load())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun fileBackendInstancesForTheSamePathShareAProcessTransactionLock() {
+        val directory = Files.createTempDirectory("atlas-plan-lock").toFile()
+        try {
+            val file = File(directory, "day-plan.json")
+
+            assertSame(FilePlanBackend(file).transactionLock, FilePlanBackend(file).transactionLock)
         } finally {
             directory.deleteRecursively()
         }

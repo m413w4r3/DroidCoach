@@ -111,7 +111,11 @@ class DayPlanRepository(
     }
 
     @Synchronized
-    fun create(plan: DayPlan): PlanWriteResult {
+    fun create(plan: DayPlan): PlanWriteResult = synchronized(backend.transactionLock) {
+        createTransaction(plan)
+    }
+
+    private fun createTransaction(plan: DayPlan): PlanWriteResult {
         if (plan.version != 1) return PlanWriteResult.Rejected(PlanRejectionReason.NON_MONOTONE_VERSION)
         return when (val loaded = readDocument()) {
             InternalRead.Missing -> persist(
@@ -123,7 +127,11 @@ class DayPlanRepository(
     }
 
     @Synchronized
-    fun save(plan: DayPlan): PlanWriteResult = when (val loaded = readDocument()) {
+    fun save(plan: DayPlan): PlanWriteResult = synchronized(backend.transactionLock) {
+        saveTransaction(plan)
+    }
+
+    private fun saveTransaction(plan: DayPlan): PlanWriteResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanWriteResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
         is InternalRead.Corrupt -> PlanWriteResult.Corrupt(loaded.reason, loaded.quarantine)
         is InternalRead.Loaded -> {
@@ -171,6 +179,14 @@ class DayPlanRepository(
         revision: PlanRevision,
         confirmation: PlanConfirmation,
         statusEventDraft: StatusEventDraft? = null,
+    ): PlanApplyResult = synchronized(backend.transactionLock) {
+        applyTransaction(revision, confirmation, statusEventDraft)
+    }
+
+    private fun applyTransaction(
+        revision: PlanRevision,
+        confirmation: PlanConfirmation,
+        statusEventDraft: StatusEventDraft?,
     ): PlanApplyResult =
         when (val loaded = readDocument()) {
             InternalRead.Missing -> PlanApplyResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
@@ -184,7 +200,11 @@ class DayPlanRepository(
     }
 
     @Synchronized
-    fun reportActivity(request: ReportActivityRequest): PlanReportResult = when (val loaded = readDocument()) {
+    fun reportActivity(request: ReportActivityRequest): PlanReportResult = synchronized(backend.transactionLock) {
+        reportActivityTransaction(request)
+    }
+
+    private fun reportActivityTransaction(request: ReportActivityRequest): PlanReportResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanReportResult.Rejected(PlanReportRejection.PLAN_NOT_FOUND)
         is InternalRead.Corrupt -> PlanReportResult.Corrupt(loaded.reason, loaded.quarantine)
         is InternalRead.Loaded -> reportInDocument(loaded.document, request)
@@ -197,7 +217,11 @@ class DayPlanRepository(
 
     /** Records an explicit A1 consent decision, separately from all sharing and agent mandates. */
     @Synchronized
-    fun setA1Consent(enabled: Boolean): A1SettingsResult {
+    fun setA1Consent(enabled: Boolean): A1SettingsResult = synchronized(backend.transactionLock) {
+        setA1ConsentTransaction(enabled)
+    }
+
+    private fun setA1ConsentTransaction(enabled: Boolean): A1SettingsResult {
         return when (val loaded = readDocument()) {
             InternalRead.Missing -> A1SettingsResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
             is InternalRead.Corrupt -> A1SettingsResult.Corrupt(loaded.reason, loaded.quarantine)
@@ -225,7 +249,11 @@ class DayPlanRepository(
 
     /** Classification and unlocking are explicit; titles and notes are never inspected. */
     @Synchronized
-    fun setA1ActivityPolicy(policy: A1ActivityPolicy): A1PolicyUpdateResult {
+    fun setA1ActivityPolicy(policy: A1ActivityPolicy): A1PolicyUpdateResult = synchronized(backend.transactionLock) {
+        setA1ActivityPolicyTransaction(policy)
+    }
+
+    private fun setA1ActivityPolicyTransaction(policy: A1ActivityPolicy): A1PolicyUpdateResult {
         return when (val loaded = readDocument()) {
             InternalRead.Missing -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
             is InternalRead.Corrupt -> A1PolicyUpdateResult.Corrupt(loaded.reason, loaded.quarantine)
@@ -250,7 +278,11 @@ class DayPlanRepository(
      * from the activity payload and current plan immediately before the single durable write.
      */
     @Synchronized
-    fun applyA1(proposal: A1RevisionProposal, userApproved: Boolean): A1ApplyResult {
+    fun applyA1(proposal: A1RevisionProposal, userApproved: Boolean): A1ApplyResult = synchronized(backend.transactionLock) {
+        applyA1Transaction(proposal, userApproved)
+    }
+
+    private fun applyA1Transaction(proposal: A1RevisionProposal, userApproved: Boolean): A1ApplyResult {
         if (!userApproved) return A1ApplyResult.Cancelled
         val initiallyLoaded = when (val loaded = readDocument()) {
             InternalRead.Missing -> return A1ApplyResult.Rejected(A1PolicyRejection.PLAN_NOT_FOUND)
@@ -364,7 +396,11 @@ class DayPlanRepository(
 
     /** Undo is local and user initiated, creates a new version, and never refunds quota. */
     @Synchronized
-    fun undoA1(proposalId: String): A1UndoResult {
+    fun undoA1(proposalId: String): A1UndoResult = synchronized(backend.transactionLock) {
+        undoA1Transaction(proposalId)
+    }
+
+    private fun undoA1Transaction(proposalId: String): A1UndoResult {
         val loaded = when (val result = readDocument()) {
             InternalRead.Missing -> return A1UndoResult.Rejected(A1UndoRejection.RECEIPT_NOT_FOUND)
             is InternalRead.Corrupt -> return A1UndoResult.Corrupt(result.reason, result.quarantine)

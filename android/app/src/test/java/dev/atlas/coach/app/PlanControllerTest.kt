@@ -2,6 +2,9 @@ package dev.atlas.coach.app
 
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.A1SettingsResult
+import dev.atlas.coach.plan.DayPlanRepository
+import dev.atlas.coach.plan.FilePlanBackend
 import dev.atlas.coach.plan.PlanClock
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.plan.StatusProvenance
@@ -9,6 +12,7 @@ import dev.atlas.coach.plan.StatusSource
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -61,6 +65,18 @@ class PlanControllerTest {
         assertEquals(2, restarted.plan!!.version)
         assertEquals(activityId, restarted.plan!!.activities.single().activityId)
         assertEquals("Préparer la journée", restarted.plan!!.activities.single().title)
+    }
+
+    @Test
+    fun planForDateReadsAV5Envelope() {
+        val original = controller()
+        addSample(original)
+        val file = File(temporaryFolder.root, "day-plan-$dayOne.json")
+        val repository = DayPlanRepository(FilePlanBackend(file), PlanClock { fixedNow })
+
+        assertTrue(repository.setA1Consent(true) is A1SettingsResult.Updated)
+        assertEquals(5, JSONObject(file.readText()).getInt("schema_version"))
+        assertEquals(original.plan, controller().planForDate(dayOne))
     }
 
     @Test
