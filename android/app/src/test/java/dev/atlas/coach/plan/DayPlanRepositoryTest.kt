@@ -408,6 +408,42 @@ class DayPlanRepositoryTest {
         )
     }
 
+    @Test
+    fun a1RepositoryMovePersistsAReceiptWithoutChangingActivityStatus() {
+        val backend = MemoryPlanBackend()
+        val repository = repository(backend)
+        val current = dayPlan()
+        assertTrue(repository.create(current) is PlanWriteResult.Saved)
+        assertTrue(repository.setA1Consent(true) is A1SettingsResult.Updated)
+        assertTrue(repository.setA1ActivityPolicy(
+            A1ActivityPolicy(
+                activityId = ACTIVITY_ID,
+                activityClass = A1ActivityClass.READING,
+                unlocked = true,
+                externalLinkState = A1ExternalLinkState.NONE,
+            ),
+        ) is A1PolicyUpdateResult.Updated)
+        val proposal = A1RevisionProposal(
+            proposalId = "60000000-0000-4000-8000-000000000001",
+            revisionId = "30000000-0000-4000-8000-000000000001",
+            planId = PLAN_ID,
+            baseVersion = current.version,
+            createdAtUtcMillis = NOW - 1_000,
+            expiresAtUtcMillis = NOW + A1BoundedRevisionPolicy.MAX_PROPOSAL_TTL_MILLIS - 1_000,
+            consentVersion = 1,
+            proposedActivities = current.activities.map { it.copy(scheduledLocal = schedule(10 * 60)) },
+        )
+
+        val applied = repository.applyA1(proposal, userApproved = true) as A1ApplyResult.Applied
+        val reload = repository.load() as PlanLoadResult.Loaded
+        val persisted = dev.atlas.coach.plan.v5.PlanV5JsonCodec.decodeStore(backend.value!!)
+
+        assertEquals(ActivityStatus.PLANNED, applied.plan.activities.single().status)
+        assertEquals(applied.plan, reload.plan)
+        assertEquals(1, persisted.a1State.receipts.size)
+        assertEquals(listOf(A1MoveDiff(ACTIVITY_ID, schedule(), schedule(10 * 60))), persisted.a1State.receipts.single().diff)
+    }
+
     private fun configuredMove(): Pair<DayPlanRepository, PlanRevision> {
         val backend = MemoryPlanBackend()
         val repository = repository(backend)

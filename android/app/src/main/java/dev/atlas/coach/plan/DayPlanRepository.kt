@@ -3,8 +3,11 @@ package dev.atlas.coach.plan
 import dev.atlas.coach.plan.v4.PlanReportReceipt
 import dev.atlas.coach.plan.v4.PlanV4JsonCodec
 import dev.atlas.coach.plan.v4.PlanV4StoreDocument
+import dev.atlas.coach.plan.v5.PlanV5JsonCodec
+import dev.atlas.coach.plan.v5.PlanV5StoreDocument
 import java.security.MessageDigest
 import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import org.json.JSONObject
 
@@ -107,15 +110,19 @@ class DayPlanRepository(
         is InternalRead.Corrupt -> PlanLoadResult.Corrupt(loaded.reason, loaded.quarantine)
     }
 
+    @Synchronized
     fun create(plan: DayPlan): PlanWriteResult {
         if (plan.version != 1) return PlanWriteResult.Rejected(PlanRejectionReason.NON_MONOTONE_VERSION)
         return when (val loaded = readDocument()) {
-            InternalRead.Missing -> persist(PlanV4StoreDocument(PlanStoreDocument(plan))).asWriteResult()
+            InternalRead.Missing -> persist(
+                PlanV5StoreDocument.fromV4(PlanV4StoreDocument(PlanStoreDocument(plan))),
+            ).asWriteResult()
             is InternalRead.Loaded -> PlanWriteResult.Rejected(PlanRejectionReason.PLAN_ALREADY_EXISTS)
             is InternalRead.Corrupt -> PlanWriteResult.Corrupt(loaded.reason, loaded.quarantine)
         }
     }
 
+    @Synchronized
     fun save(plan: DayPlan): PlanWriteResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanWriteResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
         is InternalRead.Corrupt -> PlanWriteResult.Corrupt(loaded.reason, loaded.quarantine)
@@ -130,7 +137,17 @@ class DayPlanRepository(
                     PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
                 !hasSameStatusProjection(current, plan) ->
                     PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
-                else -> persist(loaded.document.copy(store = loaded.document.store.copy(dayPlan = plan))).asWriteResult()
+                else -> persist(
+                    loaded.document.copy(
+                        store = loaded.document.store.copy(dayPlan = plan),
+                        a1State = reconcileA1Policies(
+                            state = loaded.document.a1State,
+                            before = current,
+                            after = plan,
+                            migrateNewActivities = loaded.document.usesV5Envelope,
+                        ),
+                    ),
+                ).asWriteResult()
             }
         }
     }
@@ -149,6 +166,7 @@ class DayPlanRepository(
         }
     }
 
+    @Synchronized
     fun apply(
         revision: PlanRevision,
         confirmation: PlanConfirmation,
@@ -165,14 +183,252 @@ class DayPlanRepository(
         else -> emptyList()
     }
 
+    @Synchronized
     fun reportActivity(request: ReportActivityRequest): PlanReportResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanReportResult.Rejected(PlanReportRejection.PLAN_NOT_FOUND)
         is InternalRead.Corrupt -> PlanReportResult.Corrupt(loaded.reason, loaded.quarantine)
         is InternalRead.Loaded -> reportInDocument(loaded.document, request)
     }
 
+    fun a1Consent(): A1Consent? = when (val loaded = readDocument()) {
+        is InternalRead.Loaded -> loaded.document.a1State.consent
+        else -> null
+    }
+
+    /** Records an explicit A1 consent decision, separately from all sharing and agent mandates. */
+    @Synchronized
+    fun setA1Consent(enabled: Boolean): A1SettingsResult = when (val loaded = readDocument()) {
+        InternalRead.Missing -> A1SettingsResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
+        is InternalRead.Corrupt -> A1SettingsResult.Corrupt(loaded.reason, loaded.quarantine)
+        is InternalRead.Loaded -> {
+            val current = loaded.document
+            val now = clock.nowUtcMillis()
+            val nextConsent = try {
+                A1Consent(
+                    version = Math.addExact(current.a1State.consent.version, 1),
+                    enabled = enabled,
+                    updatedAtUtcMillis = now,
+                )
+            } catch (_: Exception) {
+                return A1SettingsResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+            }
+            val migrated = current.a1State.migrateLegacyActivities(current.store.dayPlan).copy(consent = nextConsent)
+            val updated = current.copy(a1State = migrated, usesV5Envelope = true)
+            when (persist(updated)) {
+                PersistResult.Failed -> A1SettingsResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
+                is PersistResult.Succeeded -> A1SettingsResult.Updated(nextConsent)
+            }
+        }
+    }
+
+    /** Classification and unlocking are explicit; titles and notes are never inspected. */
+    @Synchronized
+    fun setA1ActivityPolicy(policy: A1ActivityPolicy): A1PolicyUpdateResult = when (val loaded = readDocument()) {
+        InternalRead.Missing -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
+        is InternalRead.Corrupt -> A1PolicyUpdateResult.Corrupt(loaded.reason, loaded.quarantine)
+        is InternalRead.Loaded -> {
+            val current = loaded.document
+            if (current.store.dayPlan.activities.none { it.activityId == policy.activityId }) {
+                return A1PolicyUpdateResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+            }
+            val migrated = current.a1State.migrateLegacyActivities(current.store.dayPlan).let { state ->
+                state.copy(activityPolicies = state.activityPolicies + (policy.activityId to policy))
+            }
+            when (persist(current.copy(a1State = migrated, usesV5Envelope = true))) {
+                PersistResult.Failed -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
+                is PersistResult.Succeeded -> A1PolicyUpdateResult.Updated(policy)
+            }
+        }
+    }
+
+    /**
+     * Applies one user-approved local revision. The model supplied no trusted diff: it is rebuilt
+     * from the activity payload and current plan immediately before the single durable write.
+     */
+    @Synchronized
+    fun applyA1(proposal: A1RevisionProposal, userApproved: Boolean): A1ApplyResult {
+        if (!userApproved) return A1ApplyResult.Cancelled
+        val initiallyLoaded = when (val loaded = readDocument()) {
+            InternalRead.Missing -> return A1ApplyResult.Rejected(A1PolicyRejection.PLAN_NOT_FOUND)
+            is InternalRead.Corrupt -> return A1ApplyResult.Corrupt(loaded.reason, loaded.quarantine)
+            is InternalRead.Loaded -> loaded.document
+        }
+        val initialState = initiallyLoaded.a1State
+        val fingerprint = try {
+            A1BoundedRevisionPolicy.fingerprint(proposal)
+        } catch (_: Exception) {
+            return A1ApplyResult.Rejected(A1PolicyRejection.INVALID_PROPOSAL)
+        }
+        initialState.receipts.firstOrNull { it.proposalId == proposal.proposalId }?.let { receipt ->
+            return if (receipt.requestFingerprint == fingerprint) {
+                A1ApplyResult.AlreadyApplied(initiallyLoaded.store.dayPlan, receipt)
+            } else {
+                A1ApplyResult.Rejected(A1PolicyRejection.IDEMPOTENCY_CONFLICT)
+            }
+        }
+        if (initialState.receipts.any { it.revisionId == proposal.revisionId }) {
+            return A1ApplyResult.Rejected(A1PolicyRejection.REVISION_ID_CONFLICT)
+        }
+
+        val firstValidation = A1BoundedRevisionPolicy.validate(
+            current = initiallyLoaded.store.dayPlan,
+            proposal = proposal,
+            state = initialState,
+            nowUtcMillis = clock.nowUtcMillis(),
+            engine = engine,
+        )
+        if (firstValidation !is A1ValidationResult.Valid) {
+            return A1ApplyResult.Rejected((firstValidation as A1ValidationResult.Rejected).reason)
+        }
+
+        // Re-read consent, plan version, policies, receipts and quota at the commit boundary.
+        val latest = when (val loaded = readDocument()) {
+            InternalRead.Missing -> return A1ApplyResult.Rejected(A1PolicyRejection.PLAN_NOT_FOUND)
+            is InternalRead.Corrupt -> return A1ApplyResult.Corrupt(loaded.reason, loaded.quarantine)
+            is InternalRead.Loaded -> loaded.document
+        }
+        if (!latest.a1State.consent.enabled) return A1ApplyResult.Rejected(A1PolicyRejection.CONSENT_DISABLED)
+        if (latest.a1State.consent.version != proposal.consentVersion) {
+            return A1ApplyResult.Rejected(A1PolicyRejection.CONSENT_VERSION_MISMATCH)
+        }
+        if (latest.store.dayPlan.version != proposal.baseVersion) {
+            return A1ApplyResult.Rejected(A1PolicyRejection.STALE_VERSION)
+        }
+        if (latest != initiallyLoaded) return A1ApplyResult.Rejected(A1PolicyRejection.STALE_STATE)
+        val commitNow = clock.nowUtcMillis()
+        val finalValidation = A1BoundedRevisionPolicy.validate(
+            current = latest.store.dayPlan,
+            proposal = proposal,
+            state = latest.a1State,
+            nowUtcMillis = commitNow,
+            engine = engine,
+        )
+        if (finalValidation !is A1ValidationResult.Valid) {
+            return A1ApplyResult.Rejected((finalValidation as A1ValidationResult.Rejected).reason)
+        }
+        val validated = finalValidation.revision
+        val currentPlan = latest.store.dayPlan
+        val updatedActivities = when (val applied = engine.applyChanges(currentPlan, validated.revision)) {
+            is ChangeApplicationResult.Applied -> applied.activities
+            is ChangeApplicationResult.Rejected -> return A1ApplyResult.Rejected(A1PolicyRejection.INVALID_PROPOSAL)
+        }
+        val updatedPlan = try {
+            currentPlan.copy(
+                version = validated.revision.newVersion,
+                currentRevisionId = validated.revision.revisionId,
+                activities = updatedActivities,
+                updatedAt = maxOf(currentPlan.updatedAt, commitNow),
+            )
+        } catch (_: IllegalArgumentException) {
+            return A1ApplyResult.Rejected(A1PolicyRejection.INVALID_PROPOSAL)
+        }
+        val receipt = try {
+            A1RevisionReceipt(
+                proposalId = proposal.proposalId,
+                revisionId = validated.revision.revisionId,
+                requestFingerprint = validated.requestFingerprint,
+                planId = currentPlan.planId,
+                versionBefore = currentPlan.version,
+                versionAfter = updatedPlan.version,
+                diff = validated.diff,
+                effectIds = validated.effectIds,
+                scopeHash = validated.scopeHash,
+                consentVersion = latest.a1State.consent.version,
+                localDate = validated.quotaLocalDate,
+                quotaUsed = validated.quotaUsedAfterCommit,
+                appliedAtUtcMillis = commitNow,
+                undoUntilUtcMillis = Math.addExact(commitNow, A1BoundedRevisionPolicy.UNDO_WINDOW_MILLIS),
+            )
+        } catch (_: Exception) {
+            return A1ApplyResult.Rejected(A1PolicyRejection.INVALID_PROPOSAL)
+        }
+        val nextA1 = latest.a1State.migrateLegacyActivities(currentPlan).copy(
+            quotaByLocalDate = latest.a1State.quotaByLocalDate +
+                (validated.quotaLocalDate to validated.quotaUsedAfterCommit),
+            receipts = latest.a1State.receipts + receipt,
+        )
+        val updatedDocument = latest.copy(
+            store = latest.store.copy(dayPlan = updatedPlan),
+            a1State = nextA1,
+            usesV5Envelope = true,
+        )
+        return when (persist(updatedDocument)) {
+            PersistResult.Failed -> A1ApplyResult.Rejected(A1PolicyRejection.STORAGE_FAILURE)
+            is PersistResult.Succeeded -> A1ApplyResult.Applied(updatedPlan, receipt)
+        }
+    }
+
+    /** Undo is local and user initiated, creates a new version, and never refunds quota. */
+    @Synchronized
+    fun undoA1(proposalId: String): A1UndoResult {
+        val loaded = when (val result = readDocument()) {
+            InternalRead.Missing -> return A1UndoResult.Rejected(A1UndoRejection.RECEIPT_NOT_FOUND)
+            is InternalRead.Corrupt -> return A1UndoResult.Corrupt(result.reason, result.quarantine)
+            is InternalRead.Loaded -> result.document
+        }
+        val receiptIndex = loaded.a1State.receipts.indexOfFirst { it.proposalId == proposalId }
+        if (receiptIndex < 0) return A1UndoResult.Rejected(A1UndoRejection.RECEIPT_NOT_FOUND)
+        val receipt = loaded.a1State.receipts[receiptIndex]
+        if (receipt.undoRevisionId != null) return A1UndoResult.Rejected(A1UndoRejection.ALREADY_UNDONE)
+        val now = clock.nowUtcMillis()
+        if (now >= receipt.undoUntilUtcMillis) return A1UndoResult.Rejected(A1UndoRejection.UNDO_EXPIRED)
+        val current = loaded.store.dayPlan
+        if (current.version != receipt.versionAfter || current.currentRevisionId != receipt.revisionId) {
+            return A1UndoResult.Rejected(A1UndoRejection.VERSION_CHANGED)
+        }
+        val byId = current.activities.associateBy { it.activityId }
+        if (receipt.diff.any { move ->
+                val activity = byId[move.activityId]
+                activity == null || activity.scheduledLocal != move.to || activity.status != ActivityStatus.PLANNED
+            }
+        ) return A1UndoResult.Rejected(A1UndoRejection.CURRENT_PLAN_MISMATCH)
+
+        val undoRevisionId = UUID.randomUUID().toString()
+        val proposed = current.activities.map { activity ->
+            val move = receipt.diff.firstOrNull { it.activityId == activity.activityId }
+            if (move == null) activity else activity.copy(scheduledLocal = move.from)
+        }
+        val undoRevision = try {
+            engine.createRevision(
+                current = current,
+                proposedActivities = proposed,
+                revisionId = undoRevisionId,
+                origin = RevisionOrigin.USER,
+                summary = "Undo A1 local move",
+                createdAt = now,
+            )
+        } catch (_: Exception) {
+            return A1UndoResult.Rejected(A1UndoRejection.CURRENT_PLAN_MISMATCH)
+        }
+        val activities = when (val result = engine.applyChanges(current, undoRevision)) {
+            is ChangeApplicationResult.Applied -> result.activities
+            is ChangeApplicationResult.Rejected -> return A1UndoResult.Rejected(A1UndoRejection.CURRENT_PLAN_MISMATCH)
+        }
+        val updatedPlan = current.copy(
+            version = undoRevision.newVersion,
+            currentRevisionId = undoRevision.revisionId,
+            activities = activities,
+            updatedAt = maxOf(current.updatedAt, now),
+        )
+        val updatedReceipt = receipt.copy(
+            undoRevisionId = undoRevision.revisionId,
+            undoVersion = updatedPlan.version,
+            undoneAtUtcMillis = now,
+        )
+        val updatedReceipts = loaded.a1State.receipts.toMutableList().also { it[receiptIndex] = updatedReceipt }
+        val updatedDocument = loaded.copy(
+            store = loaded.store.copy(dayPlan = updatedPlan),
+            a1State = loaded.a1State.copy(receipts = updatedReceipts),
+            usesV5Envelope = true,
+        )
+        return when (persist(updatedDocument)) {
+            PersistResult.Failed -> A1UndoResult.Rejected(A1UndoRejection.STORAGE_FAILURE)
+            is PersistResult.Succeeded -> A1UndoResult.Undone(updatedPlan, updatedReceipt)
+        }
+    }
+
     private fun applyToDocument(
-        document: PlanV4StoreDocument,
+        document: PlanV5StoreDocument,
         revision: PlanRevision,
         confirmation: PlanConfirmation,
         statusEventDraft: StatusEventDraft?,
@@ -263,6 +519,12 @@ class DayPlanRepository(
                 confirmations = document.store.confirmations + consumedConfirmation,
             ),
             statusEvents = document.statusEvents + listOfNotNull(statusEvent),
+            a1State = reconcileA1Policies(
+                state = document.a1State,
+                before = document.store.dayPlan,
+                after = preview.after,
+                migrateNewActivities = document.usesV5Envelope,
+            ),
         )
         return when (persist(updatedDocument)) {
             is PersistResult.Failed -> PlanApplyResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
@@ -276,7 +538,7 @@ class DayPlanRepository(
     }
 
     private fun reportInDocument(
-        document: PlanV4StoreDocument,
+        document: PlanV5StoreDocument,
         request: ReportActivityRequest,
     ): PlanReportResult {
         val current = document.store.dayPlan
@@ -415,6 +677,12 @@ class DayPlanRepository(
             ),
             statusEvents = document.statusEvents + statusEvent,
             reportReceipts = document.reportReceipts + receipt,
+            a1State = reconcileA1Policies(
+                state = document.a1State,
+                before = current,
+                after = updatedPlan,
+                migrateNewActivities = document.usesV5Envelope,
+            ),
         )
         return when (persist(updatedDocument)) {
             PersistResult.Failed -> PlanReportResult.Rejected(PlanReportRejection.STORAGE_FAILURE)
@@ -535,18 +803,7 @@ class DayPlanRepository(
             return InternalRead.Corrupt("local plan storage could not be read", null)
         } ?: return InternalRead.Missing
         return try {
-            val root = JSONObject(raw)
-            val version = root.opt("schema_version") as? Int
-                ?: throw IllegalArgumentException("schema_version must be an integer")
-            val document = when (version) {
-                PlanJsonCodec.SCHEMA_VERSION -> PlanV4StoreDocument(
-                    store = PlanJsonCodec.decodeStore(raw),
-                    schema3Original = raw,
-                )
-                PlanV4JsonCodec.SCHEMA_VERSION -> PlanV4JsonCodec.decodeStore(raw)
-                else -> throw IllegalArgumentException("unsupported plan schema version $version")
-            }
-            InternalRead.Loaded(document)
+            InternalRead.Loaded(PlanV5JsonCodec.decodeStore(raw))
         } catch (_: Exception) {
             val quarantine = try {
                 backend.quarantine(raw, "invalid or unsupported local plan schema; preserved for recovery", clock.nowUtcMillis())
@@ -557,8 +814,17 @@ class DayPlanRepository(
         }
     }
 
-    private fun persist(document: PlanV4StoreDocument): PersistResult = try {
-        backend.write(PlanV4JsonCodec.encodeStore(document))
+    private fun persist(document: PlanV5StoreDocument): PersistResult = try {
+        val hasA1State = document.usesV5Envelope ||
+            document.a1State.consent.version > 0 ||
+            document.a1State.activityPolicies.isNotEmpty() ||
+            document.a1State.quotaByLocalDate.isNotEmpty() ||
+            document.a1State.receipts.isNotEmpty()
+        if (hasA1State) {
+            backend.write(PlanV5JsonCodec.encodeStore(document.copy(usesV5Envelope = true)))
+        } else {
+            backend.write(PlanV4JsonCodec.encodeStore(document.asV4()))
+        }
         PersistResult.Succeeded(document.store.dayPlan)
     } catch (_: Exception) {
         PersistResult.Failed
@@ -572,9 +838,34 @@ class DayPlanRepository(
     private fun sameRevisionIgnoringStatus(left: PlanRevision, right: PlanRevision): Boolean =
         left.copy(status = RevisionStatus.PROPOSED) == right.copy(status = RevisionStatus.PROPOSED)
 
+    private fun reconcileA1Policies(
+        state: A1PersistentState,
+        before: DayPlan,
+        after: DayPlan,
+        migrateNewActivities: Boolean,
+    ): A1PersistentState {
+        if (!migrateNewActivities && state.activityPolicies.isEmpty()) return state
+        val beforeById = before.activities.associateBy { it.activityId }
+        val afterIds = after.activities.map { it.activityId }.toSet()
+        val policies = state.activityPolicies.filterKeys { it in afterIds }.toMutableMap()
+        after.activities.forEach { activity ->
+            val previous = beforeById[activity.activityId]
+            val contentChanged = previous != null && previous.copy(
+                scheduledLocal = activity.scheduledLocal,
+                status = activity.status,
+                createdRevisionId = activity.createdRevisionId,
+                lastRevisionId = activity.lastRevisionId,
+            ) != activity
+            if ((previous == null || contentChanged) && (migrateNewActivities || activity.activityId in policies)) {
+                policies[activity.activityId] = A1ActivityPolicy.legacyProtected(activity.activityId)
+            }
+        }
+        return state.copy(activityPolicies = policies)
+    }
+
     private sealed interface InternalRead {
         data object Missing : InternalRead
-        data class Loaded(val document: PlanV4StoreDocument) : InternalRead
+        data class Loaded(val document: PlanV5StoreDocument) : InternalRead
         data class Corrupt(val reason: String, val quarantine: PlanQuarantineMetadata?) : InternalRead
     }
 
