@@ -5,6 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.A1ApplyResult
+import dev.atlas.coach.plan.A1RevisionProposal
+import dev.atlas.coach.plan.A1PolicyRejection
 import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.DayPlanRepository
 import dev.atlas.coach.plan.FilePlanBackend
@@ -13,11 +16,11 @@ import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanApplyResult
 import dev.atlas.coach.plan.PlanClock
 import dev.atlas.coach.plan.PlanConfirmation
+import dev.atlas.coach.plan.PlanPreviewResult
+import dev.atlas.coach.plan.PlanRejectionReason
 import dev.atlas.coach.plan.PlanLoadResult
 import dev.atlas.coach.plan.PlanOrigin
 import dev.atlas.coach.plan.PlanPreview
-import dev.atlas.coach.plan.PlanPreviewResult
-import dev.atlas.coach.plan.PlanRejectionReason
 import dev.atlas.coach.plan.PlanRevision
 import dev.atlas.coach.plan.PlanRevisionApiRequest
 import dev.atlas.coach.plan.PlanRevisionApiResult
@@ -29,9 +32,18 @@ import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.PlanStatusPolicy
 import dev.atlas.coach.plan.PlanWriteResult
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.plan.RevisionOrigin
 import dev.atlas.coach.plan.ReportActivityRequest
 import dev.atlas.coach.plan.PlanReportResult
-import dev.atlas.coach.plan.RevisionOrigin
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Ack
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckResultCode
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckState
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ApplicationProof
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4LocalStore
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Proposal
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.plan.StatusEventDraft
 import dev.atlas.coach.plan.StatusProvenance
 import dev.atlas.coach.plan.StatusSource
@@ -45,6 +57,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
+import java.time.Instant
 
 /**
  * UI-facing owner of the local day plan. It never talks to the network and never
@@ -59,8 +72,12 @@ class PlanController(
     private val todayProvider: () -> LocalDate = { LocalDate.now(zoneIdProvider()) },
     private val engine: PlanRevisionEngine = PlanRevisionEngine(),
     private val agentRevisionMapper: PlanRevisionMapper = PlanRevisionMapper(engine),
+    inboxRepository: dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository? = null,
 ) {
     private val directory = directory
+    private val inboxRepository = inboxRepository ?: InboxV4LocalStore.repository(
+        File(directory, InboxV4LocalStore.FILE_NAME),
+    )
     private var repository: DayPlanRepository? = null
     private var loadedDate: String? = null
     private var pendingRevision: PlanRevision? = null
@@ -79,6 +96,10 @@ class PlanController(
         private set
     var lastAppliedSummary by mutableStateOf<String?>(null)
         private set
+    var inboxEntries by mutableStateOf(this.inboxRepository.all())
+        private set
+    var inboxPendingAckCount by mutableStateOf(this.inboxRepository.pendingAcks().size)
+        private set
 
     init {
         refresh()
@@ -95,6 +116,7 @@ class PlanController(
         todayProvider = { date },
         engine = engine,
         agentRevisionMapper = agentRevisionMapper,
+        inboxRepository = inboxRepository,
     )
 
     /** Reads a saved plan for [date] without changing this controller or its repository state. */
@@ -136,7 +158,454 @@ class PlanController(
                 corruption = loaded.reason
             }
         }
+        refreshInbox()
         revision++
+    }
+
+    fun refreshInbox() {
+        inboxEntries = inboxRepository.all()
+        inboxPendingAckCount = inboxRepository.pendingAcks().size
+    }
+
+    /** A refusal is terminal locally and its ACK is durable before transport replay. */
+    fun rejectInboxProposal(proposalId: String, consentVersion: Long): Boolean {
+        val entry = inboxRepository.get(proposalId) ?: return fail("Proposition inbox inconnue.")
+        if (entry.proposal.state !in REVIEWABLE_INBOX_STATES) {
+            return fail("Cette proposition ne peut plus être refusée depuis son état courant.")
+        }
+        val expired = !entry.proposal.expiresAt.isAfter(Instant.ofEpochMilli(clock.nowUtcMillis()))
+        val appended = appendInboxAck(
+            entry = entry,
+            consentVersion = consentVersion,
+            state = if (expired) InboxV4AckState.EXPIRED else InboxV4AckState.REJECTED,
+            resultCode = if (expired) InboxV4AckResultCode.PROPOSAL_EXPIRED else InboxV4AckResultCode.USER_REJECTED,
+            proof = null,
+        )
+        if (appended) message = if (expired) {
+            "Proposition expirée. Aucun effet local n'a été appliqué."
+        } else {
+            "Proposition refusée. Le refus est conservé localement."
+        }
+        return appended
+    }
+
+    /** Applies only after the review dialog calls this method; all gates are checked again here. */
+    fun applyInboxProposal(
+        proposalId: String,
+        planRevisionCapabilityEnabled: Boolean,
+        dayPlanConsentGranted: Boolean,
+        dayPlanConsentVersion: Long,
+    ): Boolean {
+        val entry = inboxRepository.get(proposalId) ?: return fail("Proposition inbox inconnue.")
+        val proposal = entry.proposal
+        if (proposal.state !in REVIEWABLE_INBOX_STATES) {
+            return fail("Cette proposition n'est plus en attente de confirmation.")
+        }
+        if (!planRevisionCapabilityEnabled) return fail("La capability de révision du programme est désactivée.")
+        if (!dayPlanConsentGranted || dayPlanConsentVersion < 1L) {
+            return fail("Le consentement courant du programme ne permet pas cette révision.")
+        }
+        val current = when (val loaded = requireRepository().load()) {
+            is PlanLoadResult.Loaded -> loaded.plan.also { plan = it }
+            PlanLoadResult.Missing -> return rejectInboxProposalAsValidation(entry, dayPlanConsentVersion)
+            is PlanLoadResult.Corrupt -> {
+                corruption = loaded.reason
+                return recordInboxUncertain(entry, dayPlanConsentVersion)
+            }
+        }
+        val now = clock.nowUtcMillis()
+        if (!proposal.expiresAt.isAfter(Instant.ofEpochMilli(now))) {
+            return appendInboxAck(
+                entry, dayPlanConsentVersion, InboxV4AckState.EXPIRED,
+                InboxV4AckResultCode.PROPOSAL_EXPIRED, null,
+            )
+        }
+        if (current.planId != proposal.planId || current.state != PlanState.APPROVED) {
+            return rejectInboxProposalAsValidation(entry, dayPlanConsentVersion)
+        }
+
+        val revisionId = PlanRevisionMapper.revisionId(proposal.proposalId)
+        persistedInboxProof(proposal, current)?.let { proof ->
+            plan = current
+            return appendAppliedInboxAck(entry, dayPlanConsentVersion, proof)
+        }
+        if (current.currentRevisionId == revisionId && current.version.toLong() == proposal.baseVersion + 1L) {
+            // A previous process may have committed the plan and stopped before ACK persistence.
+            // If its atomic local receipt cannot be re-read, retain uncertainty and never apply again.
+            return recordInboxUncertain(entry, dayPlanConsentVersion)
+        }
+        if (current.version.toLong() != proposal.baseVersion) {
+            return appendInboxAck(
+                entry, dayPlanConsentVersion, InboxV4AckState.STALE_VERSION,
+                InboxV4AckResultCode.STALE_VERSION, null,
+            )
+        }
+        if (proposal.conflicts.isNotEmpty()) return rejectInboxProposalAsValidation(entry, dayPlanConsentVersion)
+
+        if (proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK) {
+            return applyA1InboxProposal(entry, current, now, dayPlanConsentVersion)
+        }
+        return applyReviewedInboxRevision(entry, current, now, dayPlanConsentVersion)
+    }
+
+    private fun persistedInboxProof(proposal: InboxV4Proposal, current: DayPlan): InboxV4ApplicationProof? {
+        val revisionId = PlanRevisionMapper.revisionId(proposal.proposalId)
+        val file = File(directory, "day-plan-${current.localDate}.json")
+        val document = runCatching {
+            PlanV5JsonCodec.decodeStore(file.readText(Charsets.UTF_8))
+        }.getOrNull() ?: return null
+        if (document.store.dayPlan != current) return null
+
+        if (proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK) {
+            val receipt = document.a1State.receipts.singleOrNull { it.proposalId == proposal.proposalId }
+                ?: return null
+            if (receipt.planId != current.planId ||
+                receipt.versionBefore.toLong() != proposal.baseVersion ||
+                receipt.versionAfter != receipt.versionBefore + 1 ||
+                receipt.revisionId != revisionId || receipt.versionAfter > current.version
+            ) return null
+            return runCatching {
+                InboxV4ApplicationProof(
+                    planId = receipt.planId,
+                    appliedPlanVersion = receipt.versionAfter.toLong(),
+                    revisionId = receipt.revisionId,
+                    scopeHash = "sha256:${receipt.scopeHash}",
+                    effectIds = receipt.effectIds,
+                )
+            }.getOrNull()
+        }
+
+        val applied = document.store.appliedRevisions.singleOrNull { it.revisionId == revisionId }
+            ?: return null
+        val confirmation = document.store.confirmations.singleOrNull { it.revisionId == revisionId }
+            ?: return null
+        if (applied.status != dev.atlas.coach.plan.RevisionStatus.APPLIED ||
+            applied.planId != current.planId || applied.baseVersion.toLong() != proposal.baseVersion ||
+            applied.newVersion != applied.baseVersion + 1 || applied.newVersion > current.version ||
+            confirmation.consumedAt == null
+        ) return null
+        val effectIds = runCatching { engine.effectIds(applied.changes, revisionId) }.getOrNull() ?: return null
+        if (confirmation.effectIds.sorted() != effectIds.sorted() ||
+            confirmation.scopeHash != engine.scopeHash(effectIds, applied.changes)
+        ) return null
+        return runCatching {
+            InboxV4ApplicationProof(
+                planId = current.planId,
+                appliedPlanVersion = applied.newVersion.toLong(),
+                revisionId = revisionId,
+                scopeHash = "sha256:${confirmation.scopeHash}",
+                effectIds = effectIds,
+            )
+        }.getOrNull()
+    }
+
+    private fun applyA1InboxProposal(
+        entry: InboxV4EntryView,
+        current: DayPlan,
+        now: Long,
+        consentVersion: Long,
+    ): Boolean {
+        val proposal = entry.proposal
+        val consent = requireRepository().a1Consent()
+        if (consent == null || !consent.enabled || consent.version < 1) {
+            message = "A1 n'est pas autorisé : activez son consentement versionné avant d'appliquer."
+            return false
+        }
+        val proposedActivities = try {
+            mapInboxActivities(proposal, current, PlanRevisionMapper.revisionId(proposal.proposalId), a1Only = true)
+        } catch (_: Exception) {
+            return rejectInboxProposalAsValidation(entry, consentVersion)
+        }
+        val a1Proposal = try {
+            A1RevisionProposal(
+                proposalId = proposal.proposalId,
+                revisionId = PlanRevisionMapper.revisionId(proposal.proposalId),
+                planId = proposal.planId,
+                baseVersion = proposal.baseVersion.toInt(),
+                createdAtUtcMillis = proposal.createdAt.toEpochMilli(),
+                expiresAtUtcMillis = proposal.expiresAt.toEpochMilli(),
+                consentVersion = consent.version,
+                proposedActivities = proposedActivities,
+            )
+        } catch (_: Exception) {
+            return rejectInboxProposalAsValidation(entry, consentVersion)
+        }
+        return when (val result = requireRepository().applyA1(a1Proposal, userApproved = true)) {
+            is A1ApplyResult.Applied -> {
+                plan = result.plan
+                val proof = InboxV4ApplicationProof(
+                    planId = result.receipt.planId,
+                    appliedPlanVersion = result.receipt.versionAfter.toLong(),
+                    revisionId = result.receipt.revisionId,
+                    scopeHash = "sha256:${result.receipt.scopeHash}",
+                    effectIds = result.receipt.effectIds,
+                )
+                revision++
+                appendAppliedInboxAck(entry, consentVersion, proof)
+            }
+            is A1ApplyResult.AlreadyApplied -> {
+                plan = result.plan
+                val proof = InboxV4ApplicationProof(
+                    planId = result.receipt.planId,
+                    appliedPlanVersion = result.receipt.versionAfter.toLong(),
+                    revisionId = result.receipt.revisionId,
+                    scopeHash = "sha256:${result.receipt.scopeHash}",
+                    effectIds = result.receipt.effectIds,
+                )
+                revision++
+                appendAppliedInboxAck(entry, consentVersion, proof)
+            }
+            A1ApplyResult.Cancelled -> fail("La révision A1 a été annulée.")
+            is A1ApplyResult.Rejected -> when (result.reason) {
+                A1PolicyRejection.STALE_VERSION -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.STALE_VERSION,
+                    InboxV4AckResultCode.STALE_VERSION, null,
+                )
+                A1PolicyRejection.PROPOSAL_EXPIRED -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.EXPIRED,
+                    InboxV4AckResultCode.PROPOSAL_EXPIRED, null,
+                )
+                A1PolicyRejection.STORAGE_FAILURE, A1PolicyRejection.STALE_STATE -> recordInboxUncertain(entry, consentVersion)
+                else -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.VALIDATION_REJECTED,
+                    InboxV4AckResultCode.VALIDATION_FAILED, null,
+                )
+            }
+            is A1ApplyResult.Corrupt -> {
+                corruption = result.reason
+                recordInboxUncertain(entry, consentVersion)
+            }
+        }
+    }
+
+    private fun applyReviewedInboxRevision(
+        entry: InboxV4EntryView,
+        current: DayPlan,
+        now: Long,
+        consentVersion: Long,
+    ): Boolean {
+        val proposal = entry.proposal
+        val inboxRevision = try {
+            val activities = mapInboxActivities(proposal, current, PlanRevisionMapper.revisionId(proposal.proposalId))
+            engine.createRevision(
+                current = current,
+                proposedActivities = activities,
+                revisionId = PlanRevisionMapper.revisionId(proposal.proposalId),
+                origin = RevisionOrigin.AGENT,
+                summary = proposal.justification.take(240),
+                createdAt = now,
+                ttlMillis = proposal.expiresAt.toEpochMilli() - now,
+            )
+        } catch (_: Exception) {
+            return rejectInboxProposalAsValidation(entry, consentVersion)
+        }
+        val preview = when (val result = requireRepository().preview(inboxRevision)) {
+            is PlanPreviewResult.Ready -> result.preview
+            is PlanPreviewResult.Rejected -> return when (result.reason) {
+                PlanRejectionReason.STALE_REVISION, PlanRejectionReason.VERSION_CONFLICT -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.STALE_VERSION,
+                    InboxV4AckResultCode.STALE_VERSION, null,
+                )
+                PlanRejectionReason.REVISION_EXPIRED, PlanRejectionReason.CONFIRMATION_EXPIRED -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.EXPIRED,
+                    InboxV4AckResultCode.PROPOSAL_EXPIRED, null,
+                )
+                else -> rejectInboxProposalAsValidation(entry, consentVersion)
+            }
+            is PlanPreviewResult.Corrupt -> {
+                corruption = result.reason
+                return recordInboxUncertain(entry, consentVersion)
+            }
+        }
+        val confirmation = try {
+            PlanConfirmation(
+                confirmationId = UUID.randomUUID().toString(),
+                revisionId = inboxRevision.revisionId,
+                effectIds = preview.effectIds,
+                scopeHash = preview.scopeHash,
+                approvedAt = now,
+                expiresAt = now + CONFIRMATION_TTL_MILLIS,
+            )
+        } catch (_: Exception) {
+            return rejectInboxProposalAsValidation(entry, consentVersion)
+        }
+        return when (val applied = requireRepository().apply(inboxRevision, confirmation)) {
+            is PlanApplyResult.Applied -> {
+                plan = applied.plan
+                lastAppliedSummary = inboxRevision.summary
+                revision++
+                val proof = InboxV4ApplicationProof(
+                    planId = applied.plan.planId,
+                    appliedPlanVersion = applied.plan.version.toLong(),
+                    revisionId = applied.revision.revisionId,
+                    scopeHash = "sha256:${confirmation.scopeHash}",
+                    effectIds = applied.effectIds,
+                )
+                appendAppliedInboxAck(entry, consentVersion, proof)
+            }
+            is PlanApplyResult.AlreadyApplied -> {
+                plan = applied.plan
+                revision++
+                val effectIds = applied.effectIds
+                val proof = InboxV4ApplicationProof(
+                    planId = applied.plan.planId,
+                    appliedPlanVersion = applied.plan.version.toLong(),
+                    revisionId = applied.revision.revisionId,
+                    scopeHash = "sha256:${engine.scopeHash(effectIds, applied.revision.changes)}",
+                    effectIds = effectIds,
+                )
+                appendAppliedInboxAck(entry, consentVersion, proof)
+            }
+            is PlanApplyResult.Rejected -> when (applied.reason) {
+                PlanRejectionReason.STALE_REVISION, PlanRejectionReason.VERSION_CONFLICT -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.STALE_VERSION,
+                    InboxV4AckResultCode.STALE_VERSION, null,
+                )
+                PlanRejectionReason.REVISION_EXPIRED, PlanRejectionReason.CONFIRMATION_EXPIRED -> appendInboxAck(
+                    entry, consentVersion, InboxV4AckState.EXPIRED,
+                    InboxV4AckResultCode.PROPOSAL_EXPIRED, null,
+                )
+                PlanRejectionReason.STORAGE_FAILURE -> recordInboxUncertain(entry, consentVersion)
+                else -> rejectInboxProposalAsValidation(entry, consentVersion)
+            }
+            is PlanApplyResult.Corrupt -> {
+                corruption = applied.reason
+                recordInboxUncertain(entry, consentVersion)
+            }
+        }
+    }
+
+    private fun mapInboxActivities(
+        proposal: InboxV4Proposal,
+        current: DayPlan,
+        revisionId: String,
+        a1Only: Boolean = false,
+    ): List<PlanActivity> {
+        val activities = current.activities.associateByTo(linkedMapOf()) { it.activityId }
+        val touched = mutableSetOf<String>()
+        for (change in proposal.changes) {
+            val op = change["op"] as? String ?: error("Missing operation")
+            if (a1Only && op != "reschedule") error("A1 only permits a reschedule")
+            when (op) {
+                "reschedule" -> {
+                    val id = change.requiredInboxString("activity_id")
+                    require(touched.add(id)) { "Duplicate activity operation" }
+                    val old = activities[id] ?: error("Unknown activity")
+                    val target = change.requiredInboxInt("target_start_minute")
+                    val duration = change["duration_minutes"]?.let { (it as? Number)?.toInt() } ?: old.scheduledLocal.durationMinutes
+                    activities[id] = old.copy(
+                        scheduledLocal = old.scheduledLocal.copy(startMinute = target, durationMinutes = duration),
+                    )
+                }
+                "edit_activity" -> {
+                    val id = change.requiredInboxString("activity_id")
+                    require(touched.add(id)) { "Duplicate activity operation" }
+                    val old = activities[id] ?: error("Unknown activity")
+                    val title = change["title"] as? String ?: old.title
+                    val priority = (change["priority"] as? String)?.let(Priority::valueOf) ?: old.priority
+                    val estimate = change["estimate_minutes"]?.let { (it as? Number)?.toInt() ?: error("Invalid estimate") }
+                    activities[id] = old.copy(title = title, priority = priority, estimateMinutes = estimate ?: old.estimateMinutes)
+                }
+                "create_activity" -> {
+                    val clientRef = change.requiredInboxString("client_ref")
+                    val id = PlanRevisionMapper.activityId(current.planId, clientRef, current.version)
+                    require(touched.add(id) && !activities.containsKey(id)) { "Duplicate activity reference" }
+                    val kind = ActivityKind.valueOf(change.requiredInboxString("kind"))
+                    val title = change.requiredInboxString("title")
+                    val priority = Priority.valueOf(change.requiredInboxString("priority"))
+                    val start = change.requiredInboxInt("start_minute")
+                    val duration = change.requiredInboxInt("duration_minutes")
+                    val goalId = change["goal_id"] as? String
+                    activities[id] = PlanActivity(
+                        activityId = id,
+                        planId = current.planId,
+                        kind = kind,
+                        title = title,
+                        status = ActivityStatus.PLANNED,
+                        scheduledLocal = LocalSchedule(current.localDate, start, duration, current.timezone),
+                        priority = priority,
+                        goalId = goalId,
+                        createdRevisionId = revisionId,
+                        lastRevisionId = revisionId,
+                    )
+                }
+                else -> error("Unsupported operation")
+            }
+        }
+        return activities.values.toList()
+    }
+
+    private fun appendAppliedInboxAck(
+        entry: InboxV4EntryView,
+        consentVersion: Long,
+        proof: InboxV4ApplicationProof,
+    ): Boolean {
+        val appended = appendInboxAck(
+            entry, consentVersion, InboxV4AckState.APPLIED,
+            InboxV4AckResultCode.APPLIED, proof,
+        )
+        if (!appended) {
+            runCatching {
+                inboxRepository.recordUncertain(
+                    entry.proposal.proposalId,
+                    consentVersion,
+                    knownApplicationProof = proof,
+                )
+            }
+            refreshInbox()
+            message = "La révision locale est enregistrée, mais son ACK est incertain. Aucun nouvel effet ne sera rejoué."
+        }
+        return appended
+    }
+
+    private fun appendInboxAck(
+        entry: InboxV4EntryView,
+        consentVersion: Long,
+        state: InboxV4AckState,
+        resultCode: InboxV4AckResultCode,
+        proof: InboxV4ApplicationProof?,
+    ): Boolean {
+        if (consentVersion < 1L) return fail("Version de consentement invalide pour l'ACK inbox.")
+        val current = inboxRepository.get(entry.proposal.proposalId) ?: return fail("Proposition inbox inconnue.")
+        return try {
+            val ack = InboxV4Ack(
+                contractVersion = 4,
+                schemaVersion = 4,
+                ackId = UUID.randomUUID().toString(),
+                capability = "proposal.ack",
+                proposalId = entry.proposal.proposalId,
+                sequence = current.lastAckSequence + 1L,
+                state = state,
+                resultCode = resultCode,
+                occurredAt = Instant.ofEpochMilli(clock.nowUtcMillis()),
+                consentVersion = consentVersion,
+                proof = proof,
+            )
+            inboxRepository.appendAck(ack)
+            refreshInbox()
+            true
+        } catch (_: Exception) {
+            message = "L'ACK inbox n'a pas pu être conservé durablement. Réessayez sans répéter l'effet local."
+            false
+        }
+    }
+
+    private fun rejectInboxProposalAsValidation(entry: InboxV4EntryView, consentVersion: Long): Boolean = appendInboxAck(
+        entry, consentVersion, InboxV4AckState.VALIDATION_REJECTED,
+        InboxV4AckResultCode.VALIDATION_FAILED, null,
+    )
+
+    private fun recordInboxUncertain(entry: InboxV4EntryView, consentVersion: Long): Boolean {
+        if (consentVersion < 1L) return fail("Version de consentement invalide pour l'ACK inbox.")
+        return try {
+            inboxRepository.recordUncertain(entry.proposal.proposalId, consentVersion)
+            refreshInbox()
+            message = "Résultat local incertain. La proposition ne sera pas réappliquée automatiquement."
+            false
+        } catch (_: Exception) {
+            message = "Résultat local incertain et ACK non conservé. Aucun nouvel effet n'a été lancé."
+            false
+        }
     }
 
     fun createTodayPlan(): Boolean {
@@ -758,4 +1227,22 @@ class PlanController(
             dev.atlas.coach.plan.PlanReportRejection.STORAGE_FAILURE -> "L'écriture locale a échoué ; aucun effet n'a été appliqué."
         }
     }
+}
+
+private val REVIEWABLE_INBOX_STATES = setOf(
+    InboxV4ProposalState.PENDING_ANDROID,
+    InboxV4ProposalState.RECEIVED,
+    InboxV4ProposalState.AWAITING_USER,
+)
+
+private fun Map<String, Any?>.requiredInboxString(key: String): String =
+    this[key] as? String ?: error("Invalid $key")
+
+private fun Map<String, Any?>.requiredInboxInt(key: String): Int {
+    val number = this[key] as? Number ?: error("Invalid $key")
+    val longValue = number.toLong()
+    require(number.toDouble() == longValue.toDouble() && longValue in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+        "Invalid $key"
+    }
+    return longValue.toInt()
 }

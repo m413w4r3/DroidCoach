@@ -51,6 +51,13 @@ import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.sync.relay.RelayTransportMode
+import dev.atlas.coach.sync.AndroidSyncStorage
+import dev.atlas.coach.sync.v4.CoreV4Category
+import dev.atlas.coach.sync.v4.CoreV4ConsentState
+import dev.atlas.coach.sync.v4.CoreV4SyncScheduler
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.focus.android.AndroidFocusNotifications
 import java.time.Duration
 import java.time.LocalDate
@@ -62,9 +69,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Local day-plan surface. Local mutations are previewed before application.
- * The explicit coach request is the only network path: it requires the
- * planRevision capability and consent, and it still produces only a preview.
+ * Local day-plan surface. Plan revisions received through WorkManager stay in
+ * the inbox until a proposal-specific review and confirmation succeeds locally.
  */
 @Composable
 internal fun PlanScreen(sourceController: PlanController, atlasController: AtlasController? = null) {
@@ -89,6 +95,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     var emptyDetailsExpanded by rememberSaveable { mutableStateOf(false) }
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showCoachRequest by rememberSaveable { mutableStateOf(false) }
+    var reviewingInboxProposalId by rememberSaveable { mutableStateOf<String?>(null) }
     var agentMessage by rememberSaveable { mutableStateOf("Propose une organisation de ma journée.") }
     var configurationMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var coachBusy by rememberSaveable { mutableStateOf(false) }
@@ -291,6 +298,16 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+
+        PlanInboxSection(
+            controller = controller,
+            enabled = !selectedTomorrow,
+            capabilityEnabled = atlasController?.capabilities?.get(AtlasController.CAP_PLAN_REVISION) == true,
+            pendingAckCount = controller.inboxPendingAckCount,
+            selectedProposalId = reviewingInboxProposalId,
+            onSelectProposal = { reviewingInboxProposalId = it },
+            onDismissReview = { reviewingInboxProposalId = null },
+        )
 
         nextActivity?.let { PlanNextActivityCard(it) }
 
@@ -860,6 +877,7 @@ private fun PlanAgentSection(
     configurationMessage: String?,
 ) {
     if (atlasController == null) return
+    val appContext = LocalContext.current.applicationContext
     var showConsent by rememberSaveable { mutableStateOf(false) }
     val enabled = atlasController.capabilities[AtlasController.CAP_PLAN_REVISION] == true
     val configured = atlasController.syncTokenConfigured && atlasController.syncBaseUrl.isNotBlank()
@@ -908,6 +926,7 @@ private fun PlanAgentSection(
                 onClick = {
                     atlasController.setCapability(AtlasController.CAP_PLAN_REVISION, false)
                     if (controller.preview != null) controller.cancelPreview()
+                    CoreV4SyncScheduler.schedule(appContext)
                 },
             )
         }
@@ -926,12 +945,196 @@ private fun PlanAgentSection(
                 TextButton(onClick = {
                     atlasController.setCapability(AtlasController.CAP_PLAN_REVISION, true)
                     showConsent = false
+                    CoreV4SyncScheduler.schedule(appContext)
                 }) { Text("Activer") }
             },
             dismissButton = { TextButton(onClick = { showConsent = false }) { Text("Annuler") } },
         )
     }
 
+}
+
+@Composable
+private fun PlanInboxSection(
+    controller: PlanController,
+    enabled: Boolean,
+    capabilityEnabled: Boolean,
+    pendingAckCount: Int,
+    selectedProposalId: String?,
+    onSelectProposal: (String?) -> Unit,
+    onDismissReview: () -> Unit,
+) {
+    if (!enabled) return
+    val context = LocalContext.current.applicationContext
+    val entries = controller.inboxEntries.filter { entry ->
+        val state = entry.proposal.state
+        (state in setOf(
+            InboxV4ProposalState.PENDING_ANDROID,
+            InboxV4ProposalState.RECEIVED,
+            InboxV4ProposalState.AWAITING_USER,
+            InboxV4ProposalState.UNCERTAIN,
+        ))
+    }
+    if (entries.isEmpty() && pendingAckCount == 0) return
+
+    val consent = remember(controller, controller.revision) {
+        runCatching { AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot }.getOrNull()
+    }
+    val reviewable = entries.filter { it.proposal.state in setOf(
+        InboxV4ProposalState.PENDING_ANDROID,
+        InboxV4ProposalState.RECEIVED,
+        InboxV4ProposalState.AWAITING_USER,
+    ) }
+    val selected = selectedProposalId?.let { id -> reviewable.firstOrNull { it.proposal.proposalId == id } }
+
+    AtlasSection("Propositions reçues") {
+        if (pendingAckCount > 0) {
+            Text(
+                "$pendingAckCount ACK en attente de livraison. Ils restent conservés localement hors ligne.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("inbox_ack_pending"),
+            )
+        }
+        entries.forEach { entry ->
+            Card(modifier = Modifier.fillMaxWidth().testTag("inbox_proposal_${entry.proposal.proposalId}")) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "Proposition ${entry.proposal.proposalId.take(8)} · ${inboxModeLabel(entry.proposal.confirmationMode)}",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(entry.proposal.justification, style = MaterialTheme.typography.bodyMedium)
+                    when (entry.proposal.state) {
+                        InboxV4ProposalState.UNCERTAIN -> AtlasStatus(
+                            "Résultat incertain. Aucun effet ne sera rejoué sans preuve locale.",
+                            AtlasStatusKind.UNAVAILABLE,
+                        )
+                        else -> {
+                            Text(
+                                "Programme v${entry.proposal.baseVersion} · expire ${entry.proposal.expiresAt}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            AtlasSecondaryButton("Examiner les changements", onClick = {
+                                onSelectProposal(entry.proposal.proposalId)
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    selected?.let { entry ->
+        val proposal = entry.proposal
+        AlertDialog(
+            onDismissRequest = onDismissReview,
+            title = { Text("Revoir la proposition ${proposal.proposalId.take(8)}") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(proposal.justification, style = MaterialTheme.typography.bodyMedium)
+                    Text("Mode · ${inboxModeLabel(proposal.confirmationMode)}", style = MaterialTheme.typography.labelLarge)
+                    when (proposal.confirmationMode) {
+                        InboxV4ConfirmationMode.A0_USER_REVIEW -> Text("Chaque changement ci-dessous sera revu avant son application locale.")
+                        InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK -> Text(
+                            "A1 exige la capability de révision, un consentement A1 versionné et l'acceptation du moteur borné. Votre confirmation reste nécessaire.",
+                        )
+                        InboxV4ConfirmationMode.A2_USER_CONFIRMATION -> Text(
+                            "Cette proposition A2 requiert votre confirmation spécifique avant toute application.",
+                        )
+                    }
+                    Text(
+                        "Programme ${proposal.planId.take(8)} · version de base ${proposal.baseVersion}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    proposal.changes.forEachIndexed { index, change ->
+                        Text("${index + 1}. ${renderInboxChange(change, controller.plan)}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (!capabilityEnabled) {
+                        Text("Activez les révisions par le coach pour appliquer cette proposition.", color = MaterialTheme.colorScheme.error)
+                    }
+                    if (consent?.state != CoreV4ConsentState.GRANTED) {
+                        Text("Le consentement DAY_PLAN doit être actif pour appliquer cette proposition.", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = capabilityEnabled && consent?.state == CoreV4ConsentState.GRANTED,
+                    onClick = {
+                        val latestConsent = runCatching {
+                            AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot
+                        }.getOrNull()
+                        if (controller.applyInboxProposal(
+                                proposalId = proposal.proposalId,
+                                planRevisionCapabilityEnabled = capabilityEnabled,
+                                dayPlanConsentGranted = latestConsent?.state == CoreV4ConsentState.GRANTED,
+                                dayPlanConsentVersion = latestConsent?.version?.toLong() ?: 0L,
+                            )
+                        ) onDismissReview()
+                    },
+                ) {
+                    Text(if (proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK) {
+                        "Confirmer la révision A1"
+                    } else {
+                        "Confirmer et appliquer"
+                    })
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        val latestConsent = runCatching {
+                            AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot
+                        }.getOrNull()
+                        if (controller.rejectInboxProposal(proposal.proposalId, latestConsent?.version?.toLong() ?: 0L)) {
+                            onDismissReview()
+                        }
+                    }) { Text("Refuser définitivement") }
+                    TextButton(onClick = onDismissReview) { Text("Plus tard") }
+                }
+            },
+        )
+    }
+}
+
+private fun inboxModeLabel(mode: InboxV4ConfirmationMode): String = when (mode) {
+    InboxV4ConfirmationMode.A0_USER_REVIEW -> "A0 · revue utilisateur"
+    InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK -> "A1 · règle locale bornée"
+    InboxV4ConfirmationMode.A2_USER_CONFIRMATION -> "A2 · confirmation spécifique"
+}
+
+private fun renderInboxChange(change: Map<String, Any?>, currentPlan: dev.atlas.coach.plan.DayPlan?): String {
+    val op = change["op"] as? String ?: "changement"
+    return when (op) {
+        "reschedule" -> {
+            val activityId = change["activity_id"] as? String
+            val activity = currentPlan?.activities?.firstOrNull { it.activityId == activityId }
+            val target = (change["target_start_minute"] as? Number)?.toInt()
+            val start = activity?.scheduledLocal?.startMinute?.let { PlanController.timeLabel(it) } ?: "?"
+            val destination = target?.let { PlanController.timeLabel(it) } ?: "?"
+            val duration = (change["duration_minutes"] as? Number)?.toInt()
+                ?: activity?.scheduledLocal?.durationMinutes
+            "déplacer « ${activity?.title ?: activityId?.take(8) ?: "activité"} » de $start à $destination · ${duration ?: "?"} min"
+        }
+        "create_activity" -> {
+            val start = (change["start_minute"] as? Number)?.toInt()?.let { PlanController.timeLabel(it) } ?: "?"
+            "ajouter « ${change["title"] ?: "activité"} » · ${change["kind"] ?: "type inconnu"} · à $start (${change["duration_minutes"] ?: "?"} min)"
+        }
+        "edit_activity" -> {
+            val activityId = change["activity_id"] as? String
+            val title = currentPlan?.activities?.firstOrNull { it.activityId == activityId }?.title
+            val fields = change.filterKeys { it != "op" && it != "activity_id" }
+            "modifier « ${title ?: activityId?.take(8) ?: "activité"} » · $fields"
+        }
+        else -> "$op · $change"
+    }
 }
 
 private data class ActivityDraft(
