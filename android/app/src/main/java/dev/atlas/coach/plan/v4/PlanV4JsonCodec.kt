@@ -4,6 +4,7 @@ import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanJsonCodec
+import dev.atlas.coach.plan.PlanRevisionEngine
 import dev.atlas.coach.plan.PlanStatusPolicy
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.PlanStoreDocument
@@ -162,6 +163,16 @@ internal object PlanV4JsonCodec {
                 source == StatusSource.USER_UI &&
                     provenance in setOf(StatusProvenance.DECLARED, StatusProvenance.CONFIRMED),
             ) { "terminal completion status requires a user decision" }
+        }
+        if (toStatus == ActivityStatus.MISSED) {
+            val missedActivity = plan.activities.singleOrNull { it.activityId == activityId }
+                ?: error("MISSED status event references an unknown activity")
+            val schedule = missedActivity.scheduledLocal
+            val slotEnd = PlanRevisionEngine().localToInstant(schedule)
+                .plusSeconds(schedule.durationMinutes.toLong() * 60L)
+            require(!OffsetDateTime.parse(decidedAt).toInstant().isBefore(slotEnd)) {
+                "MISSED status decision precedes the scheduled slot end"
+            }
         }
         if (toStatus == ActivityStatus.POSTPONED) {
             val report = receipts.singleOrNull {
