@@ -293,6 +293,24 @@ class PlanController(
         )
     }
 
+    /** Applies a user-selected status in one UI gesture while retaining domain validation and provenance. */
+    fun setStatusAndConfirm(activityId: String, status: ActivityStatus): Boolean {
+        if (!setStatus(activityId, status)) return false
+        return confirmPreview()
+    }
+
+    /** Applies a note-only UI edit without leaving a second preview step after explicit save. */
+    fun editActivityAndConfirm(
+        activityId: String,
+        title: String,
+        kind: ActivityKind,
+        priority: Priority,
+        notes: String?,
+    ): Boolean {
+        if (!editActivity(activityId, title, kind, priority, notes)) return false
+        return confirmPreview()
+    }
+
     /** Applies the explicit same-day report transaction, including its status event and replacement slot. */
     fun reportActivity(
         activityId: String,
@@ -412,6 +430,11 @@ class PlanController(
 
     fun dismissMessage() {
         message = null
+    }
+
+    /** Surfaces a UI-only message produced by a related screen controller. */
+    fun showTransientMessage(value: String) {
+        message = value
     }
 
     /** Sends only a consented, minimized plan and stages the resulting diff for confirmation. */

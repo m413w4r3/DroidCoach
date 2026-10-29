@@ -102,7 +102,21 @@ data class FocusSession(
     val totalWorkCycles: Int = Int.MAX_VALUE,
     val continuous: Boolean = true,
     val taskTitle: String? = null,
+    val planId: String? = null,
+    val activityId: String? = null,
+    val planLocalDate: String? = null,
 ) {
+    init {
+        val hasPlanLink = planId != null || activityId != null || planLocalDate != null
+        require(!hasPlanLink || (planId != null && activityId != null && planLocalDate != null)) {
+            "Plan and activity links must be provided together"
+        }
+        require(planId?.isNotBlank() != false && activityId?.isNotBlank() != false) {
+            "Plan and activity links must not be blank"
+        }
+        require(planLocalDate?.isNotBlank() != false) { "Plan date must not be blank" }
+    }
+
     fun toMap(): Map<String, Any?> = mapOf(
         "id" to id,
         "directiveId" to directiveId,
@@ -121,6 +135,9 @@ data class FocusSession(
         "totalWorkCycles" to totalWorkCycles,
         "continuous" to continuous,
         "taskTitle" to taskTitle,
+        "planId" to planId,
+        "activityId" to activityId,
+        "planLocalDate" to planLocalDate,
     )
 
     fun toPlan(): FocusPlan = FocusPlan(
@@ -176,6 +193,9 @@ data class FocusSession(
                 totalWorkCycles = totalWorkCycles,
                 continuous = continuous,
                 taskTitle = values["taskTitle"] as? String,
+                planId = values["planId"] as? String,
+                activityId = values["activityId"] as? String,
+                planLocalDate = values["planLocalDate"] as? String,
             )
             require(id.isNotBlank() && presetId.isNotBlank()) { "Focus IDs must not be blank" }
             require(session.createdAtUtcMillis >= 0L && session.updatedAtUtcMillis >= 0L) { "Invalid focus timestamps" }

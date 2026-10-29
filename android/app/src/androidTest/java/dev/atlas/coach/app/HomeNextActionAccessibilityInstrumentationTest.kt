@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.atlas.coach.app.ui.AtlasTheme
 import dev.atlas.coach.plan.ActivityKind
@@ -51,9 +52,11 @@ class HomeNextActionAccessibilityInstrumentationTest {
         }
 
         composeRule.onAllNodesWithContentDescription(
-            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final.",
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final. Actions : Démarrer, Reporter.",
         ).assertCountEquals(1)
         composeRule.onNodeWithTag("home_next_action_card").assertIsDisplayed()
+        composeRule.onNodeWithText("Démarrer").assertIsDisplayed()
+        composeRule.onNodeWithText("Reporter").assertIsDisplayed()
     }
 
     @Test

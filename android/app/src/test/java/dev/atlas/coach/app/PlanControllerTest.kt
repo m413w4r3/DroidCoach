@@ -115,8 +115,7 @@ class PlanControllerTest {
     fun statusIsExplicitAndDoneActivityCannotBeRemoved() {
         val controller = controller()
         val activityId = addSample(controller)
-        assertTrue(controller.setStatus(activityId, ActivityStatus.DONE))
-        assertTrue(controller.confirmPreview())
+        assertTrue(controller.setStatusAndConfirm(activityId, ActivityStatus.DONE))
         assertEquals(ActivityStatus.DONE, controller.plan!!.activities.single().status)
         assertEquals(StatusProvenance.CONFIRMED, controller.statusEvents().single().provenance)
         assertEquals(StatusSource.USER_UI, controller.statusEvents().single().source)
@@ -151,6 +150,27 @@ class PlanControllerTest {
         assertTrue(controller.confirmPreview())
         assertFalse(controller.setStatus(activityId, ActivityStatus.PLANNED))
         assertTrue(controller.allowedStatuses(controller.plan!!.activities.single()).isEmpty())
+    }
+
+    @Test
+    fun crossDateReportSurfacesUnsupportedMessageWithoutChangingThePlan() {
+        val controller = controller()
+        val activityId = addSample(controller)
+        val version = controller.plan!!.version
+
+        assertFalse(
+            controller.reportActivity(
+                activityId = activityId,
+                targetLocalDate = dayOne.plusDays(1).toString(),
+                targetStartMinute = 10 * 60,
+                targetDurationMinutes = 50,
+                reason = "Report choisi par l’utilisateur",
+            ),
+        )
+
+        assertEquals(version, controller.plan!!.version)
+        assertEquals(ActivityStatus.PLANNED, controller.plan!!.activities.single().status)
+        assertTrue(controller.message!!.contains("n'est pas encore disponible"))
     }
 
     @Test

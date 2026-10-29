@@ -42,7 +42,9 @@ import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.PlanActivity
+import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
@@ -79,8 +81,14 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     var coachBusy by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
-    var changingStatusId by rememberSaveable { mutableStateOf<String?>(null) }
     var removingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var reportingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var contextualCoachActivityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var contextualCoachPlanVersion by rememberSaveable { mutableIntStateOf(0) }
+    var contextualCoachActivityTitle by rememberSaveable { mutableStateOf("") }
+    var addingNoteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmingTerminalId by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmingTerminalStatusName by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarPreview by remember { mutableStateOf<CalendarSyncPreview?>(null) }
     var calendarPlanAtDialogOpen by remember { mutableStateOf<dev.atlas.coach.plan.DayPlan?>(null) }
     var calendarSyncBusy by remember { mutableStateOf(false) }
@@ -150,10 +158,16 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     val displayMinute = if (selectedTomorrow) 0 else currentMinute
     val nextActivity = plan?.let { PlanUiLogic.nextActivity(it.activities, displayMinute) }
     val activitiesById = plan?.activities?.associateBy(PlanActivity::activityId).orEmpty()
+    val statusEvents = remember(controller, controller.revision, plan?.version) {
+        runCatching { controller.statusEvents() }.getOrDefault(emptyList<PlanStatusEvent>())
+    }
     val editing = editingId?.let(activitiesById::get)
     val moving = movingId?.let(activitiesById::get)
-    val changingStatus = changingStatusId?.let(activitiesById::get)
     val removing = removingId?.let(activitiesById::get)
+    val reporting = reportingId?.let(activitiesById::get)
+    val addingNote = addingNoteId?.let(activitiesById::get)
+    val confirmingTerminal = confirmingTerminalId?.let(activitiesById::get)
+    val confirmingTerminalStatus = confirmingTerminalStatusName?.let { runCatching { ActivityStatus.valueOf(it) }.getOrNull() }
 
     Column(
         modifier = Modifier
@@ -257,10 +271,28 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                     PlanActivityList(
                         activities = plan.activities,
                         nowMinute = displayMinute,
+                        statusEvents = statusEvents,
                         onMove = { movingId = it.activityId },
                         onEdit = { editingId = it.activityId },
-                        onStatus = { changingStatusId = it.activityId },
                         onRemove = { removingId = it.activityId },
+                        onPrimary = { activity -> performPlanActivityPrimaryAction(activity, controller, atlasController) },
+                        onReport = { reportingId = it.activityId },
+                        onMarkMissed = {
+                            confirmingTerminalId = it.activityId
+                            confirmingTerminalStatusName = ActivityStatus.MISSED.name
+                        },
+                        onCancel = {
+                            confirmingTerminalId = it.activityId
+                            confirmingTerminalStatusName = ActivityStatus.CANCELLED.name
+                        },
+                        onAddNote = { addingNoteId = it.activityId },
+                        onAskCoach = if (atlasController?.isAgentEnabled == true) {
+                            { activity ->
+                                contextualCoachActivityId = activity.activityId
+                                contextualCoachPlanVersion = plan.version
+                                contextualCoachActivityTitle = activity.title
+                            }
+                        } else null,
                     )
                 }
             }
@@ -515,14 +547,101 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
         )
     }
 
-    changingStatus?.let { activity ->
-        StatusDialog(
-            activity = activity,
-            allowed = controller.allowedStatuses(activity),
-            onDismiss = { changingStatusId = null },
-            onSelect = { status ->
-                if (controller.setStatus(activity.activityId, status)) changingStatusId = null
+    if (confirmingTerminal != null && confirmingTerminalStatus != null) {
+        AlertDialog(
+            onDismissRequest = {
+                confirmingTerminalId = null
+                confirmingTerminalStatusName = null
             },
+            title = {
+                Text(if (confirmingTerminalStatus == ActivityStatus.CANCELLED) "Annuler cette activité ?" else "Marquer comme pas fait ?")
+            },
+            text = {
+                val consequence = if (confirmingTerminalStatus == ActivityStatus.CANCELLED) {
+                    "L’activité sera annulée volontairement."
+                } else {
+                    "L’activité sera déclarée manquée après la fin de son créneau."
+                }
+                Text("« ${confirmingTerminal.title} » · $consequence Cette décision sera enregistrée au programme.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (controller.setStatusAndConfirm(confirmingTerminal.activityId, confirmingTerminalStatus)) {
+                            confirmingTerminalId = null
+                            confirmingTerminalStatusName = null
+                        }
+                    },
+                    modifier = Modifier.sizeIn(minHeight = 48.dp),
+                ) { Text(if (confirmingTerminalStatus == ActivityStatus.CANCELLED) "Annuler l’activité" else "Pas fait") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        confirmingTerminalId = null
+                        confirmingTerminalStatusName = null
+                    },
+                    modifier = Modifier.sizeIn(minHeight = 48.dp),
+                ) { Text("Garder") }
+            },
+        )
+    }
+
+    reporting?.let { activity ->
+        plan?.let { currentPlan ->
+            PlanReportBottomSheet(
+                plan = currentPlan,
+                activity = activity,
+                onDismiss = { reportingId = null },
+                onConfirm = { target ->
+                    controller.reportActivity(
+                        activityId = activity.activityId,
+                        targetLocalDate = target.localDate,
+                        targetStartMinute = target.startMinute,
+                        targetDurationMinutes = target.durationMinutes,
+                        reason = "Report choisi par l’utilisateur",
+                    )
+                },
+                failureMessage = { controller.message },
+            )
+        }
+    }
+
+    contextualCoachActivityId?.let { activityId ->
+        atlasController?.let { coachController ->
+            PlanActivityCoachDialog(
+                activityId = activityId,
+                planVersion = contextualCoachPlanVersion,
+                activityTitle = contextualCoachActivityTitle,
+                offline = coachController.relaySettings.mode == RelayTransportMode.OFFLINE,
+                onDismiss = { contextualCoachActivityId = null },
+                onSend = { note ->
+                    coachController.sendPlanActivityCoachMessage(
+                        activityId = activityId,
+                        planVersion = contextualCoachPlanVersion,
+                        activityTitle = contextualCoachActivityTitle,
+                        note = note,
+                    )
+                },
+                failureMessage = { coachController.latestMessage },
+            )
+        }
+    }
+
+    addingNote?.let { activity ->
+        PlanNoteDialog(
+            activity = activity,
+            onDismiss = { addingNoteId = null },
+            onConfirm = { note ->
+                controller.editActivityAndConfirm(
+                    activityId = activity.activityId,
+                    title = activity.title,
+                    kind = activity.kind,
+                    priority = activity.priority,
+                    notes = note,
+                ).also { if (it) addingNoteId = null }
+            },
+            failureMessage = { controller.message },
         )
     }
 
@@ -794,41 +913,6 @@ private fun MoveActivityDialog(
             }) { Text("Prévisualiser") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
-    )
-}
-
-@Composable
-private fun StatusDialog(
-    activity: PlanActivity,
-    allowed: List<ActivityStatus>,
-    onDismiss: () -> Unit,
-    onSelect: (ActivityStatus) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Statut de « ${activity.title} »") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "Un statut est déclaré explicitement : l'heure qui passe ne rend jamais une activité terminée.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (allowed.isEmpty()) {
-                    Text(
-                        "Ce statut est terminal. Créez une nouvelle activité si une replanification est nécessaire.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    allowed.forEach { status ->
-                        TextButton(onClick = { onSelect(status) }) {
-                            Text("${PlanController.statusLabel(status)} (${status.name})")
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
     )
 }
 

@@ -228,15 +228,15 @@ class HomeNextActionTest {
         )
 
         assertEquals(
-            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final.",
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final. Actions : Démarrer, Reporter.",
             homeNextActionAccessibilityLabel(oneMinute, "Dossier final"),
         )
         assertEquals(
-            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:32, 2 minutes, priorité requise, objectif Dossier final.",
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:32, 2 minutes, priorité requise, objectif Dossier final. Actions : Démarrer, Reporter.",
             homeNextActionAccessibilityLabel(twoMinutes, "Dossier final"),
         )
         assertEquals(
-            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 17:30, 480 minutes, priorité requise, objectif Dossier final.",
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 17:30, 480 minutes, priorité requise, objectif Dossier final. Actions : Démarrer, Reporter.",
             homeNextActionAccessibilityLabel(longDuration, "Dossier final"),
         )
     }

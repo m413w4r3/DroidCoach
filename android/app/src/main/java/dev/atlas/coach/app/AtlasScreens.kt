@@ -180,7 +180,7 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        HomePlanHero(nextAction, nextActionGoalTitle) {
+        HomePlanHero(nextAction, nextActionGoalTitle, planController, controller) {
             controller.navigationState.selectTab(AtlasScreenId.PLAN)
         }
 
@@ -284,8 +284,11 @@ private fun HomeFocusQuickCard(
 private fun HomePlanHero(
     state: HomeNextActionState,
     goalTitle: String?,
+    planController: PlanController?,
+    atlasController: AtlasController,
     onPlan: () -> Unit,
 ) {
+    var reportOpen by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth().testTag("home_plan_hero"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -310,13 +313,40 @@ private fun HomePlanHero(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text("Priorité ${homePriorityLabel(activity.priority)}", style = MaterialTheme.typography.bodySmall)
-                    if (activity.status == dev.atlas.coach.plan.ActivityStatus.IN_PROGRESS) {
-                        Text("En cours", style = MaterialTheme.typography.labelMedium)
-                    }
+                    Text(PlanController.statusLabel(activity.status), style = MaterialTheme.typography.labelMedium)
                     goalTitle?.let { Text("Objectif · $it", style = MaterialTheme.typography.bodySmall) }
+                    PlanActivityActionButtons(
+                        activity = activity,
+                        onPrimary = {
+                            planController?.let { performPlanActivityPrimaryAction(activity, it, atlasController) }
+                        },
+                        onReport = { reportOpen = true },
+                        enabled = planController != null,
+                    )
                 }
             }
         }
+    }
+    val selectedActivity = (state as? HomeNextActionState.Selected)?.activity
+    val currentPlan = planController?.plan
+    if (reportOpen && selectedActivity != null && currentPlan != null &&
+        planController != null && currentPlan.planId == selectedActivity.planId
+    ) {
+        PlanReportBottomSheet(
+            plan = currentPlan,
+            activity = selectedActivity,
+            onDismiss = { reportOpen = false },
+            onConfirm = { target ->
+                planController.reportActivity(
+                    activityId = selectedActivity.activityId,
+                    targetLocalDate = target.localDate,
+                    targetStartMinute = target.startMinute,
+                    targetDurationMinutes = target.durationMinutes,
+                    reason = "Report choisi par l’utilisateur",
+                )
+            },
+            failureMessage = { planController.message },
+        )
     }
 }
 
@@ -324,7 +354,10 @@ private fun HomePlanHero(
 internal fun HomeNextActionCard(
     state: HomeNextActionState,
     goalTitle: String?,
+    planController: PlanController? = null,
+    atlasController: AtlasController? = null,
 ) {
+    var reportOpen by remember { mutableStateOf(false) }
     if (state == HomeNextActionState.Neutral) return
     val accessibilityLabel = when (state) {
         HomeNextActionState.Neutral -> return
@@ -333,7 +366,7 @@ internal fun HomeNextActionCard(
     }
     Card(
         modifier = Modifier.fillMaxWidth()
-            .semantics(mergeDescendants = true) { contentDescription = accessibilityLabel }
+            .semantics { contentDescription = accessibilityLabel }
             .testTag("home_next_action_card"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
@@ -358,13 +391,42 @@ internal fun HomeNextActionCard(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text("Priorité ${homePriorityLabel(activity.priority)}", style = MaterialTheme.typography.bodySmall)
-                    if (activity.status == dev.atlas.coach.plan.ActivityStatus.IN_PROGRESS) {
-                        Text("En cours", style = MaterialTheme.typography.labelMedium)
-                    }
+                    Text(PlanController.statusLabel(activity.status), style = MaterialTheme.typography.labelMedium)
                     goalTitle?.let { Text("Objectif · $it", style = MaterialTheme.typography.bodySmall) }
+                    PlanActivityActionButtons(
+                        activity = activity,
+                        onPrimary = {
+                            planController?.let {
+                                performPlanActivityPrimaryAction(activity, it, atlasController)
+                            }
+                        },
+                        onReport = { reportOpen = true },
+                        enabled = planController != null,
+                    )
                 }
             }
         }
+    }
+    val selectedActivity = (state as? HomeNextActionState.Selected)?.activity
+    val currentPlan = planController?.plan
+    if (reportOpen && selectedActivity != null && currentPlan != null &&
+        planController != null && currentPlan.planId == selectedActivity.planId
+    ) {
+        PlanReportBottomSheet(
+            plan = currentPlan,
+            activity = selectedActivity,
+            onDismiss = { reportOpen = false },
+            onConfirm = { target ->
+                planController.reportActivity(
+                    activityId = selectedActivity.activityId,
+                    targetLocalDate = target.localDate,
+                    targetStartMinute = target.startMinute,
+                    targetDurationMinutes = target.durationMinutes,
+                    reason = "Report choisi par l’utilisateur",
+                )
+            },
+            failureMessage = { planController.message },
+        )
     }
 }
 
@@ -375,6 +437,19 @@ internal fun ShortcutButton(label: String, modifier: Modifier = Modifier, onClic
 
 @Composable
 internal fun FocusScreen(controller: AtlasController, revision: Int, onChooseHabit: () -> Unit) {
+    val appContext = LocalContext.current.applicationContext
+    val linkedPlanController = remember(appContext, controller.focusSession?.planLocalDate) {
+        val base = (appContext as? AtlasApplication)?.planController
+        val date = controller.focusSession?.planLocalDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        if (base != null && date != null) base.forDate(date) else base
+    }
+    val linkedSession = controller.focusSession?.takeIf { it.planId != null && it.activityId != null }
+    LaunchedEffect(linkedSession?.id, linkedSession?.status) { linkedPlanController?.refresh() }
+    val linkedActivity = remember(linkedSession?.activityId, linkedPlanController?.revision) {
+        linkedSession?.activityId?.let { id ->
+            linkedPlanController?.plan?.activities?.firstOrNull { it.activityId == id }
+        }
+    }
     val focusEnabled = controller.capabilities[AtlasController.CAP_FOCUS] == true
     val pausedSession = controller.focusSession?.takeIf { it.status == FocusStatus.PAUSED }
     val finishedSession = controller.focusSession?.takeIf { it.status == FocusStatus.FINISHED }
@@ -452,6 +527,39 @@ internal fun FocusScreen(controller: AtlasController, revision: Int, onChooseHab
                 },
                 onChooseHabit = onChooseHabit,
             )
+        }
+        linkedSession?.let { session ->
+            Card(modifier = Modifier.fillMaxWidth().testTag("focus_plan_activity_link")) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Activité du programme", style = MaterialTheme.typography.titleMedium)
+                    Text(linkedActivity?.title ?: session.taskTitle ?: "Activité liée")
+                    Text(
+                        "${linkedActivity?.let { PlanController.timeLabel(it.scheduledLocal.startMinute) } ?: "Heure inconnue"} · " +
+                            "${linkedActivity?.let { PlanController.statusLabel(it.status) } ?: "État indisponible"}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text("La fin du minuteur Focus ne marque pas l’activité comme terminée.", style = MaterialTheme.typography.bodySmall)
+                    if (session.status == FocusStatus.FINISHED && linkedActivity?.status == dev.atlas.coach.plan.ActivityStatus.IN_PROGRESS) {
+                        AtlasPrimaryButton(
+                            label = "Confirmer la séance terminée",
+                            modifier = Modifier.testTag("focus_confirm_plan_activity_done"),
+                            onClick = {
+                                val planController = linkedPlanController ?: return@AtlasPrimaryButton
+                                planController.refresh()
+                                val current = planController.plan?.activities?.firstOrNull { it.activityId == session.activityId }
+                                if (current?.status == dev.atlas.coach.plan.ActivityStatus.IN_PROGRESS) {
+                                    planController.setStatusAndConfirm(current.activityId, dev.atlas.coach.plan.ActivityStatus.DONE)
+                                }
+                            },
+                        )
+                    } else if (linkedActivity?.status == dev.atlas.coach.plan.ActivityStatus.DONE) {
+                        Text("Séance confirmée par l’utilisateur.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
         }
         OutlinedButton(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTagModifier("focus_statistics"),
