@@ -7,8 +7,13 @@ import dev.atlas.coach.plan.LocalSchedule
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanChange
 import dev.atlas.coach.plan.PlanOrigin
+import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.plan.StatusProvenance
+import dev.atlas.coach.plan.StatusSource
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -69,6 +74,66 @@ class PlanUiLogicTest {
             listOf("Requise", "Importante", "Optionnelle"),
             Priority.entries.map { PlanUiLogic.priorityLabel(it) },
         )
+    }
+
+    @Test
+    fun statusOriginUsesLatestMatchingEventAndKeepsMissingHistoryUnknown() {
+        val done = activity(ID_1, "Lecture", 10 * 60, status = ActivityStatus.DONE)
+        val older = statusEvent(
+            eventId = ID_3,
+            activity = done,
+            version = 2,
+            provenance = StatusProvenance.DECLARED,
+            source = StatusSource.USER_UI,
+        )
+        val latest = statusEvent(
+            eventId = ID_4,
+            activity = done,
+            version = 3,
+            provenance = StatusProvenance.CONFIRMED,
+            source = StatusSource.USER_UI,
+        )
+        val unrelated = statusEvent(
+            eventId = ID_2,
+            activity = done.copy(activityId = ID_2),
+            version = 9,
+            provenance = StatusProvenance.MEASURED,
+            source = StatusSource.USAGE_STATS,
+        )
+
+        val selected = PlanUiLogic.statusEventForActivity(done, listOf(latest, unrelated, older))
+        assertEquals(latest, selected)
+        assertEquals("Confirmé par vous · interface ATLAS", PlanUiLogic.statusOriginLabel(selected))
+        assertEquals("Origine du statut inconnue", PlanUiLogic.statusOriginLabel(null))
+    }
+
+    @Test
+    fun provenanceAndSourceEnumsHaveClearUserLabels() {
+        assertEquals(
+            listOf("Déclaré par vous", "Mesuré", "Confirmé par vous", "Inconnu"),
+            StatusProvenance.entries.map(PlanUiLogic::provenanceLabel),
+        )
+        assertEquals(
+            listOf("interface ATLAS", "minuteur Focus", "UsageStats", "lecture wger", "import Core"),
+            StatusSource.entries.map(PlanUiLogic::sourceLabel),
+        )
+    }
+
+    @Test
+    fun coachEnvelopeCarriesStructuredActivityContextAndEscapesMessage() {
+        val envelope = buildPlanActivityCoachEnvelope(
+            activityId = ID_1,
+            planVersion = 7,
+            message = "  Vérifie \"cette activité\"\nmerci  ",
+        )
+
+        assertTrue(envelope.contains("\"activity_id\":\"$ID_1\""))
+        assertTrue(envelope.contains("\"plan_version\":7"))
+        assertTrue(envelope.contains("\"action\":\"ASK_COACH\""))
+        assertTrue(envelope.contains("Vérifie \\\"cette activité\\\""))
+        assertTrue(envelope.contains("\\nmerci"))
+        assertFalse(envelope.contains("\n"))
+        assertFalse(envelope.contains("notes"))
     }
 
     @Test
@@ -172,6 +237,27 @@ class PlanUiLogicTest {
         updatedAt = 0L,
         approvedAt = 0L,
         origin = PlanOrigin.LOCAL,
+    )
+
+    private fun statusEvent(
+        eventId: String,
+        activity: PlanActivity,
+        version: Int,
+        provenance: StatusProvenance,
+        source: StatusSource,
+    ) = PlanStatusEvent(
+        statusEventId = eventId,
+        planId = activity.planId,
+        activityId = activity.activityId,
+        continuityId = null,
+        fromStatus = ActivityStatus.IN_PROGRESS,
+        toStatus = activity.status,
+        provenance = provenance,
+        source = source,
+        decidedAt = "2026-10-26T10:00:00Z",
+        observedAt = "2026-10-26T10:00:00Z",
+        planVersion = version,
+        consentVersion = 0,
     )
 
     private companion object {

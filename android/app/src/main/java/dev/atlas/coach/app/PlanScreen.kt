@@ -42,7 +42,9 @@ import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.PlanActivity
+import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
@@ -81,6 +83,8 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
     var removingId by rememberSaveable { mutableStateOf<String?>(null) }
     var reportingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var contextualCoachActivityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var contextualCoachPlanVersion by rememberSaveable { mutableIntStateOf(0) }
     var addingNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingTerminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingTerminalStatusName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -153,6 +157,9 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     val displayMinute = if (selectedTomorrow) 0 else currentMinute
     val nextActivity = plan?.let { PlanUiLogic.nextActivity(it.activities, displayMinute) }
     val activitiesById = plan?.activities?.associateBy(PlanActivity::activityId).orEmpty()
+    val statusEvents = remember(controller, controller.revision, plan?.version) {
+        runCatching { controller.statusEvents() }.getOrDefault(emptyList<PlanStatusEvent>())
+    }
     val editing = editingId?.let(activitiesById::get)
     val moving = movingId?.let(activitiesById::get)
     val removing = removingId?.let(activitiesById::get)
@@ -263,6 +270,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                     PlanActivityList(
                         activities = plan.activities,
                         nowMinute = displayMinute,
+                        statusEvents = statusEvents,
                         onMove = { movingId = it.activityId },
                         onEdit = { editingId = it.activityId },
                         onRemove = { removingId = it.activityId },
@@ -277,6 +285,12 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                             confirmingTerminalStatusName = ActivityStatus.CANCELLED.name
                         },
                         onAddNote = { addingNoteId = it.activityId },
+                        onAskCoach = if (atlasController?.isAgentEnabled == true) {
+                            { activity ->
+                                contextualCoachActivityId = activity.activityId
+                                contextualCoachPlanVersion = plan.version
+                            }
+                        } else null,
                     )
                 }
             }
@@ -587,6 +601,19 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                     )
                 },
                 failureMessage = { controller.message },
+            )
+        }
+    }
+
+    contextualCoachActivityId?.let { activityId ->
+        atlasController?.let { coachController ->
+            PlanActivityCoachDialog(
+                activityId = activityId,
+                planVersion = contextualCoachPlanVersion,
+                offline = coachController.relaySettings.mode == RelayTransportMode.OFFLINE,
+                onDismiss = { contextualCoachActivityId = null },
+                onSend = coachController::sendAgentMessage,
+                failureMessage = { coachController.latestMessage },
             )
         }
     }

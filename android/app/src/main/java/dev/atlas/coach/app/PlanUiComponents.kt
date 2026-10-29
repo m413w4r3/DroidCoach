@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -48,7 +49,10 @@ import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanChange
 import dev.atlas.coach.plan.PlanPreview
+import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.plan.StatusProvenance
+import dev.atlas.coach.plan.StatusSource
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -81,6 +85,32 @@ internal object PlanUiLogic {
     }
 
     fun statusLabel(status: ActivityStatus): String = PlanController.statusLabel(status)
+
+    fun statusEventForActivity(activity: PlanActivity, events: List<PlanStatusEvent>): PlanStatusEvent? =
+        events.asSequence()
+            .filter {
+                it.planId == activity.planId && it.activityId == activity.activityId && it.toStatus == activity.status
+            }
+            .maxWithOrNull(compareBy<PlanStatusEvent> { it.planVersion }.thenBy { it.decidedAt }.thenBy { it.statusEventId })
+
+    fun statusOriginLabel(event: PlanStatusEvent?): String = event?.let {
+        "${provenanceLabel(it.provenance)} · ${sourceLabel(it.source)}"
+    } ?: "Origine du statut inconnue"
+
+    fun provenanceLabel(provenance: StatusProvenance): String = when (provenance) {
+        StatusProvenance.CONFIRMED -> "Confirmé par vous"
+        StatusProvenance.DECLARED -> "Déclaré par vous"
+        StatusProvenance.MEASURED -> "Mesuré"
+        StatusProvenance.UNKNOWN -> "Inconnu"
+    }
+
+    fun sourceLabel(source: StatusSource): String = when (source) {
+        StatusSource.USER_UI -> "interface ATLAS"
+        StatusSource.FOCUS_TIMER -> "minuteur Focus"
+        StatusSource.USAGE_STATS -> "UsageStats"
+        StatusSource.WGER_READ -> "lecture wger"
+        StatusSource.CORE_IMPORT -> "import Core"
+    }
 
     fun primaryActionLabel(status: ActivityStatus): String? = when (status) {
         ActivityStatus.PLANNED -> "Démarrer"
@@ -205,11 +235,13 @@ internal fun PlanActivityList(
     onMove: (PlanActivity) -> Unit,
     onEdit: (PlanActivity) -> Unit,
     onRemove: (PlanActivity) -> Unit,
+    statusEvents: List<PlanStatusEvent> = emptyList(),
     onPrimary: (PlanActivity) -> Unit = {},
     onReport: (PlanActivity) -> Unit = {},
     onMarkMissed: (PlanActivity) -> Unit = {},
     onCancel: (PlanActivity) -> Unit = {},
     onAddNote: (PlanActivity) -> Unit = {},
+    onAskCoach: ((PlanActivity) -> Unit)? = null,
 ) {
     val ordered = PlanUiLogic.sortActivities(activities)
     val nextActivityId = PlanUiLogic.nextActivity(ordered, nowMinute)?.activityId
@@ -217,6 +249,7 @@ internal fun PlanActivityList(
         ordered.forEach { activity ->
             PlanActivityRow(
                 activity = activity,
+                statusEvent = PlanUiLogic.statusEventForActivity(activity, statusEvents),
                 timing = PlanUiLogic.timing(activity, nowMinute),
                 isNext = activity.activityId == nextActivityId,
                 onMove = { onMove(activity) },
@@ -227,6 +260,7 @@ internal fun PlanActivityList(
                 onMarkMissed = { onMarkMissed(activity) },
                 onCancel = { onCancel(activity) },
                 onAddNote = { onAddNote(activity) },
+                onAskCoach = onAskCoach?.let { callback -> { callback(activity) } },
                 canMarkMissed = PlanUiLogic.canMarkMissed(activity, nowMinute),
             )
         }
@@ -241,19 +275,23 @@ internal fun PlanActivityRow(
     onMove: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
+    statusEvent: PlanStatusEvent? = null,
     onPrimary: () -> Unit = {},
     onReport: () -> Unit = {},
     onMarkMissed: () -> Unit = {},
     onCancel: () -> Unit = {},
     onAddNote: () -> Unit = onEdit,
+    onAskCoach: (() -> Unit)? = null,
     canMarkMissed: Boolean = false,
 ) {
     val statusLabel = PlanController.statusLabel(activity.status)
     val timeRange = "${PlanController.timeLabel(activity.scheduledLocal.startMinute)} – " +
         PlanController.endTimeLabel(activity.scheduledLocal.startMinute, activity.scheduledLocal.durationMinutes)
+    val originLabel = PlanUiLogic.statusOriginLabel(statusEvent)
     val primaryLabel = PlanUiLogic.primaryActionLabel(activity.status)
     val rowDescription = "${timeRange}. ${activity.title}. État : $statusLabel." +
-        (primaryLabel?.let { " Actions : $it, Reporter." } ?: " Actions : Plus d’actions.")
+        " $originLabel." +
+        (primaryLabel?.let { " Actions : $it, Reporter, Plus d’actions." } ?: " Actions : Plus d’actions.")
     val containerColor = if (isNext) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -333,15 +371,22 @@ internal fun PlanActivityRow(
                             ActivityStatus.PLANNED, ActivityStatus.POSTPONED -> AtlasStatusKind.SIMULATED
                         },
                     )
+                    Text(
+                        "Origine du statut · $originLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 PlanActivityOverflowMenu(
                     activity = activity,
+                    statusOriginLabel = originLabel,
                     onMove = onMove,
                     onEdit = onEdit,
                     onRemove = onRemove,
                     onMarkMissed = onMarkMissed,
                     onCancel = onCancel,
                     onAddNote = onAddNote,
+                    onAskCoach = onAskCoach,
                     canMarkMissed = canMarkMissed,
                 )
             }
@@ -425,9 +470,11 @@ internal fun PlanActivityOverflowMenu(
     onMove: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
+    statusOriginLabel: String = "Origine du statut inconnue",
     onMarkMissed: () -> Unit = {},
     onCancel: () -> Unit = {},
     onAddNote: () -> Unit = onEdit,
+    onAskCoach: (() -> Unit)? = null,
     canMarkMissed: Boolean = false,
 ) {
     var expanded by rememberSaveable(activity.activityId) { mutableStateOf(false) }
@@ -440,7 +487,18 @@ internal fun PlanActivityOverflowMenu(
             Text("Plus")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Origine du statut · $statusOriginLabel", style = MaterialTheme.typography.bodySmall) },
+                onClick = {},
+                enabled = false,
+            )
             DropdownMenuItem(text = { Text("Ajouter une note") }, onClick = { expanded = false; onAddNote() })
+            onAskCoach?.let { callback ->
+                DropdownMenuItem(
+                    text = { Text("Dire quelque chose au coach…") },
+                    onClick = { expanded = false; callback() },
+                )
+            }
             if (activity.status == ActivityStatus.PLANNED) {
                 DropdownMenuItem(text = { Text("Modifier") }, onClick = { expanded = false; onEdit() })
                 DropdownMenuItem(text = { Text("Déplacer") }, onClick = { expanded = false; onMove() })
@@ -487,7 +545,18 @@ internal fun PlanReportBottomSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Reporter l’activité", style = MaterialTheme.typography.titleLarge)
-            Text("Créneau actuel · ${PlanUiLogic.readableDate(activity.scheduledLocal.localDate)} · ${timeRangeLabel(activity)}")
+            Text(activity.title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Catégorie · ${PlanController.kindLabel(activity.kind)} · priorité ${PlanController.priorityLabel(activity.priority)}",
+                modifier = Modifier.testTag("plan_report_activity_category_priority"),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Créneau actuel · ${PlanUiLogic.readableDate(activity.scheduledLocal.localDate)} · " +
+                    "${timeRangeLabel(activity)} · ${activity.scheduledLocal.durationMinutes} min · " +
+                    activity.scheduledLocal.timezone,
+                modifier = Modifier.testTag("plan_report_current_slot"),
+            )
             PlanReportChoice.entries.chunked(2).forEach { rowChoices ->
                 androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rowChoices.forEach { option ->
@@ -518,7 +587,8 @@ internal fun PlanReportBottomSheet(
                     PlanController.endTimeLabel(target.startMinute, target.durationMinutes)
                 Text(
                     "Nouveau créneau proposé · ${PlanUiLogic.readableDate(target.localDate)} · $targetSchedule · " +
-                        "${target.durationMinutes} min · ${plan.timezone} · priorité ${PlanController.priorityLabel(activity.priority)}",
+                        "${target.durationMinutes} min · ${activity.scheduledLocal.timezone} · " +
+                        "${PlanController.kindLabel(activity.kind)} · priorité ${PlanController.priorityLabel(activity.priority)}",
                     modifier = Modifier.testTag("plan_report_proposed_slot"),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -552,6 +622,133 @@ internal fun PlanReportBottomSheet(
             AtlasSecondaryButton("Fermer", onClick = onDismiss, enabled = !busy)
         }
     }
+}
+
+internal const val PLAN_ACTIVITY_COACH_ACTION = "ASK_COACH"
+
+/** JSON envelope sent through the existing coach message transport; private activity notes are not inputs. */
+internal fun buildPlanActivityCoachEnvelope(
+    activityId: String,
+    planVersion: Int,
+    message: String,
+): String {
+    require(activityId.isNotBlank()) { "activityId must not be blank" }
+    require(planVersion >= 1) { "planVersion must be positive" }
+    val cleanMessage = message.trim()
+    require(cleanMessage.isNotEmpty() && cleanMessage.length <= 280) { "message must contain 1..280 characters" }
+    return """{"type":"plan_activity_coach_message","context":{"activity_id":${jsonQuoted(activityId)},"plan_version":$planVersion,"action":${jsonQuoted(PLAN_ACTIVITY_COACH_ACTION)}},"message":${jsonQuoted(cleanMessage)}}"""
+}
+
+private fun jsonQuoted(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '"' -> append("\\\"")
+            '\\' -> append("\\\\")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> if (character.code < 0x20) {
+                append("\\u")
+                append(character.code.toString(16).padStart(4, '0'))
+            } else {
+                append(character)
+            }
+        }
+    }
+    append('"')
+}
+
+@Composable
+internal fun PlanActivityCoachDialog(
+    activityId: String,
+    planVersion: Int,
+    offline: Boolean,
+    onDismiss: () -> Unit,
+    onSend: (String) -> Boolean,
+    failureMessage: () -> String? = { null },
+) {
+    var draft by rememberSaveable(activityId, planVersion) {
+        mutableStateOf("J’aimerais échanger sur cette activité.")
+    }
+    var contextConsent by rememberSaveable(activityId, planVersion) { mutableStateOf(false) }
+    var error by rememberSaveable(activityId, planVersion) { mutableStateOf<String?>(null) }
+    var busy by rememberSaveable(activityId, planVersion) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Dire quelque chose au coach…") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Contexte structuré · activity_id $activityId · plan version $planVersion · action demander un avis",
+                    modifier = Modifier.testTag("plan_activity_coach_context"),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it.take(280); error = null },
+                    label = { Text("Votre message (280 caractères max.)") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth().testTag("plan_activity_coach_message"),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = contextConsent,
+                        onCheckedChange = { contextConsent = it; error = null },
+                        modifier = Modifier.testTag("plan_activity_coach_context_consent").semantics {
+                            contentDescription =
+                                "Autoriser le partage du contexte de l’activité $activityId, version $planVersion, action demander un avis"
+                        },
+                    )
+                    Text(
+                        "J’autorise le partage de cet identifiant, de la version et de l’action avec ma question.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text(
+                    if (offline) {
+                        "Mode hors ligne : traitement local sur cet appareil, sans transmission réseau."
+                    } else {
+                        "L’envoi dépend de la connexion et du mandat actifs. La note privée de l’activité n’est pas incluse."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("plan_activity_coach_error"))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (!busy && contextConsent && draft.isNotBlank()) {
+                        busy = true
+                        val sent = runCatching {
+                            onSend(buildPlanActivityCoachEnvelope(activityId, planVersion, draft))
+                        }.getOrDefault(false)
+                        busy = false
+                        if (sent) onDismiss() else error = failureMessage() ?: "La demande n’a pas été envoyée; votre texte reste dans le champ."
+                    }
+                },
+                enabled = !busy && contextConsent && draft.isNotBlank(),
+                modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("plan_activity_coach_send"),
+            ) {
+                Text(if (offline) "Continuer hors ligne" else "Envoyer au coach")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.sizeIn(minHeight = 48.dp)) {
+                Text("Annuler")
+            }
+        },
+    )
 }
 
 @Composable
