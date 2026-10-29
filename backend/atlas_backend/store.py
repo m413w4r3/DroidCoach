@@ -3,14 +3,42 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+
+_V4_MIGRATION_V1_STATEMENTS = (
+    "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS v4_quarantine (record_id TEXT PRIMARY KEY, kind TEXT NOT NULL, device_ref TEXT, schema_version INTEGER, record_key TEXT, payload BLOB NOT NULL, payload_hash TEXT NOT NULL, error_code TEXT NOT NULL, received_at TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS day_plan_snapshots_v4 (device_ref TEXT NOT NULL, plan_id TEXT NOT NULL, local_date TEXT NOT NULL, timezone TEXT NOT NULL, plan_version INTEGER NOT NULL CHECK(plan_version > 0), revision_id TEXT NOT NULL, schema_version INTEGER NOT NULL, observed_at TEXT NOT NULL, received_at TEXT NOT NULL, consent_version INTEGER NOT NULL CHECK(consent_version > 0), snapshot_hash TEXT NOT NULL, projection_json TEXT NOT NULL, PRIMARY KEY(device_ref, plan_id, plan_version))",
+    "CREATE INDEX IF NOT EXISTS day_plan_snapshots_v4_date_idx ON day_plan_snapshots_v4(device_ref, local_date, received_at)",
+    "CREATE TABLE IF NOT EXISTS activity_status_events_v4 (event_id TEXT PRIMARY KEY, device_ref TEXT NOT NULL, plan_id TEXT NOT NULL, activity_id TEXT NOT NULL, continuity_id TEXT, sequence INTEGER NOT NULL CHECK(sequence > 0), old_status TEXT NOT NULL, new_status TEXT NOT NULL, provenance TEXT NOT NULL, source TEXT NOT NULL, decided_at TEXT NOT NULL, observed_at TEXT NOT NULL, plan_version INTEGER NOT NULL CHECK(plan_version > 0), consent_version INTEGER NOT NULL CHECK(consent_version > 0), event_hash TEXT NOT NULL, UNIQUE(device_ref, sequence))",
+    "CREATE INDEX IF NOT EXISTS activity_status_events_v4_activity_idx ON activity_status_events_v4(device_ref, plan_id, activity_id, sequence)",
+    "CREATE TABLE IF NOT EXISTS usage_summaries_v4 (device_ref TEXT NOT NULL, window_start TEXT NOT NULL, window_end TEXT NOT NULL, timezone TEXT NOT NULL, generated_at TEXT NOT NULL, received_at TEXT NOT NULL, consent_version INTEGER NOT NULL CHECK(consent_version > 0), summary_hash TEXT NOT NULL, summary_json TEXT NOT NULL, PRIMARY KEY(device_ref, window_start, window_end, consent_version))",
+    "CREATE TABLE IF NOT EXISTS goal_progress_snapshots_v4 (device_ref TEXT NOT NULL, goals_version INTEGER NOT NULL CHECK(goals_version > 0), observed_at TEXT NOT NULL, received_at TEXT NOT NULL, consent_version INTEGER NOT NULL CHECK(consent_version > 0), snapshot_hash TEXT NOT NULL, projection_json TEXT NOT NULL, PRIMARY KEY(device_ref, goals_version))",
+    "CREATE TABLE IF NOT EXISTS training_snapshots_v4 (device_ref TEXT NOT NULL, provider TEXT NOT NULL, observed_at TEXT NOT NULL, received_at TEXT NOT NULL, sync_state TEXT NOT NULL, source_version TEXT, consent_version INTEGER NOT NULL CHECK(consent_version > 0), snapshot_hash TEXT NOT NULL, projection_json TEXT NOT NULL, PRIMARY KEY(device_ref, provider, observed_at))",
+    "CREATE TABLE IF NOT EXISTS agent_proposals_v4 (proposal_id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, body_hash TEXT NOT NULL, plan_id TEXT NOT NULL, base_version INTEGER NOT NULL CHECK(base_version > 0), capability TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, state TEXT NOT NULL, proposal_json TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS agent_proposals_v4_state_expiry_idx ON agent_proposals_v4(state, expires_at)",
+    "CREATE TABLE IF NOT EXISTS agent_proposal_events_v4 (ack_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL REFERENCES agent_proposals_v4(proposal_id), sequence INTEGER NOT NULL CHECK(sequence > 0), state TEXT NOT NULL, result_code TEXT NOT NULL, applied_plan_version INTEGER, revision_id TEXT, scope_hash TEXT, effect_ids_json TEXT NOT NULL, occurred_at TEXT NOT NULL, received_at TEXT NOT NULL, body_hash TEXT NOT NULL, UNIQUE(proposal_id, sequence))",
+    "CREATE INDEX IF NOT EXISTS agent_proposal_events_v4_proposal_idx ON agent_proposal_events_v4(proposal_id, sequence)",
+    "CREATE TABLE IF NOT EXISTS tool_audit_v4 (call_id TEXT PRIMARY KEY, tool_name TEXT NOT NULL, capability TEXT NOT NULL, request_hash TEXT NOT NULL, result_code TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT NOT NULL, latency_ms INTEGER NOT NULL CHECK(latency_ms >= 0))",
+    "CREATE TRIGGER IF NOT EXISTS activity_status_events_v4_no_update BEFORE UPDATE ON activity_status_events_v4 BEGIN SELECT RAISE(ABORT, 'append-only V4 status event'); END",
+    "CREATE TRIGGER IF NOT EXISTS activity_status_events_v4_no_delete BEFORE DELETE ON activity_status_events_v4 BEGIN SELECT RAISE(ABORT, 'append-only V4 status event'); END",
+    "CREATE TRIGGER IF NOT EXISTS agent_proposal_events_v4_no_update BEFORE UPDATE ON agent_proposal_events_v4 BEGIN SELECT RAISE(ABORT, 'append-only V4 proposal event'); END",
+    "CREATE TRIGGER IF NOT EXISTS agent_proposal_events_v4_no_delete BEFORE DELETE ON agent_proposal_events_v4 BEGIN SELECT RAISE(ABORT, 'append-only V4 proposal event'); END",
+)
+
+_V4_MIGRATION_V2_STATEMENTS = (
+    "ALTER TABLE activity_status_events_v4 ADD COLUMN received_at TEXT",
+)
 
 class SQLiteStore:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, clock: Callable[[], datetime] | None = None) -> None:
         self.path = Path(path)
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize()
 
@@ -73,6 +101,171 @@ class SQLiteStore:
                 );
                 """
             )
+        self.initialize_v4_migrations()
+
+    def now_iso(self) -> str:
+        value = self.clock()
+        if isinstance(value, str):
+            return value
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def initialize_v4_migrations(self) -> None:
+        """Apply the additive V4 schema, keeping all existing V1/V2 tables intact."""
+        migrations = (
+            (1, "v4_core_projections", _V4_MIGRATION_V1_STATEMENTS),
+            (2, "v4_status_received_at", _V4_MIGRATION_V2_STATEMENTS),
+        )
+        checksums = {
+            version: hashlib.sha256(
+                (name + "\n" + "\n".join(statement.strip() for statement in statements)).encode("utf-8")
+            ).hexdigest()
+            for version, name, statements in migrations
+        }
+        with self.connect() as connection:
+            user_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            has_migrations = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+            ).fetchone() is not None
+            known_rows = connection.execute(
+                "SELECT version,name,checksum,applied_at FROM schema_migrations ORDER BY version"
+            ).fetchall() if has_migrations else []
+
+        current_version = migrations[-1][0]
+        unknown_rows = [row for row in known_rows if int(row["version"]) > current_version]
+        if user_version > current_version or unknown_rows:
+            self._quarantine_unknown_schema_version(user_version, unknown_rows)
+            return
+
+        applied_by_version = {int(row["version"]): row for row in known_rows}
+        for version, name, _statements in migrations:
+            applied = applied_by_version.get(version)
+            if applied is not None and (applied["name"] != name or applied["checksum"] != checksums[version]):
+                self._record_migration_quarantine(
+                    "MIGRATION_CHECKSUM_MISMATCH",
+                    json.dumps(dict(applied), sort_keys=True, default=str).encode("utf-8"),
+                )
+                raise MigrationChecksumConflict(f"la checksum de la migration V4 version {version} ne correspond pas")
+
+        applied_max = max(applied_by_version, default=0)
+        expected_applied = set(range(1, applied_max + 1))
+        if user_version > applied_max or set(applied_by_version) != expected_applied:
+            payload = json.dumps(
+                {
+                    "user_version": user_version,
+                    "applied_versions": sorted(applied_by_version),
+                    "expected_applied_versions": sorted(expected_applied),
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+            self._record_migration_quarantine("MIGRATION_LEDGER_MISMATCH", payload)
+            return
+
+        if any(version not in applied_by_version for version, _name, _statements in migrations):
+            self._create_coherent_pre_migration_backup()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                "version INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, "
+                "checksum TEXT NOT NULL, applied_at TEXT NOT NULL)"
+            )
+            for version, name, statements in migrations:
+                if version in applied_by_version:
+                    connection.execute(f"PRAGMA user_version={version}")
+                    continue
+                for statement in statements:
+                    connection.execute(statement)
+                connection.execute(
+                    "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES(?,?,?,?)",
+                    (version, name, checksums[version], self.now_iso()),
+                )
+                connection.execute(f"PRAGMA user_version={version}")
+                result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+                if result != "ok":
+                    raise MigrationIntegrityError(f"integrity_check SQLite a échoué: {result}")
+        self._verify_v4_integrity()
+
+    def _create_coherent_pre_migration_backup(self) -> None:
+        if not self.path.exists():
+            return
+        backup_path = self.path.with_suffix(self.path.suffix + ".pre-v4.bak")
+        if backup_path.exists():
+            with sqlite3.connect(backup_path) as backup:
+                result = backup.execute("PRAGMA integrity_check").fetchone()[0]
+            if result != "ok":
+                raise MigrationIntegrityError("la sauvegarde pré-migration existante est invalide")
+            return
+        with self.connect() as source, sqlite3.connect(backup_path) as destination:
+            source.backup(destination)
+            result = destination.execute("PRAGMA integrity_check").fetchone()[0]
+            if result != "ok":
+                raise MigrationIntegrityError("la sauvegarde pré-migration est invalide")
+
+    def _verify_v4_integrity(self) -> None:
+        with self.connect() as connection:
+            result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if result != "ok":
+                raise MigrationIntegrityError(f"integrity_check SQLite a échoué: {result}")
+
+    def _create_quarantine_table(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS v4_quarantine ("
+            "record_id TEXT PRIMARY KEY, kind TEXT NOT NULL, device_ref TEXT, "
+            "schema_version INTEGER, record_key TEXT, payload BLOB NOT NULL, "
+            "payload_hash TEXT NOT NULL, error_code TEXT NOT NULL, received_at TEXT NOT NULL)"
+        )
+
+    def _quarantine_unknown_schema_version(self, user_version: int, rows: list[sqlite3.Row]) -> None:
+        self._create_coherent_pre_migration_backup()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._create_quarantine_table(connection)
+            payload = json.dumps(
+                {
+                    "user_version": user_version,
+                    "migration_rows": [dict(row) for row in rows],
+                },
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+            self._insert_quarantine(
+                connection, "SCHEMA_VERSION", None, user_version, None, payload,
+                "UNSUPPORTED_SCHEMA_VERSION", self.now_iso()
+            )
+            result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if result != "ok":
+                raise MigrationIntegrityError(f"integrity_check SQLite a échoué: {result}")
+
+    def _record_migration_quarantine(self, code: str, payload: bytes) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._create_quarantine_table(connection)
+            self._insert_quarantine(connection, "MIGRATION", None, None, None, payload, code, self.now_iso())
+
+    @staticmethod
+    def _insert_quarantine(
+        connection: sqlite3.Connection,
+        kind: str,
+        device_ref: str | None,
+        schema_version: int | None,
+        record_key: str | None,
+        payload: bytes,
+        error_code: str,
+        received_at: str,
+    ) -> str:
+        import uuid
+
+        record_id = str(uuid.uuid4())
+        payload_hash = "sha256:" + hashlib.sha256(payload).hexdigest()
+        connection.execute(
+            "INSERT INTO v4_quarantine(record_id,kind,device_ref,schema_version,record_key,payload,payload_hash,error_code,received_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (record_id, kind, device_ref, schema_version, record_key, payload, payload_hash, error_code, received_at),
+        )
+        return record_id
+
 
     def claim_plan_revision_request(
         self,
@@ -445,3 +638,11 @@ class UnknownProposalCursor(ValueError):
 
 class InvalidProposalTransition(ValueError):
     """A client acknowledgement attempted an invalid state transition."""
+
+
+class MigrationChecksumConflict(ValueError):
+    """An already recorded migration does not match the checked-in migration."""
+
+
+class MigrationIntegrityError(ValueError):
+    """SQLite integrity validation failed during an additive migration."""
