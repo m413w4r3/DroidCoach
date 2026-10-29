@@ -107,7 +107,7 @@ class CoachTextDensityInstrumentationTest {
         composeRule.onNodeWithText("Contexte du coach").performScrollTo().assertIsDisplayed()
 
         val categoryTags = AgentContextCategory.wireValues.map { "agent_context_category_$it" }
-        composeRule.onNodeWithText("Aucune catégorie autorisée · 0 élément inclus")
+        composeRule.onNodeWithText("Aucune catégorie autorisée · 0 éléments inclus")
             .performScrollTo().assertIsDisplayed()
         val collapsedCategoryTextCount = categoryTags.count { tag ->
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
