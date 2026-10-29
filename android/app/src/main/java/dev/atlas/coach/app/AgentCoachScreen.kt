@@ -233,10 +233,10 @@ internal fun AgentCoachScreen(
             modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_refresh"),
             onClick = controller::pullAgentInbox,
         ) { Text("Actualiser") }
-        CoachQuickActions(controller)
         if (controller.capabilities[AtlasController.CAP_COACH] != true) {
             Text("Coach local désactivé dans les paramètres.")
         } else {
+            CoachQuickActions(controller)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Conversation", style = MaterialTheme.typography.titleLarge)
                 if (controller.agentConversation.isEmpty()) {

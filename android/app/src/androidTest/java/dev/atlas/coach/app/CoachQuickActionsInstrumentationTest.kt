@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -158,6 +159,28 @@ class CoachQuickActionsInstrumentationTest {
         composeRule.onNodeWithText("Focus désactivé dans les paramètres.").assertIsDisplayed()
         assertNull(controller.focusSession)
         assertEquals(AtlasScreenId.HOME, controller.navigationState.current)
+    }
+
+    @Test
+    fun quickActionsAreHiddenWhenCoachCapabilityIsDisabled() {
+        val controller = AtlasController(isolatedContext(), stateBackendOverride = MemoryStateBackend())
+        controller.setCapability(AtlasController.CAP_COACH, false)
+
+        composeRule.setContent {
+            AtlasTheme {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    AgentCoachScreen(controller, pullOnOpen = false)
+                }
+            }
+        }
+
+        listOf("coach_quick_action_day", "coach_quick_action_goal", "coach_quick_action_focus").forEach { tag ->
+            assertTrue(
+                "Quick action $tag is hidden when Coach is disabled",
+                composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty(),
+            )
+        }
+        composeRule.onNodeWithText("Coach local désactivé dans les paramètres.").assertIsDisplayed()
     }
 
     private fun confirmationEffect(): String = composeRule.onNodeWithTag("coach_quick_confirmation_effect")
