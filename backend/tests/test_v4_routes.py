@@ -130,7 +130,44 @@ def sync_envelope(capability: str, data: dict, *, consent_version: int = 3,
     }
 
 
+def consent_envelope(category: str, state: str, version: int, *, key: str | None = None) -> dict:
+    category_number = {
+        "DAY_PLAN": 1,
+        "ACTIVITY_STATUS": 2,
+        "USAGE_SUMMARY": 3,
+        "GOAL_PROGRESS": 4,
+        "TRAINING_PLAN": 5,
+    }[category]
+    state_number = {"GRANTED": 1, "REVOKED": 2, "UNKNOWN": 3}[state]
+    numeric_key = 300 + category_number * 100 + version * 3 + state_number
+    return {
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": UUID_REQUEST,
+        "capability": "consent.state.write",
+        "sent_at": stamp(),
+        "category": category,
+        "consent_version": version,
+        "state": state,
+        "idempotency_key": key or f"00000000-0000-4000-8000-{numeric_key:012d}",
+    }
+
+
+def post_consent(client: ASGITestClient, category: str, state: str, version: int,
+                 *, key: str | None = None) -> dict:
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=android_headers(),
+        json=consent_envelope(category, state, version, key=key),
+    )
+    assert response.status_code == 200, response.text
+    schema = json.loads((CONTRACTS / "sync.schema.json").read_text(encoding="utf-8"))["$defs"]["consent_state_receipt"]
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(response.json())
+    return response.json()
+
+
 def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3) -> dict:
+    post_consent(client, "DAY_PLAN", "GRANTED", consent_version)
     response = client.post(
         "/v4/sync/day-plan-snapshots",
         headers=android_headers(),
@@ -156,6 +193,7 @@ def validate_error(response, expected_code: str | None = None) -> dict:
 
 def test_sync_snapshots_and_six_fixed_tool_routes_match_contracts(tmp_path, monkeypatch):
     client = make_client(tmp_path, monkeypatch)
+    post_consent(client, "DAY_PLAN", "GRANTED", 3)
     plan_body = sync_envelope("day_plan.snapshot.write", day_plan())
     plan_response = client.post("/v4/sync/day-plan-snapshots", headers=android_headers(), json=plan_body)
     assert plan_response.status_code == 200, plan_response.text
@@ -203,6 +241,8 @@ def test_sync_snapshots_and_six_fixed_tool_routes_match_contracts(tmp_path, monk
         "results": [],
     }
     sync_payloads = []
+    for category in ("ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"):
+        post_consent(client, category, "GRANTED", 3)
     for route, capability, data in (
         ("/v4/sync/usage-summaries", "usage_summary.write", usage_data),
         ("/v4/sync/goal-progress-snapshots", "goal_progress.write", goals_data),
@@ -307,8 +347,47 @@ def test_tool_auth_is_separate_loopback_only_and_headers_are_strict(tmp_path, mo
     non_loopback.close()
 
 
+def test_consent_state_sync_is_android_only_typed_and_idempotent(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    body = consent_envelope("DAY_PLAN", "GRANTED", 3)
+    granted = client.post("/v4/sync/consent-state", headers=android_headers(), json=body)
+    assert granted.status_code == 200, granted.text
+    receipt_schema = json.loads((CONTRACTS / "sync.schema.json").read_text(encoding="utf-8"))["$defs"]["consent_state_receipt"]
+    Draft202012Validator(receipt_schema, format_checker=FormatChecker()).validate(granted.json())
+    assert granted.json()["state"] == "GRANTED"
+    assert granted.json()["result_code"] == "ACCEPTED"
+
+    replay = client.post("/v4/sync/consent-state", headers=android_headers(), json=body)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["replayed"] is True
+    assert replay.json()["result_code"] == "DUPLICATE"
+
+    conflict_body = {**body, "state": "REVOKED"}
+    conflict = client.post("/v4/sync/consent-state", headers=android_headers(), json=conflict_body)
+    assert conflict.status_code == 409
+    validate_error(conflict, "IDEMPOTENCY_CONFLICT")
+
+    tool_auth = client.post("/v4/sync/consent-state", headers=android_headers(TOOL_TOKEN), json=body)
+    assert tool_auth.status_code == 401
+    validate_error(tool_auth, "AUTH_REQUIRED")
+
+    invalid = client.post(
+        "/v4/sync/consent-state", headers=android_headers(),
+        json={**consent_envelope("DAY_PLAN", "GRANTED", 4), "state": "DISABLED"},
+    )
+    assert invalid.status_code == 400
+    validate_error(invalid, "BAD_REQUEST")
+
+    wrong_method = client.get("/v4/sync/consent-state", headers=android_headers())
+    assert wrong_method.status_code == 405
+    validate_error(wrong_method, "BAD_REQUEST")
+    client.close()
+
+
 def test_absence_staleness_schema_size_unknown_method_and_no_generic_proxy(tmp_path, monkeypatch):
     client = make_client(tmp_path, monkeypatch)
+    for category in ("DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"):
+        post_consent(client, category, "GRANTED", 3)
     missing = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
     assert missing.status_code == 200
     validate("tool-results.schema.json", missing.json())
@@ -371,6 +450,6 @@ def test_capability_flags_and_consent_version_gate_reads_and_sync(tmp_path, monk
         "/v4/sync/day-plan-snapshots", headers=android_headers(),
         json=sync_envelope("day_plan.snapshot.write", day_plan(), consent_version=3),
     )
-    assert stale_consent.status_code == 403
-    validate_error(stale_consent, "CONSENT_REQUIRED")
+    assert stale_consent.status_code == 409
+    validate_error(stale_consent, "STALE_VERSION")
     client.close()

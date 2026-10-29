@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,6 +10,8 @@ import httpx
 from jsonschema import Draft202012Validator, FormatChecker
 
 from atlas_backend.main import create_app
+from atlas_backend.store import SQLiteStore
+from atlas_backend.v4_projection_store import V4ProjectionStore
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -123,7 +126,41 @@ def proposal_args(idempotency_key: str, target: int = 660, *, base_version: int 
     }
 
 
+def consent_body(category: str, state: str, version: int, *, key: str | None = None) -> dict:
+    category_number = {
+        "DAY_PLAN": 1,
+        "ACTIVITY_STATUS": 2,
+        "USAGE_SUMMARY": 3,
+        "GOAL_PROGRESS": 4,
+        "TRAINING_PLAN": 5,
+    }[category]
+    state_number = {"GRANTED": 1, "REVOKED": 2, "UNKNOWN": 3}[state]
+    numeric_key = 500 + category_number * 100 + version * 3 + state_number
+    return {
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": UUID_REQUEST,
+        "capability": "consent.state.write",
+        "sent_at": stamp(),
+        "category": category,
+        "consent_version": version,
+        "state": state,
+        "idempotency_key": key or f"00000000-0000-4000-8000-{numeric_key:012d}",
+    }
+
+
+def post_consent(client: ASGITestClient, category: str, state: str, version: int,
+                 *, key: str | None = None):
+    response = client.post(
+        "/v4/sync/consent-state", headers=android_headers(),
+        json=consent_body(category, state, version, key=key),
+    )
+    assert response.status_code == 200, response.text
+    return response
+
+
 def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3) -> dict:
+    post_consent(client, "DAY_PLAN", "GRANTED", consent_version)
     body = {
         "contract_version": 4,
         "schema_version": 4,
@@ -318,8 +355,8 @@ def test_inbox_cursor_pagination_ack_states_and_replay_conflicts(tmp_path, monke
         consent_version=2,
     )
     response = client.post(f"/v4/agent/proposals/{rejected_id}/ack", headers=android_headers(), json=wrong_consent)
-    assert response.status_code == 403
-    assert error_code(response) == "CONSENT_REQUIRED"
+    assert response.status_code == 409
+    assert error_code(response) == "STALE_VERSION"
     client.close()
 
 
@@ -337,4 +374,102 @@ def test_proposal_requires_fresh_snapshot_and_never_accepts_arbitrary_route_data
     )
     assert arbitrary.status_code == 400
     assert error_code(arbitrary) == "BAD_REQUEST"
+    client.close()
+
+
+def test_consent_revocation_tombstone_blocks_reads_proposals_pull_and_ack_until_regrant(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client, consent_version=3)
+
+    before_revoke = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert before_revoke.status_code == 200, before_revoke.text
+    validate("tool-results.schema.json", before_revoke.json())
+    original = post_proposal(client, "00000000-0000-4000-8000-000000000251")
+    assert original.status_code == 200, original.text
+    proposal_id = original.json()["data"]["proposal_id"]
+
+    revoked = post_consent(client, "DAY_PLAN", "REVOKED", 4)
+    assert revoked.json()["state"] == "REVOKED"
+    old_projection = client.app.state.store
+    with old_projection.connect() as connection:
+        projection_count_before = connection.execute(
+            "SELECT COUNT(*) FROM day_plan_snapshots_v4"
+        ).fetchone()[0]
+    assert projection_count_before == 1
+
+    denied_read = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert denied_read.status_code == 403
+    assert error_code(denied_read) == "CONSENT_REQUIRED"
+    denied_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000252")
+    assert denied_proposal.status_code == 403
+    assert error_code(denied_proposal) == "CONSENT_REQUIRED"
+    denied_lookup = client.get(
+        "/internal/v4/agent/proposals/by-idempotency/00000000-0000-4000-8000-000000000251",
+        headers=tool_headers("plan_revision.propose"),
+    )
+    assert denied_lookup.status_code == 403
+    assert error_code(denied_lookup) == "CONSENT_REQUIRED"
+
+    pull_body = {
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": UUID_REQUEST,
+        "capability": "proposal.ack",
+        "consent_version": 4,
+        "page_size": 10,
+        "cursor": None,
+    }
+    denied_pull = client.post("/v4/agent/proposals/pull", headers=android_headers(), json=pull_body)
+    assert denied_pull.status_code == 403
+    assert error_code(denied_pull) == "CONSENT_REQUIRED"
+    denied_ack = client.post(
+        f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(),
+        json=ack_body(proposal_id, "00000000-0000-4000-8000-000000000253", "REJECTED", "USER_REJECTED",
+                      consent_version=4),
+    )
+    assert denied_ack.status_code == 403
+    assert error_code(denied_ack) == "CONSENT_REQUIRED"
+
+    device_ref = "android-" + hashlib.sha256(ANDROID_TOKEN.encode("utf-8")).hexdigest()[:32]
+    reopened = V4ProjectionStore(SQLiteStore(tmp_path / "atlas.sqlite3"))
+    persisted = reopened.consent_state(device_ref, "DAY_PLAN")
+    assert persisted is not None
+    assert persisted["device_ref"] == device_ref
+    assert persisted["category"] == "DAY_PLAN"
+    assert persisted["consent_version"] == 4
+    assert persisted["state"] == "REVOKED"
+    assert persisted["source"] == "ANDROID_SYNC"
+    with reopened.store.connect() as connection:
+        tombstone_count = connection.execute(
+            "SELECT COUNT(*) FROM consent_state_events_v4 WHERE device_ref=? AND category='DAY_PLAN' "
+            "AND consent_version=4 AND state='REVOKED'",
+            (device_ref,),
+        ).fetchone()[0]
+        projection_count_after = connection.execute(
+            "SELECT COUNT(*) FROM day_plan_snapshots_v4"
+        ).fetchone()[0]
+    assert tombstone_count == 1
+    assert projection_count_after == projection_count_before
+
+    regressive = client.post(
+        "/v4/sync/consent-state", headers=android_headers(),
+        json=consent_body("DAY_PLAN", "GRANTED", 3),
+    )
+    assert regressive.status_code == 409
+    assert error_code(regressive) == "STALE_VERSION"
+
+    post_consent(client, "DAY_PLAN", "GRANTED", 5)
+    after_regrant = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert after_regrant.status_code == 200, after_regrant.text
+    validate("tool-results.schema.json", after_regrant.json())
+    regranted_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000255")
+    assert regranted_proposal.status_code == 200, regranted_proposal.text
+
+    post_consent(client, "DAY_PLAN", "UNKNOWN", 6)
+    unknown_read = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert unknown_read.status_code == 403
+    assert error_code(unknown_read) == "CONSENT_REQUIRED"
+    unknown_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000256")
+    assert unknown_proposal.status_code == 403
+    assert error_code(unknown_proposal) == "CONSENT_REQUIRED"
     client.close()

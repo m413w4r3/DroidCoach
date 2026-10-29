@@ -35,6 +35,15 @@ _V4_MIGRATION_V2_STATEMENTS = (
     "ALTER TABLE activity_status_events_v4 ADD COLUMN received_at TEXT",
 )
 
+_V4_MIGRATION_V3_STATEMENTS = (
+    "CREATE TABLE IF NOT EXISTS consent_states_v4 (device_ref TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('DAY_PLAN','ACTIVITY_STATUS','USAGE_SUMMARY','GOAL_PROGRESS','TRAINING_PLAN')), consent_version INTEGER NOT NULL CHECK(consent_version > 0), state TEXT NOT NULL CHECK(state IN ('GRANTED','REVOKED','UNKNOWN')), updated_at TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(device_ref, category))",
+    "CREATE TRIGGER IF NOT EXISTS consent_states_v4_no_delete BEFORE DELETE ON consent_states_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent state tombstone cannot be deleted'); END",
+    "CREATE TRIGGER IF NOT EXISTS consent_states_v4_monotonic_update BEFORE UPDATE ON consent_states_v4 WHEN NEW.consent_version <= OLD.consent_version BEGIN SELECT RAISE(ABORT, 'V4 consent version must increase'); END",
+    "CREATE TABLE IF NOT EXISTS consent_state_events_v4 (idempotency_key TEXT PRIMARY KEY, device_ref TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('DAY_PLAN','ACTIVITY_STATUS','USAGE_SUMMARY','GOAL_PROGRESS','TRAINING_PLAN')), consent_version INTEGER NOT NULL CHECK(consent_version > 0), state TEXT NOT NULL CHECK(state IN ('GRANTED','REVOKED','UNKNOWN')), updated_at TEXT NOT NULL, source TEXT NOT NULL, body_hash TEXT NOT NULL)",
+    "CREATE TRIGGER IF NOT EXISTS consent_state_events_v4_no_update BEFORE UPDATE ON consent_state_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent events are immutable'); END",
+    "CREATE TRIGGER IF NOT EXISTS consent_state_events_v4_no_delete BEFORE DELETE ON consent_state_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent events are immutable'); END",
+)
+
 class SQLiteStore:
     def __init__(self, path: str | Path, *, clock: Callable[[], datetime] | None = None) -> None:
         self.path = Path(path)
@@ -116,6 +125,7 @@ class SQLiteStore:
         migrations = (
             (1, "v4_core_projections", _V4_MIGRATION_V1_STATEMENTS),
             (2, "v4_status_received_at", _V4_MIGRATION_V2_STATEMENTS),
+            (3, "v4_explicit_consent_states", _V4_MIGRATION_V3_STATEMENTS),
         )
         checksums = {
             version: hashlib.sha256(

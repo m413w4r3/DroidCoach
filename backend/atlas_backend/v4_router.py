@@ -44,6 +44,14 @@ _TOOL_CAPABILITIES = {
     "atlas_get_goal_progress": "goal_progress.read",
     "atlas_get_training_plan": "training_plan.read",
 }
+_TOOL_CONSENT_CATEGORY = {
+    "day_plan.read": "DAY_PLAN",
+    "activity_status.read": "ACTIVITY_STATUS",
+    "plan_revision.propose": "DAY_PLAN",
+    "usage_summary.read": "USAGE_SUMMARY",
+    "goal_progress.read": "GOAL_PROGRESS",
+    "training_plan.read": "TRAINING_PLAN",
+}
 _TOOL_SCHEMA_KEYS = {
     "atlas_get_day_plan": "atlas_get_day_plan_arguments",
     "atlas_get_activity_status": "atlas_get_activity_status_arguments",
@@ -317,18 +325,34 @@ def create_v4_router(
         return android_token if android_token is not None else os.getenv("ATLAS_TOKEN")
 
     def consent_lookup(device_ref: str, category: str) -> dict[str, Any] | None:
+        if category not in _CAPABILITY_TO_CONSENT_TABLE:
+            return None
+        state = projections.consent_state(device_ref, category)
+        if state is None:
+            return None
+        if state["state"] != "GRANTED":
+            return {"state": state["state"], "version": int(state["consent_version"])}
+        projection_version = latest_projection_consent_version(device_ref, category)
+        effective_version = projection_version or int(state["consent_version"])
+        return {"state": "GRANTED", "version": effective_version}
+
+    def latest_projection_consent_version(device_ref: str, category: str) -> int | None:
         table = _CAPABILITY_TO_CONSENT_TABLE.get(category)
         if table is None:
             return None
+        order_by = {
+            "day_plan_snapshots_v4": "received_at DESC, plan_version DESC",
+            "activity_status_events_v4": "sequence DESC",
+            "usage_summaries_v4": "received_at DESC",
+            "goal_progress_snapshots_v4": "received_at DESC, goals_version DESC",
+            "training_snapshots_v4": "received_at DESC, observed_at DESC",
+        }[table]
         with store.connect() as connection:
             row = connection.execute(
-                f"SELECT MAX(consent_version) AS consent_version FROM {table} WHERE device_ref=?",
+                f"SELECT consent_version FROM {table} WHERE device_ref=? ORDER BY {order_by} LIMIT 1",
                 (device_ref,),
             ).fetchone()
-        version = row["consent_version"] if row is not None else None
-        if version is None:
-            return None
-        return {"state": "GRANTED", "version": int(version)}
+        return int(row["consent_version"]) if row is not None else None
 
     service = V4ToolService(
         projections,
@@ -364,9 +388,19 @@ def create_v4_router(
         except ValueError:
             return _error_response(request, "BAD_REQUEST", "X-Atlas-Request-Id doit être un UUID.",
                                    capability, status=400, fallback_request_id=request_id)
-        return parsed_id, _device_ref(android_secret)
+        if capability in _READ_CAPABILITIES and not active_capabilities.get(capability, False):
+            return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
+                                   status=403, fallback_request_id=parsed_id)
+        device_ref = _device_ref(android_secret)
+        category = _TOOL_CONSENT_CATEGORY.get(capability)
+        if category is not None:
+            state = projections.consent_state(device_ref, category)
+            if state is None or state["state"] != "GRANTED":
+                return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+                                       capability, status=403, fallback_request_id=parsed_id)
+        return parsed_id, device_ref
 
-    def require_android(request: Request, capability: str, *, fallback: str | None = None) -> tuple[str, str] | JSONResponse:
+    def require_android(request: Request, capability: str | None, *, fallback: str | None = None) -> tuple[str, str] | JSONResponse:
         expected = current_android_token()
         supplied = _bearer(request)
         tool_secret = os.getenv("ATLAS_TOOL_TOKEN")
@@ -380,25 +414,69 @@ def create_v4_router(
                                    status=401, fallback_request_id=fallback)
         return _request_id(request, fallback), _device_ref(expected)
 
-    def current_consent_version(device_ref: str, category: str) -> int | None:
-        table = _CAPABILITY_TO_CONSENT_TABLE[category]
-        with store.connect() as connection:
-            row = connection.execute(
-                f"SELECT MAX(consent_version) AS consent_version FROM {table} WHERE device_ref=?",
-                (device_ref,),
-            ).fetchone()
-        value = row["consent_version"] if row is not None else None
-        return int(value) if value is not None else None
-
     def require_current_consent(device_ref: str, category: str, version: int, capability: str,
                                 request: Request) -> JSONResponse | None:
-        current = current_consent_version(device_ref, category)
-        if current is not None and version < current:
-            return _error_response(request, "CONSENT_REQUIRED", "La version de consentement est obsolète.",
+        state = projections.consent_state(device_ref, category)
+        if state is None or state["state"] != "GRANTED":
+            return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+                                   capability, status=403)
+        current = int(state["consent_version"])
+        if version < current:
+            return _error_response(request, "STALE_VERSION", "La version de consentement est obsolète.",
+                                   capability, status=409)
+        if version > current:
+            return _error_response(request, "CONSENT_REQUIRED", "L’état du consentement doit être synchronisé avant les données.",
                                    capability, status=403)
         return None
 
-    async def read_json_body(request: Request, capability: str, *, fallback: str | None = None) -> tuple[Any, JSONResponse | None]:
+    async def handle_consent_state_sync(request: Request) -> JSONResponse:
+        auth = require_android(request, None)
+        if isinstance(auth, JSONResponse):
+            return auth
+        request_id, device_ref = auth
+        body, failure = await read_json_body(request, None, fallback=request_id)
+        if failure is not None:
+            return failure
+        schema = _SYNC_SCHEMA["$defs"]["consent_state_update"]
+        if not isinstance(body, dict) or not _validate(schema, body):
+            return _schema_failure(request, None, fallback=request_id)
+        request_id = _request_id(request, body["request_id"])
+        if body["capability"] != "consent.state.write":
+            return _error_response(request, "BAD_REQUEST", "La capability du payload ne correspond pas à la route.",
+                                   None, status=400, fallback_request_id=request_id)
+        try:
+            receipt = projections.save_consent_state(
+                device_ref,
+                body["category"],
+                int(body["consent_version"]),
+                body["state"],
+                idempotency_key=body["idempotency_key"],
+            )
+        except V4ProjectionError as exc:
+            code, status, message = _status_from_projection_error(exc)
+            if isinstance(exc, IdempotencyConflict):
+                code, status, message = "IDEMPOTENCY_CONFLICT", 409, "Clé d’idempotence réutilisée avec un autre état."
+            return _error_response(request, code, message, None, status=status,
+                                   fallback_request_id=request_id)
+        response = {
+            "contract_version": 4,
+            "schema_version": 4,
+            "request_id": request_id,
+            "capability": "consent.state.write",
+            "category": receipt["category"],
+            "consent_version": receipt["consent_version"],
+            "state": receipt["state"],
+            "updated_at": receipt["updated_at"],
+            "source": receipt["source"],
+            "replayed": receipt["replayed"],
+            "result_code": "DUPLICATE" if receipt["replayed"] else "ACCEPTED",
+        }
+        if not _validate(_SYNC_SCHEMA["$defs"]["consent_state_receipt"], response):
+            return _error_response(request, "INTERNAL", "Le reçu de consentement ne respecte pas le schéma V4.",
+                                   None, status=500, fallback_request_id=request_id)
+        return JSONResponse(content=response)
+
+    async def read_json_body(request: Request, capability: str | None, *, fallback: str | None = None) -> tuple[Any, JSONResponse | None]:
         try:
             body = await request.json()
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
@@ -708,6 +786,8 @@ def create_v4_router(
     for sync_path in _SYNC_ROUTES:
         router.add_api_route(sync_path, sync_endpoint(sync_path), methods=["POST"],
                              name=f"sync_{sync_path.rsplit('/', 1)[-1]}", include_in_schema=False)
+    router.add_api_route("/v4/sync/consent-state", handle_consent_state_sync, methods=["POST"],
+                         name="sync_consent_state", include_in_schema=False)
 
     @router.post("/v4/agent/proposals/pull")
     async def pull_proposals(request: Request) -> JSONResponse:
@@ -741,9 +821,11 @@ def create_v4_router(
         if not active_capabilities.get("plan_revision.propose", False):
             return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
                                    status=403, fallback_request_id=request_id)
-        if current_consent_version(device_ref, "DAY_PLAN") != body["consent_version"]:
-            return _error_response(request, "CONSENT_REQUIRED", "Version de consentement du plan absente ou obsolète.",
-                                   capability, status=403, fallback_request_id=request_id)
+        consent_failure = require_current_consent(
+            device_ref, "DAY_PLAN", body["consent_version"], capability, request
+        )
+        if consent_failure is not None:
+            return consent_failure
         cursor_value = body.get("cursor")
         after_created = ""
         after_id = ""
@@ -808,10 +890,11 @@ def create_v4_router(
         if body["proposal_id"] != path_id:
             return _error_response(request, "PLAN_MISMATCH", "proposal_id du chemin et du reçu diffèrent.",
                                    capability, status=409, fallback_request_id=request_id)
-        current_day_plan_consent = current_consent_version(device_ref, "DAY_PLAN")
-        if current_day_plan_consent is None or body["consent_version"] != current_day_plan_consent:
-            return _error_response(request, "CONSENT_REQUIRED", "Version de consentement de l’ACK absente ou obsolète.",
-                                   capability, status=403, fallback_request_id=request_id)
+        consent_failure = require_current_consent(
+            device_ref, "DAY_PLAN", body["consent_version"], capability, request
+        )
+        if consent_failure is not None:
+            return consent_failure
         with store.connect() as connection:
             proposal_row = connection.execute(
                 "SELECT state,expires_at FROM agent_proposals_v4 WHERE proposal_id=?",
@@ -852,6 +935,7 @@ def create_v4_router(
             "/internal/v4/goal-progress",
             "/internal/v4/training-plan",
             "/internal/v4/agent/proposals/by-idempotency/{key}",
+            "/v4/sync/consent-state",
             "/v4/agent/proposals/pull",
         }
         request_path = request.url.path
@@ -863,7 +947,8 @@ def create_v4_router(
             is_known = request.method != "POST"
         else:
             expected_method = "POST" if request_path in _SYNC_ROUTES or request_path in {
-                "/internal/v4/plan-revision-proposals", "/v4/agent/proposals/pull"
+                "/internal/v4/plan-revision-proposals", "/v4/agent/proposals/pull",
+                "/v4/sync/consent-state"
             } else "GET"
             is_known = request_path in known and request.method != expected_method
         if is_known:

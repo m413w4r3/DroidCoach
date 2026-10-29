@@ -67,11 +67,136 @@ def content_hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+_CONSENT_CATEGORIES = frozenset({
+    "DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN",
+})
+_CONSENT_STATES = frozenset({"GRANTED", "REVOKED", "UNKNOWN"})
+
+
 class V4ProjectionStore:
     """Persists only dated projections and append-only receipts; never applies a plan."""
 
     def __init__(self, store: SQLiteStore) -> None:
         self.store = store
+
+    def consent_state(self, device_ref: str, category: str) -> dict[str, Any] | None:
+        if category not in _CONSENT_CATEGORIES:
+            raise ValueError("catégorie de consentement V4 inconnue")
+        with self.store.connect() as connection:
+            row = connection.execute(
+                "SELECT device_ref,category,consent_version,state,updated_at,source "
+                "FROM consent_states_v4 WHERE device_ref=? AND category=?",
+                (device_ref, category),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def save_consent_state(
+        self,
+        device_ref: str,
+        category: str,
+        consent_version: int,
+        state: str,
+        *,
+        idempotency_key: str,
+        source: str = "ANDROID_SYNC",
+        updated_at: str | None = None,
+    ) -> dict[str, Any]:
+        if (
+            not isinstance(device_ref, str)
+            or not device_ref
+            or not isinstance(category, str)
+            or category not in _CONSENT_CATEGORIES
+        ):
+            raise V4ProjectionError("device_ref ou catégorie de consentement V4 invalide")
+        if (
+            not isinstance(consent_version, int)
+            or isinstance(consent_version, bool)
+            or consent_version < 1
+            or not isinstance(state, str)
+            or state not in _CONSENT_STATES
+            or not isinstance(idempotency_key, str)
+            or not idempotency_key
+            or not isinstance(source, str)
+            or source != "ANDROID_SYNC"
+        ):
+            raise V4ProjectionError("état de consentement V4 invalide")
+        try:
+            idempotency_key = str(uuid.UUID(idempotency_key))
+        except ValueError:
+            raise V4ProjectionError("clé d’idempotence de consentement V4 invalide") from None
+        request_hash = content_hash({
+            "device_ref": device_ref,
+            "category": category,
+            "consent_version": consent_version,
+            "state": state,
+            "source": source,
+        })
+        proposed_timestamp = updated_at or self.store.now_iso()
+        timestamp = proposed_timestamp
+        replayed = False
+        with self.store.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT consent_version,state,updated_at,source FROM consent_states_v4 "
+                "WHERE device_ref=? AND category=?",
+                (device_ref, category),
+            ).fetchone()
+            if row is not None and consent_version < int(row["consent_version"]):
+                raise StaleProjectionVersion("version de consentement régressive")
+            prior_event = connection.execute(
+                "SELECT device_ref,category,consent_version,state,updated_at,source,body_hash "
+                "FROM consent_state_events_v4 WHERE idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+            if prior_event is not None:
+                if prior_event["body_hash"] != request_hash:
+                    raise IdempotencyConflict("clé d’idempotence de consentement utilisée avec un autre état")
+                replayed = True
+                timestamp = str(prior_event["updated_at"])
+                result_state = {
+                    "device_ref": str(prior_event["device_ref"]),
+                    "category": str(prior_event["category"]),
+                    "consent_version": int(prior_event["consent_version"]),
+                    "state": str(prior_event["state"]),
+                    "updated_at": timestamp,
+                    "source": str(prior_event["source"]),
+                    "replayed": True,
+                }
+                return result_state
+            if row is not None:
+                current_version = int(row["consent_version"])
+                if consent_version == current_version:
+                    if state != row["state"]:
+                        raise ProjectionConflict("état différent pour la même version de consentement")
+                    replayed = True
+                    timestamp = str(row["updated_at"])
+                    source = str(row["source"])
+                else:
+                    connection.execute(
+                        "UPDATE consent_states_v4 SET consent_version=?,state=?,updated_at=?,source=? "
+                        "WHERE device_ref=? AND category=?",
+                        (consent_version, state, timestamp, source, device_ref, category),
+                    )
+            else:
+                connection.execute(
+                    "INSERT INTO consent_states_v4(device_ref,category,consent_version,state,updated_at,source) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (device_ref, category, consent_version, state, timestamp, source),
+                )
+            connection.execute(
+                "INSERT INTO consent_state_events_v4(idempotency_key,device_ref,category,consent_version,state,updated_at,source,body_hash) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (idempotency_key, device_ref, category, consent_version, state, timestamp, source, request_hash),
+            )
+        return {
+            "device_ref": device_ref,
+            "category": category,
+            "consent_version": consent_version,
+            "state": state,
+            "updated_at": timestamp,
+            "source": source,
+            "replayed": replayed,
+        }
 
     @staticmethod
     def _raw_payload(payload: Any) -> bytes:

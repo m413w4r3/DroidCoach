@@ -21,9 +21,9 @@ def test_fresh_and_legacy_databases_migrate_additively_and_idempotently(tmp_path
     fresh_path = tmp_path / "fresh.sqlite3"
     fresh = SQLiteStore(fresh_path, clock=fixed_clock())
     with fresh.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 3
         names = {
             row[0]
             for row in connection.execute(
@@ -40,6 +40,8 @@ def test_fresh_and_legacy_databases_migrate_additively_and_idempotently(tmp_path
             "agent_proposal_events_v4",
             "tool_audit_v4",
             "v4_quarantine",
+            "consent_states_v4",
+            "consent_state_events_v4",
         } <= names
     backup_path = fresh_path.with_suffix(fresh_path.suffix + ".pre-v4.bak")
     assert backup_path.exists()
@@ -47,8 +49,8 @@ def test_fresh_and_legacy_databases_migrate_additively_and_idempotently(tmp_path
     # Reopening does not add migration rows or mutate the V4 schema.
     fresh.initialize()
     with fresh.connect() as connection:
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
     legacy_path = tmp_path / "legacy.sqlite3"
@@ -91,7 +93,7 @@ def test_fresh_and_legacy_databases_migrate_additively_and_idempotently(tmp_path
         assert connection.execute("SELECT event_id FROM events").fetchone()[0] == "legacy-event"
         assert connection.execute("SELECT proposal_id FROM agent_proposals").fetchone()[0] == "legacy-proposal"
         assert connection.execute("SELECT proposal_id FROM agent_proposal_acks").fetchone()[0] == "legacy-proposal"
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
 
@@ -130,4 +132,4 @@ def test_migration_checksum_mismatch_is_quarantined_and_fails_closed(tmp_path):
         assert row is not None
         assert row[0] == "MIGRATION_CHECKSUM_MISMATCH"
         assert hashlib.sha256(row[1]).hexdigest() in row[2]
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
