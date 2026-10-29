@@ -1025,11 +1025,34 @@ def create_v4_router(
             "goal_progress.write": "GOAL_PROGRESS",
             "training_plan.write": "TRAINING_PLAN",
         }[capability]
+        data = body["data"]
+        if capability == "activity_status.write":
+            try:
+                existing_receipt = projections.existing_activity_status_event(device_ref, data)
+            except V4ProjectionError as exc:
+                code, status, message = _status_from_projection_error(exc)
+                return _error_response(request, code, message, capability, status=status,
+                                       fallback_request_id=request_id)
+            if existing_receipt is not None:
+                response = {
+                    "contract_version": 4,
+                    "schema_version": 4,
+                    "request_id": request_id,
+                    "capability": capability,
+                    "items": [{
+                        "event_id": data["event_id"],
+                        "result_code": "DUPLICATE",
+                        "last_synced_at": existing_receipt.received_at or _utc_now(store),
+                    }],
+                }
+                if not _validate(_SYNC_RECEIPTS_SCHEMA, response):
+                    return _error_response(request, "INTERNAL", "Le reçu ne respecte pas le schéma V4.",
+                                           capability, status=500, fallback_request_id=request_id)
+                return JSONResponse(content=response)
         stale_consent = require_current_consent(device_ref, consent_category, consent_version,
                                                 capability, request)
         if stale_consent is not None:
             return stale_consent
-        data = body["data"]
         if capability == "usage_summary.write" and int(data["consent_version"]) != consent_version:
             return _error_response(request, "CONSENT_REQUIRED", "Le résumé ne correspond pas au consentement courant.",
                                    capability, status=403, fallback_request_id=request_id)
@@ -1067,8 +1090,8 @@ def create_v4_router(
             current_status = prior_event["new_status"] if prior_event else activity.get("status")
             with store.connect() as connection:
                 existing_event = connection.execute(
-                    "SELECT 1 FROM activity_status_events_v4 WHERE event_id=?",
-                    (data["event_id"],),
+                    "SELECT 1 FROM activity_status_events_v4 WHERE device_ref=? AND event_id=?",
+                    (device_ref, data["event_id"]),
                 ).fetchone()
             if existing_event is None and current_status != data["from_status"]:
                 return _error_response(request, "STALE_VERSION", "Le statut précédent ne correspond plus au plan.",
@@ -1109,7 +1132,7 @@ def create_v4_router(
                     "items": [{
                         "event_id": data["event_id"],
                         "result_code": "DUPLICATE" if receipt.replayed else "ACCEPTED",
-                        "last_synced_at": _utc_now(store),
+                        "last_synced_at": receipt.received_at or _utc_now(store),
                     }],
                 }
                 if not _validate(_SYNC_RECEIPTS_SCHEMA, response):

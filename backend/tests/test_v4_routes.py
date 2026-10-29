@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -154,10 +155,10 @@ def consent_envelope(category: str, state: str, version: int, *, key: str | None
 
 
 def post_consent(client: ASGITestClient, category: str, state: str, version: int,
-                 *, key: str | None = None) -> dict:
+                 *, key: str | None = None, token: str = ANDROID_TOKEN) -> dict:
     response = client.post(
         "/v4/sync/consent-state",
-        headers=android_headers(),
+        headers=android_headers(token),
         json=consent_envelope(category, state, version, key=key),
     )
     assert response.status_code == 200, response.text
@@ -166,16 +167,46 @@ def post_consent(client: ASGITestClient, category: str, state: str, version: int
     return response.json()
 
 
-def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3) -> dict:
-    post_consent(client, "DAY_PLAN", "GRANTED", consent_version)
+def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3,
+              token: str = ANDROID_TOKEN, consent_key: str | None = None) -> dict:
+    post_consent(client, "DAY_PLAN", "GRANTED", consent_version, key=consent_key, token=token)
     response = client.post(
         "/v4/sync/day-plan-snapshots",
-        headers=android_headers(),
+        headers=android_headers(token),
         json=sync_envelope("day_plan.snapshot.write", day_plan(observed_at=observed_at),
                            consent_version=consent_version),
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def activity_status_data(event_id: str, *, sequence: int = 1) -> dict:
+    return {
+        "event_id": event_id,
+        "sequence": sequence,
+        "plan_id": UUID_PLAN,
+        "activity_id": UUID_ACTIVITY,
+        "continuity_id": UUID_CONTINUITY,
+        "plan_version": 7,
+        "from_status": "PLANNED",
+        "to_status": "IN_PROGRESS",
+        "provenance": "CONFIRMED",
+        "source": "USER_UI",
+        "decided_at": stamp(),
+        "observed_at": stamp(),
+        "focus_session_id": None,
+    }
+
+
+def activity_status_row_count(client: ASGITestClient, event_id: str | None = None) -> int:
+    with client.app.state.store.connect() as connection:
+        if event_id is None:
+            row = connection.execute("SELECT COUNT(*) AS count FROM activity_status_events_v4").fetchone()
+        else:
+            row = connection.execute(
+                "SELECT COUNT(*) AS count FROM activity_status_events_v4 WHERE event_id=?", (event_id,)
+            ).fetchone()
+    return int(row["count"])
 
 
 def validate(schema_name: str, result: dict) -> None:
@@ -314,6 +345,133 @@ def test_sync_snapshots_and_six_fixed_tool_routes_match_contracts(tmp_path, monk
         response = client.get(path, headers=tool_headers(capability))
         assert response.status_code == 200, response.text
         validate("tool-results.schema.json", response.json())
+    client.close()
+
+
+def test_status_event_reconciles_before_stale_consent_and_reuses_stored_receipt(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    now = [datetime(2026, 10, 29, 8, 0, tzinfo=timezone.utc)]
+    client.app.state.store.clock = lambda: now[0]
+    post_plan(client)
+    post_consent(client, "ACTIVITY_STATUS", "GRANTED", 3)
+    event_id = "00000000-0000-4000-8000-000000000501"
+    envelope = sync_envelope("activity_status.write", activity_status_data(event_id))
+
+    accepted = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert accepted.status_code == 200, accepted.text
+    validate("sync-receipts.schema.json", accepted.json())
+    accepted_item = accepted.json()["items"][0]
+    assert accepted_item["result_code"] == "ACCEPTED"
+
+    now[0] += timedelta(minutes=1)
+    post_consent(client, "ACTIVITY_STATUS", "REVOKED", 4)
+    now[0] += timedelta(minutes=1)
+    post_consent(client, "ACTIVITY_STATUS", "GRANTED", 5)
+    now[0] += timedelta(minutes=3)
+
+    changed_body = json.loads(json.dumps(envelope))
+    changed_body["data"]["to_status"] = "DONE"
+    conflict = client.post(
+        "/v4/sync/activity-status-events", headers=android_headers(), json=changed_body
+    )
+    assert conflict.status_code == 409
+    validate_error(conflict, "EVENT_ID_CONFLICT")
+    assert activity_status_row_count(client, event_id) == 1
+
+    replay = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert replay.status_code == 200, replay.text
+    validate("sync-receipts.schema.json", replay.json())
+    replay_item = replay.json()["items"][0]
+    assert replay_item["event_id"] == accepted_item["event_id"]
+    assert replay_item["result_code"] == "DUPLICATE"
+    assert replay_item["last_synced_at"] == accepted_item["last_synced_at"]
+    assert replay_item["last_synced_at"] != now[0].isoformat().replace("+00:00", "Z")
+    assert activity_status_row_count(client, event_id) == 1
+    client.close()
+
+
+def test_absent_status_event_with_stale_consent_is_rejected_without_write(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    post_consent(client, "ACTIVITY_STATUS", "GRANTED", 4)
+    event_id = "00000000-0000-4000-8000-000000000502"
+    envelope = sync_envelope(
+        "activity_status.write", activity_status_data(event_id), consent_version=3
+    )
+
+    response = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert response.status_code == 409
+    validate_error(response, "STALE_VERSION")
+    assert activity_status_row_count(client) == 0
+    client.close()
+
+
+def test_status_event_receipt_is_not_visible_to_another_device(tmp_path, monkeypatch):
+    other_token = "other-android-test-secret"
+    owner = make_client(tmp_path, monkeypatch)
+    other_device = make_client(tmp_path, monkeypatch, android_token=other_token)
+    post_plan(owner)
+    post_consent(owner, "ACTIVITY_STATUS", "GRANTED", 3)
+    event_id = "00000000-0000-4000-8000-000000000503"
+    envelope = sync_envelope("activity_status.write", activity_status_data(event_id))
+
+    accepted = owner.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert accepted.status_code == 200, accepted.text
+    accepted_timestamp = accepted.json()["items"][0]["last_synced_at"]
+
+    post_plan(
+        other_device,
+        token=other_token,
+        consent_key="00000000-0000-4000-8000-000000000601",
+    )
+    post_consent(
+        other_device,
+        "ACTIVITY_STATUS",
+        "GRANTED",
+        3,
+        key="00000000-0000-4000-8000-000000000602",
+        token=other_token,
+    )
+    cross_device_replay = other_device.post(
+        "/v4/sync/activity-status-events", headers=android_headers(other_token), json=envelope
+    )
+    assert cross_device_replay.status_code == 409
+    validate_error(cross_device_replay, "EVENT_ID_CONFLICT")
+    assert "items" not in cross_device_replay.json()
+    assert accepted_timestamp not in cross_device_replay.text
+    assert activity_status_row_count(owner, event_id) == 1
+
+    owner_replay = owner.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert owner_replay.status_code == 200, owner_replay.text
+    assert owner_replay.json()["items"][0]["last_synced_at"] == accepted_timestamp
+    owner.close()
+    other_device.close()
+
+
+def test_concurrent_status_event_replays_keep_one_stored_receipt(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    post_consent(client, "ACTIVITY_STATUS", "GRANTED", 3)
+    event_id = "00000000-0000-4000-8000-000000000504"
+    envelope = sync_envelope("activity_status.write", activity_status_data(event_id))
+    accepted = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert accepted.status_code == 200, accepted.text
+    stored_timestamp = accepted.json()["items"][0]["last_synced_at"]
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="v4-status-replay") as pool:
+        responses = list(pool.map(
+            lambda _index: client.post(
+                "/v4/sync/activity-status-events", headers=android_headers(), json=envelope
+            ),
+            range(2),
+        ))
+
+    assert all(response.status_code == 200 for response in responses)
+    for response in responses:
+        validate("sync-receipts.schema.json", response.json())
+        assert response.json()["items"][0]["result_code"] == "DUPLICATE"
+        assert response.json()["items"][0]["last_synced_at"] == stored_timestamp
+    assert activity_status_row_count(client, event_id) == 1
     client.close()
 
 
