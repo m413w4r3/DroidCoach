@@ -197,46 +197,50 @@ class DayPlanRepository(
 
     /** Records an explicit A1 consent decision, separately from all sharing and agent mandates. */
     @Synchronized
-    fun setA1Consent(enabled: Boolean): A1SettingsResult = when (val loaded = readDocument()) {
-        InternalRead.Missing -> A1SettingsResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
-        is InternalRead.Corrupt -> A1SettingsResult.Corrupt(loaded.reason, loaded.quarantine)
-        is InternalRead.Loaded -> {
-            val current = loaded.document
-            val now = clock.nowUtcMillis()
-            val nextConsent = try {
-                A1Consent(
-                    version = Math.addExact(current.a1State.consent.version, 1),
-                    enabled = enabled,
-                    updatedAtUtcMillis = now,
-                )
-            } catch (_: Exception) {
-                return A1SettingsResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
-            }
-            val migrated = current.a1State.migrateLegacyActivities(current.store.dayPlan).copy(consent = nextConsent)
-            val updated = current.copy(a1State = migrated, usesV5Envelope = true)
-            when (persist(updated)) {
-                PersistResult.Failed -> A1SettingsResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
-                is PersistResult.Succeeded -> A1SettingsResult.Updated(nextConsent)
+    fun setA1Consent(enabled: Boolean): A1SettingsResult {
+        return when (val loaded = readDocument()) {
+            InternalRead.Missing -> A1SettingsResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
+            is InternalRead.Corrupt -> A1SettingsResult.Corrupt(loaded.reason, loaded.quarantine)
+            is InternalRead.Loaded -> {
+                val current = loaded.document
+                val now = clock.nowUtcMillis()
+                val nextConsent = try {
+                    A1Consent(
+                        version = Math.addExact(current.a1State.consent.version, 1),
+                        enabled = enabled,
+                        updatedAtUtcMillis = now,
+                    )
+                } catch (_: Exception) {
+                    return A1SettingsResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+                }
+                val migrated = current.a1State.migrateLegacyActivities(current.store.dayPlan).copy(consent = nextConsent)
+                val updated = current.copy(a1State = migrated, usesV5Envelope = true)
+                when (persist(updated)) {
+                    PersistResult.Failed -> A1SettingsResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
+                    is PersistResult.Succeeded -> A1SettingsResult.Updated(nextConsent)
+                }
             }
         }
     }
 
     /** Classification and unlocking are explicit; titles and notes are never inspected. */
     @Synchronized
-    fun setA1ActivityPolicy(policy: A1ActivityPolicy): A1PolicyUpdateResult = when (val loaded = readDocument()) {
-        InternalRead.Missing -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
-        is InternalRead.Corrupt -> A1PolicyUpdateResult.Corrupt(loaded.reason, loaded.quarantine)
-        is InternalRead.Loaded -> {
-            val current = loaded.document
-            if (current.store.dayPlan.activities.none { it.activityId == policy.activityId }) {
-                return A1PolicyUpdateResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
-            }
-            val migrated = current.a1State.migrateLegacyActivities(current.store.dayPlan).let { state ->
-                state.copy(activityPolicies = state.activityPolicies + (policy.activityId to policy))
-            }
-            when (persist(current.copy(a1State = migrated, usesV5Envelope = true))) {
-                PersistResult.Failed -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
-                is PersistResult.Succeeded -> A1PolicyUpdateResult.Updated(policy)
+    fun setA1ActivityPolicy(policy: A1ActivityPolicy): A1PolicyUpdateResult {
+        return when (val loaded = readDocument()) {
+            InternalRead.Missing -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
+            is InternalRead.Corrupt -> A1PolicyUpdateResult.Corrupt(loaded.reason, loaded.quarantine)
+            is InternalRead.Loaded -> {
+                val current = loaded.document
+                if (current.store.dayPlan.activities.none { it.activityId == policy.activityId }) {
+                    return A1PolicyUpdateResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+                }
+                val migrated = current.a1State.migrateLegacyActivities(current.store.dayPlan).let { state ->
+                    state.copy(activityPolicies = state.activityPolicies + (policy.activityId to policy))
+                }
+                when (persist(current.copy(a1State = migrated, usesV5Envelope = true))) {
+                    PersistResult.Failed -> A1PolicyUpdateResult.Rejected(PlanRejectionReason.STORAGE_FAILURE)
+                    is PersistResult.Succeeded -> A1PolicyUpdateResult.Updated(policy)
+                }
             }
         }
     }
