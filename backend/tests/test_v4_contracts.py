@@ -356,12 +356,9 @@ def fixtures() -> dict[str, list[dict]]:
         },
     ]
     sync_caps = ["day_plan.snapshot.write", "activity_status.write", "usage_summary.write", "goal_progress.write", "training_plan.write"]
-    sync_keys = [True, False, True, True, True]
     sync_fixtures = []
-    for capability, data, needs_key in zip(sync_caps, sync_data, sync_keys):
-        item = {**sync_base, "capability": capability, "data": data}
-        if needs_key:
-            item["idempotency_key"] = UUID_D
+    for capability, data in zip(sync_caps, sync_data):
+        item = {**sync_base, "capability": capability, "data": data, "idempotency_key": UUID_D}
         sync_fixtures.append(item)
 
     proposal = {
@@ -645,6 +642,7 @@ def test_chat_requires_sent_at_and_capability():
         ("sync.schema.json", 0, ("request_id",)),
         ("sync.schema.json", 0, ("data", "plan_id")),
         ("sync.schema.json", 1, ("data", "event_id")),
+        ("sync.schema.json", 1, ("idempotency_key",)),
         ("sync-receipts.schema.json", 0, ("result_code",)),
         ("sync-receipts.schema.json", 1, ("items", 0, "event_id")),
         ("proposal-inbox-ack.schema.json", 0, ("proposal_id",)),
@@ -678,8 +676,75 @@ def test_uncertain_ack_does_not_claim_applied_effects():
     ack["state"] = "UNCERTAIN"
     ack["result_code"] = "RESULT_UNCERTAIN"
     validator("proposal-inbox-ack.schema.json").validate(ack)
+    ack["result_code"] = "APPLIED"
+    assert_invalid("proposal-inbox-ack.schema.json", ack)
+    ack["result_code"] = "RESULT_UNCERTAIN"
     ack["revision_id"] = UUID_C
     assert_invalid("proposal-inbox-ack.schema.json", ack)
+
+
+def test_reconciled_applied_ack_requires_complete_application_proof():
+    ack = copy.deepcopy(FIXTURES["proposal-inbox-ack.schema.json"][2])
+    ack["state"] = "RECONCILED"
+    ack["result_code"] = "RECONCILED_APPLIED"
+    validator("proposal-inbox-ack.schema.json").validate(ack)
+
+    for field in ("applied_plan_version", "revision_id", "scope_hash", "effect_ids"):
+        incomplete = copy.deepcopy(ack)
+        incomplete.pop(field)
+        assert_invalid("proposal-inbox-ack.schema.json", incomplete)
+
+    rejected = copy.deepcopy(ack)
+    rejected["result_code"] = "USER_REJECTED"
+    assert_invalid("proposal-inbox-ack.schema.json", rejected)
+
+
+def test_reconciled_not_applied_and_rejected_ack_cannot_claim_application():
+    ack = copy.deepcopy(FIXTURES["proposal-inbox-ack.schema.json"][2])
+    for field in ("plan_id", "applied_plan_version", "revision_id", "scope_hash", "effect_ids"):
+        ack.pop(field)
+    ack["state"] = "RECONCILED"
+    ack["result_code"] = "RECONCILED_NOT_APPLIED"
+    validator("proposal-inbox-ack.schema.json").validate(ack)
+
+    ack["result_code"] = "USER_REJECTED"
+    validator("proposal-inbox-ack.schema.json").validate(ack)
+
+    for field, value in (
+        ("applied_plan_version", 8),
+        ("revision_id", UUID_C),
+        ("scope_hash", HASH_C),
+        ("effect_ids", [f"PLAN_APPLY:{UUID_C}"]),
+    ):
+        contradictory = copy.deepcopy(ack)
+        contradictory[field] = value
+        assert_invalid("proposal-inbox-ack.schema.json", contradictory)
+
+    rejected = copy.deepcopy(ack)
+    rejected["state"] = "REJECTED"
+    rejected["result_code"] = "USER_REJECTED"
+    rejected["plan_id"] = UUID_B
+    assert_invalid("proposal-inbox-ack.schema.json", rejected)
+
+    falsely_applied = copy.deepcopy(ack)
+    falsely_applied["result_code"] = "APPLIED"
+    assert_invalid("proposal-inbox-ack.schema.json", falsely_applied)
+
+
+
+def test_usage_window_over_14_days_requires_atlas_validation():
+    request = copy.deepcopy(FIXTURES["tool-requests.schema.json"][3])
+    request["arguments"]["window_start"] = "2026-10-01T08:02:00Z"
+    request["arguments"]["window_end"] = "2026-10-16T08:02:00Z"
+
+    standard_validator = Draft202012Validator(
+        SCHEMAS["tool-requests.schema.json"], format_checker=CHECKER
+    )
+    assert standard_validator.is_valid(request)  # x-atlas-constraints is a custom keyword.
+    assert_invalid("tool-requests.schema.json", request)
+    assert "DOIVENT" in SCHEMAS["tool-requests.schema.json"]["$defs"][
+        "atlas_get_usage_summary_arguments"
+    ]["x-atlas-constraints"]["description"]
 
 
 def test_required_fields_types_enums_formats_and_bounds_are_rejected():

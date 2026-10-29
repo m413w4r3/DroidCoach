@@ -440,6 +440,12 @@
             "observed_at",
             "focus_session_id"
           ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
         }
       },
       "required": [
@@ -449,7 +455,8 @@
         "capability",
         "sent_at",
         "consent_version",
-        "data"
+        "data",
+        "idempotency_key"
       ]
     },
     "usage_summary": {
@@ -1090,7 +1097,8 @@
         "decided_at": "2026-10-29T08:02:00Z",
         "observed_at": "2026-10-29T08:02:00Z",
         "focus_session_id": "00000000-0000-4000-8000-000000000102"
-      }
+      },
+      "idempotency_key": "00000000-0000-4000-8000-000000000104"
     },
     {
       "contract_version": 4,

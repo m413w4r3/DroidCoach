@@ -812,6 +812,166 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "REJECTED"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "plan_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "applied_plan_version"
+                  ]
+                },
+                {
+                  "required": [
+                    "revision_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "scope_hash"
+                  ]
+                },
+                {
+                  "required": [
+                    "effect_ids"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "RECONCILED"
+              }
+            }
+          },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "result_code": {
+                    "const": "RECONCILED_APPLIED"
+                  }
+                },
+                "required": [
+                  "result_code",
+                  "plan_id",
+                  "applied_plan_version",
+                  "revision_id",
+                  "scope_hash",
+                  "effect_ids"
+                ]
+              },
+              {
+                "properties": {
+                  "result_code": {
+                    "enum": [
+                      "RECONCILED_NOT_APPLIED",
+                      "USER_REJECTED"
+                    ]
+                  }
+                },
+                "required": [
+                  "result_code"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "plan_id"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "applied_plan_version"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "revision_id"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "scope_hash"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "effect_ids"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "result_code": {
+                "enum": [
+                  "USER_REJECTED",
+                  "STALE_VERSION",
+                  "PROPOSAL_EXPIRED",
+                  "VALIDATION_FAILED",
+                  "RESULT_UNCERTAIN",
+                  "RECONCILED_NOT_APPLIED"
+                ]
+              }
+            },
+            "required": [
+              "result_code"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "plan_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "applied_plan_version"
+                  ]
+                },
+                {
+                  "required": [
+                    "revision_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "scope_hash"
+                  ]
+                },
+                {
+                  "required": [
+                    "effect_ids"
+                  ]
+                }
+              ]
+            }
+          }
         }
       ]
     }

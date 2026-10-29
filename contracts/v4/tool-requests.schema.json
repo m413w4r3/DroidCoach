@@ -288,7 +288,7 @@
       "x-atlas-constraints": {
         "window_end_after_window_start": true,
         "maximum_window_days": 14,
-        "description": "window_end doit être ultérieur à window_start, avec une période maximale de 14 jours."
+        "description": "Les consommateurs DOIVENT refuser toute fenêtre où window_end n’est pas ultérieur à window_start ou dont la durée dépasse 14 jours. JSON Schema standard ne vérifie pas cette contrainte métier; le validateur Atlas doit l’appliquer."
       }
     },
     "atlas_get_goal_progress_arguments": {
