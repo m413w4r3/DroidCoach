@@ -1,5 +1,5 @@
 import { RemoteError } from "./errors.js";
-import { assertCoachChatResponse, assertSmallResponse, type Operation } from "./protocol.js";
+import { assertCoachChatResponse, assertSmallResponse, isV4Operation, type Operation, validatePayload } from "./protocol.js";
 
 export type FetchLike = typeof fetch;
 
@@ -8,6 +8,10 @@ export interface BackendConfig {
   serviceToken?: string;
   timeoutMs?: number;
   chatTimeoutMs?: number;
+  /** V4 stays disabled in the production connector until Relay-to-Core identity binding is proven. */
+  v4Enabled?: boolean;
+  /** Resolves a paired Relay device to its distinct Core Android bearer; never read from payload data. */
+  pairedDeviceToken?: (pairedDeviceId: string) => string | undefined;
   fetcher?: FetchLike;
 }
 
@@ -56,15 +60,29 @@ export class BackendClient {
     }
   }
 
-  async execute(operation: Operation, payload: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  async execute(operation: Operation, payload: Record<string, unknown>, signal?: AbortSignal, pairedDeviceId?: string): Promise<Record<string, unknown>> {
+    const v4Operation = isV4Operation(operation);
+    if (v4Operation) validatePayload(operation, payload);
+    if (v4Operation && (!this.config.v4Enabled || !pairedDeviceId || !this.config.pairedDeviceToken)) {
+      throw new RemoteError("OPERATION_UNAVAILABLE");
+    }
+    const deviceToken = v4Operation ? this.config.pairedDeviceToken?.(pairedDeviceId!) : undefined;
+    if (v4Operation && !deviceToken) throw new RemoteError("OPERATION_UNAVAILABLE");
     const route = routeFor(operation, payload);
     if (!route) throw new RemoteError("OPERATION_UNAVAILABLE");
-    if (route.method !== "GET" && !this.config.serviceToken) throw new RemoteError("OPERATION_UNAVAILABLE");
-    if (route.auth && !this.config.serviceToken) throw new RemoteError("OPERATION_UNAVAILABLE");
+    const bearerToken = route.v4 ? deviceToken : this.config.serviceToken;
+    if (route.method !== "GET" && !bearerToken) throw new RemoteError("OPERATION_UNAVAILABLE");
+    if (route.auth && !bearerToken) throw new RemoteError("OPERATION_UNAVAILABLE");
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (route.auth && this.config.serviceToken) headers.Authorization = `Bearer ${this.config.serviceToken}`;
+    if (route.auth && bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
+    if (route.v4) {
+      headers["X-Atlas-Contract-Version"] = "4";
+      headers["X-Atlas-Schema-Version"] = "4";
+      headers["X-Atlas-Capability"] = route.v4.capability;
+      headers["X-Atlas-Request-Id"] = route.v4.requestId;
+    }
     if (route.body) headers["Content-Type"] = "application/json";
-    const timeoutMs = operation === "coach.chat.request" ? this.chatTimeoutMs : this.timeoutMs;
+    const timeoutMs = operation === "coach.chat.request" || operation === "v4.coach.chat.request" ? this.chatTimeoutMs : this.timeoutMs;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const init: RequestInit = { method: route.method, headers, signal: combinedSignal, redirect: "error" };
@@ -105,6 +123,7 @@ interface Route {
   path: string;
   auth: boolean;
   body?: Record<string, unknown>;
+  v4?: { capability: string; requestId: string };
 }
 
 function routeFor(operation: Operation, payload: Record<string, unknown>): Route | null {
@@ -127,7 +146,36 @@ function routeFor(operation: Operation, payload: Record<string, unknown>): Route
     case "plan.revision.result":
     case "sync.status":
       return null;
+    case "v4.plan.snapshot.upsert":
+      return v4Post(payload, "/v4/sync/day-plan-snapshots", "day_plan.snapshot.write");
+    case "v4.activity-status.events.append":
+      return v4Post(payload, "/v4/sync/activity-status-events", "activity_status.write");
+    case "v4.usage.summary.upsert":
+      return v4Post(payload, "/v4/sync/usage-summaries", "usage_summary.write");
+    case "v4.goal.snapshot.upsert":
+      return v4Post(payload, "/v4/sync/goal-progress-snapshots", "goal_progress.write");
+    case "v4.training.snapshot.upsert":
+      return v4Post(payload, "/v4/sync/training-snapshots", "training_plan.write");
+    case "v4.proposals.pull":
+      return v4Post(payload, "/v4/agent/proposals/pull", "proposal.ack");
+    case "v4.proposals.ack":
+      return v4Post(payload, `/v4/agent/proposals/${encodeURIComponent(String(payload.proposal_id))}/ack`, "proposal.ack");
+    case "v4.coach.chat.request":
+      return v4Post(payload, "/v4/agent/chat", "coach.chat");
+    case "v4.consent.state.upsert":
+      return v4Post(payload, "/v4/sync/consent-state", "consent.state.write");
   }
+}
+
+function v4Post(payload: Record<string, unknown>, path: string, capability: string): Route {
+  const requestId = payload.request_id ?? payload.ack_id;
+  return {
+    method: "POST",
+    path,
+    auth: true,
+    body: payload,
+    v4: { capability, requestId: String(requestId) },
+  };
 }
 
 async function readBoundedJson(response: Response): Promise<Record<string, unknown>> {

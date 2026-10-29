@@ -9,7 +9,9 @@ import {
   MAX_REQUEST_BYTES,
   MAX_RESPONSE_BYTES,
   PROTOCOL,
+  PROTOCOLS,
   SESSION_SECONDS,
+  capabilityForOperation,
   isRecord,
   parseJsonFrame,
   validateHello,
@@ -17,6 +19,7 @@ import {
   type Capability,
   type ErrorEnvelope,
   type Hello,
+  type Protocol,
   type RequestEnvelope,
 } from "./protocol.js";
 
@@ -28,6 +31,7 @@ interface SessionState {
 interface AuthenticatedDevice {
   record: DeviceRecord;
   sessionId: string;
+  protocol: Protocol;
   capabilities: Capability[];
   expiresAt: number;
 }
@@ -37,16 +41,6 @@ interface QuotaBucket {
 }
 
 const REVOKE_GRACE_MS = 200;
-
-const OPERATION_CAPABILITY: Partial<Record<string, Capability>> = {
-  "coach.chat.request": "coach.chat",
-  "coach.status": "coach.status",
-  "plan.today.read": "plan.today",
-  "plan.revision.request": "plan.revision",
-  "plan.revision.result": "plan.revision",
-  "sport.plan.read": "sport.plan",
-  "sync.status": "sync.status",
-};
 
 export class SessionManager {
   private readonly active = new Map<string, PeerSession>();
@@ -99,6 +93,7 @@ export class SessionManager {
     const authenticated: AuthenticatedDevice = {
       record,
       sessionId: randomUUID(),
+      protocol: hello.protocol,
       capabilities: [...grantedCapabilities],
       expiresAt: now + SESSION_SECONDS * 1000,
     };
@@ -185,14 +180,16 @@ export class PeerSession {
     if (this.closed) return;
     this.lastActivity = this.now();
     let currentRequestId: string | null = null;
+    let incomingProtocol: Protocol | undefined;
     const frameBytes = typeof data === "string" ? Buffer.byteLength(data, "utf8") : data.byteLength;
     try {
       const value = parseJsonFrame(data);
+      incomingProtocol = isRecord(value) && PROTOCOLS.includes(value.protocol as Protocol) ? value.protocol as Protocol : undefined;
       if (!this.auth) {
         const hello = validateHello(value);
         this.auth = await this.manager.authenticate(this, hello);
         await this.send({
-          protocol: PROTOCOL,
+          protocol: this.auth.protocol,
           kind: "hello_ok",
           session_id: this.auth.sessionId,
           server_time: new Date(this.now()).toISOString(),
@@ -207,19 +204,19 @@ export class PeerSession {
       if (this.auth.expiresAt <= this.now() || this.now() - this.openedAt >= SESSION_SECONDS * 1000) {
         throw new RemoteError("AUTH_REQUIRED");
       }
-      if (!isRecord(value) || value.protocol !== PROTOCOL || typeof value.kind !== "string") throw new RemoteError("INVALID_REQUEST");
+      if (!isRecord(value) || value.protocol !== this.auth.protocol || typeof value.kind !== "string") throw new RemoteError("INVALID_REQUEST");
       if (value.kind === "request") {
         currentRequestId = typeof value.request_id === "string" && UUID.test(value.request_id) ? value.request_id : null;
         if (frameBytes > MAX_REQUEST_BYTES) throw new RemoteError("PAYLOAD_TOO_LARGE");
         await this.handleRequest(value);
       } else if (value.kind === "ping") {
         if (Object.keys(value).length !== 3 || typeof value.nonce !== "string" || value.nonce.length < 1 || value.nonce.length > 32) throw new RemoteError("INVALID_REQUEST");
-        await this.send({ protocol: PROTOCOL, kind: "pong", nonce: value.nonce });
+        await this.send({ protocol: this.auth.protocol, kind: "pong", nonce: value.nonce });
       } else if (value.kind === "pong") {
         if (Object.keys(value).length !== 3 || typeof value.nonce !== "string" || value.nonce !== this.outstandingPing) throw new RemoteError("INVALID_REQUEST");
         this.outstandingPing = null;
       } else if (value.kind === "cancel") {
-        await this.handleCancel(value);
+        await this.handleCancel(value, this.auth.protocol);
       } else {
         throw new RemoteError("INVALID_REQUEST");
       }
@@ -233,8 +230,10 @@ export class PeerSession {
         await this.sendError(remoteError, currentRequestId);
         await this.closeForRevocation(remoteError.message);
       } else {
-        await this.sendError(remoteError, currentRequestId);
-        if (!this.auth || remoteError.code === "AUTH_REQUIRED") this.close(4001, remoteError.message);
+        await this.sendError(remoteError, currentRequestId, incomingProtocol);
+        if ((!this.auth && remoteError.code !== "OPERATION_UNAVAILABLE") || remoteError.code === "AUTH_REQUIRED") {
+          this.close(4001, remoteError.message);
+        }
       }
     }
   }
@@ -283,9 +282,11 @@ export class PeerSession {
   private async handleRequest(value: Record<string, unknown>): Promise<void> {
     const auth = this.auth;
     if (!auth) throw new RemoteError("AUTH_REQUIRED");
-    const request = validateRequest(value, auth.sessionId, this.now());
-    const needed = OPERATION_CAPABILITY[request.operation];
-    if (needed && !auth.capabilities.includes(needed)) throw new RemoteError("OPERATION_UNAVAILABLE");
+    const request = validateRequest(value, auth.sessionId, this.now(), auth.protocol);
+    const needed = capabilityForOperation(request.operation);
+    if (needed && !auth.capabilities.includes(needed)) {
+      throw new RemoteError("OPERATION_UNAVAILABLE");
+    }
     if (!this.manager.takeQuota(auth.record.device_id)) throw new RemoteError("RATE_LIMITED", true);
     if (this.inFlight.size >= 4) throw new RemoteError("RATE_LIMITED", true);
     if (this.inFlight.has(request.request_id)) throw new RemoteError("IDEMPOTENCY_CONFLICT");
@@ -305,8 +306,8 @@ export class PeerSession {
     }
   }
 
-  private async handleCancel(value: Record<string, unknown>): Promise<void> {
-    if (Object.keys(value).length !== 4 || value.protocol !== PROTOCOL || value.kind !== "cancel" || typeof value.request_id !== "string" || typeof value.target_request_id !== "string" || !UUID.test(value.request_id) || !UUID.test(value.target_request_id)) {
+  private async handleCancel(value: Record<string, unknown>, protocol: Protocol): Promise<void> {
+    if (Object.keys(value).length !== 4 || value.protocol !== protocol || value.kind !== "cancel" || typeof value.request_id !== "string" || typeof value.target_request_id !== "string" || !UUID.test(value.request_id) || !UUID.test(value.target_request_id)) {
       throw new RemoteError("INVALID_REQUEST");
     }
     const controller = this.inFlight.get(value.target_request_id);
@@ -331,7 +332,7 @@ export class PeerSession {
     if (this.now() - this.lastActivity >= 20_000) {
       const nonce = randomUUID().replaceAll("-", "").slice(0, 32);
       this.outstandingPing = nonce;
-      await this.send({ protocol: PROTOCOL, kind: "ping", nonce });
+      await this.send({ protocol: this.auth.protocol, kind: "ping", nonce });
     }
   }
 
@@ -343,10 +344,10 @@ export class PeerSession {
     await this.channel.send(serialized);
   }
 
-  private async sendError(error: RemoteError, requestId: string | null): Promise<void> {
+  private async sendError(error: RemoteError, requestId: string | null, protocol?: Protocol): Promise<void> {
     if (this.closed) return;
     const envelope: ErrorEnvelope = {
-      protocol: PROTOCOL,
+      protocol: this.auth?.protocol ?? protocol ?? PROTOCOL,
       kind: "error",
       request_id: requestId,
       session_id: this.auth?.sessionId ?? null,
