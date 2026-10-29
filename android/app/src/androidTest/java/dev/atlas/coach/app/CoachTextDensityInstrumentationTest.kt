@@ -104,10 +104,11 @@ class CoachTextDensityInstrumentationTest {
             .forEach { tag -> composeRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp) }
         composeRule.onNodeWithTag("agent_open_context")
             .performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
-        composeRule.onNodeWithText("Contexte du coach").assertIsDisplayed()
+        composeRule.onNodeWithText("Contexte du coach").performScrollTo().assertIsDisplayed()
 
         val categoryTags = AgentContextCategory.wireValues.map { "agent_context_category_$it" }
-        composeRule.onNodeWithText("Aucune catégorie autorisée · 0 élément inclus").assertIsDisplayed()
+        composeRule.onNodeWithText("Aucune catégorie autorisée · 0 élément inclus")
+            .performScrollTo().assertIsDisplayed()
         val collapsedCategoryTextCount = categoryTags.count { tag ->
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
         }
