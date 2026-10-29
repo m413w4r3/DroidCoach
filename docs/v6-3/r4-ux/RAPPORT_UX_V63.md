@@ -4,7 +4,7 @@
 - **Branche** : `feat/atlas-v6-3-ux-daily-use`
 - **HEAD** : `7d7b5f5`
 - **Base `origin/main`** : `566668ac9cd0778f43d7f4d90a93c6a45645935c`
-- **Statut** : code et tests AVD terminés ; **validation Pixel bloquée par la déconnexion USB** ; pas de push.
+- **Statut** : code et tests AVD terminés ; **validation Pixel ciblée effectuée le 2026-10-29** ; revue indépendante **GO_WITH_LIMITATIONS** ; **pas de push au moment de la rédaction**.
 
 ## Résultat
 
@@ -24,7 +24,7 @@ La passe rend les parcours **Coach** et **Planning** directs, allège l'accueil,
 - Lint et builds debug/androidTest : **PASS**.
 - AVD API 37 : **50 tests ciblés PASS** (33 + 16 + 1 police 2.0), Plan **9/9** après correctif Demain.
 - Launcher AVD : footer `Plan` → `Planning`, footer `Coach` → `Coach` ; **PASS**.
-- Pixel : **NOT_RUN** (appareil déconnecté avant installation).
+- Pixel : **PASS ciblé** le 2026-10-29 (Pixel 9 Pro XL, Android 17/API 37) — installation `adb install -r` de l'APK `605b9454…`, données préservées, parcours launcher/Accueil/Plan/Demain/Coach/Synthèses/Connexion/hors ligne. Détails et limites ci-dessous.
 - Captures : `docs/captures/v6-3-r4/avant/` et `apres/`.
 
 ## Identité APK
@@ -34,10 +34,21 @@ La passe rend les parcours **Coach** et **Planning** directs, allège l'accueil,
 
 ## Limites
 
-- Aucune installation ni validation sur le Pixel physique dans cette passe.
-- Rotation et TalkBack non exécutés sur le Pixel ; la police 2× et le paysage sont couverts sur AVD API 37.
-- Le backend relayé réel n'a pas été rejoué ; les états locaux et les tests existants couvrent le mode local.
-- Revue indépendante finale à exécuter après reconnexion Pixel.
+- La validation Pixel est **ciblée** : elle couvre l'installation non destructive et les parcours listés ci-dessous, pas l'ensemble des scénarios de permissions, notifications, localisation et mobilité.
+- Rotation, TalkBack complet et police 2× sur Pixel non exécutés dans cette passe ; la police 2× et le paysage restent couverts par l'AVD API 37.
+- Le backend relayé réel n'a pas été rejoué ; les états locaux et les tests existants couvrent le mode local. Le mode hors ligne a été validé via le mode `Hors ligne` de l'application, puis le mode `Relais` a été restauré.
+- Revue indépendante finale exécutée sur le code R5 : **GO_WITH_LIMITATIONS**, aucun P0/P1.
+- **Aucun push** n'a été effectué pendant la rédaction de ce rapport.
+
+## Validation Pixel du 2026-10-29
+
+- Appareil : Pixel 9 Pro XL (`komodo`), Android 17 / API 37, rôle HOME toujours `dev.atlas.coach/.app.LauncherActivity` (aucun changement).
+- APK installé : SHA-256 `605b9454ee77b1fe2fdef5ef71add41d5aa61055162b29e6cfdabd19a9e0bc07`, signature debug `da301466…`, version 0.1.0.
+- Installation : `adb install -r` uniquement ; aucun `pm clear`, aucune désinstallation, aucun reset.
+- Intégrité des données : sauvegarde app-only `~/atlas-backups/r5/pixel-app-backup-pre-r5.tar` (SHA-256 `8cfed885…`), manifeste pré/post hors dépôt. Tous les fichiers ATLAS (`atlas_local_state.xml`, plans, consentements, relais, etc.) sont **identiques** après installation ; seuls `files/profileInstalled` (marqueur d'installation) et `no_backup/androidx.work.workdb-shm` (mémoire partagée SQLite transitoire) ont changé.
+- Parcours : launcher HOME → Plan et Coach ; Accueil ; Plan Aujourd'hui et Demain ; Coach avec actions rapides ; Synthèses avec `Données insuffisantes` et raison ; Connexion relayée avec état humain, PC appairé et assurance de chiffrement ; mode `Hors ligne` avec Accueil/Plan disponibles, puis restauration du mode `Relais` (`Connecté`).
+- Pause d'urgence : visible sur les écrans parcourus ; non activée.
+- Captures expurgées : `docs/captures/v6-3-r4/apres-pixel/` (icônes de notification et UUID de test masqués ; aucune capture du tiroir d'applications).
 
 ## Suite
 

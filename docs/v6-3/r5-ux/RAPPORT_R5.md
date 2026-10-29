@@ -28,7 +28,7 @@
 | AVD API 37 — nouveaux tests R5 | **11/11 PASS** (`CoachTextDensity`, `CoachInsights`, `CoachQuickActions`, `SecondLotTextDensity` avec le test Plan vide) |
 | AVD API 37 — régression + R5 | **50/50 PASS** (`AtlasPresentation`, `LotEUi`, `PlanScreen`, `PlanCalendarScroll`, `GoalFocusStart`, `FocusGauge`, `AtlasLaunch`, `SyncSettingsScreenCapture`, + 4 nouveaux) |
 | AVD API 37 — smoke APK final | **50/50 PASS** sur l'APK final exact |
-| Pixel physique | **BLOCKED_DEVICE / NOT_RUN** — seul `emulator-5554` est présent à `adb devices -l` |
+| Pixel physique | **PASS ciblé** le 2026-10-29 — Pixel 9 Pro XL, API 37, APK `605b9454…`, `adb install -r`, données préservées |
 
 ### Identité APK finale
 
@@ -57,8 +57,8 @@
 
 ## 5. Limites
 
-- **Pixel physique non exécuté** : installation, parcours launcher Coach/Plan, hors ligne et captures Pixel « après » restent à faire après reconnexion et accord ciblé.
-- **R4 Pixel** reste `BLOCKED_DEVICE` ; la sauvegarde `~/atlas-backups/r4/pixel-app-backup-pre-r4.tar` est vérifiée, mais `pixel-app-files-preinstall.sha256` est vide et doit être reconstitué avant installation.
+- **Validation Pixel ciblée** : installation non destructive et parcours launcher/Accueil/Plan/Demain/Coach/Synthèses/Connexion/hors ligne effectués. Permissions, notifications, localisation, mobilité, rotation et TalkBack complet ne sont pas rejoués sur Pixel.
+- **R4 Pixel** est désormais validé pour les parcours ciblés ; la sauvegarde R5 `~/atlas-backups/r5/pixel-app-backup-pre-r5.tar` et les manifestes pré/post sont hors dépôt.
 - **Insights** : lecture des plans passés sur le thread de composition (fichiers locaux de petite taille) ; une optimisation reste possible si la liste devient longue.
 - **Zéros factuels** : une période avec un document local mais aucune action affiche des zéros dérivés ; l'état `Données insuffisantes` est couvert par les tests pour les périodes réellement vides.
 - **AVD seulement** : TalkBack complet, rotation et police 2× sur Pixel ne sont pas rejoués ; la police 2× et le paysage restent couverts par les suites existantes.
@@ -66,9 +66,9 @@
 
 ## 6. Suite
 
-1. Reconnecter le Pixel, reconstituer les empreintes de fichiers, installer l'APK final avec `adb install -r`, rejouer les parcours et capturer les écrans expurgés.
-2. Revue indépendante finale (nouvelle session Luna XHigh, lecture seule technique).
-3. Push sur `main` uniquement après validation Pixel + revue + GO explicite.
+1. ~~Reconnecter le Pixel, installer l'APK final, rejouer les parcours et capturer les écrans expurgés.~~ Fait le 2026-10-29.
+2. ~~Revue indépendante finale.~~ Fait : GO_WITH_LIMITATIONS, aucun P0/P1, P2 corrigés.
+3. Push sur `main` après validation Pixel + revue + GO ; le propriétaire a pré-autorisé le push final.
 
 ## 7. Revue indépendante
 
@@ -81,3 +81,12 @@
   3. Test Insights trop permissif sur l'état vide → assertion directe de `Données insuffisantes` et de sa raison.
   4. Fins de ligne CRLF des tickets → normalisées en LF ; `git diff --check` PASS.
 - **Limites maintenues** : Pixel physique `BLOCKED_DEVICE`, aucune revendication de qualification Pixel ; lecture des plans passés sur le thread de composition ; AVD uniquement.
+
+## 8. Validation Pixel du 2026-10-29
+
+- Appareil : Pixel 9 Pro XL (`komodo`), Android 17 / API 37, HOME ATLAS inchangé.
+- Installation : `adb install -r` de l'APK `605b9454…`, sans `pm clear`, sans désinstallation, sans reset.
+- Données : sauvegarde app-only `~/atlas-backups/r5/pixel-app-backup-pre-r5.tar` (SHA-256 `8cfed885…`) et manifestes pré/post hors dépôt ; tous les fichiers ATLAS sont identiques après installation, seuls `profileInstalled` et le `-shm` WorkManager changent.
+- Parcours : launcher → Plan/Coach, Accueil, Plan Aujourd'hui/Demain, Coach, Synthèses (`Données insuffisantes`), Connexion relayée, mode Hors ligne puis restauration Relais (`Connecté`).
+- Captures : `docs/captures/v6-3-r4/apres-pixel/` (expurgées).
+- Non rejoué sur Pixel : permissions, notifications, localisation, mobilité, rotation, TalkBack complet, backend relayé réel.

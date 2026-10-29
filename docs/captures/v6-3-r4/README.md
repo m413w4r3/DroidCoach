@@ -14,10 +14,28 @@
 - Données : plan, conversation et propositions synthétiques ; aucun compte, aucun secret, aucune donnée personnelle.
 - Le Pixel physique n'était plus connecté au moment de la capture finale. Les captures « après » sur Pixel restent à refaire après reconnexion ; aucune validation Pixel n'est revendiquée.
 
-> **Mise à jour R5 (2026-10-29)** : le Pixel est toujours absent. Les nouvelles
-> captures des écrans Coach/Synthèses/Focus sont dans
-> `docs/captures/v6-3-r5/` (AVD API 37, données synthétiques). Aucune capture
-> Pixel « après » n'a été produite et R4 Pixel reste `BLOCKED_DEVICE`.
+> **Mise à jour R5 (2026-10-29)** : le Pixel a été reconnecté et la validation
+> ciblée a été effectuée avec l'APK final. Les captures Pixel « après » sont
+> dans `apres-pixel/`. Les captures AVD des écrans R5 restent dans
+> `docs/captures/v6-3-r5/`.
+
+## Après — Pixel (2026-10-29)
+
+- Appareil : Pixel 9 Pro XL, Android 17 / API 37.
+- APK : SHA-256 `605b9454ee77b1fe2fdef5ef71add41d5aa61055162b29e6cfdabd19a9e0bc07`, signature debug `da301466…`.
+- Installation : `adb install -r`, aucun `pm clear`/uninstall ; données ATLAS préservées (voir `RAPPORT_UX_V63.md`).
+- Expurgation : icônes de notification de la barre d'état masquées ; UUID de test de conversation masqué. Aucun `serverId`, aucun jeton, aucune capture du tiroir d'applications.
+
+| Fichier | Écran |
+|---|---|
+| `apres-pixel/15-pixel-launcher.png` | Launcher HOME ATLAS avec footer Apps/Plan/Coach/Pause/Plus |
+| `apres-pixel/16-pixel-accueil.png` | Accueil ATLAS : prochaine activité, actions rapides, directive |
+| `apres-pixel/17-pixel-plan-aujourdhui.png` | Planning Aujourd'hui : sélecteur, préparation, Détails |
+| `apres-pixel/18-pixel-plan-demain.png` | Planning Demain : date distincte, préparation du lendemain |
+| `apres-pixel/19-pixel-coach.png` | Coach : onglets Échanges/Synthèses, actions rapides, conversation |
+| `apres-pixel/20-pixel-insights.png` | Synthèses Jour : `Données insuffisantes` et raison |
+| `apres-pixel/21-pixel-connexion.png` | Connexion relayée : état, PC appairé, assurance E2E, Avancé replié |
+| `apres-pixel/22-pixel-hors-ligne.png` | Mode hors ligne : coach distant désactivé, données locales disponibles |
 
 ## Fichiers
 
