@@ -10,6 +10,7 @@ import json
 import os
 import re
 import uuid
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
@@ -321,6 +322,24 @@ def create_v4_router(
     projections = V4ProjectionStore(store)
     active_capabilities = dict(capabilities if capabilities is not None else _configured_capabilities())
 
+    class _RollbackRouteResponse(Exception):
+        def __init__(self, response: JSONResponse) -> None:
+            self.response = response
+
+    def serialized_consent_route(endpoint: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(endpoint)
+        async def wrapped(*args: Any, **kwargs: Any) -> JSONResponse:
+            try:
+                with store.transaction(immediate=True):
+                    response = await endpoint(*args, **kwargs)
+                    if response.status_code >= 400:
+                        raise _RollbackRouteResponse(response)
+                    return response
+            except _RollbackRouteResponse as rollback:
+                return rollback.response
+
+        return wrapped
+
     def current_android_token() -> str | None:
         return android_token if android_token is not None else os.getenv("ATLAS_TOKEN")
 
@@ -502,6 +521,7 @@ def create_v4_router(
             require_projection=require_projection,
         )
 
+    @serialized_consent_route
     async def handle_consent_state_sync(request: Request) -> JSONResponse:
         auth = require_android(request, None)
         if isinstance(auth, JSONResponse):
@@ -663,6 +683,7 @@ def create_v4_router(
         return JSONResponse(content=response)
 
     @router.get("/internal/v4/day-plan")
+    @serialized_consent_route
     async def get_day_plan(request: Request) -> JSONResponse:
         auth = require_tool(request, "day_plan.read")
         if isinstance(auth, JSONResponse):
@@ -676,6 +697,7 @@ def create_v4_router(
         return await invoke_tool(request, "atlas_get_day_plan", args, request_id, device_ref)
 
     @router.get("/internal/v4/activity-status/{activity_id}")
+    @serialized_consent_route
     async def get_activity_status(activity_id: str, request: Request) -> JSONResponse:
         auth = require_tool(request, "activity_status.read")
         if isinstance(auth, JSONResponse):
@@ -689,6 +711,7 @@ def create_v4_router(
         return await invoke_tool(request, "atlas_get_activity_status", args, request_id, device_ref)
 
     @router.post("/internal/v4/plan-revision-proposals")
+    @serialized_consent_route
     async def propose_plan_revision(request: Request) -> JSONResponse:
         auth = require_tool(request, "plan_revision.propose")
         if isinstance(auth, JSONResponse):
@@ -703,6 +726,7 @@ def create_v4_router(
         return await invoke_tool(request, "atlas_propose_plan_revision", body, request_id, device_ref)
 
     @router.get("/internal/v4/usage-summary")
+    @serialized_consent_route
     async def get_usage_summary(request: Request) -> JSONResponse:
         auth = require_tool(request, "usage_summary.read")
         if isinstance(auth, JSONResponse):
@@ -716,6 +740,7 @@ def create_v4_router(
         return await invoke_tool(request, "atlas_get_usage_summary", args, request_id, device_ref)
 
     @router.get("/internal/v4/goal-progress")
+    @serialized_consent_route
     async def get_goal_progress(request: Request) -> JSONResponse:
         auth = require_tool(request, "goal_progress.read")
         if isinstance(auth, JSONResponse):
@@ -729,6 +754,7 @@ def create_v4_router(
         return await invoke_tool(request, "atlas_get_goal_progress", args, request_id, device_ref)
 
     @router.get("/internal/v4/training-plan")
+    @serialized_consent_route
     async def get_training_plan(request: Request) -> JSONResponse:
         auth = require_tool(request, "training_plan.read")
         if isinstance(auth, JSONResponse):
@@ -742,6 +768,7 @@ def create_v4_router(
         return await invoke_tool(request, "atlas_get_training_plan", args, request_id, device_ref)
 
     @router.get("/internal/v4/agent/proposals/by-idempotency/{idempotency_key}")
+    @serialized_consent_route
     async def lookup_proposal(idempotency_key: str, request: Request) -> JSONResponse:
         capability = "plan_revision.propose"
         auth = require_tool(request, capability)
@@ -948,6 +975,7 @@ def create_v4_router(
         return JSONResponse(content=response)
 
     def sync_endpoint(path: str) -> Callable[[Request], Any]:
+        @serialized_consent_route
         async def endpoint(request: Request) -> JSONResponse:
             return await handle_sync(request, path)
 
@@ -961,6 +989,7 @@ def create_v4_router(
                          name="sync_consent_state", include_in_schema=False)
 
     @router.post("/v4/agent/proposals/pull")
+    @serialized_consent_route
     async def pull_proposals(request: Request) -> JSONResponse:
         capability = "proposal.ack"
         auth = require_android(request, capability)
@@ -1057,6 +1086,7 @@ def create_v4_router(
         return JSONResponse(content=response)
 
     @router.post("/v4/agent/proposals/{proposal_id}/ack")
+    @serialized_consent_route
     async def acknowledge_proposal(proposal_id: str, request: Request) -> JSONResponse:
         capability = "proposal.ack"
         auth = require_android(request, capability)

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import hashlib
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -534,79 +537,359 @@ def test_consent_revocation_tombstone_blocks_reads_proposals_pull_and_ack_until_
     client.close()
 
 
-@pytest.mark.parametrize(
-    ("route", "consent_read_to_race"),
-    [("lookup", 4), ("lookup", 5), ("pull", 2), ("ack", 2)],
-)
-def test_consent_revocation_during_projection_read_denies_lookup_pull_and_ack(
-    tmp_path, monkeypatch, route: str, consent_read_to_race: int
-):
+@pytest.mark.parametrize("route", ["lookup", "pull"])
+def test_revocation_wins_before_proposal_inbox_read(tmp_path, monkeypatch, route: str):
     client = make_client(tmp_path, monkeypatch)
     post_plan(client, consent_version=5)
     idempotency_key = "00000000-0000-4000-8000-000000000271"
     proposal_response = post_proposal(client, idempotency_key)
     assert proposal_response.status_code == 200, proposal_response.text
-    proposal_id = proposal_response.json()["data"]["proposal_id"]
-    device_ref = "android-" + hashlib.sha256(ANDROID_TOKEN.encode("utf-8")).hexdigest()[:32]
-    original_consent_state = V4ProjectionStore.consent_state
-    consent_reads = 0
-    injected = False
+    role = threading.local()
+    original_transaction = SQLiteStore.transaction
+    original_consent_write = V4ProjectionStore.save_consent_state
+    revocation_written = threading.Event()
+    release_revocation = threading.Event()
+    protected_transaction_attempt = threading.Event()
 
-    def revoke_after_consent_read(store, current_device_ref: str, category: str) -> dict | None:
-        nonlocal consent_reads, injected
-        state = original_consent_state(store, current_device_ref, category)
-        if current_device_ref == device_ref and category == "DAY_PLAN":
-            consent_reads += 1
-            if consent_reads == consent_read_to_race:
-                assert state is not None and state["state"] == "GRANTED"
-                store.save_consent_state(
-                    current_device_ref,
-                    category,
-                    int(state["consent_version"]) + 1,
-                    "REVOKED",
-                    idempotency_key="00000000-0000-4000-8000-000000000272",
+    @contextmanager
+    def observed_transaction(store, **kwargs):
+        if getattr(role, "name", None) == "protected":
+            protected_transaction_attempt.set()
+        with original_transaction(store, **kwargs) as connection:
+            yield connection
+
+    def pause_after_revocation_write(store, device_ref, category, version, state, **kwargs):
+        receipt = original_consent_write(store, device_ref, category, version, state, **kwargs)
+        if getattr(role, "name", None) == "revoker" and category == "DAY_PLAN" and state == "REVOKED":
+            revocation_written.set()
+            if not release_revocation.wait(timeout=5):
+                raise TimeoutError("revocation test barrier was not released")
+        return receipt
+
+    monkeypatch.setattr(SQLiteStore, "transaction", observed_transaction)
+    monkeypatch.setattr(V4ProjectionStore, "save_consent_state", pause_after_revocation_write)
+
+    def revoke():
+        role.name = "revoker"
+        try:
+            return client.post(
+                "/v4/sync/consent-state",
+                headers=android_headers(),
+                json=consent_body("DAY_PLAN", "REVOKED", 6,
+                                  key="00000000-0000-4000-8000-000000000272"),
+            )
+        finally:
+            role.name = None
+
+    def read_proposals():
+        role.name = "protected"
+        try:
+            if route == "lookup":
+                return client.get(
+                    f"/internal/v4/agent/proposals/by-idempotency/{idempotency_key}",
+                    headers=tool_headers("plan_revision.propose"),
                 )
-                injected = True
-        return state
+            return client.post(
+                "/v4/agent/proposals/pull",
+                headers=android_headers(),
+                json={
+                    "contract_version": 4,
+                    "schema_version": 4,
+                    "request_id": UUID_REQUEST,
+                    "capability": "proposal.ack",
+                    "consent_version": 5,
+                    "page_size": 10,
+                    "cursor": None,
+                },
+            )
+        finally:
+            role.name = None
 
-    monkeypatch.setattr(V4ProjectionStore, "consent_state", revoke_after_consent_read)
-    if route == "lookup":
-        response = client.get(
-            f"/internal/v4/agent/proposals/by-idempotency/{idempotency_key}",
-            headers=tool_headers("plan_revision.propose"),
-        )
-    elif route == "pull":
-        response = client.post(
-            "/v4/agent/proposals/pull",
-            headers=android_headers(),
-            json={
-                "contract_version": 4,
-                "schema_version": 4,
-                "request_id": UUID_REQUEST,
-                "capability": "proposal.ack",
-                "consent_version": 5,
-                "page_size": 10,
-                "cursor": None,
-            },
-        )
-    else:
-        ack_id = "00000000-0000-4000-8000-000000000273"
-        response = client.post(
-            f"/v4/agent/proposals/{proposal_id}/ack",
-            headers=android_headers(),
-            json=ack_body(proposal_id, ack_id, "REJECTED", "USER_REJECTED", consent_version=5),
-        )
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="v4-inbox-race") as pool:
+        revoke_future = pool.submit(revoke)
+        try:
+            assert revocation_written.wait(timeout=3)
+            read_future = pool.submit(read_proposals)
+            assert protected_transaction_attempt.wait(timeout=3)
+            assert not read_future.done()
+        finally:
+            release_revocation.set()
+        revoke_response = revoke_future.result(timeout=5)
+        response = read_future.result(timeout=5)
 
-    assert injected
+    assert revoke_response.status_code == 200, revoke_response.text
     assert response.status_code == 403, response.text
     assert error_code(response) == "CONSENT_REQUIRED"
     assert "proposal_id" not in response.json()
     assert "proposals" not in response.json()
-    if route == "ack":
-        with client.app.state.store.connect() as connection:
-            ack_count = connection.execute(
-                "SELECT COUNT(*) FROM agent_proposal_events_v4 WHERE ack_id=?",
-                (ack_id,),
+    client.close()
+
+
+def test_concurrent_revocation_waits_for_read_transaction_after_projection_read(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    observed_at = stamp()
+    post_plan(client, consent_version=3, observed_at=observed_at)
+    role = threading.local()
+    projection_read = threading.Event()
+    release_read = threading.Event()
+    revoke_transaction_attempt = threading.Event()
+    original_transaction = SQLiteStore.transaction
+    original_snapshot_reader = V4ProjectionStore.latest_day_plan_snapshot
+
+    @contextmanager
+    def observed_transaction(store, **kwargs):
+        if getattr(role, "name", None) == "revoker":
+            revoke_transaction_attempt.set()
+        with original_transaction(store, **kwargs) as connection:
+            yield connection
+
+    def pause_after_snapshot_read(store, device_ref: str, **kwargs):
+        snapshot = original_snapshot_reader(store, device_ref, **kwargs)
+        if getattr(role, "name", None) == "reader":
+            projection_read.set()
+            if not release_read.wait(timeout=5):
+                raise TimeoutError("read test barrier was not released")
+        return snapshot
+
+    monkeypatch.setattr(SQLiteStore, "transaction", observed_transaction)
+    monkeypatch.setattr(V4ProjectionStore, "latest_day_plan_snapshot", pause_after_snapshot_read)
+
+    def read_plan():
+        role.name = "reader"
+        try:
+            return client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+        finally:
+            role.name = None
+
+    def revoke():
+        role.name = "revoker"
+        try:
+            return client.post(
+                "/v4/sync/consent-state",
+                headers=android_headers(),
+                json=consent_body("DAY_PLAN", "REVOKED", 4,
+                                  key="00000000-0000-4000-8000-000000000281"),
+            )
+        finally:
+            role.name = None
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="v4-read-race") as pool:
+        read_future = pool.submit(read_plan)
+        assert projection_read.wait(timeout=3)
+        revoke_future = pool.submit(revoke)
+        assert revoke_transaction_attempt.wait(timeout=3)
+        assert not revoke_future.done()
+        release_read.set()
+        read_response = read_future.result(timeout=5)
+        revoke_response = revoke_future.result(timeout=5)
+
+    assert read_response.status_code == 200, read_response.text
+    validate("tool-results.schema.json", read_response.json())
+    assert revoke_response.status_code == 200, revoke_response.text
+    client.close()
+
+
+@pytest.mark.parametrize("effect", ["proposal", "sync", "ack"])
+def test_revocation_transaction_wins_before_v4_effect(tmp_path, monkeypatch, effect: str):
+    client = make_client(tmp_path, monkeypatch)
+    observed_at = stamp()
+    post_plan(client, consent_version=3, observed_at=observed_at)
+    initial_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000282")
+    assert initial_proposal.status_code == 200, initial_proposal.text
+    proposal_id = initial_proposal.json()["data"]["proposal_id"]
+
+    effect_method = {
+        "proposal": "create_agent_proposal",
+        "sync": "save_day_plan_snapshot",
+        "ack": "append_proposal_ack",
+    }[effect]
+    original_effect = getattr(V4ProjectionStore, effect_method)
+    original_consent_write = V4ProjectionStore.save_consent_state
+    original_transaction = SQLiteStore.transaction
+    role = threading.local()
+    revocation_written = threading.Event()
+    release_revocation = threading.Event()
+    effect_transaction_attempt = threading.Event()
+    effect_started = threading.Event()
+
+    @contextmanager
+    def observed_transaction(store, **kwargs):
+        if getattr(role, "name", None) == "effect":
+            effect_transaction_attempt.set()
+        with original_transaction(store, **kwargs) as connection:
+            yield connection
+
+    def pause_after_revocation_write(store, device_ref, category, version, state, **kwargs):
+        receipt = original_consent_write(store, device_ref, category, version, state, **kwargs)
+        if getattr(role, "name", None) == "revoker" and category == "DAY_PLAN" and state == "REVOKED":
+            revocation_written.set()
+            if not release_revocation.wait(timeout=5):
+                raise TimeoutError("revocation test barrier was not released")
+        return receipt
+
+    def observe_effect(store, *args, **kwargs):
+        if getattr(role, "name", None) == "effect":
+            effect_started.set()
+        return original_effect(store, *args, **kwargs)
+
+    monkeypatch.setattr(SQLiteStore, "transaction", observed_transaction)
+    monkeypatch.setattr(V4ProjectionStore, "save_consent_state", pause_after_revocation_write)
+    monkeypatch.setattr(V4ProjectionStore, effect_method, observe_effect)
+
+    def revoke():
+        role.name = "revoker"
+        try:
+            return client.post(
+                "/v4/sync/consent-state",
+                headers=android_headers(),
+                json=consent_body("DAY_PLAN", "REVOKED", 4,
+                                  key="00000000-0000-4000-8000-000000000283"),
+            )
+        finally:
+            role.name = None
+
+    def run_effect():
+        role.name = "effect"
+        try:
+            if effect == "proposal":
+                return post_proposal(client, "00000000-0000-4000-8000-000000000284")
+            if effect == "sync":
+                snapshot = day_plan(observed_at=observed_at)
+                snapshot["version"] = 8
+                snapshot["current_revision_id"] = "00000000-0000-4000-8000-000000000285"
+                return client.post(
+                    "/v4/sync/day-plan-snapshots",
+                    headers=android_headers(),
+                    json={
+                        "contract_version": 4,
+                        "schema_version": 4,
+                        "request_id": UUID_REQUEST,
+                        "capability": "day_plan.snapshot.write",
+                        "sent_at": stamp(),
+                        "consent_version": 3,
+                        "idempotency_key": "00000000-0000-4000-8000-000000000286",
+                        "data": snapshot,
+                    },
+                )
+            ack_id = "00000000-0000-4000-8000-000000000287"
+            return client.post(
+                f"/v4/agent/proposals/{proposal_id}/ack",
+                headers=android_headers(),
+                json=ack_body(proposal_id, ack_id, "REJECTED", "USER_REJECTED", consent_version=3),
+            )
+        finally:
+            role.name = None
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="v4-effect-race") as pool:
+        revoke_future = pool.submit(revoke)
+        try:
+            assert revocation_written.wait(timeout=3)
+            effect_future = pool.submit(run_effect)
+            assert effect_transaction_attempt.wait(timeout=3)
+            assert not effect_future.done()
+        finally:
+            release_revocation.set()
+        revoke_response = revoke_future.result(timeout=5)
+        effect_response = effect_future.result(timeout=5)
+
+    assert revoke_response.status_code == 200, revoke_response.text
+    assert effect_response.status_code == 403, effect_response.text
+    assert error_code(effect_response) == "CONSENT_REQUIRED"
+    assert not effect_started.is_set()
+    with client.app.state.store.connect() as connection:
+        if effect == "proposal":
+            residual_count = connection.execute(
+                "SELECT COUNT(*) FROM agent_proposals_v4 WHERE idempotency_key=?",
+                ("00000000-0000-4000-8000-000000000284",),
             ).fetchone()[0]
-        assert ack_count == 0
+        elif effect == "sync":
+            residual_count = connection.execute(
+                "SELECT COUNT(*) FROM day_plan_snapshots_v4 WHERE plan_version=8"
+            ).fetchone()[0]
+        else:
+            residual_count = connection.execute(
+                "SELECT COUNT(*) FROM agent_proposal_events_v4 WHERE ack_id=?",
+                ("00000000-0000-4000-8000-000000000287",),
+            ).fetchone()[0]
+    assert residual_count == 0
+    client.close()
+
+
+def test_ack_insert_is_serialized_before_waiting_revocation(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client, consent_version=3)
+    proposal_response = post_proposal(client, "00000000-0000-4000-8000-000000000288")
+    assert proposal_response.status_code == 200, proposal_response.text
+    proposal_id = proposal_response.json()["data"]["proposal_id"]
+    ack_id = "00000000-0000-4000-8000-000000000289"
+    role = threading.local()
+    original_transaction = SQLiteStore.transaction
+    original_append_ack = V4ProjectionStore.append_proposal_ack
+    ack_before_insert = threading.Event()
+    release_ack = threading.Event()
+    revocation_transaction_attempt = threading.Event()
+
+    @contextmanager
+    def observed_transaction(store, **kwargs):
+        if getattr(role, "name", None) == "revoker":
+            revocation_transaction_attempt.set()
+        with original_transaction(store, **kwargs) as connection:
+            yield connection
+
+    def pause_before_ack_insert(store, ack, **kwargs):
+        if getattr(role, "name", None) == "ack":
+            ack_before_insert.set()
+            if not release_ack.wait(timeout=5):
+                raise TimeoutError("ACK test barrier was not released")
+        return original_append_ack(store, ack, **kwargs)
+
+    monkeypatch.setattr(SQLiteStore, "transaction", observed_transaction)
+    monkeypatch.setattr(V4ProjectionStore, "append_proposal_ack", pause_before_ack_insert)
+
+    def send_ack():
+        role.name = "ack"
+        try:
+            return client.post(
+                f"/v4/agent/proposals/{proposal_id}/ack",
+                headers=android_headers(),
+                json=ack_body(proposal_id, ack_id, "REJECTED", "USER_REJECTED", consent_version=3),
+            )
+        finally:
+            role.name = None
+
+    def revoke():
+        role.name = "revoker"
+        try:
+            return client.post(
+                "/v4/sync/consent-state",
+                headers=android_headers(),
+                json=consent_body("DAY_PLAN", "REVOKED", 4,
+                                  key="00000000-0000-4000-8000-000000000290"),
+            )
+        finally:
+            role.name = None
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="v4-ack-race") as pool:
+        ack_future = pool.submit(send_ack)
+        assert ack_before_insert.wait(timeout=3)
+        revoke_future = pool.submit(revoke)
+        assert revocation_transaction_attempt.wait(timeout=3)
+        assert not revoke_future.done()
+        release_ack.set()
+        ack_response = ack_future.result(timeout=5)
+        revoke_response = revoke_future.result(timeout=5)
+
+    assert ack_response.status_code == 200, ack_response.text
+    assert revoke_response.status_code == 200, revoke_response.text
+    with client.app.state.store.connect() as connection:
+        ack_count = connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_events_v4 WHERE ack_id=?", (ack_id,)
+        ).fetchone()[0]
+    assert ack_count == 1
+    current_consent = V4ProjectionStore(client.app.state.store).consent_state(
+        "android-" + hashlib.sha256(ANDROID_TOKEN.encode("utf-8")).hexdigest()[:32], "DAY_PLAN"
+    )
+    assert current_consent is not None
+    assert current_consent["state"] == "REVOKED"
+    assert current_consent["consent_version"] == 4
     client.close()

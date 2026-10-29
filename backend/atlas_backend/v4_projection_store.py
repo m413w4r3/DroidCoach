@@ -135,7 +135,7 @@ class V4ProjectionStore:
         timestamp = proposed_timestamp
         replayed = False
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             row = connection.execute(
                 "SELECT consent_version,state,updated_at,source FROM consent_states_v4 "
                 "WHERE device_ref=? AND category=?",
@@ -314,7 +314,7 @@ class V4ProjectionStore:
         projection_json = canonical_json(projection)
         replayed = False
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             latest = connection.execute(
                 "SELECT plan_version FROM day_plan_snapshots_v4 "
                 "WHERE device_ref=? AND plan_id=? ORDER BY plan_version DESC LIMIT 1",
@@ -419,7 +419,7 @@ class V4ProjectionStore:
         gap = False
         replayed = False
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             existing = connection.execute(
                 "SELECT event_hash FROM activity_status_events_v4 WHERE event_id=?", (event_id,)
             ).fetchone()
@@ -500,7 +500,7 @@ class V4ProjectionStore:
             raise V4ProjectionError("fenêtre d'usage ou consent_version invalide")
         summary_hash = content_hash({"summary": summary, "consent_version": consent_version})
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             row = connection.execute(
                 "SELECT summary_hash FROM usage_summaries_v4 WHERE device_ref=? AND window_start=? AND window_end=? AND consent_version=?",
                 (device_ref, window_start, window_end, consent_version),
@@ -556,7 +556,7 @@ class V4ProjectionStore:
             raise V4ProjectionError("goals_version et consent_version doivent être positifs")
         snapshot_hash = content_hash({"snapshot": snapshot, "consent_version": consent_version})
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             latest = connection.execute(
                 "SELECT MAX(goals_version) AS goals_version FROM goal_progress_snapshots_v4 WHERE device_ref=?",
                 (device_ref,),
@@ -620,7 +620,7 @@ class V4ProjectionStore:
             raise V4ProjectionError("consent_version doit être positif")
         snapshot_hash = content_hash({"snapshot": snapshot, "consent_version": consent_version})
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             row = connection.execute(
                 "SELECT snapshot_hash FROM training_snapshots_v4 WHERE device_ref=? AND provider=? AND observed_at=?",
                 (device_ref, provider, observed_at),
@@ -662,7 +662,7 @@ class V4ProjectionStore:
     ) -> tuple[dict[str, Any], bool]:
         proposal_json = canonical_json(proposal)
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             existing = connection.execute(
                 "SELECT body_hash,proposal_json,state FROM agent_proposals_v4 WHERE idempotency_key=?",
                 (idempotency_key,),
@@ -720,7 +720,7 @@ class V4ProjectionStore:
         body_hash = content_hash(immutable_body)
         replayed = False
         with self.store.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self.store.begin_immediate(connection)
             existing = connection.execute(
                 "SELECT body_hash FROM agent_proposal_events_v4 WHERE ack_id=?", (ack_id,)
             ).fetchone()
