@@ -1,0 +1,376 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import httpx
+from jsonschema import Draft202012Validator, FormatChecker
+
+from atlas_backend.main import MAX_REQUEST_BYTES, create_app
+
+
+ROOT = Path(__file__).resolve().parents[2]
+CONTRACTS = ROOT / "contracts" / "v4"
+UUID_PLAN = "00000000-0000-4000-8000-000000000101"
+UUID_REVISION = "00000000-0000-4000-8000-000000000102"
+UUID_ACTIVITY = "00000000-0000-4000-8000-000000000103"
+UUID_CONTINUITY = "00000000-0000-4000-8000-000000000104"
+UUID_REQUEST = "00000000-0000-4000-8000-000000000105"
+UUID_IDEMPOTENCY = "00000000-0000-4000-8000-000000000106"
+ANDROID_TOKEN = "android-test-secret"
+TOOL_TOKEN = "tool-test-secret"
+READ_CAPABILITIES = {
+    "day_plan.read": True,
+    "activity_status.read": True,
+    "plan_revision.propose": True,
+    "usage_summary.read": True,
+    "goal_progress.read": True,
+    "training_plan.read": True,
+    "coach.chat": False,
+}
+
+
+class ASGITestClient:
+    """Synchronous test facade over httpx's async ASGI transport."""
+
+    def __init__(self, app, client_address: tuple[str, int]):
+        self.app = app
+        self.client_address = client_address
+
+    def request(self, method: str, url: str, **kwargs):
+        async def send():
+            transport = httpx.ASGITransport(app=self.app, client=self.client_address)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return await client.request(method, url, **kwargs)
+
+        return asyncio.run(send())
+
+    def get(self, url: str, **kwargs):
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs):
+        return self.request("POST", url, **kwargs)
+
+    def close(self) -> None:
+        return None
+
+
+def stamp(value: datetime | None = None) -> str:
+    return (value or datetime.now(timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def make_client(tmp_path: Path, monkeypatch, *, capabilities: dict[str, bool] | None = None,
+                android_token: str = ANDROID_TOKEN, tool_token: str = TOOL_TOKEN,
+                client_address: tuple[str, int] = ("127.0.0.1", 50100)) -> ASGITestClient:
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", tool_token)
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", json.dumps(READ_CAPABILITIES if capabilities is None else capabilities))
+    return ASGITestClient(create_app(db_path=tmp_path / "atlas.sqlite3", token=android_token),
+                          client_address)
+
+
+def tool_headers(capability: str, token: str = TOOL_TOKEN) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Atlas-Contract-Version": "4",
+        "X-Atlas-Schema-Version": "4",
+        "X-Atlas-Request-Id": UUID_REQUEST,
+        "X-Atlas-Capability": capability,
+    }
+
+
+def android_headers(token: str = ANDROID_TOKEN) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def day_plan(*, observed_at: str | None = None, version: int = 7) -> dict:
+    local_date = datetime.now(timezone.utc).date().isoformat()
+    return {
+        "plan_id": UUID_PLAN,
+        "local_date": local_date,
+        "timezone": "Europe/Paris",
+        "version": version,
+        "current_revision_id": UUID_REVISION,
+        "state": "APPROVED",
+        "origin": "LOCAL",
+        "observed_at": observed_at or stamp(),
+        "activities": [{
+            "activity_id": UUID_ACTIVITY,
+            "kind": "FOCUS",
+            "title": "Bloc de lecture",
+            "status": "PLANNED",
+            "scheduled_local": {
+                "local_date": local_date,
+                "start_minute": 600,
+                "duration_minutes": 45,
+                "timezone": "Europe/Paris",
+            },
+            "priority": "OPTIONAL",
+            "goal_id": None,
+            "continuity_id": UUID_CONTINUITY,
+            "supersedes_activity_id": None,
+            "status_provenance": "UNKNOWN",
+            "status_decided_at": None,
+        }],
+    }
+
+
+def sync_envelope(capability: str, data: dict, *, consent_version: int = 3,
+                  request_id: str = UUID_REQUEST, idempotency_key: str = UUID_IDEMPOTENCY) -> dict:
+    return {
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": request_id,
+        "capability": capability,
+        "sent_at": stamp(),
+        "consent_version": consent_version,
+        "idempotency_key": idempotency_key,
+        "data": data,
+    }
+
+
+def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3) -> dict:
+    response = client.post(
+        "/v4/sync/day-plan-snapshots",
+        headers=android_headers(),
+        json=sync_envelope("day_plan.snapshot.write", day_plan(observed_at=observed_at),
+                           consent_version=consent_version),
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def validate(schema_name: str, result: dict) -> None:
+    schema = json.loads((CONTRACTS / schema_name).read_text(encoding="utf-8"))
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(result)
+
+
+def validate_error(response, expected_code: str | None = None) -> dict:
+    payload = response.json()
+    validate("error.schema.json", payload)
+    if expected_code:
+        assert payload["error"]["code"] == expected_code
+    return payload
+
+
+def test_sync_snapshots_and_six_fixed_tool_routes_match_contracts(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    plan_body = sync_envelope("day_plan.snapshot.write", day_plan())
+    plan_response = client.post("/v4/sync/day-plan-snapshots", headers=android_headers(), json=plan_body)
+    assert plan_response.status_code == 200, plan_response.text
+    plan_receipt = plan_response.json()
+    validate("sync-receipts.schema.json", plan_receipt)
+    assert plan_receipt["result_code"] == "ACCEPTED"
+    plan_replay = client.post("/v4/sync/day-plan-snapshots", headers=android_headers(), json=plan_body)
+    assert plan_replay.status_code == 200, plan_replay.text
+    assert plan_replay.json()["replayed"] is True
+    conflicting_plan = json.loads(json.dumps(plan_body))
+    conflicting_plan["data"]["activities"][0]["title"] = "Titre modifié"
+    plan_conflict = client.post("/v4/sync/day-plan-snapshots", headers=android_headers(), json=conflicting_plan)
+    assert plan_conflict.status_code == 409
+    validate_error(plan_conflict, "CONFLICT")
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    start = stamp(now - timedelta(hours=1))
+    end = stamp(now - timedelta(minutes=1))
+    usage_data = {
+        "window_start": start,
+        "window_end": end,
+        "timezone": "Europe/Paris",
+        "total_foreground_ms": 120_000,
+        "apps": [{
+            "app_ref": "synthetic-app",
+            "display_name": "Example Reader",
+            "foreground_ms": 120_000,
+            "launch_count": 2,
+            "last_used_at": end,
+            "reliability": "HIGH",
+        }],
+        "coverage": {"observed_ms": 120_000, "blind_ms": 0, "events_seen": 2, "truncated": False},
+        "generated_at": end,
+        "consent_version": 3,
+    }
+    goals_data = {"goals_version": 2, "observed_at": stamp(), "goals": []}
+    training_data = {
+        "provider": "wger",
+        "source": "WGER_API",
+        "sync_state": "FRESH",
+        "observed_at": stamp(),
+        "source_updated_at": stamp(),
+        "routines": [],
+        "sessions": [],
+        "results": [],
+    }
+    sync_payloads = []
+    for route, capability, data in (
+        ("/v4/sync/usage-summaries", "usage_summary.write", usage_data),
+        ("/v4/sync/goal-progress-snapshots", "goal_progress.write", goals_data),
+        ("/v4/sync/training-snapshots", "training_plan.write", training_data),
+    ):
+        envelope = sync_envelope(capability, data)
+        response = client.post(route, headers=android_headers(), json=envelope)
+        assert response.status_code == 200, response.text
+        validate("sync-receipts.schema.json", response.json())
+        replay = client.post(route, headers=android_headers(), json=envelope)
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["replayed"] is True
+        sync_payloads.append((route, capability, envelope))
+
+    for route, capability, envelope in sync_payloads:
+        changed = json.loads(json.dumps(envelope))
+        if capability == "usage_summary.write":
+            changed["data"]["total_foreground_ms"] += 1
+        elif capability == "goal_progress.write":
+            changed["data"]["observed_at"] = stamp(datetime.now(timezone.utc) + timedelta(seconds=2))
+        else:
+            changed["data"]["sync_state"] = "UNKNOWN"
+        conflict = client.post(route, headers=android_headers(), json=changed)
+        assert conflict.status_code == 409
+        validate_error(conflict, "CONFLICT")
+
+    status_data = {
+        "event_id": "00000000-0000-4000-8000-000000000107",
+        "sequence": 1,
+        "plan_id": UUID_PLAN,
+        "activity_id": UUID_ACTIVITY,
+        "continuity_id": UUID_CONTINUITY,
+        "plan_version": 7,
+        "from_status": "PLANNED",
+        "to_status": "IN_PROGRESS",
+        "provenance": "CONFIRMED",
+        "source": "USER_UI",
+        "decided_at": stamp(),
+        "observed_at": stamp(),
+        "focus_session_id": None,
+    }
+    status_envelope = sync_envelope("activity_status.write", status_data)
+    response = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=status_envelope)
+    assert response.status_code == 200, response.text
+    validate("sync-receipts.schema.json", response.json())
+    status_replay = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=status_envelope)
+    assert status_replay.status_code == 200, status_replay.text
+    assert status_replay.json()["items"][0]["result_code"] == "DUPLICATE"
+    conflicting_status = json.loads(json.dumps(status_envelope))
+    conflicting_status["data"]["to_status"] = "DONE"
+    status_conflict = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=conflicting_status)
+    assert status_conflict.status_code == 409
+    validate_error(status_conflict, "EVENT_ID_CONFLICT")
+
+    headers = tool_headers("tool_catalog.read")
+    response = client.get("/internal/v4/capabilities", headers=headers)
+    assert response.status_code == 200, response.text
+    validate("capability-negotiation.schema.json", response.json())
+    assert response.json()["capabilities"]["day_plan.read"] is True
+
+    tool_calls = [
+        ("day_plan.read", "/internal/v4/day-plan?local_date=" + day_plan()["local_date"]),
+        ("activity_status.read", f"/internal/v4/activity-status/{UUID_ACTIVITY}?plan_id={UUID_PLAN}"),
+        ("usage_summary.read", f"/internal/v4/usage-summary?window_start={start}&window_end={end}"),
+        ("goal_progress.read", "/internal/v4/goal-progress"),
+        ("training_plan.read", f"/internal/v4/training-plan?local_date={day_plan()['local_date']}"),
+    ]
+    for capability, path in tool_calls:
+        response = client.get(path, headers=tool_headers(capability))
+        assert response.status_code == 200, response.text
+        validate("tool-results.schema.json", response.json())
+    client.close()
+
+
+def test_tool_auth_is_separate_loopback_only_and_headers_are_strict(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    android_as_tool = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read", ANDROID_TOKEN))
+    assert android_as_tool.status_code == 401
+    validate_error(android_as_tool, "AUTH_REQUIRED")
+
+    tool_as_android = client.post(
+        "/v4/sync/day-plan-snapshots", headers=android_headers(TOOL_TOKEN),
+        json=sync_envelope("day_plan.snapshot.write", day_plan()),
+    )
+    assert tool_as_android.status_code == 401
+    validate_error(tool_as_android, "AUTH_REQUIRED")
+
+    non_loopback = make_client(tmp_path / "remote", monkeypatch, client_address=("192.0.2.20", 50101))
+    response = non_loopback.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert response.status_code == 401
+    validate_error(response, "AUTH_REQUIRED")
+
+    wrong_capability = client.get("/internal/v4/day-plan", headers=tool_headers("usage_summary.read"))
+    assert wrong_capability.status_code == 400
+    validate_error(wrong_capability, "BAD_REQUEST")
+    missing_version = tool_headers("day_plan.read")
+    del missing_version["X-Atlas-Schema-Version"]
+    response = client.get("/internal/v4/day-plan", headers=missing_version)
+    assert response.status_code == 400
+    validate_error(response, "UNSUPPORTED_VERSION")
+    client.close()
+    non_loopback.close()
+
+
+def test_absence_staleness_schema_size_unknown_method_and_no_generic_proxy(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    missing = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert missing.status_code == 200
+    validate("tool-results.schema.json", missing.json())
+    assert missing.json()["freshness"] == "UNAVAILABLE"
+    assert missing.json()["data"]["state"] == "NO_PLAN"
+
+    unavailable_calls = (
+        ("activity_status.read", f"/internal/v4/activity-status/{UUID_ACTIVITY}?plan_id={UUID_PLAN}"),
+        ("usage_summary.read", "/internal/v4/usage-summary?window_start=2026-10-29T10:00:00Z&window_end=2026-10-29T11:00:00Z"),
+        ("goal_progress.read", "/internal/v4/goal-progress"),
+        ("training_plan.read", "/internal/v4/training-plan?local_date=2026-10-29"),
+    )
+    for capability, path in unavailable_calls:
+        response = client.get(path, headers=tool_headers(capability))
+        assert response.status_code == 503
+        validate_error(response, "DATA_UNAVAILABLE")
+
+    old_stamp = stamp(datetime.now(timezone.utc) - timedelta(hours=1))
+    post_plan(client, observed_at=old_stamp)
+    stale = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert stale.status_code == 200
+    validate("tool-results.schema.json", stale.json())
+    assert stale.json()["freshness"] == "STALE"
+    assert stale.json()["is_stale"] is True
+
+    bad_query = client.get("/internal/v4/day-plan?url=http://example.invalid", headers=tool_headers("day_plan.read"))
+    assert bad_query.status_code == 400
+    validate_error(bad_query, "UNKNOWN_FIELD")
+
+    unknown = client.get("/internal/v4/proxy?url=http://example.invalid", headers=tool_headers("day_plan.read"))
+    assert unknown.status_code == 404
+    validate_error(unknown, "NOT_FOUND")
+    wrong_method = client.post("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert wrong_method.status_code == 405
+    validate_error(wrong_method, "BAD_REQUEST")
+
+    invalid = client.post("/v4/sync/day-plan-snapshots", headers=android_headers(), json={"schema_version": 3})
+    assert invalid.status_code == 400
+    validate_error(invalid, "BAD_REQUEST")
+    oversized = client.post(
+        "/v4/sync/day-plan-snapshots", headers=android_headers(),
+        content=b"{" + b" " * MAX_REQUEST_BYTES,
+    )
+    assert oversized.status_code == 413
+    validate_error(oversized, "PAYLOAD_TOO_LARGE")
+    client.close()
+
+
+def test_capability_flags_and_consent_version_gate_reads_and_sync(tmp_path, monkeypatch):
+    capabilities = dict(READ_CAPABILITIES)
+    capabilities["day_plan.read"] = False
+    client = make_client(tmp_path, monkeypatch, capabilities=capabilities)
+    response = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert response.status_code == 403
+    validate_error(response, "CAPABILITY_UNAVAILABLE")
+
+    receipt = post_plan(client, consent_version=4)
+    assert receipt["stored_version"] == 7
+    stale_consent = client.post(
+        "/v4/sync/day-plan-snapshots", headers=android_headers(),
+        json=sync_envelope("day_plan.snapshot.write", day_plan(), consent_version=3),
+    )
+    assert stale_consent.status_code == 403
+    validate_error(stale_consent, "CONSENT_REQUIRED")
+    client.close()

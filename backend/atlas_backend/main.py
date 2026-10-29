@@ -54,6 +54,7 @@ from .store import (
     UnknownProposal,
     UnknownProposalCursor,
 )
+from .v4_router import create_v4_router
 
 MAX_REQUEST_BYTES = 65_536
 API_CONTRACT_VERSION = 1
@@ -156,6 +157,47 @@ class RequestSizeLimitMiddleware:
         self.app = app
         self.max_bytes = max_bytes
 
+    @staticmethod
+    def _error(scope: Scope, status_code: int, code: str, message: str) -> JSONResponse:
+        headers = dict(scope.get("headers", []))
+        path = scope.get("path", "")
+        if path.startswith(("/internal/v4/", "/v4/")):
+            allowed_capabilities = {
+                "day_plan.read", "activity_status.read", "plan_revision.propose", "usage_summary.read",
+                "goal_progress.read", "training_plan.read", "coach.chat", "day_plan.snapshot.write",
+                "activity_status.write", "usage_summary.write", "goal_progress.write", "training_plan.write",
+                "proposal.ack", "tool_catalog.read",
+            }
+            try:
+                request_id = str(UUID(headers.get(b"x-atlas-request-id", b"").decode("ascii")))
+            except (ValueError, UnicodeDecodeError):
+                request_id = str(uuid4())
+            raw_capability = headers.get(b"x-atlas-capability", b"").decode("ascii", errors="ignore")
+            return JSONResponse(
+                status_code=status_code,
+                content={
+                    "contract_version": 4,
+                    "schema_version": 4,
+                    "request_id": request_id,
+                    "error": {
+                        "code": code,
+                        "message": message[:240],
+                        "retryable": False,
+                        "capability": raw_capability if raw_capability in allowed_capabilities else None,
+                        "retry_after_seconds": None,
+                    },
+                },
+            )
+        legacy_code = "request_too_large" if status_code == 413 else "invalid_content_length"
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "contract_version": API_CONTRACT_VERSION,
+                "detail": message,
+                "error": {"code": legacy_code, "message": message},
+            },
+        )
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -166,24 +208,10 @@ class RequestSizeLimitMiddleware:
         if length is not None:
             try:
                 if int(length) > self.max_bytes:
-                    await JSONResponse(
-                        status_code=413,
-                        content={
-                            "contract_version": API_CONTRACT_VERSION,
-                            "detail": "requête trop volumineuse",
-                            "error": {"code": "request_too_large", "message": "requête trop volumineuse"},
-                        },
-                    )(scope, receive, send)
+                    await self._error(scope, 413, "PAYLOAD_TOO_LARGE", "Requête trop volumineuse.")(scope, receive, send)
                     return
             except ValueError:
-                await JSONResponse(
-                    status_code=400,
-                    content={
-                        "contract_version": API_CONTRACT_VERSION,
-                        "detail": "Content-Length invalide",
-                        "error": {"code": "invalid_content_length", "message": "Content-Length invalide"},
-                    },
-                )(scope, receive, send)
+                await self._error(scope, 400, "BAD_REQUEST", "Content-Length invalide.")(scope, receive, send)
                 return
 
         chunks: list[bytes] = []
@@ -198,14 +226,7 @@ class RequestSizeLimitMiddleware:
             chunk = message.get("body", b"")
             size += len(chunk)
             if size > self.max_bytes:
-                await JSONResponse(
-                    status_code=413,
-                    content={
-                        "contract_version": API_CONTRACT_VERSION,
-                        "detail": "requête trop volumineuse",
-                        "error": {"code": "request_too_large", "message": "requête trop volumineuse"},
-                    },
-                )(scope, receive, send)
+                await self._error(scope, 413, "PAYLOAD_TOO_LARGE", "Requête trop volumineuse.")(scope, receive, send)
                 return
             chunks.append(chunk)
             more_body = message.get("more_body", False)
@@ -273,6 +294,9 @@ def create_app(
     app.state.store = store
     app.state.policy = policy
     app.state.agent = active_agent
+    v4_router = create_v4_router(store, android_token=token)
+    app.include_router(v4_router)
+    app.state.v4_tool_service = v4_router._v4_tool_service
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
