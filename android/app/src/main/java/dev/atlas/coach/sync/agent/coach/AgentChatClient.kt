@@ -9,6 +9,7 @@ import dev.atlas.coach.sync.relay.RelayCallResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.time.Instant
 import java.util.UUID
 
 /** Common boundary used by DIRECT HTTP and RELAY conversation sends. */
@@ -92,8 +93,130 @@ object AgentChatResponseParser {
         }
     }
 
+    /** Strict parser for contracts/v4/chat-response.schema.json. */
+    fun parseV4(result: JSONObject, requestId: String, sharing: AgentChatV4Sharing): AgentChatResponse {
+        try {
+            val expectedKeys = setOf(
+                "contract_version", "schema_version", "request_id", "reply", "proposal_ids",
+                "agent_status", "tool_state", "tool_call_count",
+            )
+            require(result.keys().asSequence().toSet() == expectedKeys) { "Unexpected V4 chat response fields" }
+            require(result.requiredInt("contract_version") == 4)
+            require(result.requiredInt("schema_version") == 4)
+            require(result.requiredString("request_id") == requestId)
+            val reply = result.requiredString("reply")
+            require(reply.isNotBlank() && reply.length <= MAX_REPLY_LENGTH)
+
+            val rawProposalIds = result.opt("proposal_ids") as? JSONArray
+                ?: error("V4 chat response has no proposal_ids array")
+            require(rawProposalIds.length() <= 1)
+            val proposalIds = (0 until rawProposalIds.length()).map { index ->
+                val id = rawProposalIds.get(index) as? String ?: error("Invalid V4 proposal id")
+                require(isCanonicalUuid(id))
+                id
+            }
+            require(proposalIds.distinct().size == proposalIds.size)
+
+            val status = when (result.requiredString("agent_status")) {
+                "ok" -> AgentStatus.CONNECTED
+                "mock" -> AgentStatus.MOCK
+                "unavailable" -> AgentStatus.UNAVAILABLE
+                else -> error("Unknown V4 agent_status")
+            }
+            val toolState = result.requiredString("tool_state")
+            require(toolState in V4_TOOL_STATES)
+            val toolCallCount = result.requiredInt("tool_call_count")
+            require(toolCallCount in 0..6)
+
+            val proposalSummary = if (proposalIds.isEmpty()) {
+                "Aucune proposition (0)."
+            } else {
+                "Proposition(s) (${proposalIds.size}) : ${proposalIds.joinToString(", ")}. Consultez la boîte de réception pour le détail."
+            }
+            val metadata = "\n\nÉtat des outils : $toolState ($toolCallCount appel(s)). $proposalSummary"
+            val replyLimit = (MAX_VISIBLE_REPLY_LENGTH - metadata.length).coerceAtLeast(0)
+            val clipped = reply.length > replyLimit
+            val contentLimit = if (clipped) (replyLimit - 1).coerceAtLeast(0) else replyLimit
+            val visibleReply = reply.take(contentLimit).let { content ->
+                (if (clipped) content.trimEnd() + "…" else content) + metadata
+            }
+            val sharedCategories = JSONObject().put("consented_categories", JSONArray(sharing.sharedCategories.sorted()))
+            return AgentChatResponse(
+                reply = visibleReply,
+                proposals = emptyList(),
+                status = status,
+                sharedContextJson = sharedCategories.toString(),
+            )
+        } catch (error: Exception) {
+            throw AgentChatException(
+                AgentChatFailureKind.INVALID_RESPONSE,
+                "La réponse V4 du Coach est invalide.",
+                cause = error,
+            )
+        }
+    }
+
     private const val MAX_REPLY_LENGTH = 4_000
+    private const val MAX_VISIBLE_REPLY_LENGTH = 4_000
     private const val MAX_PROPOSALS = 5
+    private val V4_TOOL_STATES = setOf("none", "completed", "partial", "uncertain")
+}
+
+private fun JSONObject.requiredString(key: String): String =
+    opt(key) as? String ?: error("Missing or invalid $key")
+
+private fun JSONObject.requiredInt(key: String): Int {
+    val value = opt(key) as? Number ?: error("Missing or invalid $key")
+    val integer = value.toLong()
+    require(value.toDouble() == integer.toDouble() && integer in Int.MIN_VALUE..Int.MAX_VALUE.toLong())
+    return integer.toInt()
+}
+
+private fun isCanonicalUuid(value: String): Boolean = runCatching {
+    UUID.fromString(value).toString() == value.lowercase()
+}.getOrDefault(false)
+
+/** Only V4 sync categories with a current, acknowledged consent can be shared by V4 chat. */
+data class AgentChatV4Sharing(
+    val consentVersion: Int,
+    val sharedCategories: Set<String>,
+) {
+    init {
+        require(consentVersion >= 1)
+        require(sharedCategories.all { it in V4_CHAT_SHARED_CATEGORIES })
+    }
+
+    companion object {
+        val V4_CHAT_SHARED_CATEGORIES = setOf(
+            "DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN",
+        )
+        val EMPTY = AgentChatV4Sharing(consentVersion = 1, sharedCategories = emptySet())
+    }
+}
+
+/** The V4 chat body deliberately contains consented category names, never the legacy context payload. */
+object AgentChatV4RequestBody {
+    fun build(
+        conversationId: String?,
+        message: String,
+        requestId: String,
+        sharing: AgentChatV4Sharing,
+        sentAt: Instant = Instant.now(),
+    ): JSONObject {
+        require(isCanonicalUuid(requestId))
+        require(!conversationId.isNullOrBlank() && conversationId.length <= 80)
+        require(message.isNotBlank() && message.length <= 2_000)
+        return JSONObject()
+            .put("contract_version", 4)
+            .put("schema_version", 4)
+            .put("request_id", requestId)
+            .put("capability", "coach.chat")
+            .put("sent_at", sentAt.toString())
+            .put("conversation_id", conversationId)
+            .put("message", message)
+            .put("consent_version", sharing.consentVersion)
+            .put("shared_categories", JSONArray(sharing.sharedCategories.sorted()))
+    }
 }
 
 enum class AgentChatFailureKind {
@@ -103,6 +226,11 @@ enum class AgentChatFailureKind {
     CANCELLED,
     POLICY_DENIED,
     INVALID_RESPONSE,
+    AUTHENTICATION_REQUIRED,
+    CONSENT_DENIED,
+    CONFLICT,
+    INVALID_REQUEST,
+    SERVICE_UNAVAILABLE,
     REMOTE_ERROR,
 }
 
@@ -155,6 +283,7 @@ class AgentChatException(
 /** Injectable boundary keeps relay chat tests independent of real sockets. */
 fun interface RelayChatRequestExecutor {
     fun execute(
+        operation: String,
         timeoutMillis: Long,
         idempotencyKey: String,
         payloadFactory: () -> JSONObject,
@@ -169,6 +298,9 @@ class RelayAgentChatClient(
     private val onContextWritten: (AgentContextSnapshot) -> Boolean,
     private val requestAllowed: () -> Boolean = { true },
     private val snapshotStillAuthorized: (AgentContextSnapshot) -> Boolean = { true },
+    private val v4ChatEnabled: Boolean = false,
+    private val v4Sharing: () -> AgentChatV4Sharing = { AgentChatV4Sharing.EMPTY },
+    private val v4SharingStillAuthorized: (AgentChatV4Sharing) -> Boolean = { true },
 ) : AgentChatClient {
     override fun chat(
         conversationId: String?,
@@ -181,6 +313,7 @@ class RelayAgentChatClient(
         require(idempotencyKey.isNotBlank() && idempotencyKey.length <= 160)
         val dispatchMandate: AgentMandate
         val dispatchSnapshot: AgentContextSnapshot
+        val dispatchV4Sharing: AgentChatV4Sharing
         try {
             if (!runCatching(requestAllowed).getOrDefault(false)) {
                 throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "L'accès au Coach n'est plus autorisé.")
@@ -194,7 +327,9 @@ class RelayAgentChatClient(
                 throw AgentChatException(AgentChatFailureKind.POLICY_DENIED, "Le mandat du Coach est révoqué, suspendu ou expiré.")
             }
             dispatchSnapshot = fresh.minimizedSnapshot()
-            if (!onContextWritten(dispatchSnapshot)) {
+            dispatchV4Sharing = if (v4ChatEnabled) v4Sharing() else AgentChatV4Sharing.EMPTY
+            val auditedSnapshot = if (v4ChatEnabled) AgentContextSnapshot(emptyList(), emptyMap(), emptyMap()) else dispatchSnapshot
+            if (!onContextWritten(auditedSnapshot)) {
                 throw AgentChatException(
                     AgentChatFailureKind.POLICY_DENIED,
                     "L'audit local du contexte n'a pas pu être enregistré. Aucun message relayé n'a été envoyé.",
@@ -211,28 +346,37 @@ class RelayAgentChatClient(
         }
 
         val result = executor.execute(
+            operation = if (v4ChatEnabled) V4_CHAT_OPERATION else V2_CHAT_OPERATION,
             timeoutMillis = RELAY_CHAT_TIMEOUT_MILLIS,
             idempotencyKey = idempotencyKey,
             beforeDispatch = {
                 runCatching(requestAllowed).getOrDefault(false) &&
                     !dispatchMandate.revoked && !dispatchMandate.suspended &&
                     System.currentTimeMillis() < dispatchMandate.expiresAtUtcMillis &&
-                    runCatching { snapshotStillAuthorized(dispatchSnapshot) }.getOrDefault(false)
+                    runCatching { snapshotStillAuthorized(dispatchSnapshot) }.getOrDefault(false) &&
+                    (!v4ChatEnabled || runCatching { v4SharingStillAuthorized(dispatchV4Sharing) }.getOrDefault(false))
             },
             payloadFactory = {
-                AgentChatRequestBody.build(conversationId, message, dispatchMandate, dispatchSnapshot)
+                if (v4ChatEnabled) {
+                    AgentChatV4RequestBody.build(conversationId, message, idempotencyKey, dispatchV4Sharing)
+                } else {
+                    AgentChatRequestBody.build(conversationId, message, dispatchMandate, dispatchSnapshot)
+                }
             },
         )
 
         when (result) {
             is RelayCallResult.Success -> {
-                return AgentChatResponseParser.parse(result.result, dispatchSnapshot)
+                return if (v4ChatEnabled) {
+                    AgentChatResponseParser.parseV4(result.result, idempotencyKey, dispatchV4Sharing)
+                } else {
+                    AgentChatResponseParser.parse(result.result, dispatchSnapshot)
+                }
             }
             is RelayCallResult.RemoteError -> {
-                val kind = if (result.code == "OPERATION_UNAVAILABLE") {
-                    AgentChatFailureKind.OPERATION_UNAVAILABLE
-                } else AgentChatFailureKind.REMOTE_ERROR
-                throw AgentChatException(kind, result.message, result.code)
+                val code = result.code.takeIf { it.matches(REMOTE_CODE_PATTERN) }
+                val (kind, safeMessage) = remoteFailure(code)
+                throw AgentChatException(kind, safeMessage, code)
             }
             is RelayCallResult.Failure -> {
                 val (kind, message) = when (result.reason) {
@@ -255,8 +399,30 @@ class RelayAgentChatClient(
         }
     }
 
+    private fun remoteFailure(code: String?): Pair<AgentChatFailureKind, String> = when (code) {
+        "OPERATION_UNAVAILABLE" -> AgentChatFailureKind.OPERATION_UNAVAILABLE to
+            "La capacité de conversation V4 n'est pas disponible sur ce relais. Aucun repli V2 ne sera tenté."
+        "HTTP_401", "AUTH_REQUIRED", "AUTH_FAILED" -> AgentChatFailureKind.AUTHENTICATION_REQUIRED to
+            "L'authentification du Coach a échoué."
+        "HTTP_403", "FORBIDDEN", "CONSENT_REQUIRED", "CONSENT_DENIED" -> AgentChatFailureKind.CONSENT_DENIED to
+            "Le consentement ou l'autorisation du Coach ne permet pas cet envoi."
+        "HTTP_408" -> AgentChatFailureKind.RESULT_UNCERTAIN to
+            "Le résultat de la requête est incertain. ATLAS ne la renverra pas automatiquement."
+        "HTTP_409", "CONFLICT", "IDEMPOTENCY_CONFLICT", "STALE_VERSION" -> AgentChatFailureKind.CONFLICT to
+            "Le serveur a détecté un conflit. Aucun nouvel envoi automatique ne sera tenté."
+        "HTTP_422", "BAD_REQUEST", "INVALID_REQUEST" -> AgentChatFailureKind.INVALID_REQUEST to
+            "La requête V4 a été refusée car elle ne respecte pas les données attendues."
+        "HTTP_503", "SERVICE_UNAVAILABLE", "BACKEND_UNAVAILABLE", "UPSTREAM_UNAVAILABLE" ->
+            AgentChatFailureKind.SERVICE_UNAVAILABLE to "Le service du Coach est temporairement indisponible."
+        else -> AgentChatFailureKind.REMOTE_ERROR to
+            "Le serveur a refusé la requête relayée. Aucun envoi direct ni renvoi automatique ne sera tenté."
+    }
+
     companion object {
         /** Leaves headroom for the relay's strict 60-second request TTL. */
         const val RELAY_CHAT_TIMEOUT_MILLIS = 55_000L
+        const val V2_CHAT_OPERATION = "coach.chat.request"
+        const val V4_CHAT_OPERATION = "v4.coach.chat.request"
+        private val REMOTE_CODE_PATTERN = Regex("[A-Z0-9_]{1,64}")
     }
 }

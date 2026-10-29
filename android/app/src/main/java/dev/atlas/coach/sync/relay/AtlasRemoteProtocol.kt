@@ -21,13 +21,18 @@ object AtlasRemoteProtocol {
     val OPERATIONS = setOf(
         "backend.health", "coach.status", "plan.today.read", "plan.revision.request",
         "plan.revision.result", "sport.plan.read", "sync.status", "coach.chat.request",
+        "v4.coach.chat.request", "v4.proposals.pull",
     )
     val ERROR_CODES = setOf(
         "INVALID_REQUEST", "UNKNOWN_OPERATION", "PAYLOAD_TOO_LARGE", "EXPIRED", "AUTH_REQUIRED",
         "AUTH_FAILED", "DEVICE_REVOKED", "RATE_LIMITED", "IDEMPOTENCY_CONFLICT", "BACKEND_UNAVAILABLE",
         "BACKEND_REJECTED", "OPERATION_UNAVAILABLE", "CANCELLED", "INTERNAL",
+        "HTTP_401", "HTTP_403", "HTTP_408", "HTTP_409", "HTTP_422", "HTTP_503",
     )
-    val HELLO_CAPABILITIES = setOf("plan.revision", "coach.chat", "coach.status", "plan.today", "sport.plan", "sync.status")
+    val HELLO_CAPABILITIES = setOf(
+        "plan.revision", "coach.chat", "v4.coach.chat", "v4.proposal.ack",
+        "coach.status", "plan.today", "sport.plan", "sync.status",
+    )
     private val uuidPattern = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     private val tokenPattern = Regex("^[A-Za-z0-9_-]{43}$")
     private val idempotencyPattern = Regex("^[A-Za-z0-9._:-]{1,160}$")
@@ -129,6 +134,8 @@ object AtlasRemoteProtocol {
     fun requiredCapability(operation: String): String? = when (operation) {
         "plan.revision.request", "plan.revision.result" -> "plan.revision"
         "coach.chat.request" -> "coach.chat"
+        "v4.coach.chat.request" -> "v4.coach.chat"
+        "v4.proposals.pull" -> "v4.proposal.ack"
         else -> null
     }
 
