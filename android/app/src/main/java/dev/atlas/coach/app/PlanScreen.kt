@@ -313,7 +313,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             }
             if (planNotificationsEnabled && !notificationPermissionGranted) {
                 Text("Autorisez les notifications Android pour recevoir ces rappels.", style = MaterialTheme.typography.bodySmall)
-                AtlasSecondaryButton("Réglages des notifications") {
+                AtlasSecondaryButton("Réglages des notifications", onClick = {
                     runCatching {
                         uiContext.startActivity(
                             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -321,10 +321,11 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     }
-                }
+                    Unit
+                })
             } else if (planNotificationsEnabled && !planNotificationsAvailable) {
                 Text("Les notifications globales ou le canal « Rappels du programme » sont désactivés dans Android.", style = MaterialTheme.typography.bodySmall)
-                AtlasSecondaryButton("Réglages des notifications") {
+                AtlasSecondaryButton("Réglages des notifications", onClick = {
                     runCatching {
                         uiContext.startActivity(
                             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -332,7 +333,8 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     }
-                }
+                    Unit
+                })
             }
         }
         notificationTargetActivity?.let { activity ->
