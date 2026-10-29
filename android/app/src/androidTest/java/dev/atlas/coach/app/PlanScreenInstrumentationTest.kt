@@ -280,6 +280,7 @@ class PlanScreenInstrumentationTest {
                 PlanActivityCoachDialog(
                     activityId = activityWithPrivateNote.activityId,
                     planVersion = 7,
+                    activityTitle = activityWithPrivateNote.title,
                     offline = true,
                     onDismiss = { dismissed = true },
                     onSend = { sentMessage = it; true },
@@ -287,16 +288,16 @@ class PlanScreenInstrumentationTest {
             }
         }
 
-        composeRule.onNodeWithText(
-            "Contexte structuré · activity_id $ID_1 · plan version 7 · action demander un avis",
-        ).assertIsDisplayed()
+        composeRule.onNodeWithText("À propos de «Lecture» · programme version 7 · demander un avis").assertIsDisplayed()
         composeRule.onNodeWithTag("plan_activity_coach_message").assertIsDisplayed()
         composeRule.onNodeWithTag("plan_activity_coach_message")
             .assertTextContains("J’aimerais échanger sur cette activité.", substring = true)
-        composeRule.onNodeWithText("J’autorise le partage de cet identifiant, de la version et de l’action avec ma question.")
+        composeRule.onNodeWithText("J’autorise à conserver localement le lien de cette demande avec l’activité.")
             .assertIsDisplayed()
-        composeRule.onNodeWithText("Mode hors ligne : traitement local sur cet appareil, sans transmission réseau.")
+        composeRule.onNodeWithText("Hors ligne : question traitée sur cet appareil, sans envoi réseau.")
             .assertIsDisplayed()
+        composeRule.onAllNodesWithText(ID_1, substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("activity_id", substring = true).assertCountEquals(0)
         composeRule.onAllNodesWithText("NOTE_PRIVEE_NE_PAS_PARTAGER", substring = true).assertCountEquals(0)
         composeRule.onNodeWithTag("plan_activity_coach_send").assertIsNotEnabled()
 
@@ -304,9 +305,8 @@ class PlanScreenInstrumentationTest {
         composeRule.onNodeWithTag("plan_activity_coach_send").performClick()
 
         assertTrue(dismissed)
-        assertTrue(sentMessage?.contains("\"activity_id\":\"$ID_1\"") == true)
-        assertTrue(sentMessage?.contains("\"plan_version\":7") == true)
-        assertTrue(sentMessage?.contains("\"action\":\"ASK_COACH\"") == true)
+        assertTrue(sentMessage == "J’aimerais échanger sur cette activité.")
+        assertTrue(sentMessage?.startsWith("{") == false)
         assertTrue(sentMessage?.contains("NOTE_PRIVEE_NE_PAS_PARTAGER") == false)
         val displayDensity = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
         val sendHeightDp = composeRule.onNodeWithTag("plan_activity_coach_send")

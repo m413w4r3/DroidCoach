@@ -103,37 +103,67 @@ class PlanUiLogicTest {
 
         val selected = PlanUiLogic.statusEventForActivity(done, listOf(latest, unrelated, older))
         assertEquals(latest, selected)
-        assertEquals("Confirmé par vous · interface ATLAS", PlanUiLogic.statusOriginLabel(selected))
+        assertEquals("Confirmé par vous · vous", PlanUiLogic.statusOriginLabel(selected))
         assertEquals("Origine du statut inconnue", PlanUiLogic.statusOriginLabel(null))
     }
 
     @Test
     fun provenanceAndSourceEnumsHaveClearUserLabels() {
         assertEquals(
-            listOf("Déclaré par vous", "Mesuré", "Confirmé par vous", "Inconnu"),
+            listOf("Déclaré", "Mesuré", "Confirmé par vous", "Inconnu"),
             StatusProvenance.entries.map(PlanUiLogic::provenanceLabel),
         )
         assertEquals(
-            listOf("interface ATLAS", "minuteur Focus", "UsageStats", "lecture wger", "import Core"),
+            listOf("vous", "minuteur Focus", "usage des apps", "lecture de l’entraînement", "import"),
             StatusSource.entries.map(PlanUiLogic::sourceLabel),
         )
     }
 
     @Test
-    fun coachEnvelopeCarriesStructuredActivityContextAndEscapesMessage() {
-        val envelope = buildPlanActivityCoachEnvelope(
+    fun coachMessageIsHumanReadableAndDoesNotContainTheActivityIdentifier() {
+        val message = buildHumanPlanActivityCoachMessage(
+            activityTitle = "Lecture $ID_1",
+            note = "  Vérifie cette activité\nmerci  ",
             activityId = ID_1,
-            planVersion = 7,
-            message = "  Vérifie \"cette activité\"\nmerci  ",
         )
 
-        assertTrue(envelope.contains("\"activity_id\":\"$ID_1\""))
-        assertTrue(envelope.contains("\"plan_version\":7"))
-        assertTrue(envelope.contains("\"action\":\"ASK_COACH\""))
-        assertTrue(envelope.contains("Vérifie \\\"cette activité\\\""))
-        assertTrue(envelope.contains("\\nmerci"))
-        assertFalse(envelope.contains("\n"))
-        assertFalse(envelope.contains("notes"))
+        assertEquals("À propos de «Lecture» : Vérifie cette activité merci", message)
+        assertFalse(message.contains(ID_1))
+        assertFalse(message.contains("activity_id"))
+        assertFalse(message.startsWith("{"))
+        assertFalse(message.contains("\n"))
+    }
+
+    @Test
+    fun structuredCoachContextIsStoredAsItsOwnLocalEvent() {
+        val event = PlanActivityCoachContextEvent(
+            eventId = "local-event-1",
+            activityId = ID_1,
+            planVersion = 7,
+            action = PLAN_ACTIVITY_COACH_ACTION,
+            note = "Pourquoi cette activité ?",
+            createdAtUtcMillis = 1_800_000_000_000L,
+        )
+
+        val saved = event.toMap()
+        assertEquals(ID_1, saved["activity_id"])
+        assertEquals(7, saved["plan_version"])
+        assertEquals("ASK_COACH", saved["action"])
+        assertEquals("Pourquoi cette activité ?", saved["note"])
+        assertEquals(event, PlanActivityCoachContextEvent.fromMap(saved))
+        assertFalse(saved.containsKey("message"))
+    }
+
+    @Test
+    fun legacyCoachEnvelopeIsRenderedAsAQuestionWithoutItsIdentifiersOrJson() {
+        val legacy = """{"type":"plan_activity_coach_message","context":{"activity_id":"$ID_1","plan_version":7,"action":"ASK_COACH"},"message":"Pourquoi cette activité ?"}"""
+
+        val displayed = readableConversationMessage(legacy)
+
+        assertEquals("À propos d’une activité : Pourquoi cette activité ?", displayed)
+        assertFalse(displayed.contains(ID_1))
+        assertFalse(displayed.contains("activity_id"))
+        assertFalse(displayed.startsWith("{"))
     }
 
     @Test

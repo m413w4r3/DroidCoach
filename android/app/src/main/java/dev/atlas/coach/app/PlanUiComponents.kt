@@ -99,17 +99,17 @@ internal object PlanUiLogic {
 
     fun provenanceLabel(provenance: StatusProvenance): String = when (provenance) {
         StatusProvenance.CONFIRMED -> "Confirmé par vous"
-        StatusProvenance.DECLARED -> "Déclaré par vous"
+        StatusProvenance.DECLARED -> "Déclaré"
         StatusProvenance.MEASURED -> "Mesuré"
         StatusProvenance.UNKNOWN -> "Inconnu"
     }
 
     fun sourceLabel(source: StatusSource): String = when (source) {
-        StatusSource.USER_UI -> "interface ATLAS"
+        StatusSource.USER_UI -> "vous"
         StatusSource.FOCUS_TIMER -> "minuteur Focus"
-        StatusSource.USAGE_STATS -> "UsageStats"
-        StatusSource.WGER_READ -> "lecture wger"
-        StatusSource.CORE_IMPORT -> "import Core"
+        StatusSource.USAGE_STATS -> "usage des apps"
+        StatusSource.WGER_READ -> "lecture de l’entraînement"
+        StatusSource.CORE_IMPORT -> "import"
     }
 
     fun primaryActionLabel(status: ActivityStatus): String? = when (status) {
@@ -624,47 +624,11 @@ internal fun PlanReportBottomSheet(
     }
 }
 
-internal const val PLAN_ACTIVITY_COACH_ACTION = "ASK_COACH"
-
-/** JSON envelope sent through the existing coach message transport; private activity notes are not inputs. */
-internal fun buildPlanActivityCoachEnvelope(
-    activityId: String,
-    planVersion: Int,
-    message: String,
-): String {
-    require(activityId.isNotBlank()) { "activityId must not be blank" }
-    require(planVersion >= 1) { "planVersion must be positive" }
-    val cleanMessage = message.trim()
-    require(cleanMessage.isNotEmpty() && cleanMessage.length <= 280) { "message must contain 1..280 characters" }
-    return """{"type":"plan_activity_coach_message","context":{"activity_id":${jsonQuoted(activityId)},"plan_version":$planVersion,"action":${jsonQuoted(PLAN_ACTIVITY_COACH_ACTION)}},"message":${jsonQuoted(cleanMessage)}}"""
-}
-
-private fun jsonQuoted(value: String): String = buildString {
-    append('"')
-    value.forEach { character ->
-        when (character) {
-            '"' -> append("\\\"")
-            '\\' -> append("\\\\")
-            '\b' -> append("\\b")
-            '\u000C' -> append("\\f")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            else -> if (character.code < 0x20) {
-                append("\\u")
-                append(character.code.toString(16).padStart(4, '0'))
-            } else {
-                append(character)
-            }
-        }
-    }
-    append('"')
-}
-
 @Composable
 internal fun PlanActivityCoachDialog(
     activityId: String,
     planVersion: Int,
+    activityTitle: String,
     offline: Boolean,
     onDismiss: () -> Unit,
     onSend: (String) -> Boolean,
@@ -683,7 +647,7 @@ internal fun PlanActivityCoachDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Contexte structuré · activity_id $activityId · plan version $planVersion · action demander un avis",
+                    "À propos de «${humanPlanActivityTitle(activityTitle, activityId)}» · programme version $planVersion · demander un avis",
                     modifier = Modifier.testTag("plan_activity_coach_context"),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -703,19 +667,19 @@ internal fun PlanActivityCoachDialog(
                         onCheckedChange = { contextConsent = it; error = null },
                         modifier = Modifier.testTag("plan_activity_coach_context_consent").semantics {
                             contentDescription =
-                                "Autoriser le partage du contexte de l’activité $activityId, version $planVersion, action demander un avis"
+                                "Autoriser la conservation locale du lien de cette demande avec l’activité, version $planVersion"
                         },
                     )
                     Text(
-                        "J’autorise le partage de cet identifiant, de la version et de l’action avec ma question.",
+                        "J’autorise à conserver localement le lien de cette demande avec l’activité.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
                 Text(
                     if (offline) {
-                        "Mode hors ligne : traitement local sur cet appareil, sans transmission réseau."
+                        "Hors ligne : question traitée sur cet appareil, sans envoi réseau."
                     } else {
-                        "L’envoi dépend de la connexion et du mandat actifs. La note privée de l’activité n’est pas incluse."
+                        "La question envoyée reste lisible; le lien avec l’activité reste sur cet appareil. L’envoi dépend de la connexion et du mandat actifs."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -731,7 +695,7 @@ internal fun PlanActivityCoachDialog(
                     if (!busy && contextConsent && draft.isNotBlank()) {
                         busy = true
                         val sent = runCatching {
-                            onSend(buildPlanActivityCoachEnvelope(activityId, planVersion, draft))
+                            onSend(draft.trim())
                         }.getOrDefault(false)
                         busy = false
                         if (sent) onDismiss() else error = failureMessage() ?: "La demande n’a pas été envoyée; votre texte reste dans le champ."

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import org.json.JSONObject
 import dev.atlas.coach.sync.agent.AgentMode
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
@@ -251,7 +252,7 @@ internal fun AgentCoachScreen(
                             )
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(if (entry.role == AgentMessageRole.USER) "Vous" else "Coach", style = MaterialTheme.typography.labelLarge)
-                                Text(entry.text, style = MaterialTheme.typography.bodyLarge)
+                                Text(readableConversationMessage(entry.text), style = MaterialTheme.typography.bodyLarge)
                                 if (entry.role == AgentMessageRole.ASSISTANT) {
                                     Text(
                                         readableMessageSourceLabel(entry.contextSources, latestProvenance),
@@ -383,6 +384,14 @@ internal fun AgentCoachScreen(
             onSave = { parameters -> controller.editAgentProposal(entry.id, parameters); editing = null },
         )
     }
+}
+
+/** Hides identifiers from plan-context messages written by the previous envelope-based UI. */
+internal fun readableConversationMessage(text: String): String {
+    val envelope = runCatching { JSONObject(text) }.getOrNull() ?: return text
+    if (envelope.optString("type") != "plan_activity_coach_message") return text
+    val question = envelope.optString("message").trim()
+    return if (question.isEmpty()) "À propos d’une activité" else "À propos d’une activité : $question"
 }
 
 @Composable

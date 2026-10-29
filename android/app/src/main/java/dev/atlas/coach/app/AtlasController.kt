@@ -206,6 +206,67 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Future
 import org.json.JSONObject
 
+internal const val PLAN_ACTIVITY_COACH_ACTION = "ASK_COACH"
+
+/** Local-only link for a plan question. It is deliberately separate from chat text and sync context. */
+internal data class PlanActivityCoachContextEvent(
+    val eventId: String,
+    val activityId: String,
+    val planVersion: Int,
+    val action: String,
+    val note: String,
+    val createdAtUtcMillis: Long,
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "event_id" to eventId,
+        "activity_id" to activityId,
+        "plan_version" to planVersion,
+        "action" to action,
+        "note" to note,
+        "created_at_utc_millis" to createdAtUtcMillis,
+    )
+
+    companion object {
+        fun fromMap(values: Map<String, Any?>): PlanActivityCoachContextEvent? {
+            val eventId = values["event_id"] as? String ?: return null
+            val activityId = values["activity_id"] as? String ?: return null
+            val planVersion = (values["plan_version"] as? Number)?.toInt() ?: return null
+            val action = values["action"] as? String ?: return null
+            val note = values["note"] as? String ?: return null
+            val createdAtUtcMillis = (values["created_at_utc_millis"] as? Number)?.toLong() ?: return null
+            if (eventId.isBlank() || activityId.isBlank() || planVersion < 1 || action != PLAN_ACTIVITY_COACH_ACTION ||
+                note.isBlank() || note.length > 280
+            ) return null
+            return PlanActivityCoachContextEvent(
+                eventId = eventId,
+                activityId = activityId,
+                planVersion = planVersion,
+                action = action,
+                note = note,
+                createdAtUtcMillis = createdAtUtcMillis,
+            )
+        }
+    }
+}
+
+/** Human-readable activity title; identifiers stay in the local context event. */
+internal fun humanPlanActivityTitle(activityTitle: String, activityId: String? = null): String {
+    val withoutActivityId = activityId?.takeIf { it.isNotBlank() }?.let { activityTitle.replace(it, "") } ?: activityTitle
+    return withoutActivityId
+        .replace(Regex("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .take(80)
+        .ifBlank { "cette activité" }
+}
+
+/** Human-readable chat text; identifiers stay in the local context event. */
+internal fun buildHumanPlanActivityCoachMessage(activityTitle: String, note: String, activityId: String? = null): String {
+    val cleanNote = note.trim()
+    require(cleanNote.isNotEmpty() && cleanNote.length <= 280) { "note must contain 1..280 characters" }
+    return "À propos de «${humanPlanActivityTitle(activityTitle, activityId)}» : ${cleanNote.replace(Regex("\\s+"), " ")}"
+}
+
 /** Owns the small, synchronous local graph used by the Compose demo. */
 class AtlasController @JvmOverloads constructor(
     context: Context,
@@ -390,6 +451,11 @@ class AtlasController @JvmOverloads constructor(
         .filterIsInstance<String>().toMutableSet()
     private var agentConversationSnapshot by mutableStateOf(
         restored["agentConversation"].asList().mapNotNull { it.asMap()?.let { values -> runCatching { AgentConversationMessage.fromMap(values) }.getOrNull() } }.takeLast(80),
+    )
+    private var planActivityCoachContextEventsSnapshot by mutableStateOf(
+        restored["planActivityCoachEvents"].asList()
+            .mapNotNull { it.asMap()?.let(PlanActivityCoachContextEvent::fromMap) }
+            .takeLast(MAX_PLAN_ACTIVITY_COACH_EVENTS),
     )
     private var agentSuggestionsSnapshot by mutableStateOf(
         restored["agentSuggestions"].asList().filterIsInstance<String>().takeLast(100),
@@ -758,6 +824,8 @@ class AtlasController @JvmOverloads constructor(
         ) else current
     }
     val agentConversation: List<AgentConversationMessage> get() = agentConversationSnapshot
+    internal val planActivityCoachContextEvents: List<PlanActivityCoachContextEvent>
+        get() = currentPlanActivityCoachEvents()
     val agentInbox: List<AgentInboxEntry> get() = agentInboxRepository.all()
     val visibleAgentProposals: List<AgentInboxEntry> get() = agentInboxRepository.visible()
     val agentEffectHistory: List<AgentEffectRecord> get() = agentEffectJournal.entries().asReversed()
@@ -2077,6 +2145,43 @@ class AtlasController @JvmOverloads constructor(
         touch()
     }
 
+    /** Stores structured plan context locally and sends only a short human sentence through chat. */
+    fun sendPlanActivityCoachMessage(
+        activityId: String,
+        planVersion: Int,
+        activityTitle: String,
+        note: String,
+    ): Boolean {
+        val cleanNote = note.trim()
+        if (activityId.isBlank() || planVersion < 1 || cleanNote.isEmpty() || cleanNote.length > 280) {
+            latestMessage = "La demande doit contenir une activité valide et un message de 1 à 280 caractères."
+            touch()
+            return false
+        }
+        val message = runCatching { buildHumanPlanActivityCoachMessage(activityTitle, cleanNote, activityId) }
+            .getOrElse {
+                latestMessage = "La demande doit contenir un message de 1 à 280 caractères."
+                touch()
+                return false
+            }
+        val previousEvents = currentPlanActivityCoachEvents()
+        planActivityCoachContextEventsSnapshot = (previousEvents + PlanActivityCoachContextEvent(
+            eventId = UUID.randomUUID().toString(),
+            activityId = activityId,
+            planVersion = planVersion,
+            action = PLAN_ACTIVITY_COACH_ACTION,
+            note = cleanNote,
+            createdAtUtcMillis = clock.nowMillis(),
+        )).takeLast(MAX_PLAN_ACTIVITY_COACH_EVENTS)
+
+        if (sendAgentMessage(message)) return true
+
+        // Failed sends do not leave an orphan context event; successful sends persist both together.
+        planActivityCoachContextEventsSnapshot = previousEvents
+        persist()
+        return false
+    }
+
     private fun agentStatusLabel(status: AgentStatus, mode: RelayTransportMode): String = when (status) {
         AgentStatus.MOCK -> "Démonstration locale (mock)"
         AgentStatus.CONNECTED -> if (mode == RelayTransportMode.RELAY) "OpenClaw via PC" else "Agent connecté"
@@ -2151,6 +2256,9 @@ class AtlasController @JvmOverloads constructor(
     private fun addAgentConversationMessage(message: AgentConversationMessage) {
         agentConversationSnapshot = (agentConversationSnapshot + message).takeLast(MAX_AGENT_CONVERSATION_MESSAGES)
     }
+
+    private fun currentPlanActivityCoachEvents(): List<PlanActivityCoachContextEvent> =
+        runCatching { planActivityCoachContextEventsSnapshot }.getOrDefault(emptyList())
 
     private fun agentProposalContextSources(
         proposal: ProposalV2,
@@ -4464,6 +4572,7 @@ class AtlasController @JvmOverloads constructor(
             "agentMandate" to agentMandateStore.current().toJson().toString(),
             "agentHomeState" to agentHomeStateSnapshot.toJson().toString(),
             "agentConversation" to agentConversationSnapshot.map(AgentConversationMessage::toMap),
+            "planActivityCoachEvents" to currentPlanActivityCoachEvents().map(PlanActivityCoachContextEvent::toMap),
             "agentConversationId" to agentConversationId,
             "agentSuggestions" to agentSuggestionsSnapshot,
             "appliedLocalAgentEffectKeys" to appliedLocalAgentEffectKeys.toList(),
@@ -4541,6 +4650,7 @@ class AtlasController @JvmOverloads constructor(
         const val MAX_FOCUS_ROUTINES = 100
         const val MAX_AGENT_MESSAGE_LENGTH = 2_000
         const val MAX_AGENT_CONVERSATION_MESSAGES = 80
+        private const val MAX_PLAN_ACTIVITY_COACH_EVENTS = 200
         const val PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE =
             "Cette proposition n'est plus disponible (expirée ou retirée). Aucune action n'a été effectuée."
         private const val MAX_AGENT_CONTENT_ACTIVITY = 200

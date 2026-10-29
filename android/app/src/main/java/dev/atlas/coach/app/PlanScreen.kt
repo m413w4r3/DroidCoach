@@ -85,6 +85,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     var reportingId by rememberSaveable { mutableStateOf<String?>(null) }
     var contextualCoachActivityId by rememberSaveable { mutableStateOf<String?>(null) }
     var contextualCoachPlanVersion by rememberSaveable { mutableIntStateOf(0) }
+    var contextualCoachActivityTitle by rememberSaveable { mutableStateOf("") }
     var addingNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingTerminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingTerminalStatusName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -289,6 +290,7 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                             { activity ->
                                 contextualCoachActivityId = activity.activityId
                                 contextualCoachPlanVersion = plan.version
+                                contextualCoachActivityTitle = activity.title
                             }
                         } else null,
                     )
@@ -610,9 +612,17 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             PlanActivityCoachDialog(
                 activityId = activityId,
                 planVersion = contextualCoachPlanVersion,
+                activityTitle = contextualCoachActivityTitle,
                 offline = coachController.relaySettings.mode == RelayTransportMode.OFFLINE,
                 onDismiss = { contextualCoachActivityId = null },
-                onSend = coachController::sendAgentMessage,
+                onSend = { note ->
+                    coachController.sendPlanActivityCoachMessage(
+                        activityId = activityId,
+                        planVersion = contextualCoachPlanVersion,
+                        activityTitle = contextualCoachActivityTitle,
+                        note = note,
+                    )
+                },
                 failureMessage = { coachController.latestMessage },
             )
         }
