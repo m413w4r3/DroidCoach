@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from atlas_backend.main import create_app
@@ -298,7 +299,8 @@ def test_inbox_cursor_pagination_ack_states_and_replay_conflicts(tmp_path, monke
     assert second_page.status_code == 200, second_page.text
     assert len(second_page.json()["proposals"]) == 1
     assert first_page.json()["proposals"][0]["proposal_id"] != second_page.json()["proposals"][0]["proposal_id"]
-    bad_cursor = {**second_body, "cursor": cursor[:-1] + ("A" if cursor[-1] != "A" else "B")}
+    changed_cursor_char = "A" if cursor[1] != "A" else "B"
+    bad_cursor = {**second_body, "cursor": cursor[:1] + changed_cursor_char + cursor[2:]}
     invalid_cursor = client.post("/v4/agent/proposals/pull", headers=android_headers(), json=bad_cursor)
     assert invalid_cursor.status_code == 400
     assert error_code(invalid_cursor) == "CURSOR_INVALID"
@@ -529,4 +531,82 @@ def test_consent_revocation_tombstone_blocks_reads_proposals_pull_and_ack_until_
     )
     assert unknown_ack.status_code == 403
     assert error_code(unknown_ack) == "CONSENT_REQUIRED"
+    client.close()
+
+
+@pytest.mark.parametrize(
+    ("route", "consent_read_to_race"),
+    [("lookup", 4), ("lookup", 5), ("pull", 2), ("ack", 2)],
+)
+def test_consent_revocation_during_projection_read_denies_lookup_pull_and_ack(
+    tmp_path, monkeypatch, route: str, consent_read_to_race: int
+):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client, consent_version=5)
+    idempotency_key = "00000000-0000-4000-8000-000000000271"
+    proposal_response = post_proposal(client, idempotency_key)
+    assert proposal_response.status_code == 200, proposal_response.text
+    proposal_id = proposal_response.json()["data"]["proposal_id"]
+    device_ref = "android-" + hashlib.sha256(ANDROID_TOKEN.encode("utf-8")).hexdigest()[:32]
+    original_consent_state = V4ProjectionStore.consent_state
+    consent_reads = 0
+    injected = False
+
+    def revoke_after_consent_read(store, current_device_ref: str, category: str) -> dict | None:
+        nonlocal consent_reads, injected
+        state = original_consent_state(store, current_device_ref, category)
+        if current_device_ref == device_ref and category == "DAY_PLAN":
+            consent_reads += 1
+            if consent_reads == consent_read_to_race:
+                assert state is not None and state["state"] == "GRANTED"
+                store.save_consent_state(
+                    current_device_ref,
+                    category,
+                    int(state["consent_version"]) + 1,
+                    "REVOKED",
+                    idempotency_key="00000000-0000-4000-8000-000000000272",
+                )
+                injected = True
+        return state
+
+    monkeypatch.setattr(V4ProjectionStore, "consent_state", revoke_after_consent_read)
+    if route == "lookup":
+        response = client.get(
+            f"/internal/v4/agent/proposals/by-idempotency/{idempotency_key}",
+            headers=tool_headers("plan_revision.propose"),
+        )
+    elif route == "pull":
+        response = client.post(
+            "/v4/agent/proposals/pull",
+            headers=android_headers(),
+            json={
+                "contract_version": 4,
+                "schema_version": 4,
+                "request_id": UUID_REQUEST,
+                "capability": "proposal.ack",
+                "consent_version": 5,
+                "page_size": 10,
+                "cursor": None,
+            },
+        )
+    else:
+        ack_id = "00000000-0000-4000-8000-000000000273"
+        response = client.post(
+            f"/v4/agent/proposals/{proposal_id}/ack",
+            headers=android_headers(),
+            json=ack_body(proposal_id, ack_id, "REJECTED", "USER_REJECTED", consent_version=5),
+        )
+
+    assert injected
+    assert response.status_code == 403, response.text
+    assert error_code(response) == "CONSENT_REQUIRED"
+    assert "proposal_id" not in response.json()
+    assert "proposals" not in response.json()
+    if route == "ack":
+        with client.app.state.store.connect() as connection:
+            ack_count = connection.execute(
+                "SELECT COUNT(*) FROM agent_proposal_events_v4 WHERE ack_id=?",
+                (ack_id,),
+            ).fetchone()[0]
+        assert ack_count == 0
     client.close()
