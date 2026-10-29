@@ -95,8 +95,9 @@ class RelaySettingsController(
         private set
     var credentialsConfigured by mutableStateOf(credentialStore.credentials() != null)
         private set
-    var v4ChatEnabled by mutableStateOf(V4_CHAT_DEFAULT_ENABLED)
+    private var v4ChatOptIn by mutableStateOf(V4_CHAT_DEFAULT_ENABLED)
         private set
+    val v4ChatEnabled: Boolean get() = v4ChatOptIn
 
     /** WebSocket close code observed by the active transport; 4001 is the revocation close. */
     val lastCloseCode: Int? get() = transport?.lastCloseCode
@@ -165,7 +166,7 @@ class RelaySettingsController(
     }
 
     fun selectMode(newMode: RelayTransportMode) {
-        if (newMode != RelayTransportMode.RELAY) v4ChatEnabled = V4_CHAT_DEFAULT_ENABLED
+        if (newMode != RelayTransportMode.RELAY) v4ChatOptIn = V4_CHAT_DEFAULT_ENABLED
         settingsStore.updateMode(newMode)
         settings = settings.copy(mode = newMode)
         mode = newMode
@@ -196,8 +197,8 @@ class RelaySettingsController(
 
     /** V4 is an explicit session capability and starts disabled on every app launch. */
     fun setV4ChatEnabled(enabled: Boolean) {
-        if (v4ChatEnabled == enabled) return
-        v4ChatEnabled = enabled
+        if (v4ChatOptIn == enabled) return
+        v4ChatOptIn = enabled
         if (mode == RelayTransportMode.RELAY) startTransport(force = true)
     }
 
@@ -249,7 +250,7 @@ class RelaySettingsController(
     ): AgentChatClient? {
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
-        val selectedV4 = v4ChatEnabled
+        val selectedV4 = v4ChatOptIn
         val executor = RelayChatRequestExecutor { operation, timeoutMillis, idempotencyKey, payloadFactory, beforeDispatch ->
             active.executeDeferred(
                 operation = operation,
@@ -314,7 +315,7 @@ class RelaySettingsController(
                 maxReconnectAttempts = 8,
                 maxQueuedRequests = 16,
                 maxConcurrentRequests = 4,
-                requestedCapabilities = relayChatCapabilities(v4ChatEnabled),
+                requestedCapabilities = relayChatCapabilities(v4ChatOptIn),
             )
         } catch (_: Exception) {
             state = RelayConnectionState.ERROR

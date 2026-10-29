@@ -388,6 +388,8 @@ class RelayAgentChatClientTest {
         assertFalse(V4_CHAT_DEFAULT_ENABLED)
         assertEquals(setOf("plan.revision", "coach.chat"), relayChatCapabilities(false))
         assertEquals(setOf("plan.revision", "v4.coach.chat"), relayChatCapabilities(true))
+        assertEquals(AtlasRemoteProtocol.PROTOCOL, AtlasRemoteProtocol.protocolForCapabilities(relayChatCapabilities(false)))
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, AtlasRemoteProtocol.protocolForCapabilities(relayChatCapabilities(true)))
         assertEquals("v4.coach.chat", AtlasRemoteProtocol.requiredCapability("v4.coach.chat.request"))
         assertTrue(setOf("HTTP_401", "HTTP_403", "HTTP_408", "HTTP_409", "HTTP_422", "HTTP_503")
             .all { it in AtlasRemoteProtocol.ERROR_CODES })
@@ -398,7 +400,14 @@ class RelayAgentChatClientTest {
             remoteStaticPublicKey = ByteArray(32),
         )
         val now = Instant.parse("2026-10-30T12:00:00Z")
-        val hello = AtlasRemoteProtocol.hello(credential, "v4-test", relayChatCapabilities(true), now)
+        val v4Protocol = AtlasRemoteProtocol.protocolForCapabilities(relayChatCapabilities(true))
+        val hello = AtlasRemoteProtocol.hello(
+            credential,
+            "v4-test",
+            relayChatCapabilities(true),
+            now,
+            protocol = v4Protocol,
+        )
         val negotiatedRequest = AtlasRemoteProtocol.request(
             requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -413,18 +422,36 @@ class RelayAgentChatClientTest {
                 sharing = AgentChatV4Sharing.EMPTY,
                 sentAt = now,
             ),
+            protocol = v4Protocol,
         )
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, hello.getString("protocol"))
         assertEquals(setOf("plan.revision", "v4.coach.chat"),
             (0 until hello.getJSONArray("capabilities").length()).map { hello.getJSONArray("capabilities").getString(it) }.toSet())
-        assertEquals("v4.coach.chat.request", AtlasRemoteProtocol.parse(AtlasRemoteProtocol.encode(negotiatedRequest))
-            .getString("operation"))
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, negotiatedRequest.getString("protocol"))
+        val parsedV2Request = AtlasRemoteProtocol.parse(AtlasRemoteProtocol.encode(negotiatedRequest), v4Protocol)
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, parsedV2Request.getString("protocol"))
+        assertEquals("v4.coach.chat.request", parsedV2Request.getString("operation"))
         assertEquals("v4.proposal.ack", AtlasRemoteProtocol.requiredCapability("v4.proposals.pull"))
+        assertThrows(IllegalArgumentException::class.java) {
+            AtlasRemoteProtocol.hello(credential, "v1-test", relayChatCapabilities(true), now)
+        }
         assertThrows(RelayProtocolException::class.java) {
             AtlasRemoteProtocol.request(
                 requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
                 sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
                 operation = "/v2/agent/chat",
                 idempotencyKey = "fixed-route-test",
+                createdAt = now,
+                expiresAt = now.plusSeconds(30),
+                payload = JSONObject(),
+            )
+        }
+        assertThrows(RelayProtocolException::class.java) {
+            AtlasRemoteProtocol.request(
+                requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                operation = "v4.coach.chat.request",
+                idempotencyKey = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
                 createdAt = now,
                 expiresAt = now.plusSeconds(30),
                 payload = JSONObject(),
@@ -480,7 +507,8 @@ class RelayAgentChatClientTest {
         assertEquals(AgentStatus.CONNECTED, response.status)
         assertTrue(response.reply.contains("État des outils : partial (6 appel(s))"))
         assertTrue(response.reply.contains("$proposalId"))
-        assertTrue(response.reply.contains("boîte de réception"))
+        assertTrue(response.reply.contains("Contenu à synchroniser via la boîte de réception"))
+        assertFalse(response.reply.contains("pour le détail"))
         assertTrue(response.proposals.isEmpty())
         assertTrue(response.reply.length <= 4_000)
     }

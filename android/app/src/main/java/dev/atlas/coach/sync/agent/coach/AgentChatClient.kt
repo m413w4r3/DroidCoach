@@ -131,7 +131,7 @@ object AgentChatResponseParser {
             val proposalSummary = if (proposalIds.isEmpty()) {
                 "Aucune proposition (0)."
             } else {
-                "Proposition(s) (${proposalIds.size}) : ${proposalIds.joinToString(", ")}. Consultez la boîte de réception pour le détail."
+                "Proposition(s) (${proposalIds.size}) — identifiants : ${proposalIds.joinToString(", ")}. Contenu à synchroniser via la boîte de réception."
             }
             val metadata = "\n\nÉtat des outils : $toolState ($toolCallCount appel(s)). $proposalSummary"
             val replyLimit = (MAX_VISIBLE_REPLY_LENGTH - metadata.length).coerceAtLeast(0)
