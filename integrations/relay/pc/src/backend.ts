@@ -1,5 +1,5 @@
 import { RemoteError } from "./errors.js";
-import { assertCoachChatResponse, assertSmallResponse, isV4Operation, type Operation, validatePayload } from "./protocol.js";
+import { assertCoachChatResponse, assertSmallResponse, isRecord, isV4Operation, type Operation, validatePayload } from "./protocol.js";
 
 export type FetchLike = typeof fetch;
 
@@ -23,10 +23,49 @@ export class BackendRequestError extends RemoteError {
     readonly outcomeMayHaveOccurred: boolean,
     message?: string,
     readonly preserveResponseError = false,
+    readonly upstreamStatus?: number,
+    readonly remoteCode?: string,
   ) {
     super(code, retryable, message);
   }
 }
+
+const V4_REMOTE_ERROR_CODES = new Set([
+  "BAD_REQUEST",
+  "UNKNOWN_FIELD",
+  "UNSUPPORTED_VERSION",
+  "CAPABILITY_UNAVAILABLE",
+  "AUTH_REQUIRED",
+  "CONSENT_REQUIRED",
+  "PERMISSION_REQUIRED",
+  "NOT_FOUND",
+  "PLAN_NOT_FOUND",
+  "ACTIVITY_NOT_FOUND",
+  "PLAN_MISMATCH",
+  "DATA_UNAVAILABLE",
+  "DATA_UNKNOWN",
+  "STALE_DATA",
+  "STALE_VERSION",
+  "CONFLICT",
+  "VALIDATION_FAILED",
+  "IDEMPOTENCY_CONFLICT",
+  "EVENT_ID_CONFLICT",
+  "ACK_ID_CONFLICT",
+  "ACK_CONFLICT",
+  "PROPOSAL_EXPIRED",
+  "REPLAY_PENDING",
+  "RESULT_UNCERTAIN",
+  "QUOTA_EXCEEDED",
+  "RATE_LIMITED",
+  "PERIOD_TOO_LARGE",
+  "CURSOR_INVALID",
+  "CONFIG_REQUIRED",
+  "AUTH_UPSTREAM_REQUIRED",
+  "UPSTREAM_UNAVAILABLE",
+  "TIMEOUT",
+  "PAYLOAD_TOO_LARGE",
+  "INTERNAL",
+]);
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const DEFAULT_CHAT_TIMEOUT_MS = 55_000;
@@ -96,10 +135,19 @@ export class BackendClient {
       }
       throw new BackendRequestError("BACKEND_UNAVAILABLE", route.method === "GET", route.method === "POST");
     }
-    if (response.status === 404) throw new RemoteError("OPERATION_UNAVAILABLE");
+    if (response.status === 404 && !v4Operation) throw new RemoteError("OPERATION_UNAVAILABLE");
     if (!response.ok) {
-      const mayHaveOccurred = route.method === "POST" && (response.status >= 500 || response.status === 408);
-      throw new BackendRequestError("BACKEND_REJECTED", response.status >= 500, mayHaveOccurred);
+      const details = v4Operation ? await readV4ErrorDetails(response) : {};
+      const mayHaveOccurred = route.method === "POST" && (response.status >= 500 || response.status === 408) && !details.remoteCode;
+      throw new BackendRequestError(
+        "BACKEND_REJECTED",
+        details.retryable ?? response.status >= 500,
+        mayHaveOccurred,
+        undefined,
+        false,
+        v4Operation ? response.status : undefined,
+        details.remoteCode,
+      );
     }
     try {
       const result = await readBoundedJson(response);
@@ -115,6 +163,58 @@ export class BackendClient {
       }
       throw error;
     }
+  }
+}
+
+interface V4ErrorDetails {
+  remoteCode?: string;
+  retryable?: boolean;
+}
+
+async function readV4ErrorDetails(response: Response): Promise<V4ErrorDetails> {
+  const maxBytes = 16_384;
+  const declaredLength = Number(response.headers.get("content-length") ?? 0);
+  if (declaredLength > maxBytes) {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // The upstream body is deliberately discarded when it exceeds the parsing bound.
+    }
+    return {};
+  }
+  if (!response.body) return {};
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return {};
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return {};
+  } finally {
+    reader.releaseLock();
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"));
+    if (!isRecord(parsed)) return {};
+    const error = isRecord(parsed.error) ? parsed.error : parsed;
+    const remoteCode = typeof error.code === "string" && V4_REMOTE_ERROR_CODES.has(error.code) ? error.code : undefined;
+    return {
+      remoteCode,
+      retryable: remoteCode && typeof error.retryable === "boolean" ? error.retryable : undefined,
+    };
+  } catch {
+    return {};
   }
 }
 

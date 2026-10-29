@@ -222,6 +222,9 @@ export class OperationExecutor {
           if (signal?.aborted || (error instanceof BackendRequestError && error.code === "CANCELLED")) {
             throw new RemoteError("CANCELLED");
           }
+          if (error instanceof BackendRequestError && isV4Operation(request.operation) && error.upstreamStatus !== undefined) {
+            throw new BackendRequestError("BACKEND_UNAVAILABLE", false, true, undefined, false, error.upstreamStatus, error.remoteCode);
+          }
           if (error instanceof BackendRequestError && error.preserveResponseError) {
             throw new RemoteError(error.code);
           }

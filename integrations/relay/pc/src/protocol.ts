@@ -96,7 +96,9 @@ export interface ErrorEnvelope {
   kind: "error";
   request_id: string | null;
   session_id: string | null;
-  error: { code: string; message: string; retryable: boolean };
+  // Additive upstream fields are emitted only for V4 operation errors on PROTOCOL_V2 sessions.
+  // PROTOCOL_V1 keeps its original error shape so strict legacy clients remain compatible.
+  error: { code: string; message: string; retryable: boolean; http_status?: number; remote_code?: string };
   completed_at: string;
 }
 
