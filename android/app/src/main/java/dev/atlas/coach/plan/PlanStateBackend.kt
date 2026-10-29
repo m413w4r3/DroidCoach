@@ -10,6 +10,7 @@ import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 data class PlanQuarantineMetadata(
     val reason: String,
@@ -27,6 +28,13 @@ data class PlanQuarantineMetadata(
 
 /** Storage boundary intentionally has no Android framework dependency. */
 interface PlanStateBackend {
+    /**
+     * In-process read/modify/write lock shared by repositories addressing this document.
+     * This does not coordinate independent processes. Backends with multiple instances for
+     * one store must return the same lock object from each instance.
+     */
+    val transactionLock: Any get() = this
+
     fun read(): String?
     fun write(value: String)
 
@@ -36,6 +44,8 @@ interface PlanStateBackend {
 
 /** Stores one plan document and diagnostic-only quarantine sidecars beside [file]. */
 class FilePlanBackend(private val file: File) : PlanStateBackend {
+    override val transactionLock: Any = FilePlanBackendLockRegistry.forFile(file)
+
     override fun read(): String? = if (file.isFile) file.readText(Charsets.UTF_8) else null
 
     override fun write(value: String) {
@@ -87,4 +97,14 @@ class FilePlanBackend(private val file: File) : PlanStateBackend {
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes)
         .joinToString(separator = "") { byte -> "%02x".format(byte) }
+}
+
+private object FilePlanBackendLockRegistry {
+    private val locks = ConcurrentHashMap<String, Any>()
+
+    fun forFile(file: File): Any {
+        val identity = runCatching { file.canonicalFile.toPath().normalize().toString() }
+            .getOrElse { file.absoluteFile.toPath().normalize().toString() }
+        return locks.computeIfAbsent(identity) { Any() }
+    }
 }
