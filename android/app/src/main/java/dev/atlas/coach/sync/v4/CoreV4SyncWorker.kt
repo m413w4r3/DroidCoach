@@ -168,10 +168,13 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         for (event in events.filter { it.planId == plan.planId && it.planVersion == plan.version }) {
             if (isStopped) return
             val sequence = store.sequenceForStatusEvent(event.statusEventId)
+            if (sequence !in 1..Int.MAX_VALUE.toLong()) {
+                throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false, errorCode = "sequence_limit")
+            }
             val data = CoreV4SyncClient.statusData(event, plan.version, sequence)
             val sourceKey = "status:" + event.statusEventId
             sendProjection(
-                store, client, token, CoreV4Category.ACTIVITY_STATUS, sourceKey, sequence,
+                store, client, token, CoreV4Category.ACTIVITY_STATUS, sourceKey, sequence.toInt(),
                 fingerprint(data), data, now, statusConsent, planConsent,
             )
         }

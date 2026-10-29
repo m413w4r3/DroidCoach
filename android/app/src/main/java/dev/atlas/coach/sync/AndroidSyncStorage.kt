@@ -444,7 +444,9 @@ class AndroidCoreV4SyncStore(context: Context) {
         val existing = sequences.optLong(eventId, 0L)
         if (existing > 0L) return existing
         val next = root.optLong(KEY_STATUS_SEQUENCE, 0L) + 1L
-        if (next > Int.MAX_VALUE) throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false, errorCode = "sequence_limit")
+        if (next > Int.MAX_VALUE.toLong()) {
+            throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false, errorCode = "sequence_limit")
+        }
         sequences.put(eventId, next)
         root.put(KEY_STATUS_SEQUENCES, sequences)
         root.put(KEY_STATUS_SEQUENCE, next)
