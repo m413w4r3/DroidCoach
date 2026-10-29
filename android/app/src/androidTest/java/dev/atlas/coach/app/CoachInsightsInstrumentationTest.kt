@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -56,9 +57,10 @@ class CoachInsightsInstrumentationTest {
 
         composeRule.onNodeWithTag("coach_insights_tab").performScrollTo().performClick()
         composeRule.onNodeWithTag("coach_insights_period_day").performScrollTo().assertIsSelected()
-        val showsInsufficientData = composeRule.onAllNodesWithTag("coach_insights_insufficient").fetchSemanticsNodes().isNotEmpty()
-        val showsDerivedMetric = composeRule.onAllNodesWithTag("coach_insights_metric_focus_minutes_completed").fetchSemanticsNodes().isNotEmpty()
-        assertTrue("Jour must show derived metrics or an explicit insufficient-data state", showsInsufficientData || showsDerivedMetric)
+        composeRule.onNodeWithTag("coach_insights_insufficient").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Données insuffisantes").assertIsDisplayed()
+        composeRule.onNodeWithText("Aucune donnée disponible pour le jour courant.")
+            .assertIsDisplayed()
 
         composeRule.onNodeWithTag("coach_insights_period_week").performScrollTo().performClick()
         composeRule.onNodeWithTag("coach_insights_period_week").assertIsSelected()

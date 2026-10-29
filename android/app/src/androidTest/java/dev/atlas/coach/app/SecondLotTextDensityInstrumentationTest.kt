@@ -67,6 +67,26 @@ class SecondLotTextDensityInstrumentationTest {
     }
 
     @Test
+    fun emptyPlanKeepsStorageNoteBehindDetails() {
+        val context = isolatedContext()
+        val planController = PlanController(File(context.cacheDir, "plan-empty-${UUID.randomUUID()}"))
+        val atlasController = AtlasController(context)
+
+        setScreen(context, "Plan du jour") {
+            PlanScreen(planController, atlasController)
+        }
+
+        composeRule.onNodeWithText("Préparer la journée").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText(
+            "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
+        ).assertCountEquals(0)
+        composeRule.onNodeWithText("Détails").performScrollTo().performClick()
+        composeRule.onNodeWithText(
+            "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
+        ).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun relayKeepsHumanStateAndPairedPcVisibleWithTechnicalValuesAdvanced() {
         val context = isolatedContext()
         val controller = AtlasController(context)

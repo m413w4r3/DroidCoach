@@ -121,7 +121,7 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
             Text(
                 when (relay.mode) {
                     RelayTransportMode.DIRECT -> "Le PC est joint directement sur le réseau local."
-                    RelayTransportMode.RELAY -> "Le PC est joint via un relais chiffré."
+                    RelayTransportMode.RELAY -> "Relais chiffré de bout en bout ; FastAPI reste sur le PC, sans VPN."
                     RelayTransportMode.OFFLINE -> "Le coach distant est désactivé; le plan local reste disponible."
                 },
                 style = MaterialTheme.typography.bodySmall,
