@@ -209,10 +209,10 @@ async function readV4ErrorDetails(response: Response): Promise<V4ErrorDetails> {
     if (!isRecord(parsed)) return {};
     const error = isRecord(parsed.error) ? parsed.error : parsed;
     const remoteCode = typeof error.code === "string" && V4_REMOTE_ERROR_CODES.has(error.code) ? error.code : undefined;
-    return {
-      remoteCode,
-      retryable: remoteCode && typeof error.retryable === "boolean" ? error.retryable : undefined,
-    };
+    const details: V4ErrorDetails = {};
+    if (remoteCode) details.remoteCode = remoteCode;
+    if (remoteCode && typeof error.retryable === "boolean") details.retryable = error.retryable;
+    return details;
   } catch {
     return {};
   }

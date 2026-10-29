@@ -466,7 +466,7 @@ describe("closed operations and backend adapter", () => {
     const backend = new BackendClient({
       baseUrl: "http://127.0.0.1:8100",
       v4Enabled: true,
-      pairedDeviceToken: (deviceId) => deviceId === device.device_id ? "synthetic-core-android-token" : undefined,
+      pairedDeviceToken: (deviceId) => deviceId === device.device.device_id ? "synthetic-core-android-token" : undefined,
       fetcher: async (input) => {
         calls.push(String(input));
         const next = upstreamErrors.shift()!;
