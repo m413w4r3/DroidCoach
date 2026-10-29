@@ -250,3 +250,10 @@
 | 2026-10-28 | Les captures publiées sont expurgées : bulle Signal masquée, conversations synthétiques ou caviardées, aucun jeton, UUID, serverId ni donnée personnelle | Le dossier de captures est versionné et ne doit contenir aucune donnée intime. |
 | 2026-10-28 | Tous les enfants Paseo sont `codex:gpt-6-luna`, effort `xhigh`, sans sous-délégation; maximum 3 implémentations simultanées | Contrat `AGENTS.md` et prompt maître. |
 | 2026-10-28 | Le raccourci launcher `Coach` doit lancer `MainActivity` sans `FLAG_ACTIVITY_NEW_TASK`, avec `REORDER_TO_FRONT`/`SINGLE_TOP` (ou `CLEAR_TOP`) | Test physique : `NEW_TASK` laissait `LauncherActivity` au-dessus de `MainActivity` ; `am start --activity-reorder-to-front` et `CLEAR_TOP` ramènent bien le tableau de bord. P0 fonctionnel du parcours prioritaire. |
+
+## V6.3 — Réconciliation des événements de statut V4 (2026-10-29)
+
+- La route de synchronisation recherche d'abord `event_id` dans le périmètre du `device_ref` authentifié. Un corps canonique identique renvoie le reçu de statut avec l'horodatage persistant `received_at`, même si l'enveloppe porte une version de consentement antérieure; un corps différent donne `EVENT_ID_CONFLICT`/409. Le rejeu n'écrit pas et ne renvoie aucune projection.
+- Le hash historique lie aussi l'événement à la version de consentement acceptée. La comparaison d'un rejeu reprend la version stockée avec l'événement afin d'ignorer uniquement la version d'enveloppe courante; les événements absents restent soumis aux contrôles existants de consentement, projection, séquence et schéma.
+- La recherche et l'insertion restent dans la transaction SQLite immédiate de la route, ce qui sérialise les rejeux concurrents. Les contrôles d'existence de statut sont aussi limités au même appareil.
+- Le contrat V4 et les migrations restent inchangés: `last_synced_at` existe déjà dans le reçu et `received_at` dans le stockage. Pour les éventuelles lignes historiques où `received_at` est nul, l'horodatage d'origine ne peut pas être restitué; la réponse garde le repli actuel sur l'horloge du serveur sans modifier la ligne.

@@ -57,6 +57,7 @@ class WriteReceipt:
     replayed: bool
     record_id: str
     record_hash: str
+    received_at: str | None = None
 
 
 def canonical_json(value: Any) -> str:
@@ -378,6 +379,39 @@ class V4ProjectionStore:
             ).fetchone()
         return self._decode_row(row, "projection_json")
 
+    @staticmethod
+    def _activity_status_event_hash(device_ref: str, event: dict[str, Any], consent_version: int) -> str:
+        return content_hash({"device_ref": device_ref, "event": event, "consent_version": consent_version})
+
+    def existing_activity_status_event(
+        self, device_ref: str, event: dict[str, Any]
+    ) -> WriteReceipt | None:
+        """Return a same-device event receipt before current-consent checks, if present."""
+        event_id = str(event.get("event_id", ""))
+        if not event_id or not device_ref:
+            return None
+        with self.store.connect() as connection:
+            existing = connection.execute(
+                "SELECT event_hash,consent_version,received_at FROM activity_status_events_v4 "
+                "WHERE device_ref=? AND event_id=?",
+                (device_ref, event_id),
+            ).fetchone()
+        if existing is None:
+            return None
+        stored_hash = str(existing["event_hash"])
+        expected_hash = self._activity_status_event_hash(
+            device_ref, event, int(existing["consent_version"])
+        )
+        if stored_hash != expected_hash:
+            raise EventIdConflict("event_id déjà utilisé pour un corps différent")
+        return WriteReceipt(
+            True,
+            True,
+            event_id,
+            stored_hash,
+            str(existing["received_at"]) if existing["received_at"] is not None else None,
+        )
+
     def save_activity_status_event(
         self,
         device_ref: str,
@@ -414,19 +448,29 @@ class V4ProjectionStore:
         }
         if not event_id or not device_ref:
             raise V4ProjectionError("device_ref et event_id sont requis")
-        event_hash = content_hash({"device_ref": device_ref, "event": event, "consent_version": consent_version})
+        event_hash = self._activity_status_event_hash(device_ref, event, consent_version)
         raw = self._raw_payload(event)
         gap = False
         replayed = False
+        receipt_hash = event_hash
+        receipt_received_at = received_at
         with self.store.connect() as connection:
             self.store.begin_immediate(connection)
             existing = connection.execute(
-                "SELECT event_hash FROM activity_status_events_v4 WHERE event_id=?", (event_id,)
+                "SELECT event_hash,consent_version,received_at FROM activity_status_events_v4 "
+                "WHERE device_ref=? AND event_id=?",
+                (device_ref, event_id),
             ).fetchone()
             if existing is not None:
-                if existing["event_hash"] != event_hash:
+                expected_hash = self._activity_status_event_hash(
+                    device_ref, event, int(existing["consent_version"])
+                )
+                if existing["event_hash"] != expected_hash:
                     raise EventIdConflict("event_id déjà utilisé pour un corps différent")
                 replayed = True
+                receipt_hash = str(existing["event_hash"])
+                if existing["received_at"] is not None:
+                    receipt_received_at = str(existing["received_at"])
             else:
                 latest = connection.execute(
                     "SELECT MAX(sequence) AS sequence FROM activity_status_events_v4 WHERE device_ref=?",
@@ -453,10 +497,15 @@ class V4ProjectionStore:
                             )) + (received_at, values["plan_version"], values["consent_version"], event_hash),
                         )
                     except sqlite3.IntegrityError as exc:
+                        global_event = connection.execute(
+                            "SELECT 1 FROM activity_status_events_v4 WHERE event_id=?", (event_id,)
+                        ).fetchone()
+                        if global_event is not None:
+                            raise EventIdConflict("event_id indisponible") from exc
                         raise ProjectionConflict("séquence de statut déjà utilisée") from exc
         if gap:
             raise SequenceGap(f"séquence de statut attendue {expected}, reçue {sequence}")
-        return WriteReceipt(True, replayed, event_id, event_hash)
+        return WriteReceipt(True, replayed, event_id, receipt_hash, receipt_received_at)
 
     def latest_activity_status_event(
         self, device_ref: str, plan_id: str, activity_id: str
