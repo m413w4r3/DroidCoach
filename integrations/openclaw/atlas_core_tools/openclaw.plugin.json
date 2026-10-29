@@ -1,0 +1,90 @@
+{
+  "id": "atlas_core_tools",
+  "name": "ATLAS Core Tools",
+  "description": "Six bounded ATLAS V4 projection and proposal tools backed by a dedicated local Core bearer.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "coreBaseUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8100",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "tokenFile": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "capabilities": {
+        "type": "object",
+        "properties": {
+          "dayPlanRead": {
+            "type": "boolean",
+            "default": false
+          },
+          "activityStatusRead": {
+            "type": "boolean",
+            "default": false
+          },
+          "planRevisionPropose": {
+            "type": "boolean",
+            "default": false
+          },
+          "usageSummaryRead": {
+            "type": "boolean",
+            "default": false
+          },
+          "goalProgressRead": {
+            "type": "boolean",
+            "default": false
+          },
+          "trainingPlanRead": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "atlas_get_day_plan",
+      "atlas_get_activity_status",
+      "atlas_propose_plan_revision",
+      "atlas_get_usage_summary",
+      "atlas_get_goal_progress",
+      "atlas_get_training_plan"
+    ]
+  },
+  "toolMetadata": {
+    "atlas_get_day_plan": {
+      "optional": true
+    },
+    "atlas_get_activity_status": {
+      "optional": true
+    },
+    "atlas_propose_plan_revision": {
+      "optional": true
+    },
+    "atlas_get_usage_summary": {
+      "optional": true
+    },
+    "atlas_get_goal_progress": {
+      "optional": true
+    },
+    "atlas_get_training_plan": {
+      "optional": true
+    }
+  }
+}

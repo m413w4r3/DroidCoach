@@ -1,0 +1,182 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "BAD_REQUEST",
+            "UNKNOWN_FIELD",
+            "UNSUPPORTED_VERSION",
+            "CAPABILITY_UNAVAILABLE",
+            "AUTH_REQUIRED",
+            "CONSENT_REQUIRED",
+            "PERMISSION_REQUIRED",
+            "NOT_FOUND",
+            "PLAN_NOT_FOUND",
+            "ACTIVITY_NOT_FOUND",
+            "PLAN_MISMATCH",
+            "DATA_UNAVAILABLE",
+            "DATA_UNKNOWN",
+            "STALE_DATA",
+            "STALE_VERSION",
+            "CONFLICT",
+            "VALIDATION_FAILED",
+            "IDEMPOTENCY_CONFLICT",
+            "EVENT_ID_CONFLICT",
+            "ACK_ID_CONFLICT",
+            "ACK_CONFLICT",
+            "PROPOSAL_EXPIRED",
+            "REPLAY_PENDING",
+            "RESULT_UNCERTAIN",
+            "QUOTA_EXCEEDED",
+            "RATE_LIMITED",
+            "PERIOD_TOO_LARGE",
+            "CURSOR_INVALID",
+            "CONFIG_REQUIRED",
+            "AUTH_UPSTREAM_REQUIRED",
+            "UPSTREAM_UNAVAILABLE",
+            "TIMEOUT",
+            "PAYLOAD_TOO_LARGE",
+            "INTERNAL"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "capability": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "day_plan.read",
+                "activity_status.read",
+                "plan_revision.propose",
+                "usage_summary.read",
+                "goal_progress.read",
+                "training_plan.read",
+                "coach.chat",
+                "day_plan.snapshot.write",
+                "activity_status.write",
+                "usage_summary.write",
+                "goal_progress.write",
+                "training_plan.write",
+                "proposal.ack",
+                "tool_catalog.read"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_after_seconds": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "capability",
+        "retry_after_seconds"
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "schema_version",
+    "request_id",
+    "error"
+  ],
+  "$defs": {
+    "error_code": {
+      "type": "string",
+      "enum": [
+        "BAD_REQUEST",
+        "UNKNOWN_FIELD",
+        "UNSUPPORTED_VERSION",
+        "CAPABILITY_UNAVAILABLE",
+        "AUTH_REQUIRED",
+        "CONSENT_REQUIRED",
+        "PERMISSION_REQUIRED",
+        "NOT_FOUND",
+        "PLAN_NOT_FOUND",
+        "ACTIVITY_NOT_FOUND",
+        "PLAN_MISMATCH",
+        "DATA_UNAVAILABLE",
+        "DATA_UNKNOWN",
+        "STALE_DATA",
+        "STALE_VERSION",
+        "CONFLICT",
+        "VALIDATION_FAILED",
+        "IDEMPOTENCY_CONFLICT",
+        "EVENT_ID_CONFLICT",
+        "ACK_ID_CONFLICT",
+        "ACK_CONFLICT",
+        "PROPOSAL_EXPIRED",
+        "REPLAY_PENDING",
+        "RESULT_UNCERTAIN",
+        "QUOTA_EXCEEDED",
+        "RATE_LIMITED",
+        "PERIOD_TOO_LARGE",
+        "CURSOR_INVALID",
+        "CONFIG_REQUIRED",
+        "AUTH_UPSTREAM_REQUIRED",
+        "UPSTREAM_UNAVAILABLE",
+        "TIMEOUT",
+        "PAYLOAD_TOO_LARGE",
+        "INTERNAL"
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/error.schema.json",
+  "title": "ATLAS V4 error",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "error": {
+        "code": "STALE_VERSION",
+        "message": "La projection de plan doit être réconciliée.",
+        "retryable": false,
+        "capability": "plan_revision.propose",
+        "retry_after_seconds": null
+      }
+    }
+  ]
+}
