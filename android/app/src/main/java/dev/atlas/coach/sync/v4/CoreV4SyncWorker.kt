@@ -455,7 +455,7 @@ internal fun startCoreV4TransportIfAuthorized(
     request: CoreV4HttpRequest,
     shouldStop: () -> Boolean,
     start: () -> Unit,
-): Boolean = synchronized(store) {
+): Boolean = store.withExclusiveState {
     if (shouldStop() || !coreV4RequestStillAuthorized(store, request)) {
         false
     } else {

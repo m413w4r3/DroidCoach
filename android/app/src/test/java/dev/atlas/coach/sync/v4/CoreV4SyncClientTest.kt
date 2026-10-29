@@ -28,6 +28,7 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -187,6 +188,74 @@ class CoreV4SyncClientTest {
     }
 
     @Test
+    fun concurrentMutationsFromSeparateStoresPreserveBothConsentUpdates() {
+        val sharedState = SharedV4MemoryState()
+        val settingsPersistence = MemoryV4Persistence(sharedState)
+        val workerPersistence = MemoryV4Persistence(sharedState)
+        val settingsStore = AndroidCoreV4SyncStore(settingsPersistence)
+        val workerStore = AndroidCoreV4SyncStore(workerPersistence)
+        assertFalse(settingsStore === workerStore)
+        assertFalse(settingsPersistence === workerPersistence)
+
+        val firstStoreEntered = CountDownLatch(1)
+        val releaseFirstStore = CountDownLatch(1)
+        val secondStoreAttempting = CountDownLatch(1)
+        val secondStoreEntered = CountDownLatch(1)
+        val firstStoreLock = Thread {
+            settingsStore.withExclusiveState {
+                firstStoreEntered.countDown()
+                releaseFirstStore.await(2, TimeUnit.SECONDS)
+            }
+        }
+        val secondStoreLock = Thread {
+            firstStoreEntered.await(2, TimeUnit.SECONDS)
+            secondStoreAttempting.countDown()
+            workerStore.withExclusiveState { secondStoreEntered.countDown() }
+        }
+        firstStoreLock.start()
+        secondStoreLock.start()
+        assertTrue(firstStoreEntered.await(2, TimeUnit.SECONDS))
+        assertTrue(secondStoreAttempting.await(2, TimeUnit.SECONDS))
+        assertFalse(secondStoreEntered.await(100, TimeUnit.MILLISECONDS))
+        releaseFirstStore.countDown()
+        firstStoreLock.join(2_000)
+        secondStoreLock.join(2_000)
+        assertFalse(firstStoreLock.isAlive)
+        assertFalse(secondStoreLock.isAlive)
+        assertTrue(secondStoreEntered.await(2, TimeUnit.SECONDS))
+
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>(null)
+        val settingsMutation = Thread {
+            ready.countDown()
+            if (start.await(2, TimeUnit.SECONDS)) {
+                runCatching { settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true) }
+                    .onFailure { failure.compareAndSet(null, it) }
+            }
+        }
+        val workerMutation = Thread {
+            ready.countDown()
+            if (start.await(2, TimeUnit.SECONDS)) {
+                runCatching { workerStore.setConsent(CoreV4Category.USAGE_SUMMARY, granted = true) }
+                    .onFailure { failure.compareAndSet(null, it) }
+            }
+        }
+        settingsMutation.start()
+        workerMutation.start()
+        assertTrue(ready.await(2, TimeUnit.SECONDS))
+        start.countDown()
+        settingsMutation.join(2_000)
+        workerMutation.join(2_000)
+
+        assertFalse(settingsMutation.isAlive)
+        assertFalse(workerMutation.isAlive)
+        failure.get()?.let { throw AssertionError("concurrent V4 store mutation failed", it) }
+        assertEquals(CoreV4ConsentState.GRANTED, settingsStore.consent(CoreV4Category.DAY_PLAN).snapshot.state)
+        assertEquals(CoreV4ConsentState.GRANTED, workerStore.consent(CoreV4Category.USAGE_SUMMARY).snapshot.state)
+    }
+
+    @Test
     fun offlineStatusIsResumedBeforePlanRevisionAndSequenceStaysContiguous() {
         val persistence = MemoryV4Persistence()
         val store = AndroidCoreV4SyncStore(persistence)
@@ -296,6 +365,134 @@ class CoreV4SyncClientTest {
     }
 
     @Test
+    fun revokingPendingStatusCompactsItsSequenceAndAllowsResumeAfterRegrant() {
+        val sharedState = SharedV4MemoryState()
+        val settingsStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
+        val workerStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
+        val transport = FakeTransport()
+        val client = CoreV4SyncClient(transport)
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+        val dayConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val initialStatusConsent = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+
+        val initialPlan = workerStore.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${dayConsent.version}",
+            sourceVersion = 1,
+            sourceFingerprint = "8".repeat(64),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = dayConsent.version,
+            data = planData(),
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected initial plan")
+        val initialPlanReceipt = client.sendProjection(initialPlan.request, initialPlan.body, TOKEN, dayConsent)
+        workerStore.acknowledgeProjection(initialPlan, initialPlanReceipt, NOW)
+
+        val abandonedEvent = statusEvent()
+        val abandonedSequence = workerStore.sequenceForStatusEvent(abandonedEvent.statusEventId)
+        assertEquals(1L, abandonedSequence)
+        val abandonedData = CoreV4SyncClient.statusData(abandonedEvent, 1, abandonedSequence)
+        val abandonedPending = workerStore.prepareProjection(
+            sourceKey = "status:${abandonedEvent.statusEventId}",
+            sourceVersion = abandonedSequence.toInt(),
+            sourceFingerprint = "9".repeat(64),
+            category = CoreV4Category.ACTIVITY_STATUS,
+            consentVersion = initialStatusConsent.version,
+            data = abandonedData,
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected pending status")
+        transport.offline = true
+        val offline = assertThrows(CoreV4SyncException::class.java) {
+            client.sendProjection(
+                abandonedPending.request,
+                abandonedPending.body,
+                TOKEN,
+                initialStatusConsent,
+                dayConsent,
+            )
+        }
+        assertEquals(CoreV4FailureKind.OFFLINE, offline.kind)
+
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = false)
+        assertTrue(workerStore.pendingProjections(CoreV4Category.ACTIVITY_STATUS).isEmpty())
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        transport.offline = false
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+        val resumedStatusConsent = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        assertEquals(resumedStatusConsent.version, resumedStatusConsent.syncedVersion)
+
+        val revisedPlan = approvedPlan().copy(version = 2)
+        val revisedPlanConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        assertTrue(flushSupersededStatusRequestsBeforePlan(
+            workerStore,
+            client,
+            TOKEN,
+            PLAN_ID,
+            revisedPlan.version,
+            resumedStatusConsent,
+            revisedPlanConsent,
+        ))
+        val revisedPlanData = CoreV4SyncClient.planData(revisedPlan, emptyList(), "2026-10-29T12:02:00Z")
+        val revisedPlanPending = workerStore.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${revisedPlanConsent.version}",
+            sourceVersion = revisedPlan.version,
+            sourceFingerprint = "a".repeat(64),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = revisedPlanConsent.version,
+            data = revisedPlanData,
+            client = client,
+            nowUtc = "2026-10-29T12:02:00Z",
+        ) ?: error("expected revised plan after regrant")
+        val revisedReceipt = client.sendProjection(
+            revisedPlanPending.request,
+            revisedPlanPending.body,
+            TOKEN,
+            revisedPlanConsent,
+        )
+        workerStore.acknowledgeProjection(revisedPlanPending, revisedReceipt, "2026-10-29T12:02:00Z")
+
+        val nextEvent = abandonedEvent.copy(
+            statusEventId = EVENT_ID_2,
+            fromStatus = ActivityStatus.IN_PROGRESS,
+            toStatus = ActivityStatus.DONE,
+            planVersion = revisedPlan.version,
+            decidedAt = "2026-10-29T12:03:00Z",
+            observedAt = "2026-10-29T12:03:00Z",
+        )
+        val nextSequence = workerStore.sequenceForStatusEvent(nextEvent.statusEventId)
+        assertEquals(1L, nextSequence)
+        val nextData = CoreV4SyncClient.statusData(nextEvent, revisedPlan.version, nextSequence)
+        val nextPending = workerStore.prepareProjection(
+            sourceKey = "status:${nextEvent.statusEventId}",
+            sourceVersion = nextSequence.toInt(),
+            sourceFingerprint = "b".repeat(64),
+            category = CoreV4Category.ACTIVITY_STATUS,
+            consentVersion = resumedStatusConsent.version,
+            data = nextData,
+            client = client,
+            nowUtc = "2026-10-29T12:03:00Z",
+        ) ?: error("expected resumed status")
+        client.sendProjection(nextPending.request, nextPending.body, TOKEN, resumedStatusConsent, revisedPlanConsent)
+
+        assertEquals(
+            listOf(
+                CoreV4SyncClient.CONSENT_ROUTE,
+                CoreV4SyncClient.CONSENT_ROUTE,
+                CoreV4Category.DAY_PLAN.route,
+                CoreV4Category.ACTIVITY_STATUS.route,
+                CoreV4SyncClient.CONSENT_ROUTE,
+                CoreV4Category.DAY_PLAN.route,
+                CoreV4Category.ACTIVITY_STATUS.route,
+            ),
+            transport.requests.map { it.path },
+        )
+        assertEquals(1, JSONObject(transport.requests.last().body).getJSONObject("data").getInt("sequence"))
+    }
+
+    @Test
     fun transportCancellationWinsBeforeRegistrationAndCancelsRegisteredConnection() {
         val beforeRegistration = CoreV4TransportStartGate()
         val cancelledBefore = AtomicBoolean(false)
@@ -332,13 +529,16 @@ class CoreV4SyncClientTest {
 
     @Test
     fun transportStartBarrierRejectsRevocationBeforeAndAfterConnectionRegistration() {
-        val store = AndroidCoreV4SyncStore(MemoryV4Persistence())
+        val persistence = MemoryV4Persistence()
+        val settingsStore = AndroidCoreV4SyncStore(persistence)
+        val workerStore = AndroidCoreV4SyncStore(persistence)
+        assertFalse(settingsStore === workerStore)
         val transport = FakeTransport()
         val client = CoreV4SyncClient(transport)
-        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
-        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
-        val firstConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
-        val firstPending = store.prepareProjection(
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+        val firstConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val firstPending = workerStore.prepareProjection(
             sourceKey = "plan:$PLAN_ID:consent:${firstConsent.version}",
             sourceVersion = 1,
             sourceFingerprint = "6".repeat(64),
@@ -355,22 +555,22 @@ class CoreV4SyncClientTest {
         )
 
         // Model revocation after the pre-open consent read but before registration/start.
-        assertTrue(coreV4RequestStillAuthorized(store, firstRequest))
-        store.setConsent(CoreV4Category.DAY_PLAN, granted = false)
+        assertTrue(coreV4RequestStillAuthorized(workerStore, firstRequest))
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = false)
         val beforeRegistrationGate = CoreV4TransportStartGate()
         val beforeRegistrationConnection = CoreV4CancelableConnection { }
         assertTrue(beforeRegistrationGate.register(beforeRegistrationConnection))
         val startedBeforeRegistration = AtomicBoolean(false)
         assertTrue(beforeRegistrationGate.start(beforeRegistrationConnection) {
-            startedBeforeRegistration.set(startCoreV4TransportIfAuthorized(store, firstRequest, { false }) {})
+            startedBeforeRegistration.set(startCoreV4TransportIfAuthorized(workerStore, firstRequest, { false }) {})
         })
         assertFalse(startedBeforeRegistration.get())
 
         // Re-grant, register the connection, then revoke before the start callback runs.
-        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
-        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
-        val renewedConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
-        val renewedPending = store.prepareProjection(
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+        val renewedConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val renewedPending = workerStore.prepareProjection(
             sourceKey = "plan:$PLAN_ID:consent:${renewedConsent.version}",
             sourceVersion = 1,
             sourceFingerprint = "7".repeat(64),
@@ -399,7 +599,7 @@ class CoreV4SyncClientTest {
                 gate.start(connection) {
                     startAttempted.set(true)
                     requestStarted.set(startCoreV4TransportIfAuthorized(
-                        store,
+                        workerStore,
                         renewedRequest,
                         { false },
                     ) {})
@@ -408,7 +608,7 @@ class CoreV4SyncClientTest {
         }
         sender.start()
         assertTrue(registered.await(2, TimeUnit.SECONDS))
-        store.setConsent(CoreV4Category.DAY_PLAN, granted = false)
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = false)
         releaseStart.countDown()
         sender.join(2_000)
 
@@ -727,13 +927,18 @@ class CoreV4SyncClientTest {
         )
     }
 
-    private class MemoryV4Persistence : CoreV4SyncPersistence {
-        private var state: String? = null
+    private class SharedV4MemoryState {
+        val state = AtomicReference<String?>(null)
+    }
 
-        override fun read(): String? = state
+    private class MemoryV4Persistence(
+        private val shared: SharedV4MemoryState = SharedV4MemoryState(),
+    ) : CoreV4SyncPersistence {
+
+        override fun read(): String? = shared.state.get()
 
         override fun write(value: String) {
-            state = value
+            shared.state.set(value)
         }
     }
 }
