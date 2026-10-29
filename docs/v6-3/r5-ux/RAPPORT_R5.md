@@ -3,7 +3,7 @@
 - **Date** : 2026-10-29
 - **Branche** : `feat/atlas-v6-3-ux-daily-use`
 - **Base `origin/main`** : `566668ac9cd0778f43d7f4d90a93c6a45645935c`
-- **SHA final intégré** : `072424f804ff776395d280c30394303f6748c52b`
+- **SHA final intégré** : `16ed8415972fbf884547a01815e0cc04c6af368c`
 - **Statut** : R5 code, tests JVM/lint/build et recette AVD terminés ; **Pixel physique absent** ; **aucun push**.
 
 ## 1. Livré
@@ -21,19 +21,19 @@
 
 | Élément | Résultat |
 |---|---|
-| JVM `:app:testDebugUnitTest --rerun-tasks` | **743 tests, 0 échec, 0 erreur, 0 ignoré, 105 suites** (SHA `072424f`) |
+| JVM `:app:testDebugUnitTest --rerun-tasks` | **743 tests, 0 échec, 0 erreur, 0 ignoré, 105 suites** (SHA `16ed841`) |
 | `:app:lintDebug` | **PASS** |
 | `:app:assembleDebug` | **PASS** |
 | `:app:assembleDebugAndroidTest` | **PASS** |
-| AVD API 37 — nouveaux tests R5 | **10/10 PASS** (`CoachTextDensity`, `CoachInsights`, `CoachQuickActions`, `SecondLotTextDensity`) |
-| AVD API 37 — régression | **49/49 PASS** (`AtlasPresentation`, `LotEUi`, `PlanScreen`, `PlanCalendarScroll`, `GoalFocusStart`, `FocusGauge`, `AtlasLaunch`, `SyncSettingsScreenCapture`, + 4 nouveaux) |
-| AVD API 37 — smoke APK final | **15/15 PASS** sur l'APK final exact |
+| AVD API 37 — nouveaux tests R5 | **11/11 PASS** (`CoachTextDensity`, `CoachInsights`, `CoachQuickActions`, `SecondLotTextDensity` avec le test Plan vide) |
+| AVD API 37 — régression + R5 | **50/50 PASS** (`AtlasPresentation`, `LotEUi`, `PlanScreen`, `PlanCalendarScroll`, `GoalFocusStart`, `FocusGauge`, `AtlasLaunch`, `SyncSettingsScreenCapture`, + 4 nouveaux) |
+| AVD API 37 — smoke APK final | **50/50 PASS** sur l'APK final exact |
 | Pixel physique | **BLOCKED_DEVICE / NOT_RUN** — seul `emulator-5554` est présent à `adb devices -l` |
 
 ### Identité APK finale
 
-- APK debug SHA-256 : `dfe02a7f9a71e707f9780690ecc136e563e4ecfbf43596fde94670ef71c1dbfd`
-- APK androidTest SHA-256 : `a3d63aed75b947aa9783e7ad3fb0524cf975c9ae5ff97a9c816e114285c392e8`
+- APK debug SHA-256 : `605b9454ee77b1fe2fdef5ef71add41d5aa61055162b29e6cfdabd19a9e0bc07`
+- APK androidTest SHA-256 : `3816473f88949b765d2ff8db3cf1c441de58c3a5e533551eefbec342a29f9f96`
 - Signature debug : certificat SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`
 - `applicationId` : `dev.atlas.coach`, versionCode 1, versionName 0.1.0
 
@@ -69,3 +69,15 @@
 1. Reconnecter le Pixel, reconstituer les empreintes de fichiers, installer l'APK final avec `adb install -r`, rejouer les parcours et capturer les écrans expurgés.
 2. Revue indépendante finale (nouvelle session Luna XHigh, lecture seule technique).
 3. Push sur `main` uniquement après validation Pixel + revue + GO explicite.
+
+## 7. Revue indépendante
+
+- **Session** : nouvelle session `codex:gpt-6-luna`, `xhigh`, vérifiée dans les métadonnées.
+- **Worktree** : `review/r5-final-a39a19f`, `chmod -R a-w`, aucun ADB, aucune écriture.
+- **Verdict** : **GO_WITH_LIMITATIONS** — aucun P0/P1.
+- **P2 relevés et traités** :
+  1. Assurance de chiffrement du relais raccourcie → ligne explicite restaurée : « Relais chiffré de bout en bout ; FastAPI reste sur le PC, sans VPN. »
+  2. Note de stockage du Plan non couverte après correction du harnais → test dédié `emptyPlanKeepsStorageNoteBehindDetails`.
+  3. Test Insights trop permissif sur l'état vide → assertion directe de `Données insuffisantes` et de sa raison.
+  4. Fins de ligne CRLF des tickets → normalisées en LF ; `git diff --check` PASS.
+- **Limites maintenues** : Pixel physique `BLOCKED_DEVICE`, aucune revendication de qualification Pixel ; lecture des plans passés sur le thread de composition ; AVD uniquement.
