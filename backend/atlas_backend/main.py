@@ -294,7 +294,7 @@ def create_app(
     app.state.store = store
     app.state.policy = policy
     app.state.agent = active_agent
-    v4_router = create_v4_router(store, android_token=token)
+    v4_router = create_v4_router(store, android_token=token, agent=active_agent)
     app.include_router(v4_router)
     app.state.v4_tool_service = v4_router._v4_tool_service
 

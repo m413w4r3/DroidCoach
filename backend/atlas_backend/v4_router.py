@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import os
 import re
 import sqlite3
 import uuid
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from jsonschema import Draft202012Validator, FormatChecker
 
+from .openclaw_adapter import (
+    CHAT_V4_FALLBACK_REPLY,
+    ChatOrchestrationFailure,
+    ChatToolFailure,
+)
 from .store import SQLiteStore
 from .v4_projection_store import (
     AckConflict,
@@ -36,8 +44,8 @@ from .v4_projection_store import (
 )
 from .v4_tool_service import V4ToolError, V4ToolService
 
-
 _CONTRACT_DIR = Path(__file__).resolve().parents[2] / "contracts" / "v4"
+_LOGGER = logging.getLogger(__name__)
 _TOOL_CAPABILITIES = {
     "atlas_get_day_plan": "day_plan.read",
     "atlas_get_activity_status": "activity_status.read",
@@ -104,6 +112,8 @@ def _schema(name: str) -> dict[str, Any]:
 
 _SYNC_SCHEMA = _schema("sync.schema.json")
 _SYNC_RECEIPTS_SCHEMA = _schema("sync-receipts.schema.json")
+_CHAT_REQUEST_SCHEMA = _schema("chat-request.schema.json")
+_CHAT_RESPONSE_SCHEMA = _schema("chat-response.schema.json")
 _TOOL_REQUEST_SCHEMA = _schema("tool-requests.schema.json")
 _TOOL_RESULT_SCHEMA = _schema("tool-results.schema.json")
 _CAPABILITY_SCHEMA = _schema("capability-negotiation.schema.json")
@@ -113,6 +123,8 @@ _FORMAT_CHECKER = FormatChecker()
 for _contract in (
     _SYNC_SCHEMA,
     _SYNC_RECEIPTS_SCHEMA,
+    _CHAT_REQUEST_SCHEMA,
+    _CHAT_RESPONSE_SCHEMA,
     _TOOL_REQUEST_SCHEMA,
     _TOOL_RESULT_SCHEMA,
     _CAPABILITY_SCHEMA,
@@ -124,6 +136,22 @@ for _contract in (
 
 def _validate(schema: dict[str, Any], value: Any) -> bool:
     return not any(Draft202012Validator(schema, format_checker=_FORMAT_CHECKER).iter_errors(value))
+
+
+def _strict_json_body(raw: bytes) -> Any:
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    def reject_constant(_value: str) -> None:
+        raise ValueError("non-JSON numeric constant")
+
+    return json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=reject_duplicate_keys,
+                      parse_constant=reject_constant)
 
 
 def _utc_now(store: SQLiteStore) -> str:
@@ -225,6 +253,67 @@ def _error_response(
         request, code, message, capability, fallback_request_id=fallback_request_id
     )
     return JSONResponse(status_code=status or status_by_code.get(code, 400), content=payload)
+
+
+def _chat_error_response(request_id: str, code: str, capability: str = "coach.chat") -> JSONResponse:
+    messages = {
+        "BAD_REQUEST": "La requête ne respecte pas le schéma V4.",
+        "AUTH_REQUIRED": "Authentification Android requise.",
+        "CONSENT_REQUIRED": "Le consentement Android n’est pas GRANTED.",
+        "STALE_VERSION": "La version de consentement est obsolète.",
+        "CAPABILITY_UNAVAILABLE": "Capability désactivée.",
+        "QUOTA_EXCEEDED": "La limite d’outils ou le quota du coach est atteint.",
+        "RATE_LIMITED": "Le quota du fournisseur est temporairement limité.",
+        "TIMEOUT": "Le délai total du coach est dépassé.",
+        "PAYLOAD_TOO_LARGE": "La requête ou la réponse du fournisseur est trop volumineuse.",
+        "AUTH_UPSTREAM_REQUIRED": "Le fournisseur du coach n’est pas authentifié.",
+        "CONFIG_REQUIRED": "Le fournisseur du coach n’est pas configuré.",
+        "UPSTREAM_UNAVAILABLE": "Le fournisseur du coach est indisponible ou a renvoyé une réponse invalide.",
+        "DATA_UNAVAILABLE": "Aucune projection V4 disponible.",
+        "DATA_UNKNOWN": "La projection V4 est inconnue.",
+        "ACTIVITY_NOT_FOUND": "L’activité est absente du snapshot Android.",
+        "PLAN_NOT_FOUND": "Aucun snapshot Android pour ce plan.",
+        "IDEMPOTENCY_CONFLICT": "request_id réutilisé avec un corps différent.",
+        "REPLAY_PENDING": "Une requête identique est déjà en cours.",
+        "INTERNAL": "Erreur interne V4.",
+    }
+    status_by_code = {
+        "BAD_REQUEST": 400,
+        "AUTH_REQUIRED": 401,
+        "CONSENT_REQUIRED": 403,
+        "STALE_VERSION": 409,
+        "CAPABILITY_UNAVAILABLE": 403,
+        "QUOTA_EXCEEDED": 429,
+        "RATE_LIMITED": 429,
+        "TIMEOUT": 504,
+        "PAYLOAD_TOO_LARGE": 413,
+        "AUTH_UPSTREAM_REQUIRED": 503,
+        "CONFIG_REQUIRED": 503,
+        "UPSTREAM_UNAVAILABLE": 503,
+        "DATA_UNAVAILABLE": 503,
+        "DATA_UNKNOWN": 503,
+        "ACTIVITY_NOT_FOUND": 404,
+        "PLAN_NOT_FOUND": 404,
+        "IDEMPOTENCY_CONFLICT": 409,
+        "REPLAY_PENDING": 409,
+        "INTERNAL": 500,
+    }
+    retryable = code in {"RATE_LIMITED", "TIMEOUT", "UPSTREAM_UNAVAILABLE"}
+    payload = {
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": request_id,
+        "error": {
+            "code": code if code in _ERROR_SCHEMA["properties"]["error"]["properties"]["code"]["enum"] else "INTERNAL",
+            "message": messages.get(code, "Opération V4 refusée."),
+            "retryable": retryable,
+            "capability": capability,
+            "retry_after_seconds": None,
+        },
+    }
+    if not _validate(_ERROR_SCHEMA, payload):
+        payload["error"].update(code="INTERNAL", message="Erreur interne V4.", capability=None, retryable=False)
+    return JSONResponse(status_code=status_by_code.get(code, 400), content=payload)
 
 
 def _schema_failure(request: Request, capability: str | None, *, fallback: str | None = None) -> JSONResponse:
@@ -329,6 +418,7 @@ def create_v4_router(
     *,
     android_token: str | None = None,
     capabilities: dict[str, bool] | None = None,
+    agent: Any | None = None,
 ) -> APIRouter:
     """Build the fixed V4 route set around the existing SQLite and projection services."""
     projections = V4ProjectionStore(store)
@@ -411,7 +501,16 @@ def create_v4_router(
         capabilities=active_capabilities,
         consent_lookup=consent_lookup,
     )
+    chat_tool_dispatch = {
+        "atlas_get_day_plan": service.atlas_get_day_plan,
+        "atlas_get_activity_status": service.atlas_get_activity_status,
+        "atlas_propose_plan_revision": service.atlas_propose_plan_revision,
+        "atlas_get_usage_summary": service.atlas_get_usage_summary,
+        "atlas_get_goal_progress": service.atlas_get_goal_progress,
+        "atlas_get_training_plan": service.atlas_get_training_plan,
+    }
     router = APIRouter()
+    chat_lock = asyncio.Lock()
 
     def require_tool(request: Request, capability: str) -> tuple[str, str] | JSONResponse:
         request_id = _request_id(request)
@@ -1018,6 +1117,235 @@ def create_v4_router(
     router.add_api_route("/v4/sync/consent-state", handle_consent_state_sync, methods=["POST"],
                          name="sync_consent_state", include_in_schema=False)
 
+    def consent_failure_for_version(device_ref: str, category: str, version: int) -> str | None:
+        state = projections.consent_state(device_ref, category)
+        if state is None or state["state"] != "GRANTED":
+            return "CONSENT_REQUIRED"
+        current = int(state["consent_version"])
+        if version != current:
+            return "STALE_VERSION" if version < current else "CONSENT_REQUIRED"
+        return None
+
+    @router.post("/v4/agent/chat")
+    async def agent_chat(request: Request) -> JSONResponse:
+        auth = require_android(request, "coach.chat")
+        if isinstance(auth, JSONResponse):
+            return auth
+        auth_request_id, device_ref = auth
+        try:
+            body = _strict_json_body(await request.body())
+        except (UnicodeError, ValueError, RecursionError):
+            return _chat_error_response(auth_request_id, "BAD_REQUEST")
+        if not _validate(_CHAT_REQUEST_SCHEMA, body):
+            return _chat_error_response(auth_request_id, "BAD_REQUEST")
+
+        request_id = body["request_id"]
+        if not active_capabilities.get("coach.chat", False):
+            return _chat_error_response(request_id, "CAPABILITY_UNAVAILABLE")
+        for category in body["shared_categories"]:
+            failure_code = consent_failure_for_version(device_ref, category, body["consent_version"])
+            if failure_code is not None:
+                return _chat_error_response(request_id, failure_code)
+
+        try:
+            canonical_body = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            canonical_body_bytes = canonical_body.encode("utf-8", errors="strict")
+        except (TypeError, ValueError, UnicodeError):
+            return _chat_error_response(request_id, "BAD_REQUEST")
+        body_hash = hashlib.sha256(canonical_body_bytes).hexdigest()
+        cache_key = "v4-chat:" + device_ref + ":" + str(uuid.UUID(request_id))
+
+        async with chat_lock:
+            try:
+                with store.connect() as connection:
+                    store.begin_immediate(connection)
+                    row = connection.execute(
+                        "SELECT response_json FROM agent_chat_cache WHERE cache_key=?", (cache_key,)
+                    ).fetchone()
+                    if row is None:
+                        connection.execute(
+                            "INSERT INTO agent_chat_cache(cache_key,response_json,expires_at) VALUES(?,?,?)",
+                            (cache_key, json.dumps({"request_hash": body_hash, "state": "pending"}, sort_keys=True),
+                             "9999-12-31T23:59:59Z"),
+                        )
+            except sqlite3.OperationalError:
+                return _chat_error_response(request_id, "UPSTREAM_UNAVAILABLE")
+            except Exception:  # noqa: BLE001 - storage details and request contents stay private
+                return _chat_error_response(request_id, "INTERNAL")
+            if row is not None:
+                try:
+                    cached = json.loads(row["response_json"])
+                except (TypeError, ValueError):
+                    cached = None
+                if not isinstance(cached, dict) or cached.get("request_hash") != body_hash:
+                    return _chat_error_response(request_id, "IDEMPOTENCY_CONFLICT")
+                if cached.get("state") == "pending":
+                    return _chat_error_response(request_id, "REPLAY_PENDING")
+                cached_body = cached.get("body")
+                cached_status = cached.get("status_code")
+                if not isinstance(cached_body, dict) or type(cached_status) is not int:
+                    return _chat_error_response(request_id, "IDEMPOTENCY_CONFLICT")
+                return JSONResponse(status_code=cached_status, content=cached_body)
+
+            def validate_chat_consent() -> None:
+                if not active_capabilities.get("coach.chat", False):
+                    raise ChatToolFailure("CAPABILITY_UNAVAILABLE")
+                for category in body["shared_categories"]:
+                    failure_code = consent_failure_for_version(device_ref, category, body["consent_version"])
+                    if failure_code is not None:
+                        raise ChatToolFailure(failure_code)
+
+            def validate_tool(tool_name: str) -> None:
+                capability = _TOOL_CAPABILITIES.get(tool_name)
+                if capability is None:
+                    raise ChatToolFailure("UPSTREAM_UNAVAILABLE")
+                if not active_capabilities.get(capability, False):
+                    raise ChatToolFailure("CAPABILITY_UNAVAILABLE")
+                for category in tool_consent_categories(capability):
+                    if category not in body["shared_categories"]:
+                        raise ChatToolFailure("CONSENT_REQUIRED")
+                    failure_code = consent_failure_for_version(device_ref, category, body["consent_version"])
+                    if failure_code is not None:
+                        raise ChatToolFailure(failure_code)
+
+            def execute_tool(tool_name: str, arguments: dict[str, Any], tool_call_id: str) -> dict[str, Any]:
+                validate_tool(tool_name)
+                tool_arguments = dict(arguments)
+                if tool_name == "atlas_propose_plan_revision":
+                    tool_arguments["idempotency_key"] = str(uuid.uuid5(
+                        uuid.UUID(request_id), device_ref + "\0" + canonical_body
+                    ))
+                if not _validate(_TOOL_REQUEST_SCHEMA, {"tool_name": tool_name, "arguments": tool_arguments}):
+                    raise ChatToolFailure("UPSTREAM_UNAVAILABLE")
+                result_request_id = str(uuid.uuid5(uuid.UUID(request_id), "tool:" + tool_call_id))
+                try:
+                    result = chat_tool_dispatch[tool_name](device_ref, tool_arguments)
+                except V4ToolError as exc:
+                    allowed_codes = _ERROR_SCHEMA["properties"]["error"]["properties"]["code"]["enum"]
+                    raise ChatToolFailure(exc.code if exc.code in allowed_codes else "INTERNAL") from None
+                except sqlite3.OperationalError:
+                    raise ChatToolFailure(
+                        "UPSTREAM_UNAVAILABLE", uncertain=tool_name == "atlas_propose_plan_revision"
+                    ) from None
+                except Exception:  # noqa: BLE001 - no arguments, results, or storage errors in responses
+                    raise ChatToolFailure(
+                        "INTERNAL", uncertain=tool_name == "atlas_propose_plan_revision"
+                    ) from None
+                result["request_id"] = result_request_id
+                if result.get("data") is None:
+                    if tool_name == "atlas_get_day_plan":
+                        result["data"] = {"state": "NO_PLAN", "next_cursor": None, "truncated": False}
+                    else:
+                        code = "DATA_UNKNOWN" if result.get("freshness") == "UNKNOWN" else "DATA_UNAVAILABLE"
+                        raise ChatToolFailure(code)
+                if not _validate(_TOOL_RESULT_SCHEMA, result):
+                    raise ChatToolFailure(
+                        "INTERNAL", uncertain=tool_name == "atlas_propose_plan_revision"
+                    )
+                return result
+
+            status_code = 200
+            if agent is None:
+                orchestration = {
+                    "reply": "Je peux t’aider à choisir une prochaine étape claire.",
+                    "proposal_ids": [],
+                    "agent_status": "mock",
+                    "tool_state": "none",
+                    "tool_call_count": 0,
+                }
+            else:
+                try:
+                    agent_status = agent.status()
+                except Exception:  # noqa: BLE001 - a status failure cannot authorize effects
+                    agent_status = None
+                if agent_status is not None and agent_status.adapter == "mock":
+                    orchestration = {
+                        "reply": "Je peux t’aider à choisir une prochaine étape claire.",
+                        "proposal_ids": [],
+                        "agent_status": "mock",
+                        "tool_state": "none",
+                        "tool_call_count": 0,
+                    }
+                else:
+                    chat_method = getattr(agent, "chat_v4", None)
+                    if not callable(chat_method):
+                        error_response = _chat_error_response(request_id, "UPSTREAM_UNAVAILABLE")
+                        status_code = error_response.status_code
+                        orchestration = error_response.body
+                        orchestration = json.loads(orchestration)
+                    else:
+                        try:
+                            orchestration = chat_method(
+                                conversation_id=body["conversation_id"],
+                                message=body["message"],
+                                shared_categories=body["shared_categories"],
+                                validate_tool=validate_tool,
+                                execute_tool=execute_tool,
+                                validate_chat=validate_chat_consent,
+                            )
+                        except ChatOrchestrationFailure as exc:
+                            if exc.tool_call_count > 0:
+                                status_code = _chat_error_response(request_id, exc.code).status_code
+                                orchestration = {
+                                    "reply": CHAT_V4_FALLBACK_REPLY,
+                                    "proposal_ids": exc.proposal_ids,
+                                    "agent_status": "unavailable",
+                                    "tool_state": exc.tool_state,
+                                    "tool_call_count": exc.tool_call_count,
+                                }
+                            else:
+                                error_response = _chat_error_response(request_id, exc.code)
+                                status_code = error_response.status_code
+                                orchestration = json.loads(error_response.body)
+                        except Exception:  # noqa: BLE001 - never return adapter or credential details
+                            error_response = _chat_error_response(request_id, "INTERNAL")
+                            status_code = error_response.status_code
+                            orchestration = json.loads(error_response.body)
+
+            if "error" not in orchestration:
+                response_body = {
+                    "contract_version": 4,
+                    "schema_version": 4,
+                    "request_id": request_id,
+                    **orchestration,
+                }
+                if not _validate(_CHAT_RESPONSE_SCHEMA, response_body):
+                    if response_body.get("tool_call_count", 0) > 0:
+                        response_body = {
+                            "contract_version": 4,
+                            "schema_version": 4,
+                            "request_id": request_id,
+                            "reply": CHAT_V4_FALLBACK_REPLY,
+                            "proposal_ids": [],
+                            "agent_status": "unavailable",
+                            "tool_state": "uncertain",
+                            "tool_call_count": min(6, max(0, response_body.get("tool_call_count", 0))),
+                        }
+                        status_code = 503
+                    else:
+                        error_response = _chat_error_response(request_id, "UPSTREAM_UNAVAILABLE")
+                        status_code = error_response.status_code
+                        response_body = json.loads(error_response.body)
+            else:
+                response_body = orchestration
+
+            cached_value = {
+                "request_hash": body_hash,
+                "state": "complete",
+                "status_code": status_code,
+                "body": response_body,
+            }
+            try:
+                with store.connect() as connection:
+                    connection.execute(
+                        "UPDATE agent_chat_cache SET response_json=?,expires_at=? WHERE cache_key=?",
+                        (json.dumps(cached_value, ensure_ascii=False, sort_keys=True),
+                         "9999-12-31T23:59:59Z", cache_key),
+                    )
+            except Exception:  # noqa: BLE001 - leave the reservation pending; never repeat tools
+                _LOGGER.warning("V4 chat cache finalization failed; reservation retained pending")
+            return JSONResponse(status_code=status_code, content=response_body)
+
     @router.post("/v4/agent/proposals/pull")
     @serialized_consent_route
     async def pull_proposals(request: Request) -> JSONResponse:
@@ -1197,6 +1525,7 @@ def create_v4_router(
             "/internal/v4/training-plan",
             "/internal/v4/agent/proposals/by-idempotency/{key}",
             "/v4/sync/consent-state",
+            "/v4/agent/chat",
             "/v4/agent/proposals/pull",
         }
         request_path = request.url.path
@@ -1208,7 +1537,7 @@ def create_v4_router(
             is_known = request.method != "POST"
         else:
             expected_method = "POST" if request_path in _SYNC_ROUTES or request_path in {
-                "/internal/v4/plan-revision-proposals", "/v4/agent/proposals/pull",
+                "/internal/v4/plan-revision-proposals", "/v4/agent/chat", "/v4/agent/proposals/pull",
                 "/v4/sync/consent-state"
             } else "GET"
             is_known = request_path in known and request.method != expected_method
