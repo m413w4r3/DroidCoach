@@ -54,7 +54,7 @@ class PlanV4RepositoryTest {
     @Test
     fun v4RoundTripIsStableAndKeepsASchema3RollbackProjection() {
         val continuity = "60000000-0000-4000-8000-000000000001"
-        val plan = dayPlan(activities = listOf(activity().copy(continuityId = continuity)))
+        val plan = dayPlan(activities = listOf(activity(status = ActivityStatus.DONE).copy(continuityId = continuity)))
         val event = PlanStatusEvent(
             statusEventId = "70000000-0000-4000-8000-000000000001",
             planId = PLAN_ID,
@@ -70,14 +70,9 @@ class PlanV4RepositoryTest {
             consentVersion = 2,
         )
         val rawV3 = PlanJsonCodec.encodeStore(PlanStoreDocument(dayPlan()))
-        val unknownEvent = event.copy(
-            statusEventId = "70000000-0000-4000-8000-000000000002",
-            provenance = StatusProvenance.UNKNOWN,
-            source = StatusSource.CORE_IMPORT,
-        )
         val document = PlanV4StoreDocument(
             store = PlanStoreDocument(plan),
-            statusEvents = listOf(event, unknownEvent),
+            statusEvents = listOf(event),
             schema3Original = rawV3,
         )
 
@@ -85,7 +80,9 @@ class PlanV4RepositoryTest {
         val decoded = PlanV4JsonCodec.decodeStore(encoded)
 
         assertEquals(plan, decoded.store.dayPlan)
-        assertEquals(listOf(event, unknownEvent), decoded.statusEvents)
+        assertEquals(listOf(event), decoded.statusEvents)
+        assertEquals(StatusProvenance.CONFIRMED, decoded.statusEvents.single().provenance)
+        assertEquals(StatusSource.USER_UI, decoded.statusEvents.single().source)
         assertEquals(rawV3, decoded.schema3Original)
         assertEquals(encoded, PlanV4JsonCodec.encodeStore(decoded))
         val rollback = PlanV4JsonCodec.schema3RollbackDocument(encoded)
@@ -93,6 +90,32 @@ class PlanV4RepositoryTest {
         val rollbackPlan = plan.copy(activities = plan.activities.map { it.copy(continuityId = null) })
         assertEquals(rollbackPlan, PlanJsonCodec.decodeStore(rollback).dayPlan)
         assertEquals(PlanLoadResult.Loaded(rollbackPlan), DayPlanRepository(MemoryPlanBackend(rollback), PlanClock { NOW }).load())
+    }
+
+    @Test
+    fun doneWithUnknownCoreImportProvenanceIsQuarantined() {
+        assertEventIsQuarantined(
+            doneEvent().copy(
+                provenance = StatusProvenance.UNKNOWN,
+                source = StatusSource.CORE_IMPORT,
+            ),
+        )
+    }
+
+    @Test
+    fun measuredFocusTimerAndInvalidTransitionCannotEstablishDone() {
+        assertEventIsQuarantined(
+            doneEvent().copy(
+                provenance = StatusProvenance.MEASURED,
+                source = StatusSource.FOCUS_TIMER,
+            ),
+        )
+        assertEventIsQuarantined(
+            doneEvent().copy(
+                fromStatus = ActivityStatus.DONE,
+                toStatus = ActivityStatus.IN_PROGRESS,
+            ),
+        )
     }
 
     @Test
@@ -305,6 +328,37 @@ class PlanV4RepositoryTest {
         reason = "Un imprévu est arrivé",
         idempotencyKey = key,
     )
+
+    private fun doneEvent() = PlanStatusEvent(
+        statusEventId = "70000000-0000-4000-8000-000000000001",
+        planId = PLAN_ID,
+        activityId = activity().activityId,
+        continuityId = null,
+        fromStatus = ActivityStatus.IN_PROGRESS,
+        toStatus = ActivityStatus.DONE,
+        provenance = StatusProvenance.CONFIRMED,
+        source = StatusSource.USER_UI,
+        decidedAt = Instant.ofEpochMilli(NOW).toString(),
+        observedAt = Instant.ofEpochMilli(NOW).toString(),
+        planVersion = 1,
+        consentVersion = 2,
+    )
+
+    private fun assertEventIsQuarantined(event: PlanStatusEvent) {
+        val plan = dayPlan(activities = listOf(activity(status = ActivityStatus.DONE)))
+        val raw = PlanV4JsonCodec.encodeStore(
+            PlanV4StoreDocument(
+                store = PlanStoreDocument(plan),
+                statusEvents = listOf(event.copy(activityId = plan.activities.single().activityId)),
+            ),
+        )
+        val backend = MemoryPlanBackend(raw)
+
+        assertTrue(DayPlanRepository(backend, PlanClock { NOW }).load() is PlanLoadResult.Corrupt)
+        assertEquals(raw, backend.value)
+        assertEquals(raw, backend.quarantinedRaw)
+        assertEquals(0, backend.writes)
+    }
 
     private class FailingWriteBackend(var value: String?) : PlanStateBackend {
         var writeAttempts = 0

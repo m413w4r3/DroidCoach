@@ -4,6 +4,7 @@ import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanJsonCodec
+import dev.atlas.coach.plan.PlanStatusPolicy
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.PlanStoreDocument
 import dev.atlas.coach.plan.StatusProvenance
@@ -110,6 +111,7 @@ internal object PlanV4JsonCodec {
         val plan = base.dayPlan.copy(activities = activities)
         require(events.all { it.planId == plan.planId && it.planVersion <= plan.version }) { "status event belongs to a future or different plan" }
         require(receipts.all { it.planVersion <= plan.version }) { "report receipt belongs to a future plan version" }
+        events.forEach { it.validateAgainst(plan, receipts) }
         return PlanV4StoreDocument(
             store = base.copy(dayPlan = plan),
             statusEvents = events,
@@ -122,6 +124,70 @@ internal object PlanV4JsonCodec {
     fun schema3RollbackDocument(json: String): String = JSONObject(json).string("schema3_state")
 
     private data class ActivityLineage(val continuityId: String?, val supersedesActivityId: String?)
+
+    private fun PlanStatusEvent.validateAgainst(plan: DayPlan, receipts: List<PlanReportReceipt>) {
+        val terminalStatuses = setOf(
+            ActivityStatus.DONE,
+            ActivityStatus.MISSED,
+            ActivityStatus.CANCELLED,
+            ActivityStatus.POSTPONED,
+        )
+        when (provenance) {
+            StatusProvenance.DECLARED,
+            StatusProvenance.CONFIRMED,
+            -> {
+                require(source == StatusSource.USER_UI) { "user status provenance requires USER_UI source" }
+                require(fromStatus != toStatus) { "user status event must change status" }
+            }
+            StatusProvenance.MEASURED -> {
+                require(source in setOf(StatusSource.FOCUS_TIMER, StatusSource.USAGE_STATS, StatusSource.WGER_READ, StatusSource.CORE_IMPORT)) {
+                    "measured status event requires an observation source"
+                }
+                require(fromStatus == toStatus) { "measured observation cannot change status" }
+                require(fromStatus !in terminalStatuses) { "measured observation cannot establish a terminal status" }
+            }
+            StatusProvenance.UNKNOWN -> {
+                require(source in setOf(StatusSource.USAGE_STATS, StatusSource.WGER_READ, StatusSource.CORE_IMPORT)) {
+                    "unknown status provenance requires an imported or observed source"
+                }
+                require(fromStatus != toStatus) { "unknown status event must describe a transition" }
+                require(toStatus !in terminalStatuses) { "unknown provenance cannot establish a terminal status" }
+            }
+        }
+        if (source == StatusSource.FOCUS_TIMER) {
+            require(provenance == StatusProvenance.MEASURED) { "focus timer cannot decide a status" }
+        }
+        if (toStatus in setOf(ActivityStatus.DONE, ActivityStatus.MISSED, ActivityStatus.CANCELLED)) {
+            require(
+                source == StatusSource.USER_UI &&
+                    provenance in setOf(StatusProvenance.DECLARED, StatusProvenance.CONFIRMED),
+            ) { "terminal completion status requires a user decision" }
+        }
+        if (toStatus == ActivityStatus.POSTPONED) {
+            val report = receipts.singleOrNull {
+                it.originalActivityId == activityId && it.planVersion == planVersion
+            } ?: error("POSTPONED status requires an atomic report receipt")
+            require(source == StatusSource.USER_UI && provenance == StatusProvenance.CONFIRMED) {
+                "POSTPONED status requires a confirmed user report"
+            }
+            val original = plan.activities.firstOrNull { it.activityId == activityId }
+            val replacement = plan.activities.firstOrNull { it.activityId == report.replacementActivityId }
+            require(original?.status == ActivityStatus.POSTPONED) { "report original is not POSTPONED" }
+            require(
+                replacement?.supersedesActivityId == activityId &&
+                    replacement.continuityId == continuityId,
+            ) { "report replacement lineage does not match status event" }
+        } else {
+            require(PlanStatusPolicy.structuralRejection(fromStatus, toStatus) == null) {
+                "status event has an invalid transition"
+            }
+        }
+        if (planVersion == plan.version) {
+            require(plan.activities.singleOrNull { it.activityId == activityId }?.status == toStatus) {
+                "current-version status event does not match the plan projection"
+            }
+        }
+    }
 
     private fun PlanStoreDocument.withoutLineage(): PlanStoreDocument = copy(
         dayPlan = dayPlan.copy(activities = dayPlan.activities.map { it.copy(continuityId = null, supersedesActivityId = null) }),

@@ -63,6 +63,27 @@ class DayPlanRepositoryTest {
     }
 
     @Test
+    fun saveRejectsStatusChangesThatWouldBypassTheStatusJournal() {
+        val backend = MemoryPlanBackend()
+        val repository = repository(backend)
+        val current = dayPlan()
+        repository.create(current)
+        val changed = current.copy(
+            version = current.version + 1,
+            updatedAt = current.updatedAt + 1,
+            activities = current.activities.map { it.copy(status = ActivityStatus.DONE) },
+        )
+
+        assertEquals(
+            PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES),
+            repository.save(changed),
+        )
+        assertEquals(1, backend.writes)
+        assertEquals(PlanLoadResult.Loaded(current), repository.load())
+        assertTrue(repository.statusEvents().isEmpty())
+    }
+
+    @Test
     fun fileBackendSurvivesRepositoryRecreation() {
         val directory = Files.createTempDirectory("atlas-plan-restart").toFile()
         try {

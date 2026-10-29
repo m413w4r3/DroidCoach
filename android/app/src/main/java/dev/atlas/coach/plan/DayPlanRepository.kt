@@ -128,10 +128,17 @@ class DayPlanRepository(
                 plan.version != current.version + 1 -> PlanWriteResult.Rejected(PlanRejectionReason.VERSION_CONFLICT)
                 plan.createdAt != current.createdAt || plan.updatedAt < current.updatedAt ->
                     PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
+                !hasSameStatusProjection(current, plan) ->
+                    PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES)
                 else -> persist(loaded.document.copy(store = loaded.document.store.copy(dayPlan = plan))).asWriteResult()
             }
         }
     }
+
+    /** Status changes must pass through apply/report so their provenance is journaled. */
+    private fun hasSameStatusProjection(before: DayPlan, after: DayPlan): Boolean =
+        before.activities.associate { it.activityId to it.status } ==
+            after.activities.associate { it.activityId to it.status }
 
     fun preview(revision: PlanRevision): PlanPreviewResult = when (val loaded = readDocument()) {
         InternalRead.Missing -> PlanPreviewResult.Rejected(PlanRejectionReason.PLAN_NOT_FOUND)
