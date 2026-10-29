@@ -261,8 +261,11 @@ class CoreV4SyncClientTest {
         val store = AndroidCoreV4SyncStore(persistence)
         val transport = FakeTransport()
         val client = CoreV4SyncClient(transport)
-        val dayConsent = granted(CoreV4Category.DAY_PLAN)
-        val statusConsent = granted(CoreV4Category.ACTIVITY_STATUS)
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        store.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+        val dayConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        val statusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
 
         val initialPlan = store.prepareProjection(
             sourceKey = "plan:$PLAN_ID:consent:1",
@@ -348,7 +351,7 @@ class CoreV4SyncClientTest {
         ) ?: error("expected second status")
         client.sendProjection(secondPending.request, secondPending.body, TOKEN, statusConsent, dayConsent)
 
-        val resumedPaths = transport.requests.drop(2).map { it.path }
+        val resumedPaths = transport.requests.drop(4).map { it.path }
         assertEquals(
             listOf(
                 CoreV4Category.ACTIVITY_STATUS.route,
