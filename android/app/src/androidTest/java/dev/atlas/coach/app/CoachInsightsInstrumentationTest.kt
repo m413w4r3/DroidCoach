@@ -54,18 +54,18 @@ class CoachInsightsInstrumentationTest {
         composeRule.onNodeWithTag("coach_conversation_tab").assertIsSelected()
         composeRule.onNodeWithTag("agent_open_context").performScrollTo().assertIsDisplayed()
 
-        composeRule.onNodeWithTag("coach_insights_tab").performClick()
-        composeRule.onNodeWithTag("coach_insights_period_day").assertIsSelected()
+        composeRule.onNodeWithTag("coach_insights_tab").performScrollTo().performClick()
+        composeRule.onNodeWithTag("coach_insights_period_day").performScrollTo().assertIsSelected()
         val showsInsufficientData = composeRule.onAllNodesWithTag("coach_insights_insufficient").fetchSemanticsNodes().isNotEmpty()
         val showsDerivedMetric = composeRule.onAllNodesWithTag("coach_insights_metric_focus_minutes_completed").fetchSemanticsNodes().isNotEmpty()
         assertTrue("Jour must show derived metrics or an explicit insufficient-data state", showsInsufficientData || showsDerivedMetric)
 
-        composeRule.onNodeWithTag("coach_insights_period_week").performClick()
+        composeRule.onNodeWithTag("coach_insights_period_week").performScrollTo().performClick()
         composeRule.onNodeWithTag("coach_insights_period_week").assertIsSelected()
-        composeRule.onNodeWithTag("coach_insights_period_month").performClick()
+        composeRule.onNodeWithTag("coach_insights_period_month").performScrollTo().performClick()
         composeRule.onNodeWithTag("coach_insights_period_month").assertIsSelected()
 
-        composeRule.onNodeWithTag("coach_conversation_tab").performClick()
+        composeRule.onNodeWithTag("coach_conversation_tab").performScrollTo().performClick()
         composeRule.onNodeWithTag("coach_conversation_tab").assertIsSelected()
         composeRule.onNodeWithTag("agent_open_context").performScrollTo().assertIsDisplayed()
     }
