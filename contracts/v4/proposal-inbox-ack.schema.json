@@ -1,0 +1,904 @@
+{
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "proposal_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "plan_revision.propose"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "proposal_hash": {
+          "type": "string",
+          "minLength": 71,
+          "maxLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "expires_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "PENDING_ANDROID",
+            "RECEIVED",
+            "AWAITING_USER",
+            "APPLIED",
+            "REJECTED",
+            "STALE_VERSION",
+            "EXPIRED",
+            "VALIDATION_REJECTED",
+            "UNCERTAIN",
+            "RECONCILED"
+          ]
+        },
+        "plan_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "base_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "origin": {
+          "type": "string",
+          "const": "AGENT"
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "reschedule"
+                  },
+                  "activity_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "target_start_minute": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1439
+                  },
+                  "duration_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1440
+                  }
+                },
+                "required": [
+                  "op",
+                  "activity_id",
+                  "target_start_minute"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "create_activity"
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "FOCUS",
+                      "ADMIN",
+                      "MEAL",
+                      "REST",
+                      "BUFFER",
+                      "OTHER"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "start_minute": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1439
+                  },
+                  "duration_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1440
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "REQUIRED",
+                      "IMPORTANT",
+                      "OPTIONAL"
+                    ]
+                  },
+                  "goal_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 36,
+                        "maxLength": 36,
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "op",
+                  "client_ref",
+                  "kind",
+                  "title",
+                  "start_minute",
+                  "duration_minutes",
+                  "priority"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "edit_activity"
+                  },
+                  "activity_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "REQUIRED",
+                      "IMPORTANT",
+                      "OPTIONAL"
+                    ]
+                  },
+                  "estimate_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 480
+                  }
+                },
+                "required": [
+                  "op",
+                  "activity_id"
+                ],
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "priority"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "estimate_minutes"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "diff": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "reschedule",
+                  "create_activity",
+                  "edit_activity"
+                ]
+              },
+              "activity_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "client_ref": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "before": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "start_minute": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1439
+                      },
+                      "duration_minutes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1440
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "REQUIRED",
+                          "IMPORTANT",
+                          "OPTIONAL"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "after": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "start_minute": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1439
+                  },
+                  "duration_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1440
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "REQUIRED",
+                      "IMPORTANT",
+                      "OPTIONAL"
+                    ]
+                  }
+                }
+              }
+            },
+            "required": [
+              "op",
+              "activity_id",
+              "client_ref",
+              "before",
+              "after"
+            ]
+          },
+          "maxItems": 8
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "maxItems": 16
+        },
+        "confirmation_mode": {
+          "type": "string",
+          "enum": [
+            "A0_USER_REVIEW",
+            "A1_ANDROID_ELIGIBLE_TO_CHECK",
+            "A2_USER_CONFIRMATION"
+          ]
+        },
+        "auto_application": {
+          "type": "string",
+          "const": "NONE_AT_CORE"
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "proposal_id",
+        "capability",
+        "idempotency_key",
+        "proposal_hash",
+        "created_at",
+        "expires_at",
+        "state",
+        "plan_id",
+        "base_version",
+        "origin",
+        "justification",
+        "changes",
+        "diff",
+        "conflicts",
+        "confirmation_mode",
+        "auto_application"
+      ]
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "proposal_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "from_state": {
+          "type": "string",
+          "enum": [
+            "PENDING_ANDROID",
+            "RECEIVED",
+            "AWAITING_USER",
+            "UNCERTAIN"
+          ]
+        },
+        "to_state": {
+          "type": "string",
+          "enum": [
+            "RECEIVED",
+            "AWAITING_USER",
+            "APPLIED",
+            "REJECTED",
+            "STALE_VERSION",
+            "EXPIRED",
+            "VALIDATION_REJECTED",
+            "RECONCILED"
+          ]
+        },
+        "occurred_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "USER_APPROVED",
+                "USER_REJECTED",
+                "STALE_VERSION",
+                "PROPOSAL_EXPIRED",
+                "VALIDATION_FAILED",
+                "RESULT_UNCERTAIN",
+                "RECONCILED_APPLIED",
+                "RECONCILED_NOT_APPLIED"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "proposal_id",
+        "sequence",
+        "from_state",
+        "to_state",
+        "occurred_at",
+        "reason_code"
+      ],
+      "anyOf": [
+        {
+          "properties": {
+            "from_state": {
+              "const": "PENDING_ANDROID"
+            },
+            "to_state": {
+              "enum": [
+                "RECEIVED",
+                "APPLIED",
+                "REJECTED",
+                "STALE_VERSION",
+                "EXPIRED",
+                "VALIDATION_REJECTED"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "from_state": {
+              "const": "RECEIVED"
+            },
+            "to_state": {
+              "enum": [
+                "AWAITING_USER",
+                "APPLIED",
+                "REJECTED",
+                "STALE_VERSION",
+                "EXPIRED",
+                "VALIDATION_REJECTED"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "from_state": {
+              "const": "AWAITING_USER"
+            },
+            "to_state": {
+              "enum": [
+                "APPLIED",
+                "REJECTED",
+                "STALE_VERSION",
+                "EXPIRED",
+                "VALIDATION_REJECTED"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "from_state": {
+              "const": "UNCERTAIN"
+            },
+            "to_state": {
+              "enum": [
+                "RECONCILED"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "ack_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "proposal.ack"
+        },
+        "proposal_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "APPLIED",
+            "REJECTED",
+            "STALE_VERSION",
+            "EXPIRED",
+            "VALIDATION_REJECTED",
+            "UNCERTAIN",
+            "RECONCILED"
+          ]
+        },
+        "result_code": {
+          "type": "string",
+          "enum": [
+            "APPLIED",
+            "USER_REJECTED",
+            "STALE_VERSION",
+            "PROPOSAL_EXPIRED",
+            "VALIDATION_FAILED",
+            "RESULT_UNCERTAIN",
+            "RECONCILED_APPLIED",
+            "RECONCILED_NOT_APPLIED"
+          ]
+        },
+        "occurred_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "plan_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "applied_plan_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "revision_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "scope_hash": {
+          "type": "string",
+          "minLength": 71,
+          "maxLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "effect_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "pattern": "^(PLAN_ACTIVITY_(CREATE|UPDATE|DELETE):[0-9a-f-]{36}|PLAN_APPLY:[0-9a-f-]{36})$"
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "consent_version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "ack_id",
+        "capability",
+        "proposal_id",
+        "sequence",
+        "state",
+        "result_code",
+        "occurred_at",
+        "consent_version"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "APPLIED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "plan_id",
+              "applied_plan_version",
+              "revision_id",
+              "scope_hash",
+              "effect_ids"
+            ],
+            "properties": {
+              "result_code": {
+                "const": "APPLIED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "REJECTED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result_code": {
+                "const": "USER_REJECTED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "STALE_VERSION"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result_code": {
+                "const": "STALE_VERSION"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "EXPIRED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result_code": {
+                "const": "PROPOSAL_EXPIRED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "VALIDATION_REJECTED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result_code": {
+                "const": "VALIDATION_FAILED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "UNCERTAIN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result_code": {
+                "const": "RESULT_UNCERTAIN"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "UNCERTAIN"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "plan_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "applied_plan_version"
+                  ]
+                },
+                {
+                  "required": [
+                    "revision_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "scope_hash"
+                  ]
+                },
+                {
+                  "required": [
+                    "effect_ids"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/proposal"
+    },
+    {
+      "$ref": "#/$defs/transition"
+    },
+    {
+      "$ref": "#/$defs/ack"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/proposal-inbox-ack.schema.json",
+  "title": "ATLAS V4 proposal-inbox-ack",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "proposal_id": "00000000-0000-4000-8000-000000000104",
+      "capability": "plan_revision.propose",
+      "idempotency_key": "00000000-0000-4000-8000-000000000101",
+      "proposal_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "created_at": "2026-10-29T08:02:00Z",
+      "expires_at": "2026-10-30T08:02:00Z",
+      "state": "PENDING_ANDROID",
+      "plan_id": "00000000-0000-4000-8000-000000000102",
+      "base_version": 7,
+      "origin": "AGENT",
+      "justification": "Proposition synthétique de déplacement.",
+      "changes": [
+        {
+          "op": "reschedule",
+          "activity_id": "00000000-0000-4000-8000-000000000103",
+          "target_start_minute": 660
+        }
+      ],
+      "diff": [
+        {
+          "op": "reschedule",
+          "activity_id": "00000000-0000-4000-8000-000000000103",
+          "client_ref": null,
+          "before": {
+            "start_minute": 600,
+            "duration_minutes": 45
+          },
+          "after": {
+            "start_minute": 660,
+            "duration_minutes": 45
+          }
+        }
+      ],
+      "conflicts": [],
+      "confirmation_mode": "A0_USER_REVIEW",
+      "auto_application": "NONE_AT_CORE"
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "proposal_id": "00000000-0000-4000-8000-000000000104",
+      "sequence": 1,
+      "from_state": "PENDING_ANDROID",
+      "to_state": "RECEIVED",
+      "occurred_at": "2026-10-29T08:02:00Z",
+      "reason_code": null
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "ack_id": "00000000-0000-4000-8000-000000000101",
+      "capability": "proposal.ack",
+      "proposal_id": "00000000-0000-4000-8000-000000000104",
+      "sequence": 3,
+      "state": "APPLIED",
+      "result_code": "APPLIED",
+      "occurred_at": "2026-10-29T08:02:04Z",
+      "plan_id": "00000000-0000-4000-8000-000000000102",
+      "applied_plan_version": 8,
+      "revision_id": "00000000-0000-4000-8000-000000000103",
+      "scope_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "effect_ids": [
+        "PLAN_APPLY:00000000-0000-4000-8000-000000000103"
+      ],
+      "consent_version": 3
+    }
+  ]
+}

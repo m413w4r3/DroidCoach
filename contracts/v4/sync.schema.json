@@ -1,0 +1,1179 @@
+{
+  "$defs": {
+    "day_plan_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "day_plan.snapshot.write"
+        },
+        "sent_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "consent_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid"
+            },
+            "local_date": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10,
+              "format": "date"
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^(UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+.-]+)+)$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "current_revision_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "APPROVED"
+              ]
+            },
+            "origin": {
+              "type": "string",
+              "enum": [
+                "LOCAL",
+                "AGENT",
+                "MIGRATED",
+                "DEMO"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "activities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "activity_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "FOCUS",
+                      "TRAINING",
+                      "APPOINTMENT",
+                      "ADMIN",
+                      "MEAL",
+                      "REST",
+                      "BUFFER",
+                      "OTHER"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "PLANNED",
+                      "IN_PROGRESS",
+                      "DONE",
+                      "MISSED",
+                      "CANCELLED",
+                      "POSTPONED"
+                    ]
+                  },
+                  "scheduled_local": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "local_date": {
+                        "type": "string",
+                        "minLength": 10,
+                        "maxLength": 10,
+                        "format": "date"
+                      },
+                      "start_minute": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1439
+                      },
+                      "duration_minutes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1440
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^(UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+.-]+)+)$"
+                      }
+                    },
+                    "required": [
+                      "local_date",
+                      "start_minute",
+                      "duration_minutes",
+                      "timezone"
+                    ]
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "REQUIRED",
+                      "IMPORTANT",
+                      "OPTIONAL"
+                    ]
+                  },
+                  "goal_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 36,
+                        "maxLength": 36,
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "continuity_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 36,
+                        "maxLength": 36,
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "supersedes_activity_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 36,
+                        "maxLength": 36,
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status_provenance": {
+                    "type": "string",
+                    "enum": [
+                      "DECLARED",
+                      "MEASURED",
+                      "CONFIRMED",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "status_decided_at": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 20,
+                        "maxLength": 40,
+                        "format": "date-time",
+                        "pattern": "Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "activity_id",
+                  "kind",
+                  "title",
+                  "status",
+                  "scheduled_local",
+                  "priority",
+                  "goal_id",
+                  "continuity_id",
+                  "supersedes_activity_id",
+                  "status_provenance",
+                  "status_decided_at"
+                ]
+              },
+              "maxItems": 32
+            }
+          },
+          "required": [
+            "plan_id",
+            "local_date",
+            "timezone",
+            "version",
+            "current_revision_id",
+            "state",
+            "origin",
+            "observed_at",
+            "activities"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "sent_at",
+        "consent_version",
+        "idempotency_key",
+        "data"
+      ]
+    },
+    "activity_status_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "activity_status.write"
+        },
+        "sent_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "consent_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "plan_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid"
+            },
+            "activity_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid"
+            },
+            "continuity_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 36,
+                  "maxLength": 36,
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "plan_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "from_status": {
+              "type": "string",
+              "enum": [
+                "PLANNED",
+                "IN_PROGRESS",
+                "DONE",
+                "MISSED",
+                "CANCELLED",
+                "POSTPONED"
+              ]
+            },
+            "to_status": {
+              "type": "string",
+              "enum": [
+                "PLANNED",
+                "IN_PROGRESS",
+                "DONE",
+                "MISSED",
+                "CANCELLED",
+                "POSTPONED"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "DECLARED",
+                "MEASURED",
+                "CONFIRMED",
+                "UNKNOWN"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "USER_UI",
+                "FOCUS_TIMER",
+                "ANDROID",
+                "UNKNOWN"
+              ]
+            },
+            "decided_at": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "observed_at": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "focus_session_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 36,
+                  "maxLength": 36,
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "event_id",
+            "sequence",
+            "plan_id",
+            "activity_id",
+            "continuity_id",
+            "plan_version",
+            "from_status",
+            "to_status",
+            "provenance",
+            "source",
+            "decided_at",
+            "observed_at",
+            "focus_session_id"
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "sent_at",
+        "consent_version",
+        "data"
+      ]
+    },
+    "usage_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "usage_summary.write"
+        },
+        "sent_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "consent_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "window_start": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "window_end": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^(UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+.-]+)+)$"
+            },
+            "total_foreground_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1209600000
+            },
+            "apps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "app_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "display_name": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "foreground_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1209600000
+                  },
+                  "launch_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "last_used_at": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 20,
+                        "maxLength": 40,
+                        "format": "date-time",
+                        "pattern": "Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reliability": {
+                    "type": "string",
+                    "enum": [
+                      "HIGH",
+                      "MEDIUM",
+                      "LOW"
+                    ]
+                  }
+                },
+                "required": [
+                  "app_ref",
+                  "display_name",
+                  "foreground_ms",
+                  "launch_count",
+                  "last_used_at",
+                  "reliability"
+                ]
+              },
+              "maxItems": 10
+            },
+            "coverage": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "observed_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1209600000
+                },
+                "blind_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1209600000
+                },
+                "events_seen": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "observed_ms",
+                "blind_ms",
+                "events_seen",
+                "truncated"
+              ]
+            },
+            "generated_at": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "consent_version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "window_start",
+            "window_end",
+            "timezone",
+            "total_foreground_ms",
+            "apps",
+            "coverage",
+            "generated_at",
+            "consent_version"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "sent_at",
+        "consent_version",
+        "idempotency_key",
+        "data"
+      ]
+    },
+    "goal_progress_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "goal_progress.write"
+        },
+        "sent_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "consent_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "goals_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "observed_at": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "goals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "goal_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ACTIVE",
+                      "PAUSED",
+                      "COMPLETED",
+                      "ABANDONED"
+                    ]
+                  },
+                  "progress_value": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "goal_id",
+                  "title",
+                  "status",
+                  "progress_value",
+                  "unit"
+                ]
+              },
+              "maxItems": 20
+            }
+          },
+          "required": [
+            "goals_version",
+            "observed_at",
+            "goals"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "sent_at",
+        "consent_version",
+        "idempotency_key",
+        "data"
+      ]
+    },
+    "training_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "const": "training_plan.write"
+        },
+        "sent_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "consent_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "const": "wger"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "WGER_API",
+                "ANDROID_SYNC"
+              ]
+            },
+            "sync_state": {
+              "type": "string",
+              "enum": [
+                "FRESH",
+                "STALE",
+                "UNAVAILABLE",
+                "MISMATCH",
+                "UNKNOWN"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 40,
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "source_updated_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 40,
+                  "format": "date-time",
+                  "pattern": "Z$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "routines": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "routine_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "day_id": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "routine_id",
+                  "day_id"
+                ]
+              },
+              "maxItems": 20
+            },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "scheduled_date": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 10,
+                        "maxLength": 10,
+                        "format": "date"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "session_id",
+                  "scheduled_date",
+                  "title"
+                ]
+              },
+              "maxItems": 20
+            },
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "result_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "performed_at": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 40,
+                    "format": "date-time",
+                    "pattern": "Z$"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "WGER_API",
+                      "USER_DECLARED",
+                      "IMPORTED"
+                    ]
+                  },
+                  "verification": {
+                    "type": "string",
+                    "enum": [
+                      "API_READ_BACK",
+                      "USER_CONFIRMED",
+                      "UNVERIFIED"
+                    ]
+                  }
+                },
+                "required": [
+                  "result_id",
+                  "performed_at",
+                  "source",
+                  "verification"
+                ]
+              },
+              "maxItems": 50
+            }
+          },
+          "required": [
+            "provider",
+            "source",
+            "sync_state",
+            "observed_at",
+            "source_updated_at",
+            "routines",
+            "sessions",
+            "results"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "sent_at",
+        "consent_version",
+        "idempotency_key",
+        "data"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/day_plan_snapshot"
+    },
+    {
+      "$ref": "#/$defs/activity_status_event"
+    },
+    {
+      "$ref": "#/$defs/usage_summary"
+    },
+    {
+      "$ref": "#/$defs/goal_progress_snapshot"
+    },
+    {
+      "$ref": "#/$defs/training_snapshot"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/sync.schema.json",
+  "title": "ATLAS V4 sync",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "consent_version": 3,
+      "capability": "day_plan.snapshot.write",
+      "data": {
+        "plan_id": "00000000-0000-4000-8000-000000000101",
+        "local_date": "2026-10-29",
+        "timezone": "Europe/Paris",
+        "version": 7,
+        "current_revision_id": "00000000-0000-4000-8000-000000000102",
+        "state": "APPROVED",
+        "origin": "LOCAL",
+        "observed_at": "2026-10-29T08:02:00Z",
+        "activities": [
+          {
+            "activity_id": "00000000-0000-4000-8000-000000000103",
+            "kind": "FOCUS",
+            "title": "Bloc de lecture exemple",
+            "status": "PLANNED",
+            "scheduled_local": {
+              "local_date": "2026-10-29",
+              "start_minute": 600,
+              "duration_minutes": 45,
+              "timezone": "Europe/Paris"
+            },
+            "priority": "OPTIONAL",
+            "goal_id": null,
+            "continuity_id": null,
+            "supersedes_activity_id": null,
+            "status_provenance": "UNKNOWN",
+            "status_decided_at": null
+          }
+        ]
+      },
+      "idempotency_key": "00000000-0000-4000-8000-000000000104"
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "consent_version": 3,
+      "capability": "activity_status.write",
+      "data": {
+        "event_id": "00000000-0000-4000-8000-000000000104",
+        "sequence": 2,
+        "plan_id": "00000000-0000-4000-8000-000000000101",
+        "activity_id": "00000000-0000-4000-8000-000000000103",
+        "continuity_id": null,
+        "plan_version": 7,
+        "from_status": "IN_PROGRESS",
+        "to_status": "DONE",
+        "provenance": "CONFIRMED",
+        "source": "USER_UI",
+        "decided_at": "2026-10-29T08:02:00Z",
+        "observed_at": "2026-10-29T08:02:00Z",
+        "focus_session_id": "00000000-0000-4000-8000-000000000102"
+      }
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "consent_version": 3,
+      "capability": "usage_summary.write",
+      "data": {
+        "window_start": "2026-10-29T08:02:00Z",
+        "window_end": "2026-10-29T08:02:04Z",
+        "timezone": "Europe/Paris",
+        "total_foreground_ms": 120000,
+        "apps": [],
+        "coverage": {
+          "observed_ms": 120000,
+          "blind_ms": 0,
+          "events_seen": 2,
+          "truncated": false
+        },
+        "generated_at": "2026-10-29T08:02:04Z",
+        "consent_version": 3
+      },
+      "idempotency_key": "00000000-0000-4000-8000-000000000104"
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "consent_version": 3,
+      "capability": "goal_progress.write",
+      "data": {
+        "goals_version": 2,
+        "observed_at": "2026-10-29T08:02:00Z",
+        "goals": [
+          {
+            "goal_id": "00000000-0000-4000-8000-000000000102",
+            "title": "Objectif synthétique",
+            "status": "ACTIVE",
+            "progress_value": null,
+            "unit": null
+          }
+        ]
+      },
+      "idempotency_key": "00000000-0000-4000-8000-000000000104"
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "consent_version": 3,
+      "capability": "training_plan.write",
+      "data": {
+        "provider": "wger",
+        "source": "WGER_API",
+        "sync_state": "FRESH",
+        "observed_at": "2026-10-29T08:02:00Z",
+        "source_updated_at": null,
+        "routines": [
+          {
+            "routine_id": 5,
+            "day_id": null
+          }
+        ],
+        "sessions": [
+          {
+            "session_id": "synthetic-session-01",
+            "scheduled_date": null,
+            "title": "Séance exemple"
+          }
+        ],
+        "results": [
+          {
+            "result_id": "00000000-0000-4000-8000-000000000104",
+            "performed_at": "2026-10-29T08:02:00Z",
+            "source": "USER_DECLARED",
+            "verification": "USER_CONFIRMED"
+          }
+        ]
+      },
+      "idempotency_key": "00000000-0000-4000-8000-000000000104"
+    }
+  ]
+}

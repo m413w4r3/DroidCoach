@@ -1,0 +1,654 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "atlas_get_day_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string",
+              "const": "day_plan.read"
+            },
+            "idempotence": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "PURE_READ",
+                    "KEYED_REQUEST"
+                  ],
+                  "default": "PURE_READ"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "default": "Read only for this snapshot."
+                },
+                "key_required": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "class",
+                "description",
+                "key_required"
+              ]
+            },
+            "freshness_max_age_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 300
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "BAD_REQUEST",
+                  "CAPABILITY_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "DATA_UNAVAILABLE",
+                  "CURSOR_INVALID",
+                  "TIMEOUT"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "default": [
+                "BAD_REQUEST",
+                "CAPABILITY_UNAVAILABLE",
+                "CONSENT_REQUIRED",
+                "DATA_UNAVAILABLE",
+                "CURSOR_INVALID",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "required": [
+            "capability",
+            "idempotence",
+            "freshness_max_age_seconds",
+            "errors"
+          ]
+        },
+        "atlas_get_activity_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string",
+              "const": "activity_status.read"
+            },
+            "idempotence": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "PURE_READ",
+                    "KEYED_REQUEST"
+                  ],
+                  "default": "PURE_READ"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "default": "Read only for this snapshot."
+                },
+                "key_required": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "class",
+                "description",
+                "key_required"
+              ]
+            },
+            "freshness_max_age_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 300
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "BAD_REQUEST",
+                  "ACTIVITY_NOT_FOUND",
+                  "PLAN_MISMATCH",
+                  "CONSENT_REQUIRED",
+                  "PERMISSION_REQUIRED",
+                  "DATA_UNAVAILABLE",
+                  "CAPABILITY_UNAVAILABLE",
+                  "TIMEOUT"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "default": [
+                "BAD_REQUEST",
+                "ACTIVITY_NOT_FOUND",
+                "PLAN_MISMATCH",
+                "CONSENT_REQUIRED",
+                "PERMISSION_REQUIRED",
+                "DATA_UNAVAILABLE",
+                "CAPABILITY_UNAVAILABLE",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "required": [
+            "capability",
+            "idempotence",
+            "freshness_max_age_seconds",
+            "errors"
+          ]
+        },
+        "atlas_propose_plan_revision": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string",
+              "const": "plan_revision.propose"
+            },
+            "idempotence": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "PURE_READ",
+                    "KEYED_REQUEST"
+                  ],
+                  "default": "KEYED_REQUEST"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "default": "Same canonical body and key replay the same proposal."
+                },
+                "key_required": {
+                  "type": "boolean",
+                  "default": true
+                }
+              },
+              "required": [
+                "class",
+                "description",
+                "key_required"
+              ]
+            },
+            "freshness_max_age_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 300
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "BAD_REQUEST",
+                  "VALIDATION_FAILED",
+                  "PLAN_NOT_FOUND",
+                  "STALE_VERSION",
+                  "CONFLICT",
+                  "CONSENT_REQUIRED",
+                  "CAPABILITY_UNAVAILABLE",
+                  "IDEMPOTENCY_CONFLICT",
+                  "REPLAY_PENDING",
+                  "RESULT_UNCERTAIN",
+                  "QUOTA_EXCEEDED",
+                  "TIMEOUT"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "default": [
+                "BAD_REQUEST",
+                "VALIDATION_FAILED",
+                "PLAN_NOT_FOUND",
+                "STALE_VERSION",
+                "CONFLICT",
+                "CONSENT_REQUIRED",
+                "CAPABILITY_UNAVAILABLE",
+                "IDEMPOTENCY_CONFLICT",
+                "REPLAY_PENDING",
+                "RESULT_UNCERTAIN",
+                "QUOTA_EXCEEDED",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "required": [
+            "capability",
+            "idempotence",
+            "freshness_max_age_seconds",
+            "errors"
+          ]
+        },
+        "atlas_get_usage_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string",
+              "const": "usage_summary.read"
+            },
+            "idempotence": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "PURE_READ",
+                    "KEYED_REQUEST"
+                  ],
+                  "default": "PURE_READ"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "default": "Read only for this snapshot."
+                },
+                "key_required": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "class",
+                "description",
+                "key_required"
+              ]
+            },
+            "freshness_max_age_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 1800
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "BAD_REQUEST",
+                  "CONSENT_REQUIRED",
+                  "PERMISSION_REQUIRED",
+                  "CAPABILITY_UNAVAILABLE",
+                  "PERIOD_TOO_LARGE",
+                  "DATA_UNAVAILABLE",
+                  "TIMEOUT"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "default": [
+                "BAD_REQUEST",
+                "CONSENT_REQUIRED",
+                "PERMISSION_REQUIRED",
+                "CAPABILITY_UNAVAILABLE",
+                "PERIOD_TOO_LARGE",
+                "DATA_UNAVAILABLE",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "required": [
+            "capability",
+            "idempotence",
+            "freshness_max_age_seconds",
+            "errors"
+          ]
+        },
+        "atlas_get_goal_progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string",
+              "const": "goal_progress.read"
+            },
+            "idempotence": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "PURE_READ",
+                    "KEYED_REQUEST"
+                  ],
+                  "default": "PURE_READ"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "default": "Read only for this snapshot."
+                },
+                "key_required": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "class",
+                "description",
+                "key_required"
+              ]
+            },
+            "freshness_max_age_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 3600
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CAPABILITY_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "DATA_UNAVAILABLE",
+                  "CURSOR_INVALID",
+                  "TIMEOUT"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "default": [
+                "CAPABILITY_UNAVAILABLE",
+                "CONSENT_REQUIRED",
+                "DATA_UNAVAILABLE",
+                "CURSOR_INVALID",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "required": [
+            "capability",
+            "idempotence",
+            "freshness_max_age_seconds",
+            "errors"
+          ]
+        },
+        "atlas_get_training_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string",
+              "const": "training_plan.read"
+            },
+            "idempotence": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "PURE_READ",
+                    "KEYED_REQUEST"
+                  ],
+                  "default": "PURE_READ"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "default": "Read only for this snapshot."
+                },
+                "key_required": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "class",
+                "description",
+                "key_required"
+              ]
+            },
+            "freshness_max_age_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 86400
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CAPABILITY_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONFIG_REQUIRED",
+                  "AUTH_REQUIRED",
+                  "DATA_UNAVAILABLE",
+                  "CURSOR_INVALID",
+                  "TIMEOUT",
+                  "UPSTREAM_UNAVAILABLE"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "default": [
+                "CAPABILITY_UNAVAILABLE",
+                "CONSENT_REQUIRED",
+                "CONFIG_REQUIRED",
+                "AUTH_REQUIRED",
+                "DATA_UNAVAILABLE",
+                "CURSOR_INVALID",
+                "TIMEOUT",
+                "UPSTREAM_UNAVAILABLE"
+              ]
+            }
+          },
+          "required": [
+            "capability",
+            "idempotence",
+            "freshness_max_age_seconds",
+            "errors"
+          ]
+        }
+      },
+      "required": [
+        "atlas_get_day_plan",
+        "atlas_get_activity_status",
+        "atlas_propose_plan_revision",
+        "atlas_get_usage_summary",
+        "atlas_get_goal_progress",
+        "atlas_get_training_plan"
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "schema_version",
+    "tools"
+  ],
+  "$defs": {
+    "tool_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "freshness_max_age_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      },
+      "required": [
+        "capability",
+        "freshness_max_age_seconds"
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/tool-catalog.schema.json",
+  "title": "ATLAS V4 tool-catalog",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "tools": {
+        "atlas_get_day_plan": {
+          "capability": "day_plan.read",
+          "idempotence": {
+            "class": "PURE_READ",
+            "description": "Lecture pure pour la projection observée.",
+            "key_required": false
+          },
+          "freshness_max_age_seconds": 300,
+          "errors": [
+            "BAD_REQUEST",
+            "CAPABILITY_UNAVAILABLE",
+            "CONSENT_REQUIRED",
+            "DATA_UNAVAILABLE",
+            "CURSOR_INVALID",
+            "TIMEOUT"
+          ]
+        },
+        "atlas_get_activity_status": {
+          "capability": "activity_status.read",
+          "idempotence": {
+            "class": "PURE_READ",
+            "description": "Lecture pure pour la projection observée.",
+            "key_required": false
+          },
+          "freshness_max_age_seconds": 300,
+          "errors": [
+            "BAD_REQUEST",
+            "ACTIVITY_NOT_FOUND",
+            "PLAN_MISMATCH",
+            "CONSENT_REQUIRED",
+            "PERMISSION_REQUIRED",
+            "DATA_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE",
+            "TIMEOUT"
+          ]
+        },
+        "atlas_propose_plan_revision": {
+          "capability": "plan_revision.propose",
+          "idempotence": {
+            "class": "KEYED_REQUEST",
+            "description": "Même clé et même corps canonique pour rejouer une proposition.",
+            "key_required": true
+          },
+          "freshness_max_age_seconds": 300,
+          "errors": [
+            "BAD_REQUEST",
+            "VALIDATION_FAILED",
+            "PLAN_NOT_FOUND",
+            "STALE_VERSION",
+            "CONFLICT",
+            "CONSENT_REQUIRED",
+            "CAPABILITY_UNAVAILABLE",
+            "IDEMPOTENCY_CONFLICT",
+            "REPLAY_PENDING",
+            "RESULT_UNCERTAIN",
+            "QUOTA_EXCEEDED",
+            "TIMEOUT"
+          ]
+        },
+        "atlas_get_usage_summary": {
+          "capability": "usage_summary.read",
+          "idempotence": {
+            "class": "PURE_READ",
+            "description": "Lecture pure pour la projection observée.",
+            "key_required": false
+          },
+          "freshness_max_age_seconds": 1800,
+          "errors": [
+            "BAD_REQUEST",
+            "CONSENT_REQUIRED",
+            "PERMISSION_REQUIRED",
+            "CAPABILITY_UNAVAILABLE",
+            "PERIOD_TOO_LARGE",
+            "DATA_UNAVAILABLE",
+            "TIMEOUT"
+          ]
+        },
+        "atlas_get_goal_progress": {
+          "capability": "goal_progress.read",
+          "idempotence": {
+            "class": "PURE_READ",
+            "description": "Lecture pure pour la projection observée.",
+            "key_required": false
+          },
+          "freshness_max_age_seconds": 3600,
+          "errors": [
+            "CAPABILITY_UNAVAILABLE",
+            "CONSENT_REQUIRED",
+            "DATA_UNAVAILABLE",
+            "CURSOR_INVALID",
+            "TIMEOUT"
+          ]
+        },
+        "atlas_get_training_plan": {
+          "capability": "training_plan.read",
+          "idempotence": {
+            "class": "PURE_READ",
+            "description": "Lecture pure pour la projection observée.",
+            "key_required": false
+          },
+          "freshness_max_age_seconds": 86400,
+          "errors": [
+            "CAPABILITY_UNAVAILABLE",
+            "CONSENT_REQUIRED",
+            "CONFIG_REQUIRED",
+            "AUTH_REQUIRED",
+            "DATA_UNAVAILABLE",
+            "CURSOR_INVALID",
+            "TIMEOUT",
+            "UPSTREAM_UNAVAILABLE"
+          ]
+        }
+      }
+    }
+  ]
+}

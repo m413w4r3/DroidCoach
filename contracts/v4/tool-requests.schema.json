@@ -1,0 +1,507 @@
+{
+  "$id": "https://atlas.invalid/contracts/v4/tool-requests.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ATLAS V4 tool request arguments",
+  "$defs": {
+    "atlas_get_day_plan_arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local_date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "format": "date"
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 32
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "atlas_get_activity_status_arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activity_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "plan_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "include_details": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "activity_id"
+      ]
+    },
+    "atlas_propose_plan_revision_arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "base_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "reschedule"
+                  },
+                  "activity_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "target_start_minute": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1439
+                  },
+                  "duration_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1440
+                  }
+                },
+                "required": [
+                  "op",
+                  "activity_id",
+                  "target_start_minute"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "create_activity"
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "FOCUS",
+                      "ADMIN",
+                      "MEAL",
+                      "REST",
+                      "BUFFER",
+                      "OTHER"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "start_minute": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1439
+                  },
+                  "duration_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1440
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "REQUIRED",
+                      "IMPORTANT",
+                      "OPTIONAL"
+                    ]
+                  },
+                  "goal_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 36,
+                        "maxLength": 36,
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "op",
+                  "client_ref",
+                  "kind",
+                  "title",
+                  "start_minute",
+                  "duration_minutes",
+                  "priority"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "edit_activity"
+                  },
+                  "activity_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "format": "uuid"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "REQUIRED",
+                      "IMPORTANT",
+                      "OPTIONAL"
+                    ]
+                  },
+                  "estimate_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 480
+                  }
+                },
+                "required": [
+                  "op",
+                  "activity_id"
+                ],
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "priority"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "estimate_minutes"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "plan_id",
+        "base_version",
+        "changes",
+        "justification",
+        "idempotency_key"
+      ]
+    },
+    "atlas_get_usage_summary_arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "window_start": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "window_end": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "include_app_labels": {
+          "type": "boolean",
+          "default": false
+        },
+        "app_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 10
+        }
+      },
+      "required": [
+        "window_start",
+        "window_end"
+      ],
+      "x-atlas-constraints": {
+        "window_end_after_window_start": true,
+        "maximum_window_days": 14,
+        "description": "window_end doit être ultérieur à window_start, avec une période maximale de 14 jours."
+      }
+    },
+    "atlas_get_goal_progress_arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 20
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "include_subgoals": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "atlas_get_training_plan_arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local_date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "format": "date"
+        },
+        "include_results": {
+          "type": "boolean",
+          "default": false
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 20
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "const": "atlas_get_day_plan"
+        },
+        "arguments": {
+          "$ref": "#/$defs/atlas_get_day_plan_arguments"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "const": "atlas_get_activity_status"
+        },
+        "arguments": {
+          "$ref": "#/$defs/atlas_get_activity_status_arguments"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "const": "atlas_propose_plan_revision"
+        },
+        "arguments": {
+          "$ref": "#/$defs/atlas_propose_plan_revision_arguments"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "const": "atlas_get_usage_summary"
+        },
+        "arguments": {
+          "$ref": "#/$defs/atlas_get_usage_summary_arguments"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "const": "atlas_get_goal_progress"
+        },
+        "arguments": {
+          "$ref": "#/$defs/atlas_get_goal_progress_arguments"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "const": "atlas_get_training_plan"
+        },
+        "arguments": {
+          "$ref": "#/$defs/atlas_get_training_plan_arguments"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments"
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "tool_name": "atlas_get_day_plan",
+      "arguments": {
+        "local_date": "2026-10-29",
+        "page_size": 32
+      }
+    },
+    {
+      "tool_name": "atlas_get_activity_status",
+      "arguments": {
+        "activity_id": "00000000-0000-4000-8000-000000000103",
+        "plan_id": "00000000-0000-4000-8000-000000000101",
+        "include_details": false
+      }
+    },
+    {
+      "tool_name": "atlas_propose_plan_revision",
+      "arguments": {
+        "plan_id": "00000000-0000-4000-8000-000000000101",
+        "base_version": 7,
+        "changes": [
+          {
+            "op": "reschedule",
+            "activity_id": "00000000-0000-4000-8000-000000000103",
+            "target_start_minute": 660
+          }
+        ],
+        "justification": "Déplacement synthétique dans la même journée.",
+        "idempotency_key": "00000000-0000-4000-8000-000000000104"
+      }
+    },
+    {
+      "tool_name": "atlas_get_usage_summary",
+      "arguments": {
+        "window_start": "2026-10-29T08:02:00Z",
+        "window_end": "2026-10-29T08:02:04Z",
+        "include_app_labels": false,
+        "app_limit": 10
+      }
+    },
+    {
+      "tool_name": "atlas_get_goal_progress",
+      "arguments": {
+        "page_size": 20,
+        "include_subgoals": true
+      }
+    },
+    {
+      "tool_name": "atlas_get_training_plan",
+      "arguments": {
+        "local_date": "2026-10-29",
+        "include_results": true,
+        "page_size": 20
+      }
+    }
+  ],
+  "x-atlas-limits": {
+    "maximum_payload_bytes": 65536
+  }
+}

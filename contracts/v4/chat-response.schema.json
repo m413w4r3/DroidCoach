@@ -1,0 +1,104 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "reply": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "proposal_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 36,
+        "maxLength": 36,
+        "format": "uuid"
+      },
+      "maxItems": 1,
+      "uniqueItems": true
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "mock",
+        "unavailable"
+      ]
+    },
+    "tool_state": {
+      "type": "string",
+      "enum": [
+        "none",
+        "completed",
+        "partial",
+        "uncertain"
+      ]
+    },
+    "tool_call_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 6
+    }
+  },
+  "required": [
+    "contract_version",
+    "schema_version",
+    "request_id",
+    "reply",
+    "proposal_ids",
+    "agent_status",
+    "tool_state",
+    "tool_call_count"
+  ],
+  "$defs": {
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "mock",
+        "unavailable"
+      ]
+    },
+    "tool_state": {
+      "type": "string",
+      "enum": [
+        "none",
+        "completed",
+        "partial",
+        "uncertain"
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/chat-response.schema.json",
+  "title": "ATLAS V4 chat-response",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "reply": "Une proposition est prête à être examinée.",
+      "proposal_ids": [
+        "00000000-0000-4000-8000-000000000104"
+      ],
+      "agent_status": "mock",
+      "tool_state": "completed",
+      "tool_call_count": 2
+    }
+  ]
+}
