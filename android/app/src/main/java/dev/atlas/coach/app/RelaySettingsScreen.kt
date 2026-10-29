@@ -81,6 +81,14 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
             ) {
                 AtlasStatus(connection.label, relay.state.statusKind())
                 Text(humanDetail, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "Dernière connexion : ${relay.lastConnectedAtUtcMillis?.let(::formatInstant) ?: "jamais"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Identité d'appareil : ${if (relay.credentialsConfigured) "enregistrée" else "absente"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 if (technicalError != null) {
                     TextButton(onClick = { showTechnicalDetail = !showTechnicalDetail }) {
                         Text(if (showTechnicalDetail) "Masquer le détail technique" else "Détail technique")
@@ -186,14 +194,6 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                     "Ces valeurs servent au diagnostic et à la configuration de la liaison.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "Dernière connexion : ${relay.lastConnectedAtUtcMillis?.let(::formatInstant) ?: "jamais"}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "Identité d'appareil : ${if (relay.credentialsConfigured) "enregistrée" else "absente"}",
-                    style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),

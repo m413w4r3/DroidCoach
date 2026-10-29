@@ -43,7 +43,7 @@ internal fun CoachTabScreen(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CoachSegmentChoice(
-                label = "Conversation",
+                label = "Échanges",
                 selected = selectedTab == CoachTab.CONVERSATION,
                 testTag = "coach_conversation_tab",
                 modifier = Modifier.weight(1f),
