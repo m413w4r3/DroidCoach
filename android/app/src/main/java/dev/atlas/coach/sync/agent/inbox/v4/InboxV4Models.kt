@@ -58,7 +58,9 @@ data class InboxV4ApplicationProof(
         require(isCanonicalUuid(revisionId)) { "revision_id must be a canonical UUID" }
         require(SHA256_PATTERN.matches(scopeHash)) { "scope_hash must be a SHA-256 digest" }
         require(effectIds.isNotEmpty() && effectIds.size <= MAX_EFFECT_IDS)
-        require(effectIds.all { EFFECT_ID_PATTERN.matches(it) })
+        require(effectIds.all { effectId ->
+            EFFECT_ID_PATTERN.matches(effectId) && isCanonicalUuid(effectId.substringAfterLast(':'))
+        })
     }
 }
 
@@ -198,7 +200,11 @@ data class InboxV4QuarantinedPayload(
 
 sealed interface InboxV4ProposalParseResult {
     data class Parsed(val proposal: InboxV4Proposal) : InboxV4ProposalParseResult
-    data class Rejected(val raw: String, val reason: String) : InboxV4ProposalParseResult
+    data class Rejected(
+        val raw: String,
+        val reason: String,
+        val quarantinable: Boolean = true,
+    ) : InboxV4ProposalParseResult
     data class Quarantined(val raw: String, val reason: String) : InboxV4ProposalParseResult
 }
 
@@ -264,6 +270,7 @@ internal const val MAX_CURSOR_LENGTH = 256
 internal const val MAX_CHANGES = 8
 internal const val MAX_CONFLICTS = 16
 internal const val MAX_EFFECT_IDS = 32
+internal const val MAX_PROPOSAL_PAYLOAD_BYTES = 64 * 1024
 internal val SHA256_PATTERN = Regex("^sha256:[0-9a-f]{64}$")
 internal val EFFECT_ID_PATTERN = Regex(
     "^(PLAN_ACTIVITY_(CREATE|UPDATE|DELETE):[0-9a-f-]{36}|PLAN_APPLY:[0-9a-f-]{36})$",

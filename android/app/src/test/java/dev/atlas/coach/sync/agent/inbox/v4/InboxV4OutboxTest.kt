@@ -2,6 +2,7 @@ package dev.atlas.coach.sync.agent.inbox.v4
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
@@ -76,6 +77,65 @@ class InboxV4OutboxTest {
     }
 
     @Test
+    fun failedAckPersistenceLeavesMemoryUntouchedAndSameAckRetryCommits() {
+        val storage = FailOnceStorage()
+        val repository = repository(storage)
+        val proposal = InboxV4Fixtures.proposal()
+        repository.mergePulled(InboxV4PullPage(listOf(proposal), null, false), 8)
+        val stateBeforeAck = storage.delegate.raw
+        val ack = InboxV4Fixtures.ack(
+            state = InboxV4AckState.REJECTED,
+            resultCode = InboxV4AckResultCode.USER_REJECTED,
+            proof = null,
+        )
+        storage.failNextWrite = true
+
+        assertFalse(runCatching { repository.appendAck(ack) }.isSuccess)
+        assertEquals(emptyList<InboxV4Ack>(), repository.ackHistory())
+        assertTrue(repository.pendingAcks().isEmpty())
+        assertEquals(InboxV4ProposalState.RECEIVED, repository.get(proposal.proposalId)?.proposal?.state)
+        assertEquals(stateBeforeAck, storage.delegate.raw)
+
+        assertEquals(InboxV4AppendResult.Appended, repository.appendAck(ack))
+        val restored = repository(storage)
+        assertEquals(listOf(ack.canonicalBody()), restored.ackHistory().map { it.canonicalBody() })
+        assertEquals(InboxV4ProposalState.REJECTED, restored.get(proposal.proposalId)?.proposal?.state)
+    }
+
+    @Test
+    fun failedUncertainAckPersistenceDoesNotRetainProofOrMutateOutbox() {
+        val storage = FailOnceStorage()
+        val repository = repository(storage)
+        val proposal = InboxV4Fixtures.proposal()
+        repository.mergePulled(InboxV4PullPage(listOf(proposal), null, false), 8)
+        storage.failNextWrite = true
+        val ackId = "00000000-0000-4000-8000-000000000618"
+
+        assertFalse(runCatching {
+            repository.recordUncertain(
+                proposal.proposalId,
+                consentVersion = 3,
+                knownApplicationProof = InboxV4Fixtures.proof(),
+                ackId = ackId,
+            )
+        }.isSuccess)
+        assertEquals(InboxV4ProposalState.RECEIVED, repository.get(proposal.proposalId)?.proposal?.state)
+        assertNull(repository.get(proposal.proposalId)?.applicationProof)
+        assertTrue(repository.ackHistory().isEmpty())
+        assertTrue(repository.pendingAcks().isEmpty())
+
+        assertEquals(InboxV4AppendResult.Appended, repository.recordUncertain(
+            proposal.proposalId,
+            consentVersion = 3,
+            knownApplicationProof = InboxV4Fixtures.proof(),
+            ackId = ackId,
+        ))
+        val restored = repository(storage)
+        assertEquals(InboxV4AckState.UNCERTAIN, restored.ackHistory().single().state)
+        assertEquals(InboxV4Fixtures.proof(), restored.get(proposal.proposalId)?.applicationProof)
+    }
+
+    @Test
     fun uncertainAckDeliveryStatusIsPersistedAndReplayedWithoutChangingState() {
         val storage = InMemoryInboxV4Storage()
         val repository = repository(storage)
@@ -118,6 +178,23 @@ class InboxV4OutboxTest {
     }
 
     private fun repository(storage: InboxV4Storage) = InboxV4Repository(storage, now = { InboxV4Fixtures.CREATED_AT })
+
+    private class FailOnceStorage : InboxV4Storage {
+        val delegate = InMemoryInboxV4Storage()
+        var failNextWrite = false
+
+        override fun read(): String? = delegate.read()
+
+        override fun write(serializedState: String) {
+            if (failNextWrite) {
+                failNextWrite = false
+                error("injected storage failure")
+            }
+            delegate.write(serializedState)
+        }
+
+        override fun quarantine(raw: String, reason: String): String? = delegate.quarantine(raw, reason)
+    }
 
     private class FakeTransport(private val result: InboxV4DeliveryResult) : InboxV4Transport {
         val sent = mutableListOf<InboxV4Ack>()

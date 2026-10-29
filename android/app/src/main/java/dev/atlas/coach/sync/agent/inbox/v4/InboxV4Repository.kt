@@ -3,6 +3,8 @@ package dev.atlas.coach.sync.agent.inbox.v4
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
@@ -23,8 +25,14 @@ class InboxV4Repository(
         val applicationProof: InboxV4ApplicationProof? = null,
         val lastAckSequence: Long = 0L,
     )
+    private data class RetiredEntry(
+        val proposalId: String,
+        val idempotencyKey: String,
+        val sourceBodyDigest: String,
+    )
 
     private val entries = linkedMapOf<String, Entry>()
+    private val retiredEntries = linkedMapOf<String, RetiredEntry>()
     private val ackLedger = linkedMapOf<String, InboxV4Ack>()
     private val outbox = linkedMapOf<String, InboxV4OutboxAck>()
     private val quarantine = mutableListOf<InboxV4QuarantinedPayload>()
@@ -44,6 +52,32 @@ class InboxV4Repository(
 
     @Synchronized
     fun all(): List<InboxV4EntryView> = entries.values.map { it.toView() }
+
+    /** Removes oldest terminal proposals to free inbox capacity, retaining the append-only ACK ledger. */
+    @Synchronized
+    fun evictTerminalEntries(maxToEvict: Int = Int.MAX_VALUE): Int {
+        ensureWritable()
+        require(maxToEvict >= 0)
+        if (maxToEvict == 0) return 0
+        val evictedIds = entries.values.asSequence()
+            .filter { it.proposal.state.terminal }
+            .take(maxToEvict)
+            .map { it.proposal.proposalId }
+            .toList()
+        if (evictedIds.isEmpty()) return 0
+        val candidateEntries = entries.toMutableMap()
+        val candidateRetired = retiredEntries.toMutableMap()
+        evictedIds.forEach { id ->
+            val entry = candidateEntries.remove(id) ?: return@forEach
+            candidateRetired[id] = RetiredEntry(id, entry.proposal.idempotencyKey, digest(entry.sourceBody))
+        }
+        writeSnapshot(candidateEntries, outbox, quarantine, cursor, candidateRetired)
+        entries.clear()
+        entries.putAll(candidateEntries)
+        retiredEntries.clear()
+        retiredEntries.putAll(candidateRetired)
+        return evictedIds.size
+    }
 
     @Synchronized
     fun quarantinedPayloads(): List<InboxV4QuarantinedPayload> = quarantine.toList()
@@ -75,8 +109,21 @@ class InboxV4Repository(
             val matches = entries.values.filter {
                 it.proposal.proposalId == incoming.proposalId || it.proposal.idempotencyKey == incoming.idempotencyKey
             }
-            if (matches.isNotEmpty()) {
-                if (matches.size == 1 && matches.single().sourceBody == sourceBody) {
+            val retiredMatches = retiredEntries.values.filter {
+                it.proposalId == incoming.proposalId || it.idempotencyKey == incoming.idempotencyKey
+            }
+            if (matches.isNotEmpty() || retiredMatches.isNotEmpty() || ackLedger.values.any {
+                    it.proposalId == incoming.proposalId
+                }) {
+                val activeDuplicate = matches.size == 1 && retiredMatches.isEmpty() &&
+                    matches.single().proposal.proposalId == incoming.proposalId &&
+                    matches.single().proposal.idempotencyKey == incoming.idempotencyKey &&
+                    matches.single().sourceBody == sourceBody
+                val retiredDuplicate = matches.isEmpty() && retiredMatches.size == 1 &&
+                    retiredMatches.single().proposalId == incoming.proposalId &&
+                    retiredMatches.single().idempotencyKey == incoming.idempotencyKey &&
+                    retiredMatches.single().sourceBodyDigest == digest(sourceBody)
+                if (activeDuplicate || retiredDuplicate) {
                     duplicates++
                 } else {
                     conflicts++
@@ -88,6 +135,9 @@ class InboxV4Repository(
             if (incoming.expiresAt <= timestamp) {
                 expired++
                 return@forEach
+            }
+            if (entries.size >= maxEntries && evictTerminalEntries(maxToEvict = 1) > 0) {
+                changed = true
             }
             if (entries.size >= maxEntries) {
                 deferred++
@@ -137,8 +187,9 @@ class InboxV4Repository(
                 is InboxV4ProposalParseResult.Parsed -> accepted += result.proposal
                 is InboxV4ProposalParseResult.Quarantined -> quarantine +=
                     InboxV4QuarantinedPayload(result.raw, result.reason, now())
-                is InboxV4ProposalParseResult.Rejected -> quarantine +=
-                    InboxV4QuarantinedPayload(result.raw, result.reason, now())
+                is InboxV4ProposalParseResult.Rejected -> if (result.quarantinable) {
+                    quarantine += InboxV4QuarantinedPayload(result.raw, result.reason, now())
+                }
             }
         }
         val merged = mergePulled(InboxV4PullPage(accepted, nextCursor, truncated), pageSize)
@@ -176,32 +227,32 @@ class InboxV4Repository(
         if (entry.applicationProof != null && knownApplicationProof != null) {
             require(entry.applicationProof == knownApplicationProof) { "Application proof changed" }
         }
-        if (knownApplicationProof != null) {
-            entries[proposalId] = entry.copy(applicationProof = knownApplicationProof)
-        }
-        return try {
-            appendAck(
-                InboxV4Ack(
-                    contractVersion = CONTRACT_VERSION,
-                    schemaVersion = SCHEMA_VERSION,
-                    ackId = ackId,
-                    capability = ACK_CAPABILITY,
-                    proposalId = proposalId,
-                    sequence = entry.lastAckSequence + 1L,
-                    state = InboxV4AckState.UNCERTAIN,
-                    resultCode = InboxV4AckResultCode.RESULT_UNCERTAIN,
-                    occurredAt = now(),
-                    consentVersion = consentVersion,
-                ),
-            )
-        } catch (error: Exception) {
-            entries[proposalId] = entry
-            throw error
-        }
+        return appendAckInternal(
+            InboxV4Ack(
+                contractVersion = CONTRACT_VERSION,
+                schemaVersion = SCHEMA_VERSION,
+                ackId = ackId,
+                capability = ACK_CAPABILITY,
+                proposalId = proposalId,
+                sequence = entry.lastAckSequence + 1L,
+                state = InboxV4AckState.UNCERTAIN,
+                resultCode = InboxV4AckResultCode.RESULT_UNCERTAIN,
+                occurredAt = now(),
+                consentVersion = consentVersion,
+            ),
+            knownApplicationProof,
+        )
     }
 
     @Synchronized
     fun appendAck(ack: InboxV4Ack): InboxV4AppendResult {
+        return appendAckInternal(ack, knownApplicationProof = null)
+    }
+
+    private fun appendAckInternal(
+        ack: InboxV4Ack,
+        knownApplicationProof: InboxV4ApplicationProof?,
+    ): InboxV4AppendResult {
         ensureWritable()
         val body = ack.canonicalBody()
         ackLedger[ack.ackId]?.let { previous ->
@@ -214,6 +265,11 @@ class InboxV4Repository(
         if (existingAtSequence != null) throw InboxV4ConflictException("ACK_SEQUENCE_CONFLICT")
 
         val entry = entries[ack.proposalId] ?: error("Unknown proposal")
+        if (knownApplicationProof != null) validateProofFor(entry.proposal, knownApplicationProof)
+        if (entry.applicationProof != null && knownApplicationProof != null) {
+            require(entry.applicationProof == knownApplicationProof) { "Application proof changed" }
+        }
+        val retainedProof = knownApplicationProof ?: entry.applicationProof
         require(ack.sequence > entry.lastAckSequence) { "ACK sequence must increase" }
         validateTransition(entry.proposal.state, ack.state)
         when (ack.state) {
@@ -223,35 +279,47 @@ class InboxV4Repository(
             }
             InboxV4AckState.RECONCILED -> {
                 if (ack.resultCode == InboxV4AckResultCode.RECONCILED_APPLIED) {
-                    val expectedProof = entry.applicationProof
+                    val expectedProof = retainedProof
                         ?: throw IllegalArgumentException("RECONCILED_APPLIED requires previously recorded local proof")
                     require(ack.proof == expectedProof) { "RECONCILED_APPLIED proof must match local evidence" }
                 } else {
-                    require(entry.applicationProof == null) { "Cannot reconcile as not applied after recording application proof" }
+                    require(retainedProof == null) { "Cannot reconcile as not applied after recording application proof" }
                 }
             }
-            InboxV4AckState.UNCERTAIN -> if (entry.applicationProof != null) {
-                validateProofFor(entry.proposal, entry.applicationProof)
+            InboxV4AckState.UNCERTAIN -> if (retainedProof != null) {
+                validateProofFor(entry.proposal, retainedProof)
             }
-            else -> require(entry.applicationProof == null) {
+            else -> require(retainedProof == null) {
                 "A proposal with application proof cannot transition to ${ack.state}"
             }
         }
 
         val nextProof = when (ack.state) {
             InboxV4AckState.APPLIED -> ack.proof
-            InboxV4AckState.UNCERTAIN -> entry.applicationProof
+            InboxV4AckState.UNCERTAIN -> retainedProof
             InboxV4AckState.RECONCILED -> ack.proof
             else -> null
         }
-        ackLedger[ack.ackId] = ack
-        outbox[ack.ackId] = InboxV4OutboxAck(ack, InboxV4AckDeliveryState.PENDING)
-        entries[ack.proposalId] = entry.copy(
-            proposal = entry.proposal.withState(ack.state.toProposalState()),
-            applicationProof = nextProof,
-            lastAckSequence = ack.sequence,
-        )
-        persist()
+        val candidateEntries = entries.toMutableMap().apply {
+            put(ack.proposalId, entry.copy(
+                proposal = entry.proposal.withState(ack.state.toProposalState()),
+                applicationProof = nextProof,
+                lastAckSequence = ack.sequence,
+            ))
+        }
+        val candidateAckLedger = ackLedger.toMutableMap().apply { put(ack.ackId, ack) }
+        val candidateOutbox = outbox.toMutableMap().apply {
+            put(ack.ackId, InboxV4OutboxAck(ack, InboxV4AckDeliveryState.PENDING))
+        }
+
+        // Commit the candidate snapshot first; visible in-memory state changes only after success.
+        writeSnapshot(candidateEntries, candidateOutbox, quarantine, cursor)
+        entries.clear()
+        entries.putAll(candidateEntries)
+        ackLedger.clear()
+        ackLedger.putAll(candidateAckLedger)
+        outbox.clear()
+        outbox.putAll(candidateOutbox)
         return InboxV4AppendResult.Appended
     }
 
@@ -360,11 +428,21 @@ class InboxV4Repository(
 
     private fun persist() {
         ensureWritable()
+        writeSnapshot(entries, outbox, quarantine, cursor)
+    }
+
+    private fun writeSnapshot(
+        entryState: Map<String, Entry>,
+        outboxState: Map<String, InboxV4OutboxAck>,
+        quarantineState: List<InboxV4QuarantinedPayload>,
+        cursorState: String?,
+        retiredState: Map<String, RetiredEntry> = retiredEntries,
+    ) {
         val root = JSONObject()
             .put("schema_version", LOCAL_STORAGE_SCHEMA)
-            .put("cursor", cursor ?: JSONObject.NULL)
+            .put("cursor", cursorState ?: JSONObject.NULL)
             .put("entries", JSONArray().also { array ->
-                entries.values.forEach { entry ->
+                entryState.values.forEach { entry ->
                     array.put(JSONObject()
                         .put("proposal", entry.proposal.toJsonObject())
                         .put("source_body", entry.sourceBody)
@@ -373,14 +451,22 @@ class InboxV4Repository(
                 }
             })
             .put("acks", JSONArray().also { array ->
-                outbox.values.forEach { queued ->
+                outboxState.values.forEach { queued ->
                     array.put(JSONObject()
                         .put("ack", queued.ack.toJsonObject())
                         .put("delivery_state", queued.deliveryState.name))
                 }
             })
+            .put("retired", JSONArray().also { array ->
+                retiredState.values.forEach { item ->
+                    array.put(JSONObject()
+                        .put("proposal_id", item.proposalId)
+                        .put("idempotency_key", item.idempotencyKey)
+                        .put("source_body_digest", item.sourceBodyDigest))
+                }
+            })
             .put("quarantine", JSONArray().also { array ->
-                quarantine.forEach { item ->
+                quarantineState.forEach { item ->
                     array.put(JSONObject()
                         .put("raw", item.raw)
                         .put("reason", item.reason)
@@ -396,7 +482,10 @@ class InboxV4Repository(
             val root = JSONObject(raw)
             val schema = root.opt("schema_version") as? Number
             if (schema?.toInt() != LOCAL_STORAGE_SCHEMA) throw InboxV4FormatException("Unsupported local storage schema")
-            root.requireExactLocalFields(setOf("schema_version", "cursor", "entries", "acks", "quarantine"))
+            val oldFields = setOf("schema_version", "cursor", "entries", "acks", "quarantine")
+            val currentFields = oldFields + "retired"
+            val actualFields = root.keys().asSequence().toSet()
+            require(actualFields == oldFields || actualFields == currentFields) { "Unexpected local fields" }
             cursor = when (val value = root.get("cursor")) {
                 JSONObject.NULL -> null
                 is String -> value
@@ -433,11 +522,31 @@ class InboxV4Repository(
                 item.requireExactLocalFields(setOf("ack", "delivery_state"))
                 val ack = InboxV4AckParser.parse(item.getJSONObject("ack").toString())
                 require(ack.ackId !in ackLedger)
-                require(entries.containsKey(ack.proposalId))
                 val deliveryState = enumValue<InboxV4AckDeliveryState>(item.getString("delivery_state"), "delivery_state")
                 ackLedger[ack.ackId] = ack
                 outbox[ack.ackId] = InboxV4OutboxAck(ack, deliveryState)
             }
+            if (root.has("retired")) {
+                val storedRetired = root.getJSONArray("retired")
+                for (index in 0 until storedRetired.length()) {
+                    val item = storedRetired.getJSONObject(index)
+                    item.requireExactLocalFields(setOf("proposal_id", "idempotency_key", "source_body_digest"))
+                    val retired = RetiredEntry(
+                        proposalId = item.getString("proposal_id").also { require(isCanonicalUuid(it)) },
+                        idempotencyKey = item.getString("idempotency_key").also { require(isCanonicalUuid(it)) },
+                        sourceBodyDigest = item.getString("source_body_digest").also {
+                            require(it.matches(Regex("^[0-9a-f]{64}$")))
+                        },
+                    )
+                    require(retired.proposalId !in entries && retired.proposalId !in retiredEntries)
+                    require(entries.values.none { it.proposal.idempotencyKey == retired.idempotencyKey })
+                    require(retiredEntries.values.none { it.idempotencyKey == retired.idempotencyKey })
+                    retiredEntries[retired.proposalId] = retired
+                }
+            }
+            require(ackLedger.values.all { ack ->
+                ack.proposalId in entries || ack.proposalId in retiredEntries
+            }) { "Stored ACK has no proposal ledger entry" }
             val storedQuarantine = root.getJSONArray("quarantine")
             for (index in 0 until storedQuarantine.length()) {
                 val item = storedQuarantine.getJSONObject(index)
@@ -450,6 +559,7 @@ class InboxV4Repository(
             validateRestoredSequences()
         } catch (error: Exception) {
             entries.clear()
+            retiredEntries.clear()
             ackLedger.clear()
             outbox.clear()
             quarantine.clear()
@@ -474,6 +584,10 @@ class InboxV4Repository(
     }
 
     private fun Entry.toView() = InboxV4EntryView(proposal, applicationProof, lastAckSequence)
+
+    private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(StandardCharsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 
     private fun ensureWritable() {
         check(!writesBlocked) { "Inbox V4 state is quarantined and read-only" }

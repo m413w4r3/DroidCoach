@@ -76,6 +76,50 @@ class InboxV4RepositoryTest {
     }
 
     @Test
+    fun terminalEntriesCanBeEvictedWithoutRemovingActiveEntriesOrLosingDeduplication() {
+        val storage = InMemoryInboxV4Storage()
+        val clock = MutableClock(InboxV4Fixtures.CREATED_AT)
+        val repository = InboxV4Repository(storage, clock::now, maxEntries = 2)
+        val terminal = InboxV4Fixtures.proposal()
+        val active = InboxV4Fixtures.proposal(
+            proposalId = "00000000-0000-4000-8000-000000000721",
+            idempotencyKey = "00000000-0000-4000-8000-000000000722",
+            expiresAt = terminal.expiresAt.plusSeconds(86_400),
+        )
+        val newProposal = InboxV4Fixtures.proposal(
+            proposalId = "00000000-0000-4000-8000-000000000723",
+            idempotencyKey = "00000000-0000-4000-8000-000000000724",
+            expiresAt = terminal.expiresAt.plusSeconds(86_400),
+        )
+        repository.mergePulled(InboxV4PullPage(listOf(terminal, active), null, false), 8)
+        clock.value = terminal.expiresAt
+        repository.expireDue(consentVersion = 3)
+        assertEquals(InboxV4ProposalState.EXPIRED, repository.get(terminal.proposalId)?.proposal?.state)
+
+        assertEquals(1, repository.evictTerminalEntries(maxToEvict = 1))
+        assertNull(repository.get(terminal.proposalId))
+        assertEquals(InboxV4ProposalState.RECEIVED, repository.get(active.proposalId)?.proposal?.state)
+        assertEquals(1, repository.ackHistory(terminal.proposalId).size)
+        assertEquals(1, repository.mergePulled(InboxV4PullPage(listOf(newProposal), null, false), 8).added)
+
+        val restarted = repository(storage)
+        assertEquals(1, restarted.ackHistory(terminal.proposalId).size)
+        assertEquals(1, restarted.mergePulled(InboxV4PullPage(listOf(terminal), null, false), 8).duplicates)
+        assertEquals(InboxV4ProposalState.RECEIVED, restarted.get(active.proposalId)?.proposal?.state)
+        assertEquals(2, restarted.all().size)
+    }
+
+    @Test
+    fun oversizedRawProposalIsRejectedWithoutPersistingItToQuarantine() {
+        val repository = repository(InMemoryInboxV4Storage())
+        val oversized = " ".repeat(MAX_PROPOSAL_PAYLOAD_BYTES + 1)
+
+        repository.ingestRawPage(listOf(oversized), nextCursor = null, truncated = false, pageSize = 1)
+
+        assertTrue(repository.quarantinedPayloads().isEmpty())
+    }
+
+    @Test
     fun expiredProposalProducesDurableExpiredAckWithoutApplicationProof() {
         val clock = MutableClock(InboxV4Fixtures.CREATED_AT)
         val storage = InMemoryInboxV4Storage()

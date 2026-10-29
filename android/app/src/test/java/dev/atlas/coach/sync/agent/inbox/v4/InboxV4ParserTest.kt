@@ -54,6 +54,16 @@ class InboxV4ParserTest {
     }
 
     @Test
+    fun oversizedPayloadIsRejectedBeforeItCanBeQuarantined() {
+        val oversized = " ".repeat(MAX_PROPOSAL_PAYLOAD_BYTES + 1)
+
+        val result = InboxV4ProposalParser.parse(oversized)
+
+        assertTrue(result is InboxV4ProposalParseResult.Rejected)
+        assertFalse((result as InboxV4ProposalParseResult.Rejected).quarantinable)
+    }
+
+    @Test
     fun unknownNestedFieldIsQuarantinedRatherThanDropped() {
         val raw = JSONObject(InboxV4Fixtures.rawProposal())
         raw.getJSONArray("changes").getJSONObject(0).put("future_change", "kept")
@@ -83,5 +93,8 @@ class InboxV4ParserTest {
         assertEquals(InboxV4AckState.REJECTED, InboxV4AckParser.parse(rejected).state)
         assertFalse(runCatching { InboxV4AckParser.parse(prooflessApplied) }.isSuccess)
         assertFalse(runCatching { InboxV4Fixtures.proof(effectIds = listOf("not-an-effect")) }.isSuccess)
+        assertFalse(runCatching {
+            InboxV4Fixtures.proof(effectIds = listOf("PLAN_APPLY:${"0".repeat(36)}"))
+        }.isSuccess)
     }
 }

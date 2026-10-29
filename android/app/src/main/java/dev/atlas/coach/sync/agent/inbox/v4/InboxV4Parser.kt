@@ -15,6 +15,13 @@ object InboxV4ProposalParser {
     )
 
     fun parse(raw: String): InboxV4ProposalParseResult {
+        if (raw.exceedsUtf8ByteLimit(MAX_PROPOSAL_PAYLOAD_BYTES)) {
+            return InboxV4ProposalParseResult.Rejected(
+                raw,
+                "Proposal payload exceeds 64 KiB",
+                quarantinable = false,
+            )
+        }
         val root = try {
             JSONObject(raw)
         } catch (error: JSONException) {
@@ -93,6 +100,9 @@ object InboxV4AckParser {
     private val proofFields = setOf("plan_id", "applied_plan_version", "revision_id", "scope_hash", "effect_ids")
 
     fun parse(raw: String): InboxV4Ack {
+        if (raw.exceedsUtf8ByteLimit(MAX_PROPOSAL_PAYLOAD_BYTES)) {
+            throw InboxV4FormatException("ACK payload exceeds 64 KiB")
+        }
         val root = try {
             JSONObject(raw)
         } catch (error: JSONException) {
@@ -151,6 +161,28 @@ object InboxV4AckParser {
             throw InboxV4FormatException(error.message ?: "Invalid ACK", error)
         }
     }
+}
+
+/** Counts UTF-8 bytes without allocating a byte array proportional to an untrusted payload. */
+private fun String.exceedsUtf8ByteLimit(limit: Int): Boolean {
+    var bytes = 0
+    var index = 0
+    while (index < length) {
+        val character = this[index]
+        bytes += when {
+            character.code <= 0x7f -> 1
+            character.code <= 0x7ff -> 2
+            character.isHighSurrogate() && index + 1 < length && this[index + 1].isLowSurrogate() -> {
+                index++
+                4
+            }
+            character.isSurrogate() -> 1 // String UTF-8 encoding replaces an unpaired surrogate with '?'.
+            else -> 3
+        }
+        if (bytes > limit) return true
+        index++
+    }
+    return false
 }
 
 private fun parseChanges(array: JSONArray): List<Map<String, Any?>> {
