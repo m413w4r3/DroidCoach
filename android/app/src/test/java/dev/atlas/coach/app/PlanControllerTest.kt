@@ -4,6 +4,8 @@ import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.PlanClock
 import dev.atlas.coach.plan.Priority
+import dev.atlas.coach.plan.StatusProvenance
+import dev.atlas.coach.plan.StatusSource
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -116,6 +118,8 @@ class PlanControllerTest {
         assertTrue(controller.setStatus(activityId, ActivityStatus.DONE))
         assertTrue(controller.confirmPreview())
         assertEquals(ActivityStatus.DONE, controller.plan!!.activities.single().status)
+        assertEquals(StatusProvenance.CONFIRMED, controller.statusEvents().single().provenance)
+        assertEquals(StatusSource.USER_UI, controller.statusEvents().single().source)
         assertFalse(controller.removeActivity(activityId))
         assertTrue(controller.plan!!.activities.any { it.activityId == activityId })
     }
@@ -247,5 +251,30 @@ class PlanControllerTest {
         assertNull(PlanController.parseTime("9h05"))
         assertEquals("23:59", PlanController.timeLabel(1439))
         assertEquals("10:30", PlanController.endTimeLabel(9 * 60, 90))
+    }
+
+    @Test
+    fun nextActivitySkipsPostponedOccurrenceAndSelectsItsPlannedReplacement() {
+        val controller = controller()
+        val originalId = addSample(controller)
+        assertTrue(
+            controller.reportActivity(
+                activityId = originalId,
+                targetLocalDate = dayOne.toString(),
+                targetStartMinute = 12 * 60,
+                targetDurationMinutes = 45,
+                reason = "Réunion prolongée",
+                baseVersion = controller.plan!!.version,
+                idempotencyKey = "80000000-0000-4000-8000-000000000099",
+            ),
+        )
+        val activities = controller.plan!!.activities
+        assertEquals(controller.plan, controller.planForDate(dayOne))
+        val postponed = activities.single { it.activityId == originalId }
+        val replacement = activities.single { it.activityId != originalId }
+
+        assertEquals(ActivityStatus.POSTPONED, postponed.status)
+        assertEquals(ActivityStatus.PLANNED, replacement.status)
+        assertEquals(replacement.activityId, PlanUiLogic.nextActivity(activities, 10 * 60)?.activityId)
     }
 }

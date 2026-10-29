@@ -4,6 +4,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.security.MessageDigest
+import dev.atlas.coach.plan.v4.PlanV4JsonCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -59,6 +60,27 @@ class DayPlanRepositoryTest {
             PlanWriteResult.Rejected(PlanRejectionReason.NON_MONOTONE_VERSION),
             repository.save(initial),
         )
+    }
+
+    @Test
+    fun saveRejectsStatusChangesThatWouldBypassTheStatusJournal() {
+        val backend = MemoryPlanBackend()
+        val repository = repository(backend)
+        val current = dayPlan()
+        repository.create(current)
+        val changed = current.copy(
+            version = current.version + 1,
+            updatedAt = current.updatedAt + 1,
+            activities = current.activities.map { it.copy(status = ActivityStatus.DONE) },
+        )
+
+        assertEquals(
+            PlanWriteResult.Rejected(PlanRejectionReason.INVALID_CHANGES),
+            repository.save(changed),
+        )
+        assertEquals(1, backend.writes)
+        assertEquals(PlanLoadResult.Loaded(current), repository.load())
+        assertTrue(repository.statusEvents().isEmpty())
     }
 
     @Test
@@ -120,7 +142,7 @@ class DayPlanRepositoryTest {
         assertTrue(second is PlanApplyResult.AlreadyApplied)
         assertEquals(2, (restarted.load() as PlanLoadResult.Loaded).plan.version)
         assertEquals(2, backend.writes)
-        val persisted = PlanJsonCodec.decodeStore(backend.value!!)
+        val persisted = PlanV4JsonCodec.decodeStore(backend.value!!).store
         assertEquals(NOW, persisted.confirmations.single().consumedAt)
     }
 
