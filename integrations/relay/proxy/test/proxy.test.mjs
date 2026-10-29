@@ -190,6 +190,11 @@ function maskedFrame(opcode, payload, mask = Buffer.from([0x31, 0x52, 0x73, 0x94
   return frame;
 }
 
+function serverFrame(opcode, payload) {
+  assert.ok(payload.length < 126, 'test frame uses the short payload form');
+  return Buffer.concat([Buffer.from([0x80 | opcode, payload.length]), payload]);
+}
+
 function waitForEvent(emitter, event, timeoutMs = 2_000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -360,6 +365,56 @@ test('WebSocket upgrade forwards routing headers and preserves text and binary f
   assert.equal(logged.includes(queryMarker), false);
   assert.equal(logged.includes('frame-probe-marker'), false);
   assert.equal(logged.includes(binaryPayload.toString('hex')), false);
+});
+
+test('WebSocket tunnel preserves DEVICE_REVOKED and the upstream 4001 close code', async (t) => {
+  const revokedPayload = Buffer.from(JSON.stringify({
+    protocol: 'atlas.remote.v1',
+    kind: 'error',
+    error: { code: 'DEVICE_REVOKED' },
+  }), 'utf8');
+  const revokedFrame = serverFrame(0x1, revokedPayload);
+  const closeReason = Buffer.from('device revoked', 'utf8');
+  const closePayload = Buffer.alloc(2 + closeReason.length);
+  closePayload.writeUInt16BE(4001, 0);
+  closeReason.copy(closePayload, 2);
+  const closeFrame = serverFrame(0x8, closePayload);
+  const expectedFrames = Buffer.concat([revokedFrame, closeFrame]);
+  const upstream = await startUpstream((_req, res) => {
+    res.writeHead(404);
+    res.end();
+  }, (_req, socket) => {
+    const response = Buffer.from([
+      'HTTP/1.1 101 Switching Protocols',
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      `Sec-WebSocket-Accept: ${websocketAccept(WS_KEY)}`,
+      '',
+      '',
+    ].join('\r\n'), 'ascii');
+    socket.write(Buffer.concat([response, expectedFrames]), () => socket.end());
+  });
+  const { proxy, port } = await startProxy(upstream.port);
+  t.after(async () => {
+    await closeProxy(proxy);
+    await upstream.close();
+  });
+
+  const { socket, reader, response } = await openWebSocket(
+    port,
+    '/ws?serverId=synthetic&role=client&v=2',
+    '',
+    { optionalHeaders: false },
+  );
+  t.after(() => socket.destroy());
+  assert.equal(response.status, 101);
+
+  await reader.waitFor((buffer) => buffer.length >= expectedFrames.length);
+  const observedFrames = reader.take(expectedFrames.length);
+  assert.deepEqual(observedFrames, expectedFrames);
+  assert.equal(observedFrames.subarray(revokedFrame.length, revokedFrame.length + 2)[0] & 0x0f, 0x8);
+  assert.equal(observedFrames.readUInt16BE(revokedFrame.length + 2), 4001);
+  assert.equal(observedFrames.subarray(revokedFrame.length + 4).toString('utf8'), 'device revoked');
 });
 
 test('WebSocket query rejects legacy, missing, duplicate, unknown, malformed, and oversized values', async (t) => {
@@ -586,21 +641,21 @@ test('pinned relay integration on 4402', async (t) => {
     return;
   }
 
-  const proxy = createProxy({ listenPort: 4400, upstreamHost: '127.0.0.1', upstreamPort: 4402 });
-  await proxy.listen();
+  const proxy = createProxy({ listenPort: 0, upstreamHost: '127.0.0.1', upstreamPort: 4402 });
+  const proxyPort = (await proxy.listen()).port;
   t.after(() => closeProxy(proxy));
 
   for (const route of ['health', 'ready']) {
     const direct = await fetch(`http://127.0.0.1:4402/${route}`, { signal: AbortSignal.timeout(3_000) });
-    const proxied = await fetch(`http://127.0.0.1:4400/${route}`, { signal: AbortSignal.timeout(3_000) });
+    const proxied = await fetch(`http://127.0.0.1:${proxyPort}/${route}`, { signal: AbortSignal.timeout(3_000) });
     assert.equal(proxied.status, direct.status, `/${route} status`);
     assert.equal(proxied.headers.get('content-type'), direct.headers.get('content-type'), `/${route} content-type`);
     assert.deepEqual(Buffer.from(await proxied.arrayBuffer()), Buffer.from(await direct.arrayBuffer()), `/${route} body`);
   }
-  const metrics = await fetch('http://127.0.0.1:4400/metrics');
+  const metrics = await fetch(`http://127.0.0.1:${proxyPort}/metrics`);
   assert.equal(metrics.status, 404);
   const { socket, response } = await openWebSocket(
-    4400,
+    proxyPort,
     '/ws?serverId=synthetic&role=server&v=2',
     '',
     { optionalHeaders: false },
