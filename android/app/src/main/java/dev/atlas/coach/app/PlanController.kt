@@ -14,7 +14,6 @@ import dev.atlas.coach.plan.PlanApplyResult
 import dev.atlas.coach.plan.PlanClock
 import dev.atlas.coach.plan.PlanConfirmation
 import dev.atlas.coach.plan.PlanLoadResult
-import dev.atlas.coach.plan.PlanJsonCodec
 import dev.atlas.coach.plan.PlanOrigin
 import dev.atlas.coach.plan.PlanPreview
 import dev.atlas.coach.plan.PlanPreviewResult
@@ -37,7 +36,7 @@ import dev.atlas.coach.plan.StatusEventDraft
 import dev.atlas.coach.plan.StatusProvenance
 import dev.atlas.coach.plan.StatusSource
 import dev.atlas.coach.sync.agent.AgentMandate
-import dev.atlas.coach.plan.v4.PlanV4JsonCodec
+import dev.atlas.coach.plan.v5.PlanV5JsonCodec
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,7 +45,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
-import org.json.JSONObject
 
 /**
  * UI-facing owner of the local day plan. It never talks to the network and never
@@ -104,13 +102,7 @@ class PlanController(
         val file = File(directory, "day-plan-$date.json")
         if (!file.isFile) return null
         val rawDocument = runCatching { file.readText(Charsets.UTF_8) }.getOrNull() ?: return null
-        return runCatching {
-            when (JSONObject(rawDocument).opt("schema_version")) {
-                PlanJsonCodec.SCHEMA_VERSION -> PlanJsonCodec.decodeStore(rawDocument).dayPlan
-                PlanV4JsonCodec.SCHEMA_VERSION -> PlanV4JsonCodec.decodeStore(rawDocument).store.dayPlan
-                else -> null
-            }
-        }
+        return runCatching { PlanV5JsonCodec.decodeStore(rawDocument).store.dayPlan }
             .getOrNull()
             ?.takeIf { it.localDate == date.toString() }
     }

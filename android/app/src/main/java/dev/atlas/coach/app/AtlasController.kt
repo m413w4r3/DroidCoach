@@ -160,6 +160,10 @@ import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.coach.AgentConversationMessage
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
 import dev.atlas.coach.sync.agent.coach.AgentStatus
+import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.PlanActivity
+import dev.atlas.coach.plan.PlanRevisionEngine
+import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.coach.proactive.CoachTrigger
 import dev.atlas.coach.coach.proactive.CoachTriggerReliability
 import dev.atlas.coach.coach.proactive.CoachTriggerSource
@@ -340,7 +344,8 @@ class AtlasController @JvmOverloads constructor(
     @Volatile private var coachGateway: CoachGateway = LocalMockCoachGateway()
     @Volatile private var syncGateway: SyncGateway = LocalMockSyncGateway()
     private val phaseAlarms: PhaseAlarmScheduler = phaseAlarmSchedulerOverride ?: AndroidPhaseAlarmScheduler(appContext)
-    private val focusNotifications: PhaseNotifier = phaseNotifierOverride ?: AndroidFocusNotifications(appContext)
+    private val androidFocusNotifications = AndroidFocusNotifications(appContext)
+    private val focusNotifications: PhaseNotifier = phaseNotifierOverride ?: androidFocusNotifications
     private val routineAlarms = AndroidRoutineProposalScheduler(appContext)
     private val habitReminderScheduler = AndroidHabitReminderScheduler(appContext)
     private val stateReadResult = initialState.readResult
@@ -504,6 +509,8 @@ class AtlasController @JvmOverloads constructor(
     var latestMessage by mutableStateOf(recoveryNotice ?: (restored["latestMessage"] as? String))
         private set
     var capabilities by mutableStateOf(readCapabilities(restored["capabilities"].asMap()))
+        private set
+    var pendingPlanActivityNotificationAction by mutableStateOf<PlanActivityNotificationActionRequest?>(null)
         private set
     var syncBaseUrl by mutableStateOf(persistedSyncSettings.baseUrl)
         private set
@@ -734,6 +741,11 @@ class AtlasController @JvmOverloads constructor(
         if (capabilities[CAP_HABIT_REMINDERS] == true) habitReminderScheduler.rescheduleAll()
         refreshSyncRuntime()
         refreshBackgroundUsageWork()
+        PlanActivityNotificationRuntime.refreshFromApplication(
+            appContext,
+            capabilities[CAP_PLAN_ACTIVITY_NOTIFICATIONS] == true,
+            controller = this,
+        )
         pruneExpiredAgentInbox()
         reconcilePersistedBackendObservation()
         val interruptedEffects = agentDispatcher.reconcileInterrupted()
@@ -1131,6 +1143,28 @@ class AtlasController @JvmOverloads constructor(
     }
 
     fun handleNotificationIntent(intent: Intent?) {
+        if (intent?.action == PlanActivityNotificationRuntime.ACTION_OPEN_PLAN_ACTIVITY) {
+            val actionRequest = PlanActivityNotificationRuntime.targetFromIntent(intent)
+            if (actionRequest == null || capabilities[CAP_PLAN_ACTIVITY_NOTIFICATIONS] != true ||
+                !androidFocusNotifications.canPostPlanActivityReminder() ||
+                !isCurrentPlanActivityNotificationTarget(actionRequest.target) ||
+                (isEmergencyPaused && actionRequest.action != PlanActivityNotificationAction.OPEN)
+            ) {
+                latestMessage = PLAN_ACTIVITY_NOTIFICATION_UNAVAILABLE_MESSAGE
+                touch()
+                return
+            }
+            pendingPlanActivityNotificationAction = actionRequest
+            navigationState.navigate(AtlasScreenId.PLAN)
+            latestMessage = when (actionRequest.action) {
+                PlanActivityNotificationAction.OPEN -> "Activité du programme ouverte dans ATLAS."
+                PlanActivityNotificationAction.START -> "Démarrage demandé. ATLAS mettra à jour uniquement le statut du programme."
+                PlanActivityNotificationAction.DONE -> "Confirmez dans ATLAS si l’activité est terminée."
+                PlanActivityNotificationAction.REPORT -> "Choisissez et confirmez le nouveau créneau dans ATLAS."
+            }
+            touch()
+            return
+        }
         if (intent?.action != AndroidFocusNotifications.ACTION_OPEN_FROM_NOTIFICATION) return
         when {
             intent.getStringExtra("atlas_open_routine_id") != null -> {
@@ -1144,6 +1178,80 @@ class AtlasController @JvmOverloads constructor(
         }
         touch()
     }
+
+    internal fun consumePlanActivityNotificationAction(operationKey: String): PlanActivityNotificationActionRequest? {
+        val pending = pendingPlanActivityNotificationAction ?: return null
+        if (pending.target.operationKey != operationKey) return null
+        pendingPlanActivityNotificationAction = null
+        return pending
+    }
+
+    internal fun publishPlanActivityReminder(target: PlanActivityNotificationTarget): Boolean {
+        if (capabilities[CAP_PLAN_ACTIVITY_NOTIFICATIONS] != true || isEmergencyPaused ||
+            PlanActivityNotificationRuntime.wasPublished(appContext, target) ||
+            !androidFocusNotifications.canPostPlanActivityReminder() ||
+            !isCurrentPlanActivityNotificationTarget(target)
+        ) return false
+        val activity = currentPlanActivity(target) ?: return false
+        val dueAt = runCatching { PlanRevisionEngine().localToInstant(activity.scheduledLocal).toEpochMilli() }.getOrNull()
+            ?: return false
+        if (clock.nowMillis() < dueAt) return false
+
+        val actions = listOf(
+            "Démarrer" to PlanActivityNotificationRuntime.actionPendingIntent(
+                appContext,
+                target,
+                PlanActivityNotificationAction.START,
+            ),
+            "Terminé" to PlanActivityNotificationRuntime.actionPendingIntent(
+                appContext,
+                target,
+                PlanActivityNotificationAction.DONE,
+            ),
+            "Reporter" to PlanActivityNotificationRuntime.actionPendingIntent(
+                appContext,
+                target,
+                PlanActivityNotificationAction.REPORT,
+            ),
+        )
+        val posted = androidFocusNotifications.postPlanActivityReminder(
+            tag = PlanActivityNotificationRuntime.NOTIFICATION_TAG_PREFIX + target.operationKey,
+            contentIntent = PlanActivityNotificationRuntime.actionPendingIntent(
+                appContext,
+                target,
+                PlanActivityNotificationAction.OPEN,
+            ),
+            actions = actions,
+            isStillAuthorized = {
+                capabilities[CAP_PLAN_ACTIVITY_NOTIFICATIONS] == true &&
+                    !isEmergencyPaused &&
+                    !PlanActivityNotificationRuntime.wasPublished(appContext, target) &&
+                    isCurrentPlanActivityNotificationTarget(target)
+            },
+        )
+        if (posted) PlanActivityNotificationRuntime.markPublished(appContext, target)
+        return posted
+    }
+
+    private fun currentPlanActivity(target: PlanActivityNotificationTarget): PlanActivity? {
+        val date = runCatching { LocalDate.parse(target.localDate) }.getOrNull() ?: return null
+        val atlasApplication = appContext as? AtlasApplication ?: return null
+        val today = runCatching { LocalDate.parse(atlasApplication.planController.today) }.getOrNull() ?: return null
+        if (date != today && date != today.plusDays(1)) return null
+        val plan = atlasApplication.planController.planForDate(date) ?: return null
+        if (plan.state != PlanState.APPROVED || plan.planId != target.planId ||
+            plan.localDate != target.localDate || plan.version != target.planVersion
+        ) return null
+        return plan.activities.firstOrNull { activity ->
+            activity.activityId == target.activityId &&
+                activity.planId == plan.planId &&
+                activity.status == ActivityStatus.PLANNED &&
+                activity.scheduledLocal.localDate == plan.localDate
+        }
+    }
+
+    private fun isCurrentPlanActivityNotificationTarget(target: PlanActivityNotificationTarget): Boolean =
+        currentPlanActivity(target) != null
 
     fun setSyncEnabled(enabled: Boolean) {
         if (enabled) {
@@ -4330,6 +4438,7 @@ class AtlasController @JvmOverloads constructor(
             cancelPendingAgentWork("Pause d'urgence locale; action annulée")
             latestMessage = "Pause d'urgence active pendant 30 minutes."
             persist()
+            PlanActivityNotificationRuntime.cancel(appContext)
             refreshProactiveCoachWork()
         }
     }
@@ -4339,6 +4448,11 @@ class AtlasController @JvmOverloads constructor(
         policy = policy.copy(pauseUntil = null)
         latestMessage = "La pause d'urgence est terminée."
         persist()
+        PlanActivityNotificationRuntime.refreshFromApplication(
+            appContext,
+            capabilities[CAP_PLAN_ACTIVITY_NOTIFICATIONS] == true,
+            controller = this,
+        )
         refreshProactiveCoachWork()
     }
 
@@ -4381,6 +4495,9 @@ class AtlasController @JvmOverloads constructor(
             latestMessage = "La proactivité requiert un agent actif et un mandat valide."
             touch()
             return
+        }
+        if (name == CAP_PLAN_ACTIVITY_NOTIFICATIONS && enabled) {
+            androidFocusNotifications.ensurePlanActivityChannelForOptIn()
         }
         capabilities = capabilities + (name to enabled)
         if (name == CAP_USAGE_BACKGROUND) refreshBackgroundUsageWork()
@@ -4430,6 +4547,13 @@ class AtlasController @JvmOverloads constructor(
             }
         }
         persist()
+        if (name == CAP_PLAN_ACTIVITY_NOTIFICATIONS) {
+            if (enabled) {
+                PlanActivityNotificationRuntime.refreshFromApplication(appContext, enabled = true, controller = this)
+            } else {
+                PlanActivityNotificationRuntime.cancel(appContext, clearPublishedOperations = true)
+            }
+        }
         if (name == CAP_AGENT_PROACTIVE) refreshProactiveCoachWork()
     }
 
@@ -4625,6 +4749,7 @@ class AtlasController @JvmOverloads constructor(
         const val CAP_LAUNCHER_HOME = "launcherHome"
         const val CAP_FOCUS_ROUTINES = "focusRoutines"
         const val CAP_FOCUS_NOTIFICATIONS = "focusNotifications"
+        const val CAP_PLAN_ACTIVITY_NOTIFICATIONS = "planActivityNotifications"
         const val CAP_HABIT_REMINDERS = "habitReminders"
         const val CAP_SYNC = "sync"
         const val CAP_AGENT = "agent"
@@ -4653,6 +4778,8 @@ class AtlasController @JvmOverloads constructor(
         private const val MAX_PLAN_ACTIVITY_COACH_EVENTS = 200
         const val PROACTIVE_PROPOSAL_UNAVAILABLE_MESSAGE =
             "Cette proposition n'est plus disponible (expirée ou retirée). Aucune action n'a été effectuée."
+        const val PLAN_ACTIVITY_NOTIFICATION_UNAVAILABLE_MESSAGE =
+            "Ce rappel du programme a expiré ou a été retiré. Aucune action n'a été effectuée."
         private const val MAX_AGENT_CONTENT_ACTIVITY = 200
         private const val KEY_AGENT_CONTEXT_CONSENT_DATES = "agentContextConsentAt"
         private const val KEY_LAST_CONTEXT_DISCLOSURE_AUDIT = "lastAgentContextDisclosureAudit"
@@ -4674,6 +4801,7 @@ class AtlasController @JvmOverloads constructor(
                 CAP_LAUNCHER_HOME to false,
                 CAP_FOCUS_ROUTINES to false,
                 CAP_FOCUS_NOTIFICATIONS to false,
+                CAP_PLAN_ACTIVITY_NOTIFICATIONS to false,
                 CAP_HABIT_REMINDERS to false,
                 CAP_SYNC to false,
                 CAP_AGENT to true,
