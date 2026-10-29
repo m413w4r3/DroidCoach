@@ -557,8 +557,8 @@ class A1BoundedRevisionTest {
         createdAt: Long = NOW - 1_000,
         expiresAt: Long = NOW + A1BoundedRevisionPolicy.MAX_PROPOSAL_TTL_MILLIS - 1_000,
     ) = A1RevisionProposal(
-        proposalId = uuid("60000000-0000-4000-8000-000000000", number),
-        revisionId = uuid("30000000-0000-4000-8000-000000000", number),
+        proposalId = uuid("60000000-0000-4000-8000-", number),
+        revisionId = uuid("30000000-0000-4000-8000-", number),
         planId = current.planId,
         baseVersion = current.version,
         createdAtUtcMillis = createdAt,
