@@ -4,9 +4,21 @@ import { createHash } from "node:crypto";
 import { readPrivateJson, writePrivateJson } from "./secure-files.js";
 import { BackendRequestError, BackendClient } from "./backend.js";
 import { RemoteError } from "./errors.js";
-import { CACHE_TTL_MS, type Operation, type RequestEnvelope, type ResponseEnvelope, PROTOCOL, isRecord, validatePayload } from "./protocol.js";
+import { CACHE_TTL_MS, PROTOCOLS, type Operation, type RequestEnvelope, type ResponseEnvelope, isRecord, isV4Operation, validateOperationPayload } from "./protocol.js";
 
-const EFFECTFUL_OPERATIONS = new Set<Operation>(["plan.revision.request", "coach.chat.request"]);
+const EFFECTFUL_OPERATIONS = new Set<Operation>([
+  "plan.revision.request",
+  "coach.chat.request",
+  "v4.plan.snapshot.upsert",
+  "v4.activity-status.events.append",
+  "v4.usage.summary.upsert",
+  "v4.goal.snapshot.upsert",
+  "v4.training.snapshot.upsert",
+  "v4.proposals.pull",
+  "v4.proposals.ack",
+  "v4.coach.chat.request",
+  "v4.consent.state.upsert",
+]);
 const OUTCOME_UNCERTAIN_MESSAGE = "backend outcome is uncertain; retry is blocked until the 10-minute idempotency window expires";
 
 interface CacheEntry {
@@ -16,7 +28,7 @@ interface CacheEntry {
   operation: Operation;
   businessHash: string;
   requestHash: string;
-  outcome: "in_flight" | "uncertain" | "completed";
+  outcome: "in_flight" | "uncertain" | "completed" | "completed_redacted";
   response?: ResponseEnvelope;
   expiresAt: number;
 }
@@ -71,7 +83,11 @@ export class OperationExecutor {
     signal?: AbortSignal,
   ): Promise<ResponseEnvelope> {
     await this.initialize();
-    validatePayload(request.operation, request.payload);
+    validateOperationPayload(request.operation, request.payload, {
+      protocol: request.protocol,
+      requestId: request.request_id,
+      idempotencyKey: request.idempotency_key,
+    });
     this.cleanup();
     const requestKey = cacheKey(deviceId, request.request_id);
     const idempotencyKey = cacheKey(deviceId, request.idempotency_key);
@@ -194,7 +210,7 @@ export class OperationExecutor {
           completed_at: target.response.completed_at,
         };
       } else {
-        result = await this.backend.execute(request.operation, request.payload, signal);
+        result = await this.backend.execute(request.operation, request.payload, signal, deviceId);
       }
     } catch (error) {
       if (journalEntry) {
@@ -224,7 +240,7 @@ export class OperationExecutor {
 
     const completedAt = new Date(this.now()).toISOString();
     const response: ResponseEnvelope = {
-      protocol: PROTOCOL,
+      protocol: request.protocol,
       kind: "response",
       request_id: request.request_id,
       session_id: sessionId,
@@ -278,6 +294,9 @@ export class OperationExecutor {
   }
 
   private responseFor(entry: CacheEntry, requestId: string, sessionId: string): ResponseEnvelope {
+    if (entry.outcome === "completed_redacted") {
+      throw new RemoteError("BACKEND_UNAVAILABLE", false, "completed result was redacted; retry is blocked");
+    }
     if (entry.outcome !== "completed" || !entry.response) throw uncertainOutcomeError();
     return { ...entry.response, request_id: requestId, session_id: sessionId, replayed: true, completed_at: new Date(this.now()).toISOString() };
   }
@@ -326,7 +345,14 @@ export class OperationExecutor {
     const write = this.journalWrite.catch(() => undefined).then(async () => {
       const entries = [...this.idempotencyCache.values()]
         .filter((entry) => EFFECTFUL_OPERATIONS.has(entry.operation) && entry.expiresAt > this.now())
-        .map((entry) => ({ ...entry }));
+        .map((entry) => {
+          const persisted = { ...entry };
+          if (isV4Operation(entry.operation)) {
+            if (persisted.outcome === "completed") persisted.outcome = "completed_redacted";
+            delete persisted.response;
+          }
+          return persisted;
+        });
       const document: JournalDocument = { schema_version: 1, entries };
       await writePrivateJson(this.journalPath!, document);
       const directory = await open(dirname(this.journalPath!), "r");
@@ -357,13 +383,14 @@ function validateJournal(value: unknown): JournalDocument {
       typeof valueEntry.operation !== "string" || !EFFECTFUL_OPERATIONS.has(valueEntry.operation as Operation) ||
       typeof valueEntry.businessHash !== "string" || !/^[0-9a-f]{64}$/.test(valueEntry.businessHash) ||
       typeof valueEntry.requestHash !== "string" || !/^[0-9a-f]{64}$/.test(valueEntry.requestHash) ||
-      !["in_flight", "uncertain", "completed"].includes(String(valueEntry.outcome)) ||
+      !["in_flight", "uncertain", "completed", "completed_redacted"].includes(String(valueEntry.outcome)) ||
       typeof valueEntry.expiresAt !== "number" || !Number.isFinite(valueEntry.expiresAt)) {
       throw new Error("invalid operation journal");
     }
     const entry = valueEntry as unknown as CacheEntry;
     if (entry.outcome === "completed" && (!isResponseEnvelope(entry.response) || entry.response.operation !== entry.operation)) throw new Error("invalid operation journal");
-    if (entry.outcome !== "completed" && entry.response !== undefined) throw new Error("invalid operation journal");
+    if (entry.outcome === "completed_redacted" && (!isV4Operation(entry.operation) || entry.response !== undefined)) throw new Error("invalid operation journal");
+    if (entry.outcome !== "completed" && entry.outcome !== "completed_redacted" && entry.response !== undefined) throw new Error("invalid operation journal");
     const key = cacheKey(entry.deviceId, entry.idempotencyKey);
     if (seen.has(key)) throw new Error("invalid operation journal");
     seen.add(key);
@@ -373,7 +400,7 @@ function validateJournal(value: unknown): JournalDocument {
 }
 
 function isResponseEnvelope(value: unknown): value is ResponseEnvelope {
-  return isRecord(value) && value.protocol === PROTOCOL && value.kind === "response" &&
+  return isRecord(value) && PROTOCOLS.includes(value.protocol as (typeof PROTOCOLS)[number]) && value.kind === "response" &&
     typeof value.request_id === "string" && typeof value.session_id === "string" &&
     typeof value.operation === "string" && EFFECTFUL_OPERATIONS.has(value.operation as Operation) &&
     value.status === "OK" && isRecord(value.result) &&
