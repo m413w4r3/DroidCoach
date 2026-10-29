@@ -246,15 +246,11 @@ class AndroidCoreV4SyncStore internal constructor(
         root.put(KEY_CONSENTS, rows)
         if (!granted) {
             val pending = root.optJSONObject(KEY_PENDING) ?: JSONObject()
-            val keys = pending.keys().asSequence().toList()
-            keys.forEach { key ->
-                val pendingCategory = pending.optJSONObject(key)?.optString("category")
-                if (pendingCategory == category.name) {
-                    pending.remove(key)
-                }
-            }
-            root.put(KEY_PENDING, pending)
             if (category == CoreV4Category.ACTIVITY_STATUS) {
+                val pendingEventIds = pending.keys().asSequence()
+                    .filter { pending.optJSONObject(it)?.optString("category") == category.name }
+                    .mapNotNull { it.takeIf { key -> key.startsWith("status:") }?.removePrefix("status:") }
+                    .toSet()
                 val receipts = root.optJSONObject(KEY_RECEIPTS) ?: JSONObject()
                 val sequences = root.optJSONObject(KEY_STATUS_SEQUENCES) ?: JSONObject()
                 val acceptedEventIds = receipts.keys().asSequence()
@@ -263,16 +259,25 @@ class AndroidCoreV4SyncStore internal constructor(
                     .map { it.removePrefix("status:") }
                     .toSet()
                 sequences.keys().asSequence().toList().forEach { eventId ->
-                    if (eventId !in acceptedEventIds) sequences.remove(eventId)
+                    if (eventId !in acceptedEventIds && eventId !in pendingEventIds) sequences.remove(eventId)
                 }
-                val lastAcceptedSequence = receipts.keys().asSequence()
+                root.put(KEY_STATUS_SEQUENCES, sequences)
+                val highestAccepted = receipts.keys().asSequence()
                     .mapNotNull { receipts.optJSONObject(it) }
                     .filter { it.optString("category") == category.name }
-                    .map { it.optInt("version") }
-                    .maxOrNull() ?: 0
-                root.put(KEY_STATUS_SEQUENCES, sequences)
-                root.put(KEY_STATUS_SEQUENCE, lastAcceptedSequence.toLong())
+                    .maxOfOrNull { it.optInt("version").toLong() } ?: 0L
+                val highestPending = pendingEventIds.maxOfOrNull { eventId ->
+                    pending.optJSONObject("status:$eventId")?.optInt("source_version")?.toLong() ?: 0L
+                } ?: 0L
+                val highestReserved = sequences.keys().asSequence()
+                    .maxOfOrNull { sequences.optLong(it, 0L) } ?: 0L
+                root.put(KEY_STATUS_SEQUENCE, maxOf(highestAccepted, highestPending, highestReserved))
+            } else {
+                pending.keys().asSequence().toList().forEach { key ->
+                    if (pending.optJSONObject(key)?.optString("category") == category.name) pending.remove(key)
+                }
             }
+            root.put(KEY_PENDING, pending)
         }
         writeRoot(root)
         next.toConsent(category)
@@ -469,15 +474,107 @@ class AndroidCoreV4SyncStore internal constructor(
             .toList()
     }
 
-    fun latestPlanReceiptVersion(planId: String): Int? = withCoreV4StateLock {
-        val prefix = "plan:" + planId + ":consent:"
-        val receipts = readRoot().optJSONObject(KEY_RECEIPTS) ?: return@withCoreV4StateLock null
-        receipts.keys().asSequence()
-            .filter { it.startsWith(prefix) }
+    fun hasPendingProjection(sourceKey: String, body: String): Boolean = withCoreV4StateLock {
+        readRoot().optJSONObject(KEY_PENDING)?.optJSONObject(sourceKey)?.optString("body") == body
+    }
+
+    /**
+     * A stale status body may be replaced only after the backend definitively rejected it.
+     * The event id, source sequence, fingerprint, and event data remain unchanged.
+     */
+    fun replaceRejectedStatusProjection(
+        rejected: CoreV4PendingProjection,
+        consentVersion: Int,
+        client: CoreV4SyncClient,
+        nowUtc: String,
+    ): CoreV4PendingProjection = withCoreV4StateLock {
+        require(rejected.request.category == CoreV4Category.ACTIVITY_STATUS)
+        require(consentVersion > rejected.request.consentVersion)
+        val root = readRoot()
+        val pending = root.optJSONObject(KEY_PENDING) ?: JSONObject()
+        val current = pending.optJSONObject(rejected.sourceKey)
+            ?: throw CoreV4SyncException(CoreV4FailureKind.CONFLICT, false, errorCode = "status_pending_missing")
+        check(current.optString("body") == rejected.body) { "Status body changed before definitive rejection." }
+        check(current.optInt("source_version") == rejected.sourceVersion)
+        val request = CoreV4ProjectionRequest(
+            category = CoreV4Category.ACTIVITY_STATUS,
+            consentVersion = consentVersion,
+            requestId = UUID.randomUUID().toString(),
+            idempotencyKey = UUID.randomUUID().toString(),
+            sentAt = nowUtc,
+            data = JSONObject(rejected.request.data.toString()),
+        )
+        val body = client.projectionBody(request)
+        val usedKeys = root.optJSONObject(KEY_USED_KEYS) ?: JSONObject()
+        val bodyHash = sha256(body)
+        val usedHash = usedKeys.optString(request.idempotencyKey, "")
+        if (usedHash.isNotEmpty() && usedHash != bodyHash) {
+            throw CoreV4SyncException(CoreV4FailureKind.IDEMPOTENCY_CONFLICT, false)
+        }
+        usedKeys.put(request.idempotencyKey, bodyHash)
+        pending.put(rejected.sourceKey, JSONObject()
+            .put("category", CoreV4Category.ACTIVITY_STATUS.name)
+            .put("source_version", rejected.sourceVersion)
+            .put("source_fingerprint", rejected.sourceFingerprint)
+            .put("consent_version", consentVersion)
+            .put("body", body))
+        root.put(KEY_USED_KEYS, usedKeys)
+        root.put(KEY_PENDING, pending)
+        writeRoot(root)
+        CoreV4PendingProjection(rejected.sourceKey, rejected.sourceVersion, rejected.sourceFingerprint, request, body)
+    }
+
+    /** Discard a status only after a backend response proves that this event was not accepted. */
+    fun discardRejectedStatusProjection(
+        rejected: CoreV4PendingProjection,
+        errorCode: String,
+        sequenceConsumedOrUnknown: Boolean = false,
+    ) = withCoreV4StateLock {
+        require(rejected.request.category == CoreV4Category.ACTIVITY_STATUS)
+        require(errorCode.matches(Regex("[A-Za-z0-9_.-]{1,64}")))
+        val root = readRoot()
+        val pending = root.optJSONObject(KEY_PENDING) ?: return@withCoreV4StateLock
+        val current = pending.optJSONObject(rejected.sourceKey) ?: return@withCoreV4StateLock
+        if (current.optString("body") != rejected.body) return@withCoreV4StateLock
+        val receipts = root.optJSONObject(KEY_RECEIPTS) ?: JSONObject()
+        if (receipts.has(rejected.sourceKey)) return@withCoreV4StateLock
+        pending.remove(rejected.sourceKey)
+        root.put(KEY_PENDING, pending)
+        val eventId = rejected.sourceKey.removePrefix("status:")
+        val rejectedEvents = root.optJSONObject(KEY_REJECTED_STATUSES) ?: JSONObject()
+        rejectedEvents.put(eventId, errorCode)
+        root.put(KEY_REJECTED_STATUSES, rejectedEvents)
+        val sequences = root.optJSONObject(KEY_STATUS_SEQUENCES) ?: JSONObject()
+        if (sequenceConsumedOrUnknown) {
+            sequences.put(eventId, maxOf(sequences.optLong(eventId, 0L), rejected.sourceVersion.toLong()))
+        } else {
+            sequences.remove(eventId)
+        }
+        root.put(KEY_STATUS_SEQUENCES, sequences)
+        val highestAccepted = receipts.keys().asSequence()
             .mapNotNull { receipts.optJSONObject(it) }
-            .filter { it.optString("category") == CoreV4Category.DAY_PLAN.name }
-            .mapNotNull { it.optInt("version").takeIf { version -> version > 0 } }
-            .maxOrNull()
+            .filter { it.optString("category") == CoreV4Category.ACTIVITY_STATUS.name }
+            .maxOfOrNull { it.optInt("version").toLong() } ?: 0L
+        val highestPending = pending.keys().asSequence()
+            .mapNotNull { pending.optJSONObject(it) }
+            .filter { it.optString("category") == CoreV4Category.ACTIVITY_STATUS.name }
+            .maxOfOrNull { it.optInt("source_version").toLong() } ?: 0L
+        val highestReserved = sequences.keys().asSequence().maxOfOrNull { sequences.optLong(it, 0L) } ?: 0L
+        root.put(KEY_STATUS_SEQUENCE, maxOf(highestAccepted, highestPending, highestReserved))
+        writeRoot(root)
+    }
+
+    fun isStatusEventRejected(eventId: String): Boolean = withCoreV4StateLock {
+        readRoot().optJSONObject(KEY_REJECTED_STATUSES)?.has(eventId) == true
+    }
+
+    fun latestPlanReceiptVersion(planId: String, consentVersion: Int): Int? = withCoreV4StateLock {
+        val sourceKey = "plan:$planId:consent:$consentVersion"
+        val receipts = readRoot().optJSONObject(KEY_RECEIPTS) ?: return@withCoreV4StateLock null
+        receipts.optJSONObject(sourceKey)
+            ?.takeIf { it.optString("category") == CoreV4Category.DAY_PLAN.name }
+            ?.optInt("version")
+            ?.takeIf { it > 0 }
     }
 
     fun nextSourceVersion(sourceKey: String, fingerprint: String): Int = withCoreV4StateLock {
@@ -511,6 +608,9 @@ class AndroidCoreV4SyncStore internal constructor(
         if (pendingStatus?.optString("category") == CoreV4Category.ACTIVITY_STATUS.name) {
             return@withCoreV4StateLock pendingStatus.optInt("source_version").toLong()
         }
+        if (root.optJSONObject(KEY_REJECTED_STATUSES)?.has(eventId) == true) {
+            return@withCoreV4StateLock 0L
+        }
         val reserved = sequences.optLong(eventId, 0L)
         if (reserved > 0L) return@withCoreV4StateLock reserved
         sequences.remove(eventId)
@@ -528,7 +628,7 @@ class AndroidCoreV4SyncStore internal constructor(
             }
             ?: 0L
         val highestReserved = sequences.keys().asSequence().maxOfOrNull { sequences.optLong(it, 0L) } ?: 0L
-        val next = maxOf(highestAccepted, highestPending, highestReserved) + 1L
+        val next = maxOf(highestAccepted, highestPending, highestReserved, root.optLong(KEY_STATUS_SEQUENCE, 0L)) + 1L
         if (next > Int.MAX_VALUE.toLong()) {
             throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false, errorCode = "sequence_limit")
         }
@@ -667,6 +767,7 @@ class AndroidCoreV4SyncStore internal constructor(
         private const val KEY_SOURCE_VERSIONS = "source_versions"
         private const val KEY_STATUS_SEQUENCES = "status_sequences"
         private const val KEY_STATUS_SEQUENCE = "status_sequence"
+        private const val KEY_REJECTED_STATUSES = "rejected_status_events"
         private const val KEY_STATUS_CODE = "last_status_code"
         private const val KEY_STATUS_MESSAGE = "last_status_message"
         private const val KEY_STATUS_AT = "last_status_at"

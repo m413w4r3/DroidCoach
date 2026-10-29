@@ -365,7 +365,7 @@ class CoreV4SyncClientTest {
     }
 
     @Test
-    fun revokingPendingStatusCompactsItsSequenceAndAllowsResumeAfterRegrant() {
+    fun revokingPendingStatusKeepsItsSequenceAndAllowsResumeAfterRegrant() {
         val sharedState = SharedV4MemoryState()
         val settingsStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
         val workerStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
@@ -415,9 +415,12 @@ class CoreV4SyncClientTest {
             )
         }
         assertEquals(CoreV4FailureKind.OFFLINE, offline.kind)
+        val originalBody = abandonedPending.body
 
         settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = false)
-        assertTrue(workerStore.pendingProjections(CoreV4Category.ACTIVITY_STATUS).isEmpty())
+        val afterRevoke = workerStore.pendingProjections(CoreV4Category.ACTIVITY_STATUS).single()
+        assertEquals(originalBody, afterRevoke.body)
+        assertEquals(abandonedSequence, workerStore.sequenceForStatusEvent(abandonedEvent.statusEventId))
         settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
         transport.offline = false
         syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
@@ -463,7 +466,7 @@ class CoreV4SyncClientTest {
             observedAt = "2026-10-29T12:03:00Z",
         )
         val nextSequence = workerStore.sequenceForStatusEvent(nextEvent.statusEventId)
-        assertEquals(1L, nextSequence)
+        assertEquals(2L, nextSequence)
         val nextData = CoreV4SyncClient.statusData(nextEvent, revisedPlan.version, nextSequence)
         val nextPending = workerStore.prepareProjection(
             sourceKey = "status:${nextEvent.statusEventId}",
@@ -484,12 +487,142 @@ class CoreV4SyncClientTest {
                 CoreV4Category.DAY_PLAN.route,
                 CoreV4Category.ACTIVITY_STATUS.route,
                 CoreV4SyncClient.CONSENT_ROUTE,
+                CoreV4Category.ACTIVITY_STATUS.route,
                 CoreV4Category.DAY_PLAN.route,
                 CoreV4Category.ACTIVITY_STATUS.route,
             ),
             transport.requests.map { it.path },
         )
-        assertEquals(1, JSONObject(transport.requests.last().body).getJSONObject("data").getInt("sequence"))
+        assertEquals(2, JSONObject(transport.requests.last().body).getJSONObject("data").getInt("sequence"))
+    }
+
+    @Test
+    fun acceptedStatusWithLostResponseReplaysIdenticalBodyAfterRevokeAndRegrant() {
+        val sharedState = SharedV4MemoryState()
+        val settingsStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
+        val workerStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
+        assertFalse(settingsStore === workerStore)
+        val transport = AcceptThenLoseStatusResponseTransport()
+        val client = CoreV4SyncClient(transport)
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+
+        val plan = approvedPlan()
+        val originalPlan = plan.copy()
+        val event = statusEvent()
+        val firstPlanConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val firstStatusConsent = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        val offline = assertThrows(CoreV4SyncException::class.java) {
+            pushApprovedCoreV4PlanAndStatuses(
+                workerStore, client, TOKEN, plan, listOf(event), NOW,
+                firstPlanConsent, firstStatusConsent,
+            )
+        }
+        assertEquals(CoreV4FailureKind.OFFLINE, offline.kind)
+        val originalStatusBody = transport.statusRequests().first().body
+        assertEquals(1, JSONObject(originalStatusBody).getJSONObject("data").getInt("sequence"))
+        assertTrue(workerStore.hasPendingProjection("status:$EVENT_ID", originalStatusBody))
+
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = false)
+        assertFalse(coreV4RequestStillAuthorized(
+            workerStore,
+            CoreV4HttpRequest(CoreV4Category.ACTIVITY_STATUS.route, TOKEN, originalStatusBody),
+        ))
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+        val currentPlanConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val currentStatusConsent = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        assertTrue(coreV4RequestStillAuthorized(
+            workerStore,
+            CoreV4HttpRequest(CoreV4Category.ACTIVITY_STATUS.route, TOKEN, originalStatusBody),
+        ))
+
+        assertTrue(pushApprovedCoreV4PlanAndStatuses(
+            workerStore, client, TOKEN, plan, listOf(event), NOW,
+            currentPlanConsent, currentStatusConsent,
+        ))
+
+        val statusRequests = transport.statusRequests()
+        assertEquals(2, statusRequests.size)
+        assertEquals(originalStatusBody, statusRequests[1].body)
+        val storedReceipt = workerStore.receipt("status:$EVENT_ID") ?: error("expected duplicate receipt")
+        assertEquals("DUPLICATE", storedReceipt.resultCode)
+        assertEquals(transport.acceptedAt, storedReceipt.lastSyncedAt)
+        assertEquals(1, storedReceipt.version)
+        assertEquals(2L, workerStore.sequenceForStatusEvent(EVENT_ID_2))
+        assertEquals(originalPlan, plan)
+        assertTrue(workerStore.pendingProjections(CoreV4Category.ACTIVITY_STATUS).isEmpty())
+    }
+
+    @Test
+    fun dayPlanRegrantPushesCurrentPlanBeforePendingStatus() {
+        val sharedState = SharedV4MemoryState()
+        val settingsStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
+        val workerStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
+        val transport = FakeTransport()
+        val client = CoreV4SyncClient(transport)
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+
+        val plan = approvedPlan()
+        val event = statusEvent()
+        val initialPlanConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val statusConsent = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        val initialPlanData = CoreV4SyncClient.planData(plan, listOf(event), NOW)
+        val initialPlanPending = workerStore.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${initialPlanConsent.version}",
+            sourceVersion = plan.version,
+            sourceFingerprint = coreV4Fingerprint(initialPlanData, "observed_at"),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = initialPlanConsent.version,
+            data = initialPlanData,
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected initial plan")
+        val initialPlanReceipt = client.sendProjection(
+            initialPlanPending.request, initialPlanPending.body, TOKEN, initialPlanConsent,
+        )
+        workerStore.acknowledgeProjection(initialPlanPending, initialPlanReceipt, NOW)
+
+        val sequence = workerStore.sequenceForStatusEvent(event.statusEventId)
+        val data = CoreV4SyncClient.statusData(event, plan.version, sequence)
+        transport.offline = true
+        val offline = assertThrows(CoreV4SyncException::class.java) {
+            sendCoreV4Projection(
+                workerStore, client, TOKEN, CoreV4Category.ACTIVITY_STATUS,
+                "status:${event.statusEventId}", sequence.toInt(), coreV4Fingerprint(data), data,
+                NOW, statusConsent, initialPlanConsent,
+            )
+        }
+        assertEquals(CoreV4FailureKind.OFFLINE, offline.kind)
+        val pendingBody = workerStore.pendingProjections(CoreV4Category.ACTIVITY_STATUS).single().body
+        transport.offline = false
+
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = false)
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        syncPendingCoreV4ConsentsFirst(workerStore, client, TOKEN)
+        val currentPlanConsent = workerStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        val currentStatusConsent = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        val beforeResume = transport.requests.size
+
+        assertTrue(pushApprovedCoreV4PlanAndStatuses(
+            workerStore, client, TOKEN, plan, listOf(event), NOW,
+            currentPlanConsent, currentStatusConsent,
+        ))
+
+        val resumeRequests = transport.requests.drop(beforeResume)
+        assertEquals(
+            listOf(CoreV4Category.DAY_PLAN.route, CoreV4Category.ACTIVITY_STATUS.route),
+            resumeRequests.map { it.path },
+        )
+        assertEquals(currentPlanConsent.version,
+            JSONObject(resumeRequests.first().body).getInt("consent_version"))
+        assertEquals(pendingBody, resumeRequests.last().body)
+        assertEquals(1, JSONObject(resumeRequests.last().body).getJSONObject("data").getInt("sequence"))
+        assertEquals("ACCEPTED", workerStore.receipt("status:${event.statusEventId}")?.resultCode)
+        assertTrue(workerStore.pendingProjections(CoreV4Category.ACTIVITY_STATUS).isEmpty())
     }
 
     @Test
@@ -824,6 +957,39 @@ class CoreV4SyncClientTest {
                 .put("result_code", if (duplicate) "DUPLICATE" else "ACCEPTED")
                 .toString())
         }
+    }
+
+    /** Models server acceptance followed by a lost response, then the backend's duplicate receipt. */
+    private class AcceptThenLoseStatusResponseTransport : CoreV4HttpTransport {
+        private val delegate = FakeTransport()
+        private var acceptedStatusRequest: CoreV4HttpRequest? = null
+        private var acceptedStatusResponse: CoreV4HttpResponse? = null
+        var acceptedAt: String? = null
+            private set
+
+        override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+            if (request.path != CoreV4Category.ACTIVITY_STATUS.route) return delegate.post(request)
+            val acceptedRequest = acceptedStatusRequest
+            if (acceptedRequest == null) {
+                val response = delegate.post(request)
+                acceptedStatusRequest = request
+                acceptedStatusResponse = response
+                acceptedAt = JSONObject(response.body).getJSONArray("items")
+                    .getJSONObject(0).getString("last_synced_at")
+                throw IOException("synthetic accepted response lost")
+            }
+            check(acceptedRequest.body == request.body) {
+                "A status retry must preserve the accepted event body."
+            }
+            val saved = acceptedStatusResponse ?: error("missing synthetic accepted response")
+            delegate.post(request)
+            val duplicate = JSONObject(saved.body)
+            duplicate.getJSONArray("items").getJSONObject(0).put("result_code", "DUPLICATE")
+            return saved.copy(body = duplicate.toString())
+        }
+
+        fun statusRequests(): List<CoreV4HttpRequest> = delegate.requests
+            .filter { it.path == CoreV4Category.ACTIVITY_STATUS.route }
     }
 
     companion object {

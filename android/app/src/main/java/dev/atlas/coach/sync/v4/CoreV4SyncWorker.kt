@@ -149,56 +149,21 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
     ) {
         val planConsent = consents.getValue(CoreV4Category.DAY_PLAN).snapshot
         val statusConsent = consents.getValue(CoreV4Category.ACTIVITY_STATUS).snapshot
-        if (planConsent.state == CoreV4ConsentState.GRANTED) {
-            if (!flushSupersededStatusRequestsBeforePlan(
-                    store, client, token, plan.planId, plan.version,
-                    statusConsent, planConsent,
-                )
-            ) {
-                store.recordSourceState(
-                    CoreV4Category.ACTIVITY_STATUS,
-                    "MISMATCH",
-                    "Un statut V4 en attente ne peut pas être repris avant la nouvelle version du plan.",
-                )
-                return
-            }
-            val data = CoreV4SyncClient.planData(plan, events, now)
-            val fingerprint = fingerprint(data, "observed_at")
-            val sourceKey = "plan:" + plan.planId + ":consent:" + planConsent.version
-            sendProjection(
-                store, client, token, CoreV4Category.DAY_PLAN, sourceKey, plan.version,
-                fingerprint, data, now, planConsent,
+        if (!pushApprovedCoreV4PlanAndStatuses(
+                store,
+                client,
+                token,
+                plan,
+                events,
+                now,
+                planConsent,
+                statusConsent,
             )
-            if (statusConsent.state == CoreV4ConsentState.GRANTED &&
-                !flushSupersededStatusRequestsBeforePlan(
-                    store, client, token, plan.planId, plan.version,
-                    statusConsent, planConsent,
-                )
-            ) {
-                store.recordSourceState(
-                    CoreV4Category.ACTIVITY_STATUS,
-                    "MISMATCH",
-                    "Un statut V4 en attente ne peut pas être repris après la nouvelle version du plan.",
-                )
-                return
-            }
-        }
-
-        if (planConsent.state != CoreV4ConsentState.GRANTED ||
-            statusConsent.state != CoreV4ConsentState.GRANTED ||
-            store.receipt("plan:" + plan.planId + ":consent:" + planConsent.version)?.version != plan.version
-        ) return
-        for (event in events.filter { it.planId == plan.planId && it.planVersion == plan.version }) {
-            if (isStopped) return
-            val sequence = store.sequenceForStatusEvent(event.statusEventId)
-            if (sequence !in 1..Int.MAX_VALUE.toLong()) {
-                throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false, errorCode = "sequence_limit")
-            }
-            val data = CoreV4SyncClient.statusData(event, plan.version, sequence)
-            val sourceKey = "status:" + event.statusEventId
-            sendProjection(
-                store, client, token, CoreV4Category.ACTIVITY_STATUS, sourceKey, sequence.toInt(),
-                fingerprint(data), data, now, statusConsent, planConsent,
+        ) {
+            store.recordSourceState(
+                CoreV4Category.ACTIVITY_STATUS,
+                "MISMATCH",
+                "Un statut V4 en attente ne peut pas être repris sous les consentements et le plan courants.",
             )
         }
     }
@@ -337,28 +302,10 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         consent: CoreV4ConsentSnapshot,
         dayPlanConsent: CoreV4ConsentSnapshot? = null,
     ) {
-        if (isStopped) return
-        val current = store.consent(category).snapshot
-        if (current.state != CoreV4ConsentState.GRANTED || current.version != consent.version ||
-            current.syncedVersion != current.version
-        ) return
-        if (dayPlanConsent != null) {
-            val currentPlan = store.consent(CoreV4Category.DAY_PLAN).snapshot
-            if (currentPlan.state != CoreV4ConsentState.GRANTED ||
-                currentPlan.version != dayPlanConsent.version ||
-                currentPlan.syncedVersion != currentPlan.version
-            ) return
-        }
-        val pending = store.prepareProjection(
-            sourceKey, sourceVersion, sourceFingerprint, category, consent.version, data, client, Instant.now().toString(),
-        ) ?: return
-        if (isStopped) return
-        val freshConsent = store.consent(category).snapshot
-        val freshPlanConsent = if (category == CoreV4Category.ACTIVITY_STATUS) {
-            store.consent(CoreV4Category.DAY_PLAN).snapshot
-        } else dayPlanConsent
-        val receipt = client.sendProjection(pending.request, pending.body, token, freshConsent, freshPlanConsent)
-        store.acknowledgeProjection(pending, receipt, observedAt)
+        sendCoreV4Projection(
+            store, client, token, category, sourceKey, sourceVersion, sourceFingerprint,
+            data, observedAt, consent, dayPlanConsent,
+        ) { isStopped }
     }
 
     private fun readTodayPlan(context: Context): PlanSnapshot? {
@@ -404,6 +351,188 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
     }
 }
 
+/** Pushes the plan under the current consent before status replay when that consent changed. */
+internal fun pushApprovedCoreV4PlanAndStatuses(
+    store: AndroidCoreV4SyncStore,
+    client: CoreV4SyncClient,
+    token: String,
+    plan: DayPlan,
+    events: List<PlanStatusEvent>,
+    now: String,
+    planConsent: CoreV4ConsentSnapshot,
+    statusConsent: CoreV4ConsentSnapshot,
+    shouldStop: () -> Boolean = { false },
+): Boolean {
+    if (planConsent.state != CoreV4ConsentState.GRANTED || planConsent.syncedVersion != planConsent.version) {
+        return true
+    }
+
+    val currentConsentPlanVersion = store.latestPlanReceiptVersion(plan.planId, planConsent.version)
+    if (currentConsentPlanVersion != null && statusConsent.state == CoreV4ConsentState.GRANTED &&
+        statusConsent.syncedVersion == statusConsent.version &&
+        !flushSupersededStatusRequestsBeforePlan(
+            store, client, token, plan.planId, plan.version, statusConsent, planConsent,
+        )
+    ) return false
+
+    val planData = CoreV4SyncClient.planData(plan, events, now)
+    sendCoreV4Projection(
+        store,
+        client,
+        token,
+        CoreV4Category.DAY_PLAN,
+        "plan:${plan.planId}:consent:${planConsent.version}",
+        plan.version,
+        coreV4Fingerprint(planData, "observed_at"),
+        planData,
+        now,
+        planConsent,
+        shouldStop = shouldStop,
+    )
+    if (shouldStop()) return true
+    if (store.latestPlanReceiptVersion(plan.planId, planConsent.version) != plan.version) return false
+
+    if (statusConsent.state != CoreV4ConsentState.GRANTED || statusConsent.syncedVersion != statusConsent.version) {
+        return true
+    }
+    if (!flushSupersededStatusRequestsBeforePlan(
+            store, client, token, plan.planId, plan.version, statusConsent, planConsent,
+        )
+    ) return false
+
+    for (event in events.filter { it.planId == plan.planId && it.planVersion == plan.version }) {
+        if (shouldStop()) return true
+        if (store.isStatusEventRejected(event.statusEventId)) continue
+        val sequence = store.sequenceForStatusEvent(event.statusEventId)
+        if (sequence !in 1..Int.MAX_VALUE.toLong()) {
+            throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false, errorCode = "sequence_limit")
+        }
+        val data = CoreV4SyncClient.statusData(event, plan.version, sequence)
+        sendCoreV4Projection(
+            store,
+            client,
+            token,
+            CoreV4Category.ACTIVITY_STATUS,
+            "status:${event.statusEventId}",
+            sequence.toInt(),
+            coreV4Fingerprint(data),
+            data,
+            now,
+            statusConsent,
+            planConsent,
+            shouldStop,
+        )
+    }
+    return true
+}
+
+/** Persists each exact request before transport and acknowledges only validated receipts. */
+internal fun sendCoreV4Projection(
+    store: AndroidCoreV4SyncStore,
+    client: CoreV4SyncClient,
+    token: String,
+    category: CoreV4Category,
+    sourceKey: String,
+    sourceVersion: Int,
+    sourceFingerprint: String,
+    data: JSONObject,
+    observedAt: String,
+    consent: CoreV4ConsentSnapshot,
+    dayPlanConsent: CoreV4ConsentSnapshot? = null,
+    shouldStop: () -> Boolean = { false },
+) {
+    if (shouldStop()) return
+    val current = store.consent(category).snapshot
+    if (current.state != CoreV4ConsentState.GRANTED || current.version != consent.version ||
+        current.syncedVersion != current.version
+    ) return
+    if (dayPlanConsent != null) {
+        val currentPlan = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        if (currentPlan.state != CoreV4ConsentState.GRANTED ||
+            currentPlan.version != dayPlanConsent.version || currentPlan.syncedVersion != currentPlan.version
+        ) return
+    }
+    val pending = store.prepareProjection(
+        sourceKey, sourceVersion, sourceFingerprint, category, consent.version, data, client, Instant.now().toString(),
+    ) ?: return
+    if (shouldStop()) return
+
+    if (category == CoreV4Category.ACTIVITY_STATUS) {
+        sendPendingCoreV4Status(store, client, token, pending, observedAt)
+        return
+    }
+    val freshConsent = store.consent(category).snapshot
+    val receipt = client.sendProjection(pending.request, pending.body, token, freshConsent, dayPlanConsent)
+    store.acknowledgeProjection(pending, receipt, observedAt)
+}
+
+private fun sendPendingCoreV4Status(
+    store: AndroidCoreV4SyncStore,
+    client: CoreV4SyncClient,
+    token: String,
+    pending: dev.atlas.coach.sync.CoreV4PendingProjection,
+    observedAt: String,
+    mayRefreshConsentVersion: Boolean = true,
+) {
+    val statusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+    val planConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+    try {
+        val receipt = client.sendProjection(
+            pending.request,
+            pending.body,
+            token,
+            statusConsent,
+            planConsent,
+            allowStaleStatusReplay = pending.request.consentVersion < statusConsent.version,
+        )
+        store.acknowledgeProjection(pending, receipt, observedAt)
+    } catch (error: CoreV4SyncException) {
+        if (mayRefreshConsentVersion &&
+            error.httpStatus == 409 && error.errorCode == "STALE_VERSION" &&
+            statusConsent.state == CoreV4ConsentState.GRANTED &&
+            statusConsent.syncedVersion == statusConsent.version &&
+            statusConsent.version > pending.request.consentVersion
+        ) {
+            val replacement = store.replaceRejectedStatusProjection(
+                pending, statusConsent.version, client, Instant.now().toString(),
+            )
+            sendPendingCoreV4Status(store, client, token, replacement, observedAt, mayRefreshConsentVersion = false)
+            return
+        }
+        if (isDefinitiveStatusRejection(error)) {
+            store.discardRejectedStatusProjection(
+                pending,
+                error.errorCode ?: "REJECTED",
+                sequenceConsumedOrUnknown = error.errorCode == "CONFLICT",
+            )
+            store.recordSourceState(
+                CoreV4Category.ACTIVITY_STATUS,
+                "MISMATCH",
+                "Un statut V4 a reçu un rejet définitif (${error.errorCode ?: "REJECTED"}).",
+            )
+            return
+        }
+        throw error
+    }
+}
+
+private fun isDefinitiveStatusRejection(error: CoreV4SyncException): Boolean = when {
+    error.httpStatus == 404 -> error.errorCode in setOf("PLAN_NOT_FOUND", "ACTIVITY_NOT_FOUND")
+    error.httpStatus == 409 -> error.errorCode in setOf(
+        "STALE_VERSION", "STALE_DATA", "PLAN_MISMATCH", "CONFLICT",
+    )
+    error.httpStatus == 422 -> error.errorCode == "VALIDATION_FAILED"
+    else -> false
+}
+
+internal fun coreV4Fingerprint(value: JSONObject, vararg ignored: String): String {
+    val copy = JSONObject(value.toString())
+    ignored.forEach(copy::remove)
+    return MessageDigest.getInstance("SHA-256")
+        .digest(copy.toString().toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+}
+
 internal fun syncPendingCoreV4ConsentsFirst(
     store: AndroidCoreV4SyncStore,
     client: CoreV4SyncClient,
@@ -437,13 +566,24 @@ internal fun coreV4RequestStillAuthorized(
         } else {
             val category = CoreV4Category.entries.firstOrNull { it.route == request.path } ?: return false
             val current = store.consent(category).snapshot
+            val envelopeConsentVersion = envelope.optInt("consent_version")
+            val pendingStatusReplay = if (category == CoreV4Category.ACTIVITY_STATUS &&
+                envelopeConsentVersion < current.version
+            ) {
+                val eventId = envelope.optJSONObject("data")?.optString("event_id")
+                !eventId.isNullOrBlank() && store.hasPendingProjection("status:$eventId", request.body)
+            } else {
+                false
+            }
             current.state == CoreV4ConsentState.GRANTED &&
-                current.version == envelope.optInt("consent_version") &&
                 current.syncedVersion == current.version &&
+                (current.version == envelopeConsentVersion || pendingStatusReplay) &&
                 (category != CoreV4Category.ACTIVITY_STATUS || run {
                     val planConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+                    val data = envelope.optJSONObject("data") ?: return false
                     planConsent.state == CoreV4ConsentState.GRANTED &&
-                        planConsent.syncedVersion == planConsent.version
+                        planConsent.syncedVersion == planConsent.version &&
+                        store.latestPlanReceiptVersion(data.optString("plan_id"), planConsent.version) != null
                 })
         }
     }.getOrDefault(false)
@@ -484,9 +624,10 @@ internal fun flushSupersededStatusRequestsBeforePlan(
     for ((index, pending) in pendingStatuses.withIndex()) {
         val pendingPlanId = pending.request.data.optString("plan_id")
         val pendingPlanVersion = pending.request.data.optInt("plan_version")
-        if (pending.request.consentVersion != statusConsent.version) return false
-        val remotePlanVersion = store.latestPlanReceiptVersion(pendingPlanId)
-        if (pendingPlanVersion != remotePlanVersion) {
+        if (pending.request.consentVersion > statusConsent.version) return false
+        val remotePlanVersion = store.latestPlanReceiptVersion(pendingPlanId, dayPlanConsent.version)
+            ?: return false
+        if (pendingPlanVersion > remotePlanVersion) {
             val canFollowPlanUpdate = pendingPlanId == planId &&
                 pendingPlanVersion == currentPlanVersion &&
                 pendingStatuses.drop(index).all { later ->
@@ -495,17 +636,20 @@ internal fun flushSupersededStatusRequestsBeforePlan(
                 }
             return canFollowPlanUpdate
         }
-        val receipt = client.sendProjection(
-            pending.request,
-            pending.body,
+        sendCoreV4Projection(
+            store,
+            client,
             token,
+            CoreV4Category.ACTIVITY_STATUS,
+            pending.sourceKey,
+            pending.sourceVersion,
+            pending.sourceFingerprint,
+            pending.request.data,
+            pending.request.data.optString("observed_at"),
             statusConsent,
             dayPlanConsent,
-        )
-        store.acknowledgeProjection(
-            pending,
-            receipt,
-            pending.request.data.getString("observed_at"),
+            // Preserve the exact pending body so the backend can return its existing receipt.
+            shouldStop = { false },
         )
     }
     return true

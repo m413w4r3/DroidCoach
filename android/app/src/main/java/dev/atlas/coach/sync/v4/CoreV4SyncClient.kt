@@ -243,9 +243,14 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
         bearerToken: String,
         consent: CoreV4ConsentSnapshot,
         dayPlanConsent: CoreV4ConsentSnapshot? = null,
+        allowStaleStatusReplay: Boolean = false,
     ): CoreV4Receipt {
+        val consentVersionMatches = consent.version == request.consentVersion
+        val consentAllowsReconciliation = allowStaleStatusReplay &&
+            request.category == CoreV4Category.ACTIVITY_STATUS &&
+            request.consentVersion < consent.version
         if (consent.category != request.category || consent.state != CoreV4ConsentState.GRANTED ||
-            consent.version != request.consentVersion || consent.syncedVersion != consent.version
+            (!consentVersionMatches && !consentAllowsReconciliation) || consent.syncedVersion != consent.version
         ) throw CoreV4SyncException(CoreV4FailureKind.CONSENT, false)
         if (request.category == CoreV4Category.ACTIVITY_STATUS &&
             (dayPlanConsent?.category != CoreV4Category.DAY_PLAN ||
