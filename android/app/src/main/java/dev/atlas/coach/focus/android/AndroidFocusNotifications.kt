@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.core.app.NotificationCompat
 import dev.atlas.coach.focus.PhaseNotificationResult
 import dev.atlas.coach.focus.PhaseNotifier
 import dev.atlas.coach.focus.PhaseTransition
@@ -20,6 +21,7 @@ import dev.atlas.coach.routines.RoutineProposalNotifier
 class AndroidFocusNotifications(context: Context) : PhaseNotifier, RoutineProposalNotifier {
     private val appContext = context.applicationContext
     private val manager = appContext.getSystemService(NotificationManager::class.java)
+    private val notificationPreferences = appContext.getSharedPreferences("atlas_notification_channels", Context.MODE_PRIVATE)
 
     override fun notify(transition: PhaseTransition): PhaseNotificationResult {
         ensureChannel()
@@ -69,6 +71,89 @@ class AndroidFocusNotifications(context: Context) : PhaseNotifier, RoutinePropos
         manager.cancel(notificationId("focus:$sessionId"))
     }
 
+    /** Creates the dedicated channel only after the user has opted in from the plan screen. */
+    fun ensurePlanActivityChannelForOptIn() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val notificationManager = manager ?: return
+        if (notificationManager.getNotificationChannel(PLAN_ACTIVITY_CHANNEL_ID) != null) {
+            if (!notificationPreferences.getBoolean(KEY_PLAN_ACTIVITY_CHANNEL_CREATED, false)) {
+                notificationPreferences.edit().putBoolean(KEY_PLAN_ACTIVITY_CHANNEL_CREATED, true).commit()
+            }
+            return
+        }
+        if (notificationPreferences.getBoolean(KEY_PLAN_ACTIVITY_CHANNEL_CREATED, false)) return
+        notificationManager.createNotificationChannel(
+            NotificationChannel(PLAN_ACTIVITY_CHANNEL_ID, "Rappels du programme", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = "Rappels locaux neutres pour les activités planifiées" },
+        )
+        notificationPreferences.edit().putBoolean(KEY_PLAN_ACTIVITY_CHANNEL_CREATED, true).commit()
+    }
+
+    /** A deleted, muted, permission-blocked, or globally disabled channel cannot publish. */
+    fun canPostPlanActivityReminder(): Boolean {
+        val notificationManager = manager ?: return false
+        if (!notificationPermissionGranted() || !notificationManager.areNotificationsEnabled()) return false
+        return channelAllowsPosting(notificationManager, PLAN_ACTIVITY_CHANNEL_ID)
+    }
+
+    /** Posts a deliberately generic lock-screen message after the final capability and plan gate. */
+    fun postPlanActivityReminder(
+        tag: String,
+        contentIntent: PendingIntent,
+        actions: List<Pair<String, PendingIntent>>,
+        isStillAuthorized: () -> Boolean,
+    ): Boolean = synchronized(PLAN_ACTIVITY_PUBLICATION_LOCK) {
+        val notificationManager = manager ?: return@synchronized false
+        if (!canPostPlanActivityReminder()) return@synchronized false
+        if (!runCatching(isStillAuthorized).getOrDefault(false)) return@synchronized false
+        val notification = NotificationCompat.Builder(appContext, PLAN_ACTIVITY_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("Rappel du programme")
+            .setContentText("Une activité est prévue. Ouvrez ATLAS pour la consulter.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Une activité est prévue. Ouvrez ATLAS pour la consulter."))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(appContext, PLAN_ACTIVITY_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                    .setContentTitle("ATLAS")
+                    .setContentText("Rappel disponible")
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .build(),
+            )
+            .setContentIntent(contentIntent)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .apply {
+                actions.forEachIndexed { index, (label, pendingIntent) ->
+                    val icon = when (index) {
+                        0 -> android.R.drawable.ic_media_play
+                        1 -> android.R.drawable.ic_menu_save
+                        else -> android.R.drawable.ic_menu_edit
+                    }
+                    addAction(NotificationCompat.Action.Builder(icon, label, pendingIntent).build())
+                }
+            }
+            .build()
+        notificationManager.notify(tag, PLAN_ACTIVITY_NOTIFICATION_ID, notification)
+        true
+    }
+
+    /** Revocation removes only notices owned by the plan reminder channel. */
+    fun cancelPlanActivityNotifications(): Int {
+        val notificationManager = manager ?: return 0
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return 0
+        return synchronized(PLAN_ACTIVITY_PUBLICATION_LOCK) {
+            val active = runCatching { notificationManager.activeNotifications }
+                .getOrDefault(emptyArray())
+                .filter { notification ->
+                    notification.packageName == appContext.packageName &&
+                        notification.notification.channelId == PLAN_ACTIVITY_CHANNEL_ID
+                }
+            active.forEach { notification -> notificationManager.cancel(notification.tag, notification.id) }
+            active.size
+        }
+    }
+
     private fun buildNotification(
         title: String,
         body: String,
@@ -112,17 +197,28 @@ class AndroidFocusNotifications(context: Context) : PhaseNotifier, RoutinePropos
     }
 
     private fun notificationPermissionResult(): PhaseNotificationResult {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return PhaseNotificationResult.PERMISSION_REQUIRED
+        if (!notificationPermissionGranted()) return PhaseNotificationResult.PERMISSION_REQUIRED
         if (!manager.areNotificationsEnabled()) return PhaseNotificationResult.NOTIFICATIONS_DISABLED
         return PhaseNotificationResult.POSTED
     }
+
+    private fun notificationPermissionGranted(): Boolean = Build.VERSION.SDK_INT < 33 ||
+        appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     private fun notificationId(key: String): Int = key.hashCode()
 
     companion object {
         const val CHANNEL_ID = "atlas_focus_phase"
         const val ACTION_OPEN_FROM_NOTIFICATION = "dev.atlas.coach.action.OPEN_FOCUS_NOTIFICATION"
+        const val PLAN_ACTIVITY_CHANNEL_ID = "atlas_plan_activity_reminders"
+        private const val PLAN_ACTIVITY_NOTIFICATION_ID = 0
+        private const val KEY_PLAN_ACTIVITY_CHANNEL_CREATED = "planActivityChannelCreated"
+        private val PLAN_ACTIVITY_PUBLICATION_LOCK = Any()
+
+        internal fun channelAllowsPosting(notificationManager: NotificationManager?, channelId: String): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+            val channel = notificationManager?.getNotificationChannel(channelId) ?: return false
+            return channel.importance >= NotificationManager.IMPORTANCE_DEFAULT
+        }
     }
 }

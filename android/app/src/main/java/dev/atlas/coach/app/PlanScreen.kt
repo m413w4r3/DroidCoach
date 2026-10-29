@@ -1,5 +1,10 @@
 package dev.atlas.coach.app
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +51,7 @@ import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.sync.relay.RelayTransportMode
+import dev.atlas.coach.focus.android.AndroidFocusNotifications
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
@@ -72,6 +79,12 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     }
     val controller = if (selectedTomorrow) tomorrowController else sourceController
     val plan = controller.plan
+    val pendingNotificationAction = atlasController?.pendingPlanActivityNotificationAction
+    LaunchedEffect(pendingNotificationAction?.target?.operationKey) {
+        val target = pendingNotificationAction?.target ?: return@LaunchedEffect
+        val today = runCatching { LocalDate.parse(sourceController.today) }.getOrNull() ?: return@LaunchedEffect
+        selectedTomorrow = target.localDate == today.plusDays(1).toString()
+    }
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var emptyDetailsExpanded by rememberSaveable { mutableStateOf(false) }
     var showDetails by rememberSaveable { mutableStateOf(false) }
@@ -83,18 +96,23 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     var movingId by rememberSaveable { mutableStateOf<String?>(null) }
     var removingId by rememberSaveable { mutableStateOf<String?>(null) }
     var reportingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var reportingPlanVersion by rememberSaveable { mutableIntStateOf(-1) }
     var contextualCoachActivityId by rememberSaveable { mutableStateOf<String?>(null) }
     var contextualCoachPlanVersion by rememberSaveable { mutableIntStateOf(0) }
     var contextualCoachActivityTitle by rememberSaveable { mutableStateOf("") }
     var addingNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingTerminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingTerminalStatusName by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmingTerminalPlanVersion by rememberSaveable { mutableIntStateOf(-1) }
+    var notificationTargetActivityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var notificationActionMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarPreview by remember { mutableStateOf<CalendarSyncPreview?>(null) }
     var calendarPlanAtDialogOpen by remember { mutableStateOf<dev.atlas.coach.plan.DayPlan?>(null) }
     var calendarSyncBusy by remember { mutableStateOf(false) }
     var calendarSyncMessage by remember { mutableStateOf<String?>(null) }
     var calendarDiverged by remember { mutableStateOf(false) }
     val appContext = LocalContext.current.applicationContext
+    val uiContext = LocalContext.current
     var calendarEffectController by remember { mutableStateOf<CalendarEffectController?>(null) }
     var currentMinute by remember(controller) {
         mutableIntStateOf(ZonedDateTime.now(ZoneId.of(controller.timezone)).let { it.hour * 60 + it.minute })
@@ -133,6 +151,26 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    LaunchedEffect(
+        atlasController?.capabilities?.get(AtlasController.CAP_PLAN_ACTIVITY_NOTIFICATIONS),
+        atlasController?.isEmergencyPaused,
+        sourceController.revision,
+        controller.revision,
+        plan?.version,
+    ) {
+        val coachController = atlasController ?: return@LaunchedEffect
+        val today = runCatching { LocalDate.parse(sourceController.today) }.getOrNull() ?: return@LaunchedEffect
+        val plans = withContext(Dispatchers.IO) {
+            listOf(today, today.plusDays(1)).mapNotNull(sourceController::planForDate)
+        }
+        val notifications = AndroidFocusNotifications(appContext)
+        PlanActivityNotificationRuntime.refresh(
+            context = appContext,
+            plans = plans,
+            eligible = coachController.capabilities[AtlasController.CAP_PLAN_ACTIVITY_NOTIFICATIONS] == true &&
+                !coachController.isEmergencyPaused && notifications.canPostPlanActivityReminder(),
+        )
+    }
     LaunchedEffect(controller) {
         while (true) {
             val zone = ZoneId.of(controller.timezone)
@@ -168,6 +206,60 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
     val addingNote = addingNoteId?.let(activitiesById::get)
     val confirmingTerminal = confirmingTerminalId?.let(activitiesById::get)
     val confirmingTerminalStatus = confirmingTerminalStatusName?.let { runCatching { ActivityStatus.valueOf(it) }.getOrNull() }
+    val notificationTargetActivity = notificationTargetActivityId?.let(activitiesById::get)
+    val planNotificationsEnabled = atlasController?.capabilities?.get(AtlasController.CAP_PLAN_ACTIVITY_NOTIFICATIONS) == true
+    val notificationPermissionGranted = Build.VERSION.SDK_INT < 33 ||
+        appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    val planNotificationsAvailable = AndroidFocusNotifications(appContext).canPostPlanActivityReminder()
+
+    LaunchedEffect(pendingNotificationAction, controller) {
+        val actionRequest = pendingNotificationAction ?: return@LaunchedEffect
+        if (controller.today != actionRequest.target.localDate) return@LaunchedEffect
+        controller.refresh()
+        val freshPlan = controller.plan
+        val freshActivity = freshPlan?.activities?.firstOrNull { it.activityId == actionRequest.target.activityId }
+        val targetMatches = atlasController?.capabilities?.get(AtlasController.CAP_PLAN_ACTIVITY_NOTIFICATIONS) == true &&
+            freshPlan != null &&
+            freshPlan.planId == actionRequest.target.planId &&
+            freshPlan.version == actionRequest.target.planVersion &&
+            freshPlan.state == dev.atlas.coach.plan.PlanState.APPROVED &&
+            freshActivity != null &&
+            freshActivity.planId == freshPlan.planId &&
+            freshActivity.status == ActivityStatus.PLANNED &&
+            freshActivity.scheduledLocal.localDate == actionRequest.target.localDate
+        if (!targetMatches) {
+            atlasController?.consumePlanActivityNotificationAction(actionRequest.target.operationKey)
+            notificationActionMessage = AtlasController.PLAN_ACTIVITY_NOTIFICATION_UNAVAILABLE_MESSAGE
+            return@LaunchedEffect
+        }
+        val consumed = atlasController?.consumePlanActivityNotificationAction(actionRequest.target.operationKey)
+            ?: return@LaunchedEffect
+        when (consumed.action) {
+            PlanActivityNotificationAction.OPEN -> {
+                notificationTargetActivityId = consumed.target.activityId
+                notificationActionMessage = "Activité ouverte depuis son rappel."
+            }
+            PlanActivityNotificationAction.START -> {
+                if (controller.setStatusAndConfirm(consumed.target.activityId, ActivityStatus.IN_PROGRESS)) {
+                    notificationTargetActivityId = consumed.target.activityId
+                    notificationActionMessage = "L’activité est marquée en cours dans le programme."
+                } else {
+                    notificationActionMessage = controller.message ?: "L’activité n’a pas pu être démarrée."
+                }
+            }
+            PlanActivityNotificationAction.DONE -> {
+                confirmingTerminalId = consumed.target.activityId
+                confirmingTerminalStatusName = ActivityStatus.DONE.name
+                confirmingTerminalPlanVersion = consumed.target.planVersion
+                notificationTargetActivityId = consumed.target.activityId
+            }
+            PlanActivityNotificationAction.REPORT -> {
+                reportingId = consumed.target.activityId
+                reportingPlanVersion = consumed.target.planVersion
+                notificationTargetActivityId = consumed.target.activityId
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -201,6 +293,63 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
         }
 
         nextActivity?.let { PlanNextActivityCard(it) }
+
+        AtlasSection("Rappels du programme") {
+            Text(
+                "Rappel local à l’heure prévue, selon WorkManager. Android peut le retarder, notamment avec Doze.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Activer les rappels", modifier = Modifier.weight(1f))
+                Switch(
+                    checked = planNotificationsEnabled,
+                    enabled = atlasController != null,
+                    onCheckedChange = { enabled ->
+                        atlasController?.setCapability(AtlasController.CAP_PLAN_ACTIVITY_NOTIFICATIONS, enabled)
+                    },
+                    modifier = Modifier.testTag("plan_activity_notifications_toggle"),
+                )
+            }
+            if (planNotificationsEnabled && !notificationPermissionGranted) {
+                Text("Autorisez les notifications Android pour recevoir ces rappels.", style = MaterialTheme.typography.bodySmall)
+                AtlasSecondaryButton("Réglages des notifications") {
+                    runCatching {
+                        uiContext.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }
+            } else if (planNotificationsEnabled && !planNotificationsAvailable) {
+                Text("Les notifications globales ou le canal « Rappels du programme » sont désactivés dans Android.", style = MaterialTheme.typography.bodySmall)
+                AtlasSecondaryButton("Réglages des notifications") {
+                    runCatching {
+                        uiContext.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }
+            }
+        }
+        notificationTargetActivity?.let { activity ->
+            Card(modifier = Modifier.fillMaxWidth().testTag("plan_notification_activity_target")) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    AtlasStatus("Activité du rappel", AtlasStatusKind.ACTIVE)
+                    Text(activity.title, style = MaterialTheme.typography.titleMedium)
+                    Text("Statut · ${PlanController.statusLabel(activity.status)}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        notificationActionMessage?.let { message ->
+            AtlasStatus(message, AtlasStatusKind.ACTIVE, modifier = Modifier.testTag("plan_notification_action_message"))
+        }
 
         controller.corruption?.let { reason ->
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -276,14 +425,16 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
                         onEdit = { editingId = it.activityId },
                         onRemove = { removingId = it.activityId },
                         onPrimary = { activity -> performPlanActivityPrimaryAction(activity, controller, atlasController) },
-                        onReport = { reportingId = it.activityId },
+                        onReport = { reportingId = it.activityId; reportingPlanVersion = plan.version },
                         onMarkMissed = {
                             confirmingTerminalId = it.activityId
                             confirmingTerminalStatusName = ActivityStatus.MISSED.name
+                            confirmingTerminalPlanVersion = plan.version
                         },
                         onCancel = {
                             confirmingTerminalId = it.activityId
                             confirmingTerminalStatusName = ActivityStatus.CANCELLED.name
+                            confirmingTerminalPlanVersion = plan.version
                         },
                         onAddNote = { addingNoteId = it.activityId },
                         onAskCoach = if (atlasController?.isAgentEnabled == true) {
@@ -552,34 +703,59 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             onDismissRequest = {
                 confirmingTerminalId = null
                 confirmingTerminalStatusName = null
+                confirmingTerminalPlanVersion = -1
             },
             title = {
-                Text(if (confirmingTerminalStatus == ActivityStatus.CANCELLED) "Annuler cette activité ?" else "Marquer comme pas fait ?")
+                Text(
+                    when (confirmingTerminalStatus) {
+                        ActivityStatus.CANCELLED -> "Annuler cette activité ?"
+                        ActivityStatus.DONE -> "Confirmer la fin de l’activité ?"
+                        else -> "Marquer comme pas fait ?"
+                    },
+                )
             },
             text = {
-                val consequence = if (confirmingTerminalStatus == ActivityStatus.CANCELLED) {
-                    "L’activité sera annulée volontairement."
-                } else {
-                    "L’activité sera déclarée manquée après la fin de son créneau."
+                val consequence = when (confirmingTerminalStatus) {
+                    ActivityStatus.CANCELLED -> "L’activité sera annulée volontairement."
+                    ActivityStatus.DONE -> "Vous confirmez explicitement qu’elle est terminée."
+                    else -> "L’activité sera déclarée manquée après la fin de son créneau."
                 }
                 Text("« ${confirmingTerminal.title} » · $consequence Cette décision sera enregistrée au programme.")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
+                        controller.refresh()
+                        if (controller.plan?.version != confirmingTerminalPlanVersion) {
+                            notificationActionMessage = "Le programme a changé. Rouvrez l’activité avant de confirmer."
+                            confirmingTerminalId = null
+                            confirmingTerminalStatusName = null
+                            confirmingTerminalPlanVersion = -1
+                            return@TextButton
+                        }
                         if (controller.setStatusAndConfirm(confirmingTerminal.activityId, confirmingTerminalStatus)) {
                             confirmingTerminalId = null
                             confirmingTerminalStatusName = null
+                            confirmingTerminalPlanVersion = -1
                         }
                     },
                     modifier = Modifier.sizeIn(minHeight = 48.dp),
-                ) { Text(if (confirmingTerminalStatus == ActivityStatus.CANCELLED) "Annuler l’activité" else "Pas fait") }
+                ) {
+                    Text(
+                        when (confirmingTerminalStatus) {
+                            ActivityStatus.CANCELLED -> "Annuler l’activité"
+                            ActivityStatus.DONE -> "Confirmer terminé"
+                            else -> "Pas fait"
+                        },
+                    )
+                }
             },
             dismissButton = {
                 TextButton(
                     onClick = {
                         confirmingTerminalId = null
                         confirmingTerminalStatusName = null
+                        confirmingTerminalPlanVersion = -1
                     },
                     modifier = Modifier.sizeIn(minHeight = 48.dp),
                 ) { Text("Garder") }
@@ -592,15 +768,22 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             PlanReportBottomSheet(
                 plan = currentPlan,
                 activity = activity,
-                onDismiss = { reportingId = null },
+                onDismiss = { reportingId = null; reportingPlanVersion = -1 },
                 onConfirm = { target ->
-                    controller.reportActivity(
-                        activityId = activity.activityId,
-                        targetLocalDate = target.localDate,
-                        targetStartMinute = target.startMinute,
-                        targetDurationMinutes = target.durationMinutes,
-                        reason = "Report choisi par l’utilisateur",
-                    )
+                    controller.refresh()
+                    if (controller.plan?.version != reportingPlanVersion) {
+                        controller.showTransientMessage("Le programme a changé. Vérifiez l’activité avant de confirmer le report.")
+                        false
+                    } else {
+                        controller.reportActivity(
+                            activityId = activity.activityId,
+                            targetLocalDate = target.localDate,
+                            targetStartMinute = target.startMinute,
+                            targetDurationMinutes = target.durationMinutes,
+                            reason = "Report choisi par l’utilisateur",
+                            baseVersion = reportingPlanVersion,
+                        )
+                    }
                 },
                 failureMessage = { controller.message },
             )
