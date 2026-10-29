@@ -1034,6 +1034,17 @@ def create_v4_router(
                 return _error_response(request, code, message, capability, status=status,
                                        fallback_request_id=request_id)
             if existing_receipt is not None:
+                for required_category in ("ACTIVITY_STATUS", "DAY_PLAN"):
+                    consent_state = projections.consent_state(device_ref, required_category)
+                    if consent_state is None or consent_state["state"] != "GRANTED":
+                        return _error_response(
+                            request,
+                            "CONSENT_REQUIRED",
+                            "Le consentement Android n’est pas GRANTED.",
+                            capability,
+                            status=403,
+                            fallback_request_id=request_id,
+                        )
                 response = {
                     "contract_version": 4,
                     "schema_version": 4,

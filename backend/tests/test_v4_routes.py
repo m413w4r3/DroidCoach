@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from atlas_backend.main import MAX_REQUEST_BYTES, create_app
@@ -386,6 +387,40 @@ def test_status_event_reconciles_before_stale_consent_and_reuses_stored_receipt(
     assert replay_item["result_code"] == "DUPLICATE"
     assert replay_item["last_synced_at"] == accepted_item["last_synced_at"]
     assert replay_item["last_synced_at"] != now[0].isoformat().replace("+00:00", "Z")
+    assert activity_status_row_count(client, event_id) == 1
+    client.close()
+
+
+@pytest.mark.parametrize("category", ["ACTIVITY_STATUS", "DAY_PLAN"])
+def test_status_event_replay_requires_current_grant_then_recovers_after_regrant(
+    tmp_path, monkeypatch, category
+):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    post_consent(client, "ACTIVITY_STATUS", "GRANTED", 3)
+    event_id = "00000000-0000-4000-8000-000000000505"
+    envelope = sync_envelope("activity_status.write", activity_status_data(event_id))
+
+    accepted = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert accepted.status_code == 200, accepted.text
+    stored_timestamp = accepted.json()["items"][0]["last_synced_at"]
+    assert activity_status_row_count(client, event_id) == 1
+
+    post_consent(client, category, "REVOKED", 4)
+    denied_replay = client.post(
+        "/v4/sync/activity-status-events", headers=android_headers(), json=envelope
+    )
+    assert denied_replay.status_code == 403
+    validate_error(denied_replay, "CONSENT_REQUIRED")
+    assert "items" not in denied_replay.json()
+    assert activity_status_row_count(client, event_id) == 1
+
+    post_consent(client, category, "GRANTED", 5)
+    replay = client.post("/v4/sync/activity-status-events", headers=android_headers(), json=envelope)
+    assert replay.status_code == 200, replay.text
+    validate("sync-receipts.schema.json", replay.json())
+    assert replay.json()["items"][0]["result_code"] == "DUPLICATE"
+    assert replay.json()["items"][0]["last_synced_at"] == stored_timestamp
     assert activity_status_row_count(client, event_id) == 1
     client.close()
 
