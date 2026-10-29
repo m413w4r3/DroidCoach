@@ -1,5 +1,8 @@
 package dev.atlas.coach.app
 
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -35,10 +40,38 @@ import androidx.compose.ui.unit.dp
 import dev.atlas.coach.app.ui.AtlasRule
 import dev.atlas.coach.app.ui.AtlasSecondaryButton
 import dev.atlas.coach.app.ui.AtlasSection
+import dev.atlas.coach.sync.AndroidSyncStorage
 import dev.atlas.coach.sync.SyncDataCategory
+import dev.atlas.coach.sync.v4.CoreV4Category
+import dev.atlas.coach.sync.v4.CoreV4ConsentState
+import dev.atlas.coach.sync.v4.CoreV4SyncScheduler
 
 @Composable
 fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER") revision: Int) {
+    val context = LocalContext.current.applicationContext
+    val v4Store = remember(context) { AndroidSyncStorage.v4(context) }
+    val v4WorkManager = remember(context) { WorkManager.getInstance(context) }
+    var v4Consents by remember(v4Store) { mutableStateOf(v4Store.consents()) }
+    var v4Presentation by remember(v4Store) { mutableStateOf(v4Store.presentation()) }
+    val refreshV4 = {
+        v4Consents = v4Store.consents()
+        v4Presentation = v4Store.presentation()
+    }
+    val immediateWork = remember(v4WorkManager) {
+        v4WorkManager.getWorkInfosForUniqueWorkLiveData(CoreV4SyncScheduler.IMMEDIATE_WORK)
+    }
+    val periodicWork = remember(v4WorkManager) {
+        v4WorkManager.getWorkInfosForUniqueWorkLiveData(CoreV4SyncScheduler.PERIODIC_WORK)
+    }
+    DisposableEffect(immediateWork, periodicWork) {
+        val observer = Observer<List<WorkInfo>> { refreshV4() }
+        immediateWork.observeForever(observer)
+        periodicWork.observeForever(observer)
+        onDispose {
+            immediateWork.removeObserver(observer)
+            periodicWork.removeObserver(observer)
+        }
+    }
     var baseUrl by remember(controller, controller.syncBaseUrl) { mutableStateOf(controller.syncBaseUrl) }
     var token by remember { mutableStateOf("") }
     var showClearQueue by remember { mutableStateOf(false) }
@@ -89,7 +122,7 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             )
         }
         Text(
-            "Désactiver Sync révoque les catégories et supprime les événements en attente.",
+            "Désactiver Sync V1 révoque ses catégories et purge sa file. Le Push Core V4 se règle séparément ci-dessous.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -112,6 +145,86 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
                 Text("Détails privés d'applications", color = MaterialTheme.colorScheme.onSurface)
                 Text("Désactivés et jamais envoyés.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+
+        Text("Push Core V4 · Android vers Core", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            "Les catégories V4 sont indépendantes et désactivées par défaut. Le worker transmet leur consentement avant les projections. Les envois relisent le plan approuvé sans le modifier; la révocation arrête les travaux V4 en attente.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AtlasRule()
+        CoreV4ConsentRow(
+            title = "Plan approuvé",
+            description = "Version du plan et créneaux; notes exclues.",
+            state = v4Consents.first { it.snapshot.category == CoreV4Category.DAY_PLAN }.snapshot.state,
+            freshness = v4Store.freshness(CoreV4Category.DAY_PLAN),
+        ) { enabled ->
+            v4Store.setConsent(CoreV4Category.DAY_PLAN, enabled)
+            CoreV4SyncScheduler.schedule(context)
+            refreshV4()
+        }
+        CoreV4ConsentRow(
+            title = "Journal des statuts",
+            description = "Événements déjà décidés localement; aucune transition n'est créée.",
+            state = v4Consents.first { it.snapshot.category == CoreV4Category.ACTIVITY_STATUS }.snapshot.state,
+            freshness = v4Store.freshness(CoreV4Category.ACTIVITY_STATUS),
+        ) { enabled ->
+            v4Store.setConsent(CoreV4Category.ACTIVITY_STATUS, enabled)
+            CoreV4SyncScheduler.schedule(context)
+            refreshV4()
+        }
+        CoreV4ConsentRow(
+            title = "Résumé d'usage",
+            description = "Résumé local uniquement si le consentement de collecte est actif; aucun nom d'application.",
+            state = v4Consents.first { it.snapshot.category == CoreV4Category.USAGE_SUMMARY }.snapshot.state,
+            freshness = v4Store.freshness(CoreV4Category.USAGE_SUMMARY),
+        ) { enabled ->
+            v4Store.setConsent(CoreV4Category.USAGE_SUMMARY, enabled)
+            CoreV4SyncScheduler.schedule(context)
+            refreshV4()
+        }
+        CoreV4ConsentRow(
+            title = "Progression des objectifs",
+            description = "Identifiants UUID et mesure; détails et prochaine action exclus.",
+            state = v4Consents.first { it.snapshot.category == CoreV4Category.GOAL_PROGRESS }.snapshot.state,
+            freshness = v4Store.freshness(CoreV4Category.GOAL_PROGRESS),
+        ) { enabled ->
+            v4Store.setConsent(CoreV4Category.GOAL_PROGRESS, enabled)
+            CoreV4SyncScheduler.schedule(context)
+            refreshV4()
+        }
+        CoreV4ConsentRow(
+            title = "Références d'entraînement",
+            description = "Références wger déjà présentes localement; aucune lecture live ni séance inventée.",
+            state = v4Consents.first { it.snapshot.category == CoreV4Category.TRAINING_PLAN }.snapshot.state,
+            freshness = v4Store.freshness(CoreV4Category.TRAINING_PLAN),
+        ) { enabled ->
+            v4Store.setConsent(CoreV4Category.TRAINING_PLAN, enabled)
+            CoreV4SyncScheduler.schedule(context)
+            refreshV4()
+        }
+        Column(
+            Modifier.fillMaxWidth().border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
+                MaterialTheme.shapes.medium,
+            ).testTag("sync_v4_status").padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text("État Core V4 · ${v4Presentation.code}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Text(v4Presentation.message, style = MaterialTheme.typography.bodySmall)
+            Text("Requêtes locales en attente : ${v4Presentation.pendingCount}", style = MaterialTheme.typography.bodySmall)
+            v4Presentation.updatedAt?.let {
+                Text("Dernier reçu ou état : $it", style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("sync_v4_now"),
+                enabled = controller.syncBaseUrl.isNotBlank() && controller.syncTokenConfigured,
+                onClick = {
+                    CoreV4SyncScheduler.schedule(context)
+                    refreshV4()
+                },
+            ) { Text("Pousser les projections V4") }
         }
 
         AtlasSecondaryButton(
@@ -151,6 +264,8 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
                     onClick = {
                         controller.saveSyncConfiguration(baseUrl, token.ifBlank { null })
                         token = ""
+                        CoreV4SyncScheduler.schedule(context)
+                        refreshV4()
                     },
                 ) { Text("Enregistrer la configuration") }
                 if (controller.syncTokenConfigured) {
@@ -209,6 +324,38 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             },
             dismissButton = { TextButton(onClick = { showDisableSync = false }) { Text("Annuler") } },
         )
+    }
+}
+
+@Composable
+private fun CoreV4ConsentRow(
+    title: String,
+    description: String,
+    state: CoreV4ConsentState,
+    freshness: String,
+    onChanged: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = state == CoreV4ConsentState.GRANTED,
+            onCheckedChange = onChanged,
+            modifier = Modifier.semantics { contentDescription = title },
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                description + " · " + when (state) {
+                    CoreV4ConsentState.GRANTED -> "Activé"
+                    CoreV4ConsentState.REVOKED -> "Révoqué"
+                    CoreV4ConsentState.UNKNOWN -> "Désactivé"
+                } + " · " + freshness,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
