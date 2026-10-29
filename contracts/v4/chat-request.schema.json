@@ -1,0 +1,102 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "capability": {
+      "type": "string",
+      "const": "coach.chat"
+    },
+    "sent_at": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 40,
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "consent_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "shared_categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "DAY_PLAN",
+          "ACTIVITY_STATUS",
+          "USAGE_SUMMARY",
+          "GOAL_PROGRESS",
+          "TRAINING_PLAN"
+        ]
+      },
+      "maxItems": 5,
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "contract_version",
+    "schema_version",
+    "request_id",
+    "capability",
+    "sent_at",
+    "conversation_id",
+    "message",
+    "consent_version",
+    "shared_categories"
+  ],
+  "$defs": {
+    "shared_category": {
+      "type": "string",
+      "enum": [
+        "DAY_PLAN",
+        "ACTIVITY_STATUS",
+        "USAGE_SUMMARY",
+        "GOAL_PROGRESS",
+        "TRAINING_PLAN"
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/chat-request.schema.json",
+  "title": "ATLAS V4 chat-request",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "capability": "coach.chat",
+      "sent_at": "2026-10-29T08:02:04Z",
+      "conversation_id": "demo-conversation-01",
+      "message": "Puis-je déplacer cette activité exemple ?",
+      "consent_version": 3,
+      "shared_categories": [
+        "DAY_PLAN",
+        "ACTIVITY_STATUS"
+      ]
+    }
+  ]
+}

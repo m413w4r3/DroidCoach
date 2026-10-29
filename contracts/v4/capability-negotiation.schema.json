@@ -1,0 +1,225 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 4
+    },
+    "service": {
+      "type": "string",
+      "const": "atlas-core"
+    },
+    "supported_contract_versions": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+      },
+      "minItems": 3,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "contains": {
+        "type": "integer",
+        "const": 2
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "day_plan.read": {
+          "type": "boolean"
+        },
+        "activity_status.read": {
+          "type": "boolean"
+        },
+        "plan_revision.propose": {
+          "type": "boolean"
+        },
+        "usage_summary.read": {
+          "type": "boolean"
+        },
+        "goal_progress.read": {
+          "type": "boolean"
+        },
+        "training_plan.read": {
+          "type": "boolean"
+        },
+        "coach.chat": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "day_plan.read",
+        "activity_status.read",
+        "plan_revision.propose",
+        "usage_summary.read",
+        "goal_progress.read",
+        "training_plan.read",
+        "coach.chat"
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_tool_calls_per_turn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "max_proposals_per_turn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "max_usage_window_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 14
+        },
+        "max_payload_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65536
+        },
+        "max_response_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 262144
+        },
+        "chat_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "max_tool_calls_per_turn",
+        "max_proposals_per_turn",
+        "max_page_size",
+        "max_usage_window_days",
+        "max_payload_bytes",
+        "max_response_bytes",
+        "chat_timeout_seconds"
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "schema_version",
+    "service",
+    "supported_contract_versions",
+    "capabilities",
+    "limits"
+  ],
+  "allOf": [
+    {
+      "properties": {
+        "supported_contract_versions": {
+          "contains": {
+            "type": "integer",
+            "const": 3
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "supported_contract_versions": {
+          "contains": {
+            "type": "integer",
+            "const": 4
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "contract_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "capability_flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "day_plan.read": {
+          "type": "boolean"
+        },
+        "activity_status.read": {
+          "type": "boolean"
+        },
+        "plan_revision.propose": {
+          "type": "boolean"
+        },
+        "usage_summary.read": {
+          "type": "boolean"
+        },
+        "goal_progress.read": {
+          "type": "boolean"
+        },
+        "training_plan.read": {
+          "type": "boolean"
+        },
+        "coach.chat": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "day_plan.read",
+        "activity_status.read",
+        "plan_revision.propose",
+        "usage_summary.read",
+        "goal_progress.read",
+        "training_plan.read",
+        "coach.chat"
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/capability-negotiation.schema.json",
+  "title": "ATLAS V4 capability-negotiation",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "service": "atlas-core",
+      "supported_contract_versions": [
+        2,
+        3,
+        4
+      ],
+      "capabilities": {
+        "day_plan.read": true,
+        "activity_status.read": false,
+        "plan_revision.propose": true,
+        "usage_summary.read": false,
+        "goal_progress.read": true,
+        "training_plan.read": false,
+        "coach.chat": true
+      },
+      "limits": {
+        "max_tool_calls_per_turn": 6,
+        "max_proposals_per_turn": 1,
+        "max_page_size": 32,
+        "max_usage_window_days": 14,
+        "max_payload_bytes": 65536,
+        "max_response_bytes": 262144,
+        "chat_timeout_seconds": 20
+      }
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "$defs": {
+    "item_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "result_code": {
+          "type": "string",
+          "enum": [
+            "ACCEPTED",
+            "DUPLICATE",
+            "STALE_EVENT",
+            "REJECTED"
+          ]
+        },
+        "last_synced_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "event_id",
+        "result_code",
+        "last_synced_at"
+      ]
+    },
+    "snapshot_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "enum": [
+            "day_plan.snapshot.write",
+            "activity_status.write",
+            "usage_summary.write",
+            "goal_progress.write",
+            "training_plan.write"
+          ]
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "stored_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "snapshot_hash": {
+          "type": "string",
+          "minLength": 71,
+          "maxLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "last_synced_at": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 40,
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "result_code": {
+          "type": "string",
+          "enum": [
+            "ACCEPTED",
+            "DUPLICATE",
+            "STALE_VERSION",
+            "REJECTED"
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "accepted",
+        "replayed",
+        "stored_version",
+        "snapshot_hash",
+        "last_synced_at",
+        "result_code"
+      ]
+    },
+    "status_event_batch_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 4
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        "capability": {
+          "type": "string",
+          "enum": [
+            "day_plan.snapshot.write",
+            "activity_status.write",
+            "usage_summary.write",
+            "goal_progress.write",
+            "training_plan.write"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/item_receipt"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "request_id",
+        "capability",
+        "items"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/snapshot_receipt"
+    },
+    {
+      "$ref": "#/$defs/status_event_batch_receipt"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.invalid/contracts/v4/sync-receipts.schema.json",
+  "title": "ATLAS V4 sync-receipts",
+  "examples": [
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "capability": "day_plan.snapshot.write",
+      "accepted": true,
+      "replayed": false,
+      "stored_version": 7,
+      "snapshot_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "last_synced_at": "2026-10-29T08:02:04Z",
+      "result_code": "ACCEPTED"
+    },
+    {
+      "contract_version": 4,
+      "schema_version": 4,
+      "request_id": "00000000-0000-4000-8000-000000000101",
+      "capability": "activity_status.write",
+      "items": [
+        {
+          "event_id": "00000000-0000-4000-8000-000000000104",
+          "result_code": "ACCEPTED",
+          "last_synced_at": "2026-10-29T08:02:04Z"
+        }
+      ]
+    }
+  ]
+}
