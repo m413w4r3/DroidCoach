@@ -528,9 +528,10 @@ class CoreV4SyncClientTest {
         }
         assertEquals(CoreV4FailureKind.PROTOCOL, goalFailure.kind)
 
-        val badTraining = trainingReference().copy(routineId = 0)
+        val badTraining = CoreV4SyncClient.trainingData(listOf(trainingReference()), NOW)
+        badTraining.getJSONArray("routines").getJSONObject(0).put("routine_id", 0)
         val trainingFailure = assertThrows(CoreV4SyncException::class.java) {
-            CoreV4SyncClient.trainingData(listOf(badTraining), NOW)
+            CoreV4SyncClient.validateProjectionData(CoreV4Category.TRAINING_PLAN, badTraining)
         }
         assertEquals(CoreV4FailureKind.PROTOCOL, trainingFailure.kind)
 
@@ -604,7 +605,7 @@ class CoreV4SyncClientTest {
                 return CoreV4HttpResponse(200, base.put("items", org.json.JSONArray().put(JSONObject()
                     .put("event_id", data.getString("event_id"))
                     .put("result_code", if (duplicate) "DUPLICATE" else "ACCEPTED")
-                    .put("last_synced_at", NOW)).toString()).toString())
+                    .put("last_synced_at", NOW))).toString())
             }
             val storedVersion = when (capability) {
                 CoreV4Category.DAY_PLAN.capability -> data.getInt("version")
