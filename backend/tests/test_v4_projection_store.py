@@ -13,6 +13,7 @@ from atlas_backend.store import SQLiteStore
 from atlas_backend.v4_projection_store import (
     AckConflict,
     AckIdConflict,
+    AckValidationError,
     EventIdConflict,
     IdempotencyConflict,
     ProjectionConflict,
@@ -32,6 +33,7 @@ UUID_EVENT = "00000000-0000-4000-8000-000000000105"
 UUID_PROPOSAL = "00000000-0000-4000-8000-000000000106"
 UUID_KEY = "00000000-0000-4000-8000-000000000107"
 UUID_ACK = "00000000-0000-4000-8000-000000000108"
+UUID_GOAL = "00000000-0000-4000-8000-000000000109"
 NOW = datetime(2026, 10, 29, 8, 2, tzinfo=timezone.utc)
 STAMP = "2026-10-29T08:02:00Z"
 RECEIVED = "2026-10-29T08:02:05Z"
@@ -122,7 +124,17 @@ def usage_summary() -> dict:
 
 
 def goals_snapshot() -> dict:
-    return {"goals_version": 2, "observed_at": STAMP, "goals": []}
+    return {
+        "goals_version": 2,
+        "observed_at": STAMP,
+        "goals": [{
+            "goal_id": UUID_GOAL,
+            "title": "Lire chaque semaine",
+            "status": "ACTIVE",
+            "progress_value": 7.5,
+            "unit": "heures",
+        }],
+    }
 
 
 def training_snapshot(*, observed_at: str = STAMP) -> dict:
@@ -170,6 +182,34 @@ def test_plan_snapshot_versioning_idempotence_conflict_regression_and_future_tim
     assert "private_note" not in newest["projection"]["activities"][0]
     with sqlite_store.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM day_plan_snapshots_v4").fetchone()[0] == 2
+
+
+def test_plan_and_goals_refresh_with_renewed_consent_and_remain_fresh(tmp_path):
+    _sqlite_store, projections, clock = make_store(tmp_path)
+    plan = plan_snapshot()
+    goals = goals_snapshot()
+    projections.save_day_plan_snapshot(DEVICE, plan, consent_version=3, received_at=RECEIVED)
+    projections.save_goal_progress_snapshot(DEVICE, goals, consent_version=3, received_at=RECEIVED)
+
+    assert projections.save_day_plan_snapshot(
+        DEVICE, plan, consent_version=4, received_at="2026-10-29T08:03:05Z"
+    ).replayed
+    assert projections.save_goal_progress_snapshot(
+        DEVICE, goals, consent_version=4, received_at="2026-10-29T08:03:05Z"
+    ).replayed
+
+    service = make_service(projections, clock, consent_version=4)
+    plan_result = service.atlas_get_day_plan(DEVICE, {})
+    goal_result = service.atlas_get_goal_progress(DEVICE, {})
+    assert plan_result["freshness"] == "FRESH" and plan_result["data"] is not None
+    assert goal_result["freshness"] == "FRESH" and goal_result["data"] is not None
+    with projections.store.connect() as connection:
+        assert connection.execute(
+            "SELECT consent_version FROM day_plan_snapshots_v4"
+        ).fetchone()[0] == 4
+        assert connection.execute(
+            "SELECT consent_version FROM goal_progress_snapshots_v4"
+        ).fetchone()[0] == 4
 
 
 def test_status_events_are_append_only_idempotent_and_sequence_gaps_quarantine(tmp_path):
@@ -287,6 +327,57 @@ def test_proposal_idempotency_lookup_and_ack_replay_conflicts(tmp_path):
         projections.append_proposal_ack(new_ack_same_sequence, received_at=RECEIVED)
 
 
+def test_proposal_ack_requires_complete_application_proof_and_rejects_proof_without_application(tmp_path):
+    _sqlite_store, projections, _clock = make_store(tmp_path)
+    valid_applied = {
+        "ack_id": UUID_ACK,
+        "capability": "proposal.ack",
+        "proposal_id": UUID_PROPOSAL,
+        "sequence": 1,
+        "state": "APPLIED",
+        "result_code": "APPLIED",
+        "occurred_at": STAMP,
+        "plan_id": UUID_PLAN,
+        "applied_plan_version": 8,
+        "revision_id": UUID_PROPOSAL,
+        "scope_hash": "sha256:" + "c" * 64,
+        "effect_ids": ["PLAN_APPLY:" + UUID_PROPOSAL],
+        "consent_version": 3,
+    }
+    missing_proof = dict(valid_applied)
+    missing_proof.pop("applied_plan_version")
+    null_proof = dict(valid_applied, applied_plan_version=None)
+    rejected_with_proof = dict(
+        valid_applied,
+        state="REJECTED",
+        result_code="USER_REJECTED",
+        ack_id=UUID_EVENT,
+    )
+    uncertain_with_proof = dict(
+        valid_applied,
+        state="UNCERTAIN",
+        result_code="RESULT_UNCERTAIN",
+        ack_id=UUID_CONTINUITY,
+    )
+    reconciled_without_proof = dict(
+        valid_applied,
+        state="RECONCILED",
+        result_code="RECONCILED_APPLIED",
+        ack_id=UUID_GOAL,
+    )
+    for field in ("plan_id", "applied_plan_version", "revision_id", "scope_hash", "effect_ids"):
+        reconciled_without_proof.pop(field)
+    for invalid_ack in (
+        missing_proof,
+        null_proof,
+        rejected_with_proof,
+        uncertain_with_proof,
+        reconciled_without_proof,
+    ):
+        with pytest.raises(AckValidationError):
+            projections.append_proposal_ack(invalid_ack, received_at=RECEIVED)
+
+
 def make_service(projections, clock, *, consent_state: str = "GRANTED", consent_version: int | None = 3,
                  capabilities: dict[str, bool] | None = None) -> V4ToolService:
     enabled = {capability: True for capability in (
@@ -348,10 +439,37 @@ def test_all_six_tools_match_contracts_and_do_not_leak_notes_or_apply_proposal(t
     assert "private_note" not in plan_result["data"]["plan"]["activities"][0]
     assert results["atlas_get_activity_status_response"]["data"]["status"] == "DONE"
     assert results["atlas_get_usage_summary_response"]["data"]["apps"][0]["display_name"] is None
+    assert results["atlas_get_goal_progress_response"]["data"]["goals"][0]["progress"] == {
+        "value": 7.5,
+        "unit": "heures",
+        "target_value": None,
+    }
     assert results["atlas_propose_plan_revision_response"]["data"]["status"] == "QUEUED"
     with projections.store.connect() as connection:
         assert connection.execute("SELECT state FROM agent_proposals_v4").fetchone()[0] == "PENDING_ANDROID"
         assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+
+
+def test_goal_progress_response_maps_sync_values_and_satisfies_schema(tmp_path):
+    _sqlite_store, projections, clock = make_store(tmp_path)
+    projections.save_goal_progress_snapshot(DEVICE, goals_snapshot(), consent_version=3, received_at=RECEIVED)
+    result = make_service(projections, clock).atlas_get_goal_progress(DEVICE, {})
+    schema = json.loads((Path(__file__).resolve().parents[2] / "contracts/v4/tool-results.schema.json").read_text())
+    Draft202012Validator(
+        schema["$defs"]["atlas_get_goal_progress_response"],
+        format_checker=FormatChecker(),
+    ).validate(result)
+    assert result["data"]["goals"][0] == {
+        "goal_id": UUID_GOAL,
+        "title": "Lire chaque semaine",
+        "status": "ACTIVE",
+        "progress": {"value": 7.5, "unit": "heures", "target_value": None},
+        "progress_source": None,
+        "observed_at": None,
+        "subgoals": [],
+        "confirmed_commitments": [],
+        "missing_data": [],
+    }
 
 
 def test_reads_return_unavailable_when_absent_and_capability_errors_when_disabled(tmp_path):

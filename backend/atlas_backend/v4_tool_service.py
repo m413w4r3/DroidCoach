@@ -280,12 +280,31 @@ class V4ToolService:
         projection = row["projection"]
         goals = []
         for goal in projection.get("goals", []):
-            clean = {key: goal.get(key) for key in (
-                "goal_id", "title", "status", "progress", "progress_source", "observed_at",
-                "subgoals", "confirmed_commitments", "missing_data",
-            ) if key in goal}
+            raw_progress = goal.get("progress")
+            value = raw_progress.get("value") if isinstance(raw_progress, dict) else goal.get("progress_value")
+            unit = raw_progress.get("unit") if isinstance(raw_progress, dict) else goal.get("unit")
+            target_value = (
+                raw_progress.get("target_value") if isinstance(raw_progress, dict)
+                else goal.get("target_value")
+            )
+            progress = (
+                {"value": value, "unit": unit, "target_value": target_value}
+                if value is not None and isinstance(unit, str) and unit.strip()
+                else None
+            )
+            clean = {
+                "goal_id": goal.get("goal_id"),
+                "title": goal.get("title"),
+                "status": goal.get("status"),
+                "progress": progress,
+                "progress_source": goal.get("progress_source"),
+                "observed_at": goal.get("observed_at"),
+                "subgoals": goal.get("subgoals", []),
+                "confirmed_commitments": goal.get("confirmed_commitments", []),
+                "missing_data": goal.get("missing_data", []),
+            }
             if args.get("include_subgoals", True) is False:
-                clean.pop("subgoals", None)
+                clean["subgoals"] = []
             goals.append(clean)
         binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{bool(args.get('include_subgoals', True))}"
         offset = self._decode_cursor(args.get("cursor"), binding, capability) if args.get("cursor") else 0

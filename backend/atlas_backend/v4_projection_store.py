@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -36,6 +37,10 @@ class AckIdConflict(V4ProjectionError):
 
 class AckConflict(V4ProjectionError):
     code = "ACK_CONFLICT"
+
+
+class AckValidationError(V4ProjectionError):
+    code = "VALIDATION_FAILED"
 
 
 class SequenceGap(V4ProjectionError):
@@ -191,13 +196,24 @@ class V4ProjectionStore:
                 (device_ref, plan_id),
             ).fetchone()
             existing = connection.execute(
-                "SELECT snapshot_hash FROM day_plan_snapshots_v4 "
+                "SELECT snapshot_hash,consent_version,projection_json FROM day_plan_snapshots_v4 "
                 "WHERE device_ref=? AND plan_id=? AND plan_version=?",
                 (device_ref, plan_id, version),
             ).fetchone()
             if existing is not None:
-                if existing["snapshot_hash"] != snapshot_hash:
+                if json.loads(existing["projection_json"]) != projection:
                     raise ProjectionConflict("snapshot de plan différent pour la même version")
+                existing_consent_version = int(existing["consent_version"])
+                if consent_version < existing_consent_version:
+                    raise StaleProjectionVersion("version de consentement régressive")
+                if consent_version > existing_consent_version:
+                    connection.execute(
+                        "UPDATE day_plan_snapshots_v4 SET consent_version=?,snapshot_hash=?,received_at=? "
+                        "WHERE device_ref=? AND plan_id=? AND plan_version=?",
+                        (consent_version, snapshot_hash, received_at, device_ref, plan_id, version),
+                    )
+                elif existing["snapshot_hash"] != snapshot_hash:
+                    raise ProjectionConflict("hash de plan différent pour la même version")
                 replayed = True
             elif latest is not None and version < int(latest["plan_version"]):
                 raise StaleProjectionVersion("version de plan régressive")
@@ -421,12 +437,24 @@ class V4ProjectionStore:
                 (device_ref,),
             ).fetchone()["goals_version"]
             existing = connection.execute(
-                "SELECT snapshot_hash FROM goal_progress_snapshots_v4 WHERE device_ref=? AND goals_version=?",
+                "SELECT snapshot_hash,consent_version,projection_json FROM goal_progress_snapshots_v4 "
+                "WHERE device_ref=? AND goals_version=?",
                 (device_ref, goals_version),
             ).fetchone()
             if existing is not None:
-                if existing["snapshot_hash"] != snapshot_hash:
+                if json.loads(existing["projection_json"]) != snapshot:
                     raise ProjectionConflict("snapshot d'objectifs différent pour la même version")
+                existing_consent_version = int(existing["consent_version"])
+                if consent_version < existing_consent_version:
+                    raise StaleProjectionVersion("version de consentement régressive")
+                if consent_version > existing_consent_version:
+                    connection.execute(
+                        "UPDATE goal_progress_snapshots_v4 SET consent_version=?,snapshot_hash=?,received_at=? "
+                        "WHERE device_ref=? AND goals_version=?",
+                        (consent_version, snapshot_hash, received_at, device_ref, goals_version),
+                    )
+                elif existing["snapshot_hash"] != snapshot_hash:
+                    raise ProjectionConflict("hash d'objectifs différent pour la même version")
                 replayed = True
             elif latest is not None and goals_version < int(latest):
                 raise StaleProjectionVersion("version d'objectifs régressive")
@@ -568,11 +596,6 @@ class V4ProjectionStore:
         replayed = False
         with self.store.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            proposal = connection.execute(
-                "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
-            ).fetchone()
-            if proposal is None:
-                raise V4ProjectionError("proposition V4 inconnue")
             existing = connection.execute(
                 "SELECT body_hash FROM agent_proposal_events_v4 WHERE ack_id=?", (ack_id,)
             ).fetchone()
@@ -581,6 +604,12 @@ class V4ProjectionStore:
                     raise AckIdConflict("ack_id déjà utilisé avec un corps différent")
                 replayed = True
             else:
+                self._validate_proposal_ack(ack, state, result_code)
+                proposal = connection.execute(
+                    "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+                ).fetchone()
+                if proposal is None:
+                    raise V4ProjectionError("proposition V4 inconnue")
                 latest = connection.execute(
                     "SELECT MAX(sequence) AS sequence FROM agent_proposal_events_v4 WHERE proposal_id=?",
                     (proposal_id,),
@@ -611,6 +640,72 @@ class V4ProjectionStore:
                     (state, proposal_id),
                 )
         return WriteReceipt(True, replayed, ack_id, body_hash)
+
+    @staticmethod
+    def _validate_proposal_ack(ack: dict[str, Any], state: str, result_code: str) -> None:
+        result_by_state = {
+            "APPLIED": {"APPLIED"},
+            "REJECTED": {"USER_REJECTED"},
+            "STALE_VERSION": {"STALE_VERSION"},
+            "EXPIRED": {"PROPOSAL_EXPIRED"},
+            "VALIDATION_REJECTED": {"VALIDATION_FAILED"},
+            "UNCERTAIN": {"RESULT_UNCERTAIN"},
+            "RECONCILED": {"RECONCILED_APPLIED", "RECONCILED_NOT_APPLIED", "USER_REJECTED"},
+        }
+        if result_code not in result_by_state.get(state, set()):
+            raise AckValidationError("state et result_code ACK incompatibles")
+
+        proof_fields = (
+            "plan_id", "applied_plan_version", "revision_id", "scope_hash", "effect_ids",
+        )
+        applied = state == "APPLIED" or (state == "RECONCILED" and result_code == "RECONCILED_APPLIED")
+        if not applied:
+            if any(field in ack for field in proof_fields):
+                raise AckValidationError("un ACK sans application ne doit pas porter de preuve")
+            return
+
+        missing = [field for field in proof_fields if field not in ack]
+        if missing:
+            raise AckValidationError("preuve d'application incomplète: " + ", ".join(missing))
+        plan_id = ack["plan_id"]
+        applied_version = ack["applied_plan_version"]
+        revision_id = ack["revision_id"]
+        scope_hash = ack["scope_hash"]
+        effect_ids = ack["effect_ids"]
+        if not isinstance(plan_id, str) or not plan_id:
+            raise AckValidationError("plan_id de preuve invalide")
+        try:
+            uuid.UUID(plan_id)
+        except (ValueError, AttributeError):
+            raise AckValidationError("plan_id de preuve invalide") from None
+        if not isinstance(applied_version, int) or isinstance(applied_version, bool) or applied_version < 1:
+            raise AckValidationError("applied_plan_version de preuve invalide")
+        if not isinstance(revision_id, str) or not revision_id:
+            raise AckValidationError("revision_id de preuve invalide")
+        try:
+            uuid.UUID(revision_id)
+        except (ValueError, AttributeError):
+            raise AckValidationError("revision_id de preuve invalide") from None
+        if not isinstance(scope_hash, str) or len(scope_hash) != 71 or not scope_hash.startswith("sha256:"):
+            raise AckValidationError("scope_hash de preuve invalide")
+        digest = scope_hash.removeprefix("sha256:")
+        if any(character not in "0123456789abcdef" for character in digest):
+            raise AckValidationError("scope_hash de preuve invalide")
+        effect_pattern = re.compile(
+            r"^(?:PLAN_ACTIVITY_(?:CREATE|UPDATE|DELETE):[0-9a-f-]{36}|PLAN_APPLY:[0-9a-f-]{36})$"
+        )
+        if not isinstance(effect_ids, list) or not 1 <= len(effect_ids) <= 32:
+            raise AckValidationError("effect_ids de preuve invalides")
+        if any(not isinstance(effect_id, str) for effect_id in effect_ids):
+            raise AckValidationError("effect_ids de preuve invalides")
+        if len(set(effect_ids)) != len(effect_ids):
+            raise AckValidationError("effect_ids de preuve invalides")
+        if any(
+            len(effect_id) > 96
+            or effect_pattern.fullmatch(effect_id) is None
+            for effect_id in effect_ids
+        ):
+            raise AckValidationError("effect_ids de preuve invalides")
 
     @staticmethod
     def _decode_row(row: sqlite3.Row | None, json_column: str) -> dict[str, Any] | None:
