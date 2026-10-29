@@ -139,15 +139,17 @@ class CoachTextDensityInstrumentationTest {
     }
 
     private fun isolatedContext(): Context {
-        val instrumentationContext = InstrumentationRegistry.getInstrumentation().context
-        check(instrumentationContext.packageName != InstrumentationRegistry.getInstrumentation().targetContext.packageName)
-        val files = File(instrumentationContext.cacheDir, "coach-text-density-${UUID.randomUUID()}/files")
-        check(files.mkdirs() || files.isDirectory)
-        return object : ContextWrapper(instrumentationContext) {
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val namespace = UUID.randomUUID().toString()
+        val files = File(targetContext.cacheDir, "coach-text-density-$namespace").apply {
+            check(mkdirs() || isDirectory)
+        }
+        return object : ContextWrapper(targetContext) {
             override fun getApplicationContext(): Context = this
+            override fun getCacheDir(): File = files
             override fun getFilesDir(): File = files
             override fun getSharedPreferences(name: String, mode: Int) =
-                instrumentationContext.getSharedPreferences("coach_text_density_$name", mode)
+                targetContext.getSharedPreferences("coach_text_density_${namespace}_$name", mode)
         }
     }
 
