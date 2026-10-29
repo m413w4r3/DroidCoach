@@ -14,6 +14,7 @@ import dev.atlas.coach.plan.PlanApplyResult
 import dev.atlas.coach.plan.PlanClock
 import dev.atlas.coach.plan.PlanConfirmation
 import dev.atlas.coach.plan.PlanLoadResult
+import dev.atlas.coach.plan.PlanJsonCodec
 import dev.atlas.coach.plan.PlanOrigin
 import dev.atlas.coach.plan.PlanPreview
 import dev.atlas.coach.plan.PlanPreviewResult
@@ -89,6 +90,16 @@ class PlanController(
         engine = engine,
         agentRevisionMapper = agentRevisionMapper,
     )
+
+    /** Reads a saved plan for [date] without changing this controller or its repository state. */
+    fun planForDate(date: LocalDate): DayPlan? {
+        val file = File(directory, "day-plan-$date.json")
+        if (!file.isFile) return null
+        val rawDocument = runCatching { file.readText(Charsets.UTF_8) }.getOrNull() ?: return null
+        return runCatching { PlanJsonCodec.decodeStore(rawDocument).dayPlan }
+            .getOrNull()
+            ?.takeIf { it.localDate == date.toString() }
+    }
 
     /** Reloads the plan document and rotates to the current local date when needed. */
     fun refresh() {

@@ -171,9 +171,10 @@ fun AtlasApp(
             AtlasScreenId.FOCUS -> FocusScreen(controller, revision, onChooseHabit = { showLinkChoices = true })
             AtlasScreenId.HABITS -> HabitsScreen(controller, revision, onExport = { showHabitExport = true })
             AtlasScreenId.LIBRARY -> LibraryScreen(controller, revision, context)
-            AtlasScreenId.COACH -> CoachScreen(
-                controller,
-                revision,
+            AtlasScreenId.COACH -> CoachTabScreen(
+                controller = controller,
+                planController = planController,
+                revision = revision,
                 onOpenContext = { controller.navigationState.navigate(AtlasScreenId.COACH_CONTEXT) },
             )
             AtlasScreenId.COACH_CONTEXT -> CoachContextScreen(controller, revision)
