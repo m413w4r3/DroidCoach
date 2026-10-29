@@ -9,6 +9,7 @@ import ipaddress
 import json
 import os
 import re
+import sqlite3
 import uuid
 from functools import wraps
 from pathlib import Path
@@ -135,6 +136,17 @@ def _request_id(request: Request, fallback: str | None = None) -> str:
         return str(uuid.UUID(candidate)) if candidate else str(uuid.uuid4())
     except (ValueError, AttributeError, TypeError):
         return str(uuid.uuid4())
+
+
+def _is_sqlite_busy(exc: sqlite3.OperationalError) -> bool:
+    error_code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(error_code, int) and (error_code & 0xFF) in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+        return True
+    message = str(exc).lower()
+    return any(
+        phrase in message
+        for phrase in ("database is locked", "database is busy", "database table is locked")
+    )
 
 
 def _error_payload(
@@ -329,6 +341,9 @@ def create_v4_router(
     def serialized_consent_route(endpoint: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(endpoint)
         async def wrapped(*args: Any, **kwargs: Any) -> JSONResponse:
+            request = kwargs.get("request")
+            if not isinstance(request, Request):
+                request = next((argument for argument in args if isinstance(argument, Request)), None)
             try:
                 with store.transaction(immediate=True):
                     response = await endpoint(*args, **kwargs)
@@ -337,6 +352,21 @@ def create_v4_router(
                     return response
             except _RollbackRouteResponse as rollback:
                 return rollback.response
+            except sqlite3.OperationalError as exc:
+                if request is None:
+                    raise
+                if _is_sqlite_busy(exc):
+                    return _error_response(
+                        request,
+                        "UPSTREAM_UNAVAILABLE",
+                        "Le stockage est temporairement indisponible.",
+                        status=503,
+                    )
+                return _error_response(request, "INTERNAL", "Erreur interne V4.", status=500)
+            except Exception:
+                if request is None:
+                    raise
+                return _error_response(request, "INTERNAL", "Erreur interne V4.", status=500)
 
         return wrapped
 

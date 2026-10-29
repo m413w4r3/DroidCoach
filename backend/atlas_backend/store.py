@@ -85,10 +85,10 @@ class SQLiteStore:
         return connection
 
     @contextmanager
-    def transaction(self, *, immediate: bool = True) -> Iterator[sqlite3.Connection]:
+    def transaction(self, *, immediate: bool = True, timeout: float = 5.0) -> Iterator[sqlite3.Connection]:
         if self._transaction_connection.get() is not None:
             raise RuntimeError("SQLiteStore transactions cannot be nested")
-        connection = sqlite3.connect(self.path, timeout=5)
+        connection = sqlite3.connect(self.path, timeout=timeout)
         connection.row_factory = sqlite3.Row
         try:
             connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")

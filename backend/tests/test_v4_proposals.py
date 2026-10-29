@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import hashlib
 import json
+import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -892,4 +893,63 @@ def test_ack_insert_is_serialized_before_waiting_revocation(tmp_path, monkeypatc
     assert current_consent is not None
     assert current_consent["state"] == "REVOKED"
     assert current_consent["consent_version"] == 4
+    client.close()
+
+
+def test_sqlite_busy_returns_retryable_v4_503_without_effect_then_recovers(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client, consent_version=3)
+    store = client.app.state.store
+    original_transaction = store.transaction
+    monkeypatch.setattr(
+        store,
+        "transaction",
+        lambda *, immediate=True: original_transaction(immediate=immediate, timeout=0.05),
+    )
+    idempotency_key = "00000000-0000-4000-8000-000000000291"
+    locker = sqlite3.connect(store.path, timeout=1)
+    try:
+        locker.execute("BEGIN IMMEDIATE")
+        response = post_proposal(client, idempotency_key)
+    finally:
+        locker.rollback()
+        locker.close()
+
+    assert response.status_code == 503, response.text
+    assert error_code(response) == "UPSTREAM_UNAVAILABLE"
+    payload = response.json()
+    assert payload["error"]["retryable"] is True
+    assert "database is locked" not in response.text.lower()
+    assert ANDROID_TOKEN not in response.text
+    assert TOOL_TOKEN not in response.text
+    with store.connect() as connection:
+        residual_count = connection.execute(
+            "SELECT COUNT(*) FROM agent_proposals_v4 WHERE idempotency_key=?", (idempotency_key,)
+        ).fetchone()[0]
+    assert residual_count == 0
+
+    recovered = post_proposal(client, idempotency_key)
+    assert recovered.status_code == 200, recovered.text
+    with store.connect() as connection:
+        recovered_count = connection.execute(
+            "SELECT COUNT(*) FROM agent_proposals_v4 WHERE idempotency_key=?", (idempotency_key,)
+        ).fetchone()[0]
+    assert recovered_count == 1
+    client.close()
+
+
+def test_unexpected_protected_route_exception_returns_controlled_v4_500(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client, consent_version=3)
+
+    def raise_secret_error(*args, **kwargs):
+        raise RuntimeError("private-backend-secret-value")
+
+    monkeypatch.setattr(V4ProjectionStore, "latest_day_plan_snapshot", raise_secret_error)
+    response = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+
+    assert response.status_code == 500
+    assert error_code(response) == "INTERNAL"
+    assert response.json()["error"]["message"] == "Erreur interne V4."
+    assert "private-backend-secret-value" not in response.text
     client.close()
