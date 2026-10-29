@@ -146,6 +146,84 @@ class PlanV4RepositoryTest {
     }
 
     @Test
+    fun missedHistorySurvivesActivityRemoval() {
+        val (repository, backend) = repositoryWithMissedAtSlotEnd()
+        val event = repository.statusEvents().single()
+        val current = (repository.load() as PlanLoadResult.Loaded).plan
+        val removal = revisionFor(
+            current,
+            emptyList(),
+            revisionId = "30000000-0000-4000-8000-000000000003",
+            createdAt = MISSED_SLOT_END_MILLIS - 500L,
+        )
+
+        val result = repository.apply(
+            removal,
+            confirmationFor(
+                removal,
+                approvedAt = MISSED_SLOT_END_MILLIS,
+                expiresAt = MISSED_SLOT_END_MILLIS + 60_000L,
+            ).copy(confirmationId = "40000000-0000-4000-8000-000000000002"),
+        )
+
+        assertTrue(result is PlanApplyResult.Applied)
+        val reloaded = DayPlanRepository(backend, PlanClock { MISSED_SLOT_END_MILLIS })
+        assertTrue((reloaded.load() as PlanLoadResult.Loaded).plan.activities.isEmpty())
+        assertEquals(listOf(event), reloaded.statusEvents())
+    }
+
+    @Test
+    fun missedHistorySurvivesActivityReschedulingUsingItsHistoricalSlotEnd() {
+        val (repository, backend) = repositoryWithMissedAtSlotEnd()
+        val event = repository.statusEvents().single()
+        val current = (repository.load() as PlanLoadResult.Loaded).plan
+        val moved = revisionFor(
+            current,
+            listOf(activity(status = ActivityStatus.MISSED, scheduled = schedule(startMinute = 11 * 60))),
+            revisionId = "30000000-0000-4000-8000-000000000004",
+            createdAt = MISSED_SLOT_END_MILLIS - 500L,
+        )
+
+        val result = repository.apply(
+            moved,
+            confirmationFor(
+                moved,
+                approvedAt = MISSED_SLOT_END_MILLIS,
+                expiresAt = MISSED_SLOT_END_MILLIS + 60_000L,
+            ).copy(confirmationId = "40000000-0000-4000-8000-000000000003"),
+        )
+
+        assertTrue(result is PlanApplyResult.Applied)
+        val reloaded = DayPlanRepository(backend, PlanClock { MISSED_SLOT_END_MILLIS })
+        assertEquals(schedule(startMinute = 11 * 60), (reloaded.load() as PlanLoadResult.Loaded).plan.activities.single().scheduledLocal)
+        assertEquals(listOf(event), reloaded.statusEvents())
+        assertEquals("2026-10-26T09:00:00Z", event.slotEndAt)
+    }
+
+    @Test
+    fun legacyMissedWithoutHistoricalSlotDoesNotUseANewerSchedule() {
+        val movedPlan = dayPlan(
+            activities = listOf(activity(status = ActivityStatus.MISSED, scheduled = schedule(startMinute = 11 * 60))),
+            version = 2,
+        )
+        val legacyEvent = missedEvent("2026-10-26T09:00:00Z").copy(
+            slotEndAt = null,
+            planVersion = 1,
+        )
+        val raw = PlanV4JsonCodec.encodeStore(
+            PlanV4StoreDocument(
+                store = PlanStoreDocument(movedPlan),
+                statusEvents = listOf(legacyEvent),
+            ),
+        )
+        val backend = MemoryPlanBackend(raw)
+
+        assertTrue(DayPlanRepository(backend, PlanClock { NOW }).load() is PlanLoadResult.Loaded)
+        assertEquals(raw, backend.value)
+        assertEquals(legacyEvent, DayPlanRepository(backend, PlanClock { NOW }).statusEvents().single())
+    }
+
+    @Test
     fun unknownSchemaIsQuarantinedWithoutReplacingItsOriginalBytes() {
         val future = "{\"schema_version\":99,\"future_payload\":{\"opaque\":true}}"
         val backend = MemoryPlanBackend(future)
@@ -374,9 +452,10 @@ class PlanV4RepositoryTest {
     private fun missedEvent(decidedAt: String) = userDecisionEvent(
         to = ActivityStatus.MISSED,
         decidedAt = decidedAt,
+        slotEndAt = "2026-10-26T09:00:00Z",
     )
 
-    private fun userDecisionEvent(to: ActivityStatus, decidedAt: String) = PlanStatusEvent(
+    private fun userDecisionEvent(to: ActivityStatus, decidedAt: String, slotEndAt: String? = null) = PlanStatusEvent(
         statusEventId = "70000000-0000-4000-8000-000000000002",
         planId = PLAN_ID,
         activityId = activity().activityId,
@@ -389,6 +468,7 @@ class PlanV4RepositoryTest {
         observedAt = decidedAt,
         planVersion = 1,
         consentVersion = 2,
+        slotEndAt = slotEndAt,
     )
 
     private fun assertEventIsQuarantined(event: PlanStatusEvent, status: ActivityStatus = ActivityStatus.DONE) {
@@ -409,6 +489,34 @@ class PlanV4RepositoryTest {
                 statusEvents = listOf(event.copy(activityId = plan.activities.single().activityId)),
             ),
         )
+    }
+
+    private fun repositoryWithMissedAtSlotEnd(): Pair<DayPlanRepository, MemoryPlanBackend> {
+        val backend = MemoryPlanBackend(PlanJsonCodec.encodeStore(PlanStoreDocument(dayPlan())))
+        val repository = DayPlanRepository(backend, PlanClock { MISSED_SLOT_END_MILLIS })
+        val initial = dayPlan()
+        val revision = revisionFor(
+            initial,
+            listOf(activity(status = ActivityStatus.MISSED)),
+            revisionId = "30000000-0000-4000-8000-000000000002",
+            createdAt = MISSED_SLOT_END_MILLIS - 500L,
+        )
+        val result = repository.apply(
+            revision,
+            confirmationFor(
+                revision,
+                approvedAt = MISSED_SLOT_END_MILLIS,
+                expiresAt = MISSED_SLOT_END_MILLIS + 60_000L,
+            ),
+            StatusEventDraft(StatusProvenance.DECLARED, StatusSource.USER_UI),
+        )
+        assertTrue(result is PlanApplyResult.Applied)
+        assertEquals("2026-10-26T09:00:00Z", repository.statusEvents().single().slotEndAt)
+        return repository to backend
+    }
+
+    private companion object {
+        const val MISSED_SLOT_END_MILLIS = 1_793_005_200_000L
     }
 
     private class FailingWriteBackend(var value: String?) : PlanStateBackend {

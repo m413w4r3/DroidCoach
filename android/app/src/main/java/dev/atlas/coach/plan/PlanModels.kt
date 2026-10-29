@@ -3,6 +3,7 @@ package dev.atlas.coach.plan
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.net.URI
 import java.util.UUID
 
@@ -113,6 +114,8 @@ data class PlanStatusEvent(
     val planVersion: Int,
     val consentVersion: Int,
     val focusSessionId: String? = null,
+    /** Historical UTC slot end; null for other statuses or legacy MISSED events without a snapshot. */
+    val slotEndAt: String? = null,
 ) {
     init {
         requireCanonicalUuid(statusEventId, "statusEventId")
@@ -124,6 +127,10 @@ data class PlanStatusEvent(
         require(planVersion >= 1) { "planVersion must be >= 1" }
         require(consentVersion >= 0) { "consentVersion must not be negative" }
         focusSessionId?.let { requireCanonicalUuid(it, "focusSessionId") }
+        slotEndAt?.let {
+            require(OffsetDateTime.parse(it).offset == ZoneOffset.UTC) { "slotEndAt must use UTC" }
+            require(toStatus == ActivityStatus.MISSED) { "slotEndAt is only valid for MISSED events" }
+        }
     }
 }
 

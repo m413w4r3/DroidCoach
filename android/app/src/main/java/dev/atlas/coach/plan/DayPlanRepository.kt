@@ -251,6 +251,9 @@ class DayPlanRepository(
                 draft = draft,
                 atUtcMillis = now,
                 planVersion = preview.after.version,
+                scheduledLocal = document.store.dayPlan.activities
+                    .single { it.activityId == transition.activityId }
+                    .scheduledLocal,
             )
         }
         val updatedDocument = document.copy(
@@ -450,6 +453,7 @@ class DayPlanRepository(
         draft: StatusEventDraft,
         atUtcMillis: Long,
         planVersion: Int,
+        scheduledLocal: LocalSchedule? = null,
     ) = PlanStatusEvent(
         statusEventId = UUID.randomUUID().toString(),
         planId = planId,
@@ -464,6 +468,14 @@ class DayPlanRepository(
         planVersion = planVersion,
         consentVersion = draft.consentVersion,
         focusSessionId = draft.focusSessionId,
+        slotEndAt = if (to == ActivityStatus.MISSED) {
+            val schedule = requireNotNull(scheduledLocal) { "MISSED event requires its historical schedule" }
+            engine.localToInstant(schedule)
+                .plusSeconds(schedule.durationMinutes.toLong() * 60L)
+                .toString()
+        } else {
+            null
+        },
     )
 
     private fun buildPreview(current: DayPlan, revision: PlanRevision): PreviewBuild {

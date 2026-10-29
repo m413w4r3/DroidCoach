@@ -165,13 +165,25 @@ internal object PlanV4JsonCodec {
             ) { "terminal completion status requires a user decision" }
         }
         if (toStatus == ActivityStatus.MISSED) {
-            val missedActivity = plan.activities.singleOrNull { it.activityId == activityId }
-                ?: error("MISSED status event references an unknown activity")
-            val schedule = missedActivity.scheduledLocal
-            val slotEnd = PlanRevisionEngine().localToInstant(schedule)
-                .plusSeconds(schedule.durationMinutes.toLong() * 60L)
-            require(!OffsetDateTime.parse(decidedAt).toInstant().isBefore(slotEnd)) {
-                "MISSED status decision precedes the scheduled slot end"
+            // New events carry their own slot end. Legacy V4 events without it can only
+            // use the current schedule when they describe the current plan version; a
+            // later version may have moved or removed the activity, so no safe inference
+            // is possible from that projection alone. Such legacy events stay readable
+            // as unverified historical decisions; the current slot is not evidence for them.
+            val historicalSlotEnd = slotEndAt?.let { OffsetDateTime.parse(it).toInstant() }
+                ?: if (planVersion == plan.version) {
+                    plan.activities.singleOrNull { it.activityId == activityId }?.let { activity ->
+                        val schedule = activity.scheduledLocal
+                        PlanRevisionEngine().localToInstant(schedule)
+                            .plusSeconds(schedule.durationMinutes.toLong() * 60L)
+                    }
+                } else {
+                    null
+                }
+            if (historicalSlotEnd != null) {
+                require(!OffsetDateTime.parse(decidedAt).toInstant().isBefore(historicalSlotEnd)) {
+                    "MISSED status decision precedes the historical scheduled slot end"
+                }
             }
         }
         if (toStatus == ActivityStatus.POSTPONED) {
@@ -218,11 +230,13 @@ internal object PlanV4JsonCodec {
         put("plan_version", planVersion)
         put("consent_version", consentVersion)
         put("focus_session_id", focusSessionId ?: JSONObject.NULL)
+        slotEndAt?.let { put("slot_end_at", it) }
     }
 
     private fun JSONObject.toStatusEvent(): PlanStatusEvent {
         requireKeys(
             setOf("status_event_id", "plan_id", "activity_id", "continuity_id", "from_status", "to_status", "provenance", "source", "decided_at", "observed_at", "plan_version", "consent_version", "focus_session_id"),
+            setOf("slot_end_at"),
         )
         val decidedAt = string("decided_at")
         val observedAt = string("observed_at")
@@ -242,6 +256,7 @@ internal object PlanV4JsonCodec {
             planVersion = int("plan_version"),
             consentVersion = int("consent_version"),
             focusSessionId = nullableString("focus_session_id"),
+            slotEndAt = nullableString("slot_end_at"),
         )
     }
 
