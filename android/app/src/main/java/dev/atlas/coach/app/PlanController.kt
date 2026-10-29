@@ -432,6 +432,11 @@ class PlanController(
         message = null
     }
 
+    /** Surfaces a UI-only message produced by a related screen controller. */
+    fun showTransientMessage(value: String) {
+        message = value
+    }
+
     /** Sends only a consented, minimized plan and stages the resulting diff for confirmation. */
     fun proposeAgentRevision(
         client: PlanRevisionProposalClient,

@@ -412,7 +412,7 @@ internal fun performPlanActivityPrimaryAction(
                     activity.title,
                 )
             ) {
-                planController.message = focusController.latestMessage
+                focusController.latestMessage?.let(planController::showTransientMessage)
             }
         }
     }
