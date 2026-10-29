@@ -14,6 +14,11 @@
 - Données : plan, conversation et propositions synthétiques ; aucun compte, aucun secret, aucune donnée personnelle.
 - Le Pixel physique n'était plus connecté au moment de la capture finale. Les captures « après » sur Pixel restent à refaire après reconnexion ; aucune validation Pixel n'est revendiquée.
 
+> **Mise à jour R5 (2026-10-29)** : le Pixel est toujours absent. Les nouvelles
+> captures des écrans Coach/Synthèses/Focus sont dans
+> `docs/captures/v6-3-r5/` (AVD API 37, données synthétiques). Aucune capture
+> Pixel « après » n'a été produite et R4 Pixel reste `BLOCKED_DEVICE`.
+
 ## Fichiers
 
 | Fichier | Écran |

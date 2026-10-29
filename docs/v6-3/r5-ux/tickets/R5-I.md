@@ -28,7 +28,7 @@ Pendant une séance Focus en cours (ou en pause), afficher une **jauge de temps*
 
 ## Oracle
 
-- `cd android && ./gradlew :app:testDebugUnitTest --test '*FocusGaugeTest*' --rerun-tasks` → PASS.
+- `cd android && ./gradlew :app:testDebugUnitTest --tests '*FocusGaugeTest*' --rerun-tasks` → PASS.
 - Cas : 100 %, 50 %, 0 %, pause, pause courte, pause longue, `remainingMillis=0`, valeurs incohérentes bornées, division par zéro impossible.
 - `./gradlew :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` → PASS.
 - Test instrumenté compilé (parent l'exécute sur AVD API 37) : jauge visible à 100 % et après pause, texte de phase inchangé, boutons pause/reprise/annuler/terminer visibles, urgence visible.

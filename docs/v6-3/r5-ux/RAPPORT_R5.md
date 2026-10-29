@@ -1,0 +1,71 @@
+# ATLAS V6.3 — Rapport R5 « Coach & densité textuelle »
+
+- **Date** : 2026-10-29
+- **Branche** : `feat/atlas-v6-3-ux-daily-use`
+- **Base `origin/main`** : `566668ac9cd0778f43d7f4d90a93c6a45645935c`
+- **SHA final intégré** : `072424f804ff776395d280c30394303f6748c52b`
+- **Statut** : R5 code, tests JVM/lint/build et recette AVD terminés ; **Pixel physique absent** ; **aucun push**.
+
+## 1. Livré
+
+| Ticket | Résultat |
+|---|---|
+| **F** — régime textuel Coach/Contexte | Textes raccourcis, catégories de contexte repliées derrière `Détails des catégories`, avertissements de partage/suppression conservés, JSON derrière les toggles existants. |
+| **F2** — 2ᵉ lot textuel | Plan : note de stockage sous `Détails` ; Relay : intro courte, jeton et identifiants techniques dans `Avancé`, état humain + dernière connexion + identité visibles ; Sync : relais sous `Configuration avancée` ; Paramètres et Sport raccourcis. |
+| **G1** — agrégateur Insights | API JVM pure, déterministe, sans Android/réseau ; seuils jour/semaine/mois ; sessions annulées exclues du temps Focus terminé ; tests de fuseaux, DST, seuils et ordre stable. |
+| **G2** — onglet Synthèses | Sous-onglet `Échanges · Synthèses` dans Coach ; `Jour · Semaine · Mois` ; `Données insuffisantes` explicite avec raison ; détails repliés ; sources locales uniquement. |
+| **H** — actions Coach simplifiées | `Organiser ma journée`, `Planifier un objectif`, `Focus prêt` ; formulaires courts pré-remplis ; confirmation explicite avant chaque effet ; réutilisation de `sendAgentMessage`, `createGoal`, `startFocus` ; actions masquées si le Coach est désactivé. |
+| **I** — jauge Focus | Jauge circulaire de phase, compte à rebours central, sémantique `progressBarRangeInfo`, texte secondaire replié, pause/reprise/annuler/terminer et urgence conservés. |
+
+## 2. Preuves
+
+| Élément | Résultat |
+|---|---|
+| JVM `:app:testDebugUnitTest --rerun-tasks` | **743 tests, 0 échec, 0 erreur, 0 ignoré, 105 suites** (SHA `072424f`) |
+| `:app:lintDebug` | **PASS** |
+| `:app:assembleDebug` | **PASS** |
+| `:app:assembleDebugAndroidTest` | **PASS** |
+| AVD API 37 — nouveaux tests R5 | **10/10 PASS** (`CoachTextDensity`, `CoachInsights`, `CoachQuickActions`, `SecondLotTextDensity`) |
+| AVD API 37 — régression | **49/49 PASS** (`AtlasPresentation`, `LotEUi`, `PlanScreen`, `PlanCalendarScroll`, `GoalFocusStart`, `FocusGauge`, `AtlasLaunch`, `SyncSettingsScreenCapture`, + 4 nouveaux) |
+| AVD API 37 — smoke APK final | **15/15 PASS** sur l'APK final exact |
+| Pixel physique | **BLOCKED_DEVICE / NOT_RUN** — seul `emulator-5554` est présent à `adb devices -l` |
+
+### Identité APK finale
+
+- APK debug SHA-256 : `dfe02a7f9a71e707f9780690ecc136e563e4ecfbf43596fde94670ef71c1dbfd`
+- APK androidTest SHA-256 : `a3d63aed75b947aa9783e7ad3fb0524cf975c9ae5ff97a9c816e114285c392e8`
+- Signature debug : certificat SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`
+- `applicationId` : `dev.atlas.coach`, versionCode 1, versionName 0.1.0
+
+## 3. Captures
+
+- `docs/captures/v6-3-r5/01-focus-gauge.png` — jauge Focus en cours.
+- `docs/captures/v6-3-r5/02-coach-quick-actions.png` — onglet Coach, actions rapides, conversation.
+- `docs/captures/v6-3-r5/03-coach-insights.png` — Synthèses Jour.
+- `docs/captures/v6-3-r5/04-coach-day-form.png` — formulaire journée pré-rempli.
+- `docs/captures/v6-3-r5/05-coach-confirmation.png` — confirmation explicite avant envoi.
+- Appareil : AVD API 37, données synthétiques, aucun compte, aucun jeton, aucun `serverId`, aucune capture du tiroir d'applications.
+
+## 4. Décisions
+
+1. **Insights locaux déterministes** : aucune permission, aucun réseau, aucune interprétation distante en R5.
+2. **Sous-onglet Coach** plutôt qu'un 6ᵉ onglet bas.
+3. **Seuils** : jour sans donnée, semaine < 3 jours, mois < 7 jours → `Données insuffisantes`.
+4. **Onglet « Échanges »** pour éviter le doublon visuel avec le titre `Conversation` de l'écran.
+5. **Jeton d'appairage dans `Avancé`**, mais dernière connexion et identité d'appareil restent visibles dans la carte d'état.
+6. **Régime textuel** : aucun consentement, permission, révocation ou confirmation supprimé ; les textes longs sont raccourcis ou déplacés au moment de l'action.
+
+## 5. Limites
+
+- **Pixel physique non exécuté** : installation, parcours launcher Coach/Plan, hors ligne et captures Pixel « après » restent à faire après reconnexion et accord ciblé.
+- **R4 Pixel** reste `BLOCKED_DEVICE` ; la sauvegarde `~/atlas-backups/r4/pixel-app-backup-pre-r4.tar` est vérifiée, mais `pixel-app-files-preinstall.sha256` est vide et doit être reconstitué avant installation.
+- **Insights** : lecture des plans passés sur le thread de composition (fichiers locaux de petite taille) ; une optimisation reste possible si la liste devient longue.
+- **Zéros factuels** : une période avec un document local mais aucune action affiche des zéros dérivés ; l'état `Données insuffisantes` est couvert par les tests pour les périodes réellement vides.
+- **AVD seulement** : TalkBack complet, rotation et police 2× sur Pixel ne sont pas rejoués ; la police 2× et le paysage restent couverts par les suites existantes.
+- **Aucun push** : `origin/main` reste à `566668a`.
+
+## 6. Suite
+
+1. Reconnecter le Pixel, reconstituer les empreintes de fichiers, installer l'APK final avec `adb install -r`, rejouer les parcours et capturer les écrans expurgés.
+2. Revue indépendante finale (nouvelle session Luna XHigh, lecture seule technique).
+3. Push sur `main` uniquement après validation Pixel + revue + GO explicite.

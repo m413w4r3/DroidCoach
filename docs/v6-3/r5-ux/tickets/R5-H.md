@@ -2,9 +2,9 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `R5-H / BLOCKED_BY F` (base SHA à figer après intégration de F) |
+| TASK_ID / statut | `R5-H / READY` (base `62fbca4`, F intégré) |
 | Catégorie | Implémentation UI + formulaires |
-| Depuis | `<SHA intégré F — à remplir au lancement>` |
+| Depuis | `62fbca4dd67b47e516471d957b285ac723545014` |
 | Profil exigé | `codex:gpt-6-luna`, `effort=xhigh`, vérifié dans les métadonnées |
 | Worktree | Paseo-managed, branche `feat/r5-h-coach-actions`, aucune sous-délégation |
 | Propriété d'écriture | `android/app/src/main/java/dev/atlas/coach/app/AgentCoachScreen.kt`<br>`android/app/src/main/java/dev/atlas/coach/app/CoachQuickActions.kt` (nouveau : formulaires + validation pure)<br>`android/app/src/test/java/dev/atlas/coach/app/CoachQuickActionsTest.kt` (nouveau)<br>`android/app/src/androidTest/java/dev/atlas/coach/app/CoachQuickActionsInstrumentationTest.kt` (nouveau) |
@@ -32,7 +32,7 @@ Depuis le haut de l'écran Coach, trois actions compactes permettent de prépare
 
 ## Oracle
 
-- `cd android && ./gradlew :app:testDebugUnitTest --test '*CoachQuickActionsTest*' --rerun-tasks` → PASS.
+- `cd android && ./gradlew :app:testDebugUnitTest --tests '*CoachQuickActionsTest*' --rerun-tasks` → PASS.
 - Cas : valeurs par défaut, validation heures, cible 0/négative, cycles hors borne, titre vide/trop long, confirmation annulée = aucun effet, confirmation acceptée = un seul appel.
 - `./gradlew :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` → PASS.
 - Test instrumenté compilé (parent sur AVD API 37) : les trois actions sont visibles, le dialogue de confirmation apparaît, `Annuler` ne crée rien, `Confirmer` crée l'objectif / envoie le message / démarre le focus, la conversation reste utilisable.
