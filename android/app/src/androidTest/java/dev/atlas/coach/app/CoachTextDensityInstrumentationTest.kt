@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
@@ -128,7 +129,7 @@ class CoachTextDensityInstrumentationTest {
         val checkboxMatcher = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Checkbox)
         val consentCheckboxes = composeRule.onAllNodes(checkboxMatcher, useUnmergedTree = true)
         assertEquals("Location request, summary, and mobility consents stay available", 3, consentCheckboxes.fetchSemanticsNodes().size)
-        consentCheckboxes[0].assertHeightIsAtLeast(48.dp)
+        consentCheckboxes[0].onParent().assertHeightIsAtLeast(48.dp)
         consentCheckboxes[0].performClick()
         assertTrue("The coarse location consent remains actionable", controller.locationPanelState.coarseRequestConsent)
         composeRule.onNodeWithText("Demander ma position approximative").performScrollTo().assertIsEnabled()
