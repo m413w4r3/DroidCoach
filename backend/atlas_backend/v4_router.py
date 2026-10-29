@@ -330,11 +330,7 @@ def create_v4_router(
         state = projections.consent_state(device_ref, category)
         if state is None:
             return None
-        if state["state"] != "GRANTED":
-            return {"state": state["state"], "version": int(state["consent_version"])}
-        projection_version = latest_projection_consent_version(device_ref, category)
-        effective_version = projection_version or int(state["consent_version"])
-        return {"state": "GRANTED", "version": effective_version}
+        return {"state": state["state"], "version": int(state["consent_version"])}
 
     def latest_projection_consent_version(device_ref: str, category: str) -> int | None:
         table = _CAPABILITY_TO_CONSENT_TABLE.get(category)
@@ -398,6 +394,11 @@ def create_v4_router(
             if state is None or state["state"] != "GRANTED":
                 return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
                                        capability, status=403, fallback_request_id=parsed_id)
+            projection_failure = require_projection_consent(
+                device_ref, category, int(state["consent_version"]), capability, request
+            )
+            if projection_failure is not None:
+                return projection_failure
         return parsed_id, device_ref
 
     def require_android(request: Request, capability: str | None, *, fallback: str | None = None) -> tuple[str, str] | JSONResponse:
@@ -427,6 +428,34 @@ def create_v4_router(
         if version > current:
             return _error_response(request, "CONSENT_REQUIRED", "L’état du consentement doit être synchronisé avant les données.",
                                    capability, status=403)
+        return None
+
+    def require_projection_consent(
+        device_ref: str,
+        category: str,
+        current_version: int,
+        capability: str,
+        request: Request,
+        *,
+        require_projection: bool = False,
+    ) -> JSONResponse | None:
+        state = projections.consent_state(device_ref, category)
+        if state is None or state["state"] != "GRANTED":
+            return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+                                   capability, status=403)
+        persisted_version = int(state["consent_version"])
+        if persisted_version != current_version:
+            return _error_response(request, "STALE_VERSION", "La version de consentement a changé pendant la requête.",
+                                   capability, status=409)
+        projection_version = latest_projection_consent_version(device_ref, category)
+        if projection_version is None:
+            if require_projection:
+                return _error_response(request, "STALE_DATA", "La projection doit être synchronisée avec le consentement courant.",
+                                       capability, status=409)
+            return None
+        if projection_version != persisted_version:
+            return _error_response(request, "STALE_DATA", "La projection ne correspond pas au consentement courant.",
+                                   capability, status=409)
         return None
 
     async def handle_consent_state_sync(request: Request) -> JSONResponse:
@@ -648,7 +677,20 @@ def create_v4_router(
         auth = require_tool(request, capability)
         if isinstance(auth, JSONResponse):
             return auth
-        request_id, _device_ref = auth
+        request_id, device_ref = auth
+        consent_state = projections.consent_state(device_ref, "DAY_PLAN")
+        projection_failure = require_projection_consent(
+            device_ref,
+            "DAY_PLAN",
+            int(consent_state["consent_version"]),
+            capability,
+            request,
+            require_projection=True,
+        ) if consent_state is not None else _error_response(
+            request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.", capability, status=403
+        )
+        if projection_failure is not None:
+            return projection_failure
         try:
             idempotency_key = str(uuid.UUID(idempotency_key))
         except ValueError:
@@ -826,6 +868,11 @@ def create_v4_router(
         )
         if consent_failure is not None:
             return consent_failure
+        projection_failure = require_projection_consent(
+            device_ref, "DAY_PLAN", body["consent_version"], capability, request, require_projection=True
+        )
+        if projection_failure is not None:
+            return projection_failure
         cursor_value = body.get("cursor")
         after_created = ""
         after_id = ""
@@ -895,6 +942,11 @@ def create_v4_router(
         )
         if consent_failure is not None:
             return consent_failure
+        projection_failure = require_projection_consent(
+            device_ref, "DAY_PLAN", body["consent_version"], capability, request, require_projection=True
+        )
+        if projection_failure is not None:
+            return projection_failure
         with store.connect() as connection:
             proposal_row = connection.execute(
                 "SELECT state,expires_at FROM agent_proposals_v4 WHERE proposal_id=?",

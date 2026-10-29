@@ -159,7 +159,8 @@ def post_consent(client: ASGITestClient, category: str, state: str, version: int
     return response
 
 
-def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3) -> dict:
+def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent_version: int = 3,
+              idempotency_key: str = "00000000-0000-4000-8000-000000000206") -> dict:
     post_consent(client, "DAY_PLAN", "GRANTED", consent_version)
     body = {
         "contract_version": 4,
@@ -168,7 +169,7 @@ def post_plan(client: ASGITestClient, *, observed_at: str | None = None, consent
         "capability": "day_plan.snapshot.write",
         "sent_at": stamp(),
         "consent_version": consent_version,
-        "idempotency_key": "00000000-0000-4000-8000-000000000206",
+        "idempotency_key": idempotency_key,
         "data": day_plan(observed_at=observed_at),
     }
     response = client.post("/v4/sync/day-plan-snapshots", headers=android_headers(), json=body)
@@ -379,7 +380,8 @@ def test_proposal_requires_fresh_snapshot_and_never_accepts_arbitrary_route_data
 
 def test_consent_revocation_tombstone_blocks_reads_proposals_pull_and_ack_until_regrant(tmp_path, monkeypatch):
     client = make_client(tmp_path, monkeypatch)
-    post_plan(client, consent_version=3)
+    snapshot_observed_at = stamp()
+    post_plan(client, consent_version=3, observed_at=snapshot_observed_at)
 
     before_revoke = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
     assert before_revoke.status_code == 200, before_revoke.text
@@ -459,11 +461,53 @@ def test_consent_revocation_tombstone_blocks_reads_proposals_pull_and_ack_until_
     assert error_code(regressive) == "STALE_VERSION"
 
     post_consent(client, "DAY_PLAN", "GRANTED", 5)
-    after_regrant = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
-    assert after_regrant.status_code == 200, after_regrant.text
-    validate("tool-results.schema.json", after_regrant.json())
-    regranted_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000255")
+    stale_regrant_read = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert stale_regrant_read.status_code == 409
+    assert error_code(stale_regrant_read) == "STALE_DATA"
+    stale_regrant_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000255")
+    assert stale_regrant_proposal.status_code == 409
+    assert error_code(stale_regrant_proposal) == "STALE_DATA"
+    stale_regrant_lookup = client.get(
+        "/internal/v4/agent/proposals/by-idempotency/00000000-0000-4000-8000-000000000251",
+        headers=tool_headers("plan_revision.propose"),
+    )
+    assert stale_regrant_lookup.status_code == 409
+    assert error_code(stale_regrant_lookup) == "STALE_DATA"
+    stale_regrant_pull = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={**pull_body, "consent_version": 5},
+    )
+    assert stale_regrant_pull.status_code == 409
+    assert error_code(stale_regrant_pull) == "STALE_DATA"
+    stale_regrant_ack = client.post(
+        f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(),
+        json=ack_body(proposal_id, "00000000-0000-4000-8000-000000000257", "REJECTED", "USER_REJECTED",
+                      consent_version=5),
+    )
+    assert stale_regrant_ack.status_code == 409
+    assert error_code(stale_regrant_ack) == "STALE_DATA"
+
+    post_plan(
+        client, consent_version=5, observed_at=snapshot_observed_at,
+        idempotency_key="00000000-0000-4000-8000-000000000260",
+    )
+    after_fresh_snapshot = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
+    assert after_fresh_snapshot.status_code == 200, after_fresh_snapshot.text
+    validate("tool-results.schema.json", after_fresh_snapshot.json())
+    regranted_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000258")
     assert regranted_proposal.status_code == 200, regranted_proposal.text
+    regranted_lookup = client.get(
+        "/internal/v4/agent/proposals/by-idempotency/00000000-0000-4000-8000-000000000258",
+        headers=tool_headers("plan_revision.propose"),
+    )
+    assert regranted_lookup.status_code == 200, regranted_lookup.text
+    validate("proposal-inbox-ack.schema.json", regranted_lookup.json())
+    regranted_pull = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={**pull_body, "consent_version": 5},
+    )
+    assert regranted_pull.status_code == 200, regranted_pull.text
+    validate("proposal-inbox-ack.schema.json", regranted_pull.json()["proposals"][0])
 
     post_consent(client, "DAY_PLAN", "UNKNOWN", 6)
     unknown_read = client.get("/internal/v4/day-plan", headers=tool_headers("day_plan.read"))
@@ -472,4 +516,17 @@ def test_consent_revocation_tombstone_blocks_reads_proposals_pull_and_ack_until_
     unknown_proposal = post_proposal(client, "00000000-0000-4000-8000-000000000256")
     assert unknown_proposal.status_code == 403
     assert error_code(unknown_proposal) == "CONSENT_REQUIRED"
+    unknown_pull = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={**pull_body, "consent_version": 6},
+    )
+    assert unknown_pull.status_code == 403
+    assert error_code(unknown_pull) == "CONSENT_REQUIRED"
+    unknown_ack = client.post(
+        f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(),
+        json=ack_body(proposal_id, "00000000-0000-4000-8000-000000000259", "REJECTED", "USER_REJECTED",
+                      consent_version=6),
+    )
+    assert unknown_ack.status_code == 403
+    assert error_code(unknown_ack) == "CONSENT_REQUIRED"
     client.close()
