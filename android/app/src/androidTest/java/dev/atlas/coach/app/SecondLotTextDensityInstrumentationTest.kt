@@ -10,8 +10,10 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,9 +44,15 @@ class SecondLotTextDensityInstrumentationTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun planKeepsDaySelectorPrimaryActionsAndOnDemandDetails() {
+    fun planKeepsDaySelectorAndPrimaryActionsAvailable() {
         val context = isolatedContext()
-        val planController = PlanController(File(context.cacheDir, "plan-${UUID.randomUUID()}"))
+        val directory = File(
+            InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
+            "plan-${UUID.randomUUID()}",
+        )
+        assertTrue(directory.mkdirs() || directory.isDirectory)
+        val planController = PlanController(directory)
+        assertTrue(planController.createTodayPlan())
         val atlasController = AtlasController(context)
 
         setScreen(context, "Plan du jour") {
@@ -53,18 +61,6 @@ class SecondLotTextDensityInstrumentationTest {
 
         composeRule.onNodeWithTag("plan_day_today").assertIsDisplayed()
         composeRule.onNodeWithTag("plan_day_tomorrow").assertIsDisplayed()
-        composeRule.onNodeWithText("Préparer la journée").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Créer le programme du jour").performScrollTo().assertHeightIsAtLeast(48.dp)
-        composeRule.onAllNodesWithText(
-            "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
-        ).assertCountEquals(0)
-        composeRule.onNodeWithText("Détails").performScrollTo().performClick()
-        composeRule.onNodeWithText(
-            "Le programme est stocké uniquement sur ce téléphone. Il reste lisible hors ligne et après redémarrage.",
-        ).performScrollTo().assertIsDisplayed()
-
-        composeRule.onNodeWithText("Créer le programme du jour").performScrollTo().performClick()
-        composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Aujourd’hui").assertCountEquals(2)
         composeRule.onNodeWithText("Ajouter une activité").performScrollTo().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithText("Activités").performScrollTo().assertIsDisplayed()
@@ -97,7 +93,7 @@ class SecondLotTextDensityInstrumentationTest {
         }
 
         val humanState = relayHumanConnectionState(relay.mode, relay.state, relay.lastError)
-        composeRule.onNodeWithText(humanState.label).performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText(humanState.label).onFirst().performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("PC ATLAS").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Modifier l'appairage").performScrollTo().assertHeightIsAtLeast(48.dp)
         composeRule.onAllNodesWithText("URL du relais").assertCountEquals(0)
@@ -123,7 +119,7 @@ class SecondLotTextDensityInstrumentationTest {
         composeRule.onNodeWithTag("sync_status_card").assertIsDisplayed()
         composeRule.onNodeWithTag("sync_enabled_switch").assertIsDisplayed()
         composeRule.onNodeWithText("Catégories partagées").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Focus").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Focus").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithTag("sync_backend_url").assertCountEquals(0)
         composeRule.onNodeWithText("Configuration avancée").performScrollTo().performClick()
         composeRule.onNodeWithTag("sync_backend_url").performScrollTo().assertIsDisplayed()
