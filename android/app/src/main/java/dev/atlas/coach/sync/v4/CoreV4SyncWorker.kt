@@ -27,6 +27,7 @@ import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.TrainingReferenceSyncState
 import dev.atlas.coach.plan.v4.PlanV4JsonCodec
 import dev.atlas.coach.sync.AndroidSyncStorage
+import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.CoreV4ConsentRecord
 import dev.atlas.coach.sync.SharedPreferencesBearerTokenStore
 import dev.atlas.coach.usage.android.SharedPreferencesGlobalUsageStores
@@ -49,7 +50,14 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
             store.recordFailure("RUNNING", "Synchronisation V4 en cours.")
             val syncConfig = AndroidSyncStorage.settings(applicationContext).read()
             val debuggable = applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-            val transport = CoreV4UrlConnectionTransport(syncConfig.baseUrl, debuggable)
+            val transport = CoreV4UrlConnectionTransport(
+                syncConfig.baseUrl,
+                debuggable,
+                requestAllowed = { request -> !isStopped && coreV4RequestStillAuthorized(store, request) },
+                requestStart = { request, start ->
+                    startCoreV4TransportIfAuthorized(store, request, { isStopped }, start)
+                },
+            )
             client = CoreV4SyncClient(transport)
             activeClient = client
             val token = SharedPreferencesBearerTokenStore(applicationContext).token()
@@ -127,16 +135,7 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
     }
 
     private fun syncConsentFirst(store: dev.atlas.coach.sync.AndroidCoreV4SyncStore, client: CoreV4SyncClient, token: String) {
-        for (record in store.pendingConsentRecords()) {
-            if (isStopped) return
-            val current = store.consent(record.snapshot.category)
-            if (current.snapshot.version != record.snapshot.version ||
-                current.snapshot.state != record.snapshot.state
-            ) continue
-            val body = store.prepareConsentBody(record, client)
-            val receipt = client.sendConsent(body, token)
-            store.acknowledgeConsent(record.snapshot.category, receipt)
-        }
+        syncPendingCoreV4ConsentsFirst(store, client, token) { isStopped }
     }
 
     private fun pushApprovedPlan(
@@ -149,18 +148,42 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         now: String,
     ) {
         val planConsent = consents.getValue(CoreV4Category.DAY_PLAN).snapshot
+        val statusConsent = consents.getValue(CoreV4Category.ACTIVITY_STATUS).snapshot
         if (planConsent.state == CoreV4ConsentState.GRANTED) {
-            val data = CoreV4SyncClient.planData(plan, events, store.shareTitles(), now)
+            if (!flushSupersededStatusRequestsBeforePlan(
+                    store, client, token, plan.planId, plan.version,
+                    statusConsent, planConsent,
+                )
+            ) {
+                store.recordSourceState(
+                    CoreV4Category.ACTIVITY_STATUS,
+                    "MISMATCH",
+                    "Un statut V4 en attente ne peut pas être repris avant la nouvelle version du plan.",
+                )
+                return
+            }
+            val data = CoreV4SyncClient.planData(plan, events, now)
             val fingerprint = fingerprint(data, "observed_at")
             val sourceKey = "plan:" + plan.planId + ":consent:" + planConsent.version
             sendProjection(
                 store, client, token, CoreV4Category.DAY_PLAN, sourceKey, plan.version,
                 fingerprint, data, now, planConsent,
             )
+            if (statusConsent.state == CoreV4ConsentState.GRANTED &&
+                !flushSupersededStatusRequestsBeforePlan(
+                    store, client, token, plan.planId, plan.version,
+                    statusConsent, planConsent,
+                )
+            ) {
+                store.recordSourceState(
+                    CoreV4Category.ACTIVITY_STATUS,
+                    "MISMATCH",
+                    "Un statut V4 en attente ne peut pas être repris après la nouvelle version du plan.",
+                )
+                return
+            }
         }
 
-        store.pruneStaleStatusRequests(plan.planId, plan.version)
-        val statusConsent = consents.getValue(CoreV4Category.ACTIVITY_STATUS).snapshot
         if (planConsent.state != CoreV4ConsentState.GRANTED ||
             statusConsent.state != CoreV4ConsentState.GRANTED ||
             store.receipt("plan:" + plan.planId + ":consent:" + planConsent.version)?.version != plan.version
@@ -253,10 +276,10 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
             ids.filter { id -> habits.list().any { it.id == id } }.flatMap(habits::checkIns)
         }.getOrDefault(emptyList<HabitCheckIn>())
         val progress = CoreV4SyncClient.goalProgress(goals, focus, checkIns)
-        val raw = CoreV4SyncClient.goalData(goals, progress, 1, now, store.shareTitles())
+        val raw = CoreV4SyncClient.goalData(goals, progress, 1, now)
         val sourceHash = fingerprint(raw, "observed_at", "goals_version")
         val version = store.nextSourceVersion("goals", sourceHash)
-        val data = CoreV4SyncClient.goalData(goals, progress, version, now, store.shareTitles())
+        val data = CoreV4SyncClient.goalData(goals, progress, version, now)
         sendProjection(
             store, client, token, CoreV4Category.GOAL_PROGRESS,
             "goals:consent:" + consent.version, version, sourceHash, data, now, consent,
@@ -379,6 +402,113 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         if (source.keys.any { it !is String }) return null
         return source.entries.associate { it.key as String to it.value }
     }
+}
+
+internal fun syncPendingCoreV4ConsentsFirst(
+    store: AndroidCoreV4SyncStore,
+    client: CoreV4SyncClient,
+    token: String,
+    shouldStop: () -> Boolean = { false },
+) {
+    for (record in store.pendingConsentRecords()) {
+        if (shouldStop()) return
+        val current = store.consent(record.snapshot.category)
+        if (current.snapshot.version != record.snapshot.version ||
+            current.snapshot.state != record.snapshot.state
+        ) continue
+        val body = store.prepareConsentBody(record, client)
+        val receipt = client.sendConsent(body, token)
+        store.acknowledgeConsent(record.snapshot.category, receipt)
+    }
+}
+
+internal fun coreV4RequestStillAuthorized(
+    store: AndroidCoreV4SyncStore,
+    request: CoreV4HttpRequest,
+): Boolean {
+    return runCatching {
+        val envelope = JSONObject(request.body)
+        if (request.path == CoreV4SyncClient.CONSENT_ROUTE) {
+            val category = CoreV4Category.entries.firstOrNull { it.wireValue == envelope.optString("category") }
+                ?: return false
+            val current = store.consent(category).snapshot
+            current.version == envelope.optInt("consent_version") &&
+                current.state.name == envelope.optString("state")
+        } else {
+            val category = CoreV4Category.entries.firstOrNull { it.route == request.path } ?: return false
+            val current = store.consent(category).snapshot
+            current.state == CoreV4ConsentState.GRANTED &&
+                current.version == envelope.optInt("consent_version") &&
+                current.syncedVersion == current.version &&
+                (category != CoreV4Category.ACTIVITY_STATUS || run {
+                    val planConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+                    planConsent.state == CoreV4ConsentState.GRANTED &&
+                        planConsent.syncedVersion == planConsent.version
+                })
+        }
+    }.getOrDefault(false)
+}
+
+/** Linearizes consent revocation with the point that opens the HTTP request body. */
+internal fun startCoreV4TransportIfAuthorized(
+    store: AndroidCoreV4SyncStore,
+    request: CoreV4HttpRequest,
+    shouldStop: () -> Boolean,
+    start: () -> Unit,
+): Boolean = synchronized(store) {
+    if (shouldStop() || !coreV4RequestStillAuthorized(store, request)) {
+        false
+    } else {
+        start()
+        true
+    }
+}
+
+/** Drain the contiguous pending status prefix before changing the plan they reference. */
+internal fun flushSupersededStatusRequestsBeforePlan(
+    store: AndroidCoreV4SyncStore,
+    client: CoreV4SyncClient,
+    token: String,
+    planId: String,
+    currentPlanVersion: Int,
+    statusConsent: CoreV4ConsentSnapshot,
+    dayPlanConsent: CoreV4ConsentSnapshot,
+): Boolean {
+    val pendingStatuses = store.pendingProjections(CoreV4Category.ACTIVITY_STATUS)
+    if (pendingStatuses.isEmpty()) return true
+    if (statusConsent.state != CoreV4ConsentState.GRANTED ||
+        statusConsent.syncedVersion != statusConsent.version ||
+        dayPlanConsent.state != CoreV4ConsentState.GRANTED ||
+        dayPlanConsent.syncedVersion != dayPlanConsent.version
+    ) return false
+    for ((index, pending) in pendingStatuses.withIndex()) {
+        val pendingPlanId = pending.request.data.optString("plan_id")
+        val pendingPlanVersion = pending.request.data.optInt("plan_version")
+        if (pending.request.consentVersion != statusConsent.version) return false
+        val remotePlanVersion = store.latestPlanReceiptVersion(pendingPlanId)
+        if (pendingPlanVersion != remotePlanVersion) {
+            val canFollowPlanUpdate = pendingPlanId == planId &&
+                pendingPlanVersion == currentPlanVersion &&
+                pendingStatuses.drop(index).all { later ->
+                    later.request.data.optString("plan_id") == planId &&
+                        later.request.data.optInt("plan_version") == currentPlanVersion
+                }
+            return canFollowPlanUpdate
+        }
+        val receipt = client.sendProjection(
+            pending.request,
+            pending.body,
+            token,
+            statusConsent,
+            dayPlanConsent,
+        )
+        store.acknowledgeProjection(
+            pending,
+            receipt,
+            pending.request.data.getString("observed_at"),
+        )
+    }
+    return true
 }
 
 /** Enqueues only connected work; periodic work supplies eventual delivery after offline periods. */

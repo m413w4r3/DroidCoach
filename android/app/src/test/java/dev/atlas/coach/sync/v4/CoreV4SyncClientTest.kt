@@ -17,12 +17,17 @@ import dev.atlas.coach.plan.StatusProvenance
 import dev.atlas.coach.plan.StatusSource
 import dev.atlas.coach.plan.TrainingPlanReference
 import dev.atlas.coach.plan.TrainingReferenceSyncState
+import dev.atlas.coach.sync.AndroidCoreV4SyncStore
+import dev.atlas.coach.sync.CoreV4SyncPersistence
 import dev.atlas.coach.usage.GlobalUsageConsent
 import dev.atlas.coach.usage.UsageAppSummary
 import dev.atlas.coach.usage.UsageReliability
 import dev.atlas.coach.usage.UsageSummary
 import dev.atlas.coach.usage.UsageSummaryCoverage
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,7 +63,7 @@ class CoreV4SyncClientTest {
         val client = CoreV4SyncClient(transport)
         val before = approvedPlan()
         val events = listOf(statusEvent())
-        val titlelessPlan = CoreV4SyncClient.planData(before, events, shareTitles = false, observedAt = NOW)
+        val titlelessPlan = CoreV4SyncClient.planData(before, events, observedAt = NOW)
         val status = CoreV4SyncClient.statusData(events.single(), before.version, sequence = 1)
         val usage = CoreV4SyncClient.usageData(
             usageSummary(),
@@ -70,7 +75,6 @@ class CoreV4SyncClientTest {
             mapOf(GOAL_ID to GoalProgress(GOAL_ID, GoalMetric.MANUAL, 0, 1)),
             version = 1,
             observedAt = NOW,
-            shareTitles = false,
         )
         val training = CoreV4SyncClient.trainingData(listOf(trainingReference()), NOW)
         val payloads = listOf(
@@ -103,6 +107,8 @@ class CoreV4SyncClientTest {
         assertFalse(allBodies.contains("private application label"))
         assertFalse(allBodies.contains(TOKEN))
         assertFalse(transport.requests.joinToString().contains(TOKEN))
+        assertEquals("Focus", titlelessPlan.getJSONArray("activities").getJSONObject(0).getString("title"))
+        assertEquals("Objectif 1", goals.getJSONArray("goals").getJSONObject(0).getString("title"))
         assertEquals(JSONObject.NULL, usage.getJSONArray("apps").getJSONObject(0).get("display_name"))
         assertEquals(7, training.getJSONArray("routines").getJSONObject(0).getInt("routine_id"))
     }
@@ -121,6 +127,295 @@ class CoreV4SyncClientTest {
         assertTrue(second.replayed)
         assertEquals(transport.requests[0].body, transport.requests[1].body)
         assertEquals(request.idempotencyKey, JSONObject(transport.requests[1].body).getString("idempotency_key"))
+    }
+
+    @Test
+    fun persistentStoreReplaysExactProjectionAfterRecreationAndConsentPrecedesData() {
+        val persistence = MemoryV4Persistence()
+        val store = AndroidCoreV4SyncStore(persistence)
+        val grantedRecord = store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        val transport = FakeTransport()
+        val client = CoreV4SyncClient(transport)
+
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+        val consent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        assertEquals(grantedRecord.snapshot.version, consent.syncedVersion)
+
+        val data = planData()
+        val fingerprint = "1".repeat(64)
+        val firstStoreRequest = store.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${consent.version}",
+            sourceVersion = 1,
+            sourceFingerprint = fingerprint,
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = consent.version,
+            data = data,
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected first persistent request")
+
+        val recreatedStore = AndroidCoreV4SyncStore(persistence)
+        val replay = recreatedStore.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${consent.version}",
+            sourceVersion = 1,
+            sourceFingerprint = fingerprint,
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = consent.version,
+            data = data.put("observed_at", "2026-10-29T12:01:00Z"),
+            client = client,
+            nowUtc = "2026-10-29T12:01:00Z",
+        ) ?: error("expected exact pending request replay")
+
+        assertEquals(firstStoreRequest.body, replay.body)
+        assertEquals(firstStoreRequest.request.idempotencyKey, replay.request.idempotencyKey)
+        val currentConsent = recreatedStore.consent(CoreV4Category.DAY_PLAN).snapshot
+        assertTrue(coreV4RequestStillAuthorized(
+            recreatedStore,
+            CoreV4HttpRequest(CoreV4Category.DAY_PLAN.route, TOKEN, replay.body),
+        ))
+        val receipt = client.sendProjection(replay.request, replay.body, TOKEN, currentConsent)
+        recreatedStore.acknowledgeProjection(replay, receipt, NOW)
+        assertEquals(
+            listOf(CoreV4SyncClient.CONSENT_ROUTE, CoreV4Category.DAY_PLAN.route),
+            transport.requests.map { it.path },
+        )
+        recreatedStore.setConsent(CoreV4Category.DAY_PLAN, granted = false)
+        assertFalse(coreV4RequestStillAuthorized(
+            recreatedStore,
+            CoreV4HttpRequest(CoreV4Category.DAY_PLAN.route, TOKEN, replay.body),
+        ))
+    }
+
+    @Test
+    fun offlineStatusIsResumedBeforePlanRevisionAndSequenceStaysContiguous() {
+        val persistence = MemoryV4Persistence()
+        val store = AndroidCoreV4SyncStore(persistence)
+        val transport = FakeTransport()
+        val client = CoreV4SyncClient(transport)
+        val dayConsent = granted(CoreV4Category.DAY_PLAN)
+        val statusConsent = granted(CoreV4Category.ACTIVITY_STATUS)
+
+        val initialPlan = store.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:1",
+            sourceVersion = 1,
+            sourceFingerprint = "2".repeat(64),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = 1,
+            data = planData(),
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected initial plan")
+        val planReceipt = client.sendProjection(initialPlan.request, initialPlan.body, TOKEN, dayConsent)
+        store.acknowledgeProjection(initialPlan, planReceipt, NOW)
+
+        val firstEvent = statusEvent()
+        val firstSequence = store.sequenceForStatusEvent(firstEvent.statusEventId)
+        val firstStatus = CoreV4SyncClient.statusData(firstEvent, planVersion = 1, sequence = firstSequence)
+        val firstPending = store.prepareProjection(
+            sourceKey = "status:${firstEvent.statusEventId}",
+            sourceVersion = firstSequence.toInt(),
+            sourceFingerprint = "3".repeat(64),
+            category = CoreV4Category.ACTIVITY_STATUS,
+            consentVersion = statusConsent.version,
+            data = firstStatus,
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected first status")
+
+        transport.offline = true
+        val offline = assertThrows(CoreV4SyncException::class.java) {
+            client.sendProjection(firstPending.request, firstPending.body, TOKEN, statusConsent, dayConsent)
+        }
+        assertEquals(CoreV4FailureKind.OFFLINE, offline.kind)
+
+        transport.offline = false
+        val revisedPlanVersion = 2
+        assertTrue(flushSupersededStatusRequestsBeforePlan(
+            store,
+            client,
+            TOKEN,
+            PLAN_ID,
+            revisedPlanVersion,
+            statusConsent,
+            dayConsent,
+        ))
+        assertTrue(store.pendingProjections(CoreV4Category.ACTIVITY_STATUS).isEmpty())
+
+        val revisedPlan = approvedPlan().copy(version = revisedPlanVersion)
+        val revisedData = CoreV4SyncClient.planData(revisedPlan, emptyList(), observedAt = "2026-10-29T12:02:00Z")
+        val revisedPending = store.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:1",
+            sourceVersion = revisedPlanVersion,
+            sourceFingerprint = "4".repeat(64),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = dayConsent.version,
+            data = revisedData,
+            client = client,
+            nowUtc = "2026-10-29T12:02:00Z",
+        ) ?: error("expected revised plan")
+        val revisedReceipt = client.sendProjection(revisedPending.request, revisedPending.body, TOKEN, dayConsent)
+        store.acknowledgeProjection(revisedPending, revisedReceipt, "2026-10-29T12:02:00Z")
+
+        val secondEvent = firstEvent.copy(
+            statusEventId = EVENT_ID_2,
+            fromStatus = ActivityStatus.IN_PROGRESS,
+            toStatus = ActivityStatus.DONE,
+            planVersion = revisedPlanVersion,
+            decidedAt = "2026-10-29T12:03:00Z",
+            observedAt = "2026-10-29T12:03:00Z",
+        )
+        val secondSequence = store.sequenceForStatusEvent(secondEvent.statusEventId)
+        assertEquals(2L, secondSequence)
+        val secondData = CoreV4SyncClient.statusData(secondEvent, revisedPlanVersion, secondSequence)
+        val secondPending = store.prepareProjection(
+            sourceKey = "status:${secondEvent.statusEventId}",
+            sourceVersion = secondSequence.toInt(),
+            sourceFingerprint = "5".repeat(64),
+            category = CoreV4Category.ACTIVITY_STATUS,
+            consentVersion = statusConsent.version,
+            data = secondData,
+            client = client,
+            nowUtc = "2026-10-29T12:03:00Z",
+        ) ?: error("expected second status")
+        client.sendProjection(secondPending.request, secondPending.body, TOKEN, statusConsent, dayConsent)
+
+        val resumedPaths = transport.requests.drop(2).map { it.path }
+        assertEquals(
+            listOf(
+                CoreV4Category.ACTIVITY_STATUS.route,
+                CoreV4Category.DAY_PLAN.route,
+                CoreV4Category.ACTIVITY_STATUS.route,
+            ),
+            resumedPaths,
+        )
+        val acceptedSequences = transport.requests
+            .filter { it.path == CoreV4Category.ACTIVITY_STATUS.route }
+            .drop(1)
+            .map { JSONObject(it.body).getJSONObject("data").getInt("sequence") }
+        assertEquals(listOf(1, 2), acceptedSequences)
+    }
+
+    @Test
+    fun transportCancellationWinsBeforeRegistrationAndCancelsRegisteredConnection() {
+        val beforeRegistration = CoreV4TransportStartGate()
+        val cancelledBefore = AtomicBoolean(false)
+        beforeRegistration.cancel()
+        val lateConnection = CoreV4CancelableConnection { cancelledBefore.set(true) }
+        assertFalse(beforeRegistration.register(lateConnection))
+        assertTrue(cancelledBefore.get())
+
+        val afterRegistration = CoreV4TransportStartGate()
+        val registered = CountDownLatch(1)
+        val releaseStart = CountDownLatch(1)
+        val cancelledAfter = AtomicBoolean(false)
+        val connection = CoreV4CancelableConnection { cancelledAfter.set(true) }
+        val registeredSuccessfully = AtomicBoolean(false)
+        val startAllowed = AtomicBoolean(true)
+        val sender = Thread {
+            registeredSuccessfully.set(afterRegistration.register(connection))
+            registered.countDown()
+            if (releaseStart.await(2, TimeUnit.SECONDS)) {
+                startAllowed.set(afterRegistration.mayStart(connection))
+            }
+        }
+        sender.start()
+        assertTrue(registered.await(2, TimeUnit.SECONDS))
+        afterRegistration.cancel()
+        releaseStart.countDown()
+        sender.join(2_000)
+
+        assertFalse(sender.isAlive)
+        assertTrue(registeredSuccessfully.get())
+        assertTrue(cancelledAfter.get())
+        assertFalse(startAllowed.get())
+    }
+
+    @Test
+    fun transportStartBarrierRejectsRevocationBeforeAndAfterConnectionRegistration() {
+        val store = AndroidCoreV4SyncStore(MemoryV4Persistence())
+        val transport = FakeTransport()
+        val client = CoreV4SyncClient(transport)
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+        val firstConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        val firstPending = store.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${firstConsent.version}",
+            sourceVersion = 1,
+            sourceFingerprint = "6".repeat(64),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = firstConsent.version,
+            data = planData(),
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected first plan projection")
+        val firstRequest = CoreV4HttpRequest(
+            CoreV4Category.DAY_PLAN.route,
+            TOKEN,
+            firstPending.body,
+        )
+
+        // Model revocation after the pre-open consent read but before registration/start.
+        assertTrue(coreV4RequestStillAuthorized(store, firstRequest))
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = false)
+        val beforeRegistrationGate = CoreV4TransportStartGate()
+        val beforeRegistrationConnection = CoreV4CancelableConnection { }
+        assertTrue(beforeRegistrationGate.register(beforeRegistrationConnection))
+        val startedBeforeRegistration = AtomicBoolean(false)
+        assertTrue(beforeRegistrationGate.start(beforeRegistrationConnection) {
+            startedBeforeRegistration.set(startCoreV4TransportIfAuthorized(store, firstRequest, { false }) {})
+        })
+        assertFalse(startedBeforeRegistration.get())
+
+        // Re-grant, register the connection, then revoke before the start callback runs.
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+        val renewedConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        val renewedPending = store.prepareProjection(
+            sourceKey = "plan:$PLAN_ID:consent:${renewedConsent.version}",
+            sourceVersion = 1,
+            sourceFingerprint = "7".repeat(64),
+            category = CoreV4Category.DAY_PLAN,
+            consentVersion = renewedConsent.version,
+            data = planData(),
+            client = client,
+            nowUtc = NOW,
+        ) ?: error("expected renewed plan projection")
+        val renewedRequest = CoreV4HttpRequest(
+            CoreV4Category.DAY_PLAN.route,
+            TOKEN,
+            renewedPending.body,
+        )
+        val gate = CoreV4TransportStartGate()
+        val connectionCancelled = AtomicBoolean(false)
+        val connection = CoreV4CancelableConnection { connectionCancelled.set(true) }
+        assertTrue(gate.register(connection))
+        val registered = CountDownLatch(1)
+        val releaseStart = CountDownLatch(1)
+        val startAttempted = AtomicBoolean(false)
+        val requestStarted = AtomicBoolean(false)
+        val sender = Thread {
+            registered.countDown()
+            if (releaseStart.await(2, TimeUnit.SECONDS)) {
+                gate.start(connection) {
+                    startAttempted.set(true)
+                    requestStarted.set(startCoreV4TransportIfAuthorized(
+                        store,
+                        renewedRequest,
+                        { false },
+                    ) {})
+                }
+            }
+        }
+        sender.start()
+        assertTrue(registered.await(2, TimeUnit.SECONDS))
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = false)
+        releaseStart.countDown()
+        sender.join(2_000)
+
+        assertFalse(sender.isAlive)
+        assertTrue(startAttempted.get())
+        assertFalse(requestStarted.get())
+        assertFalse(connectionCancelled.get())
     }
 
     @Test
@@ -211,7 +506,7 @@ class CoreV4SyncClientTest {
         val client = CoreV4SyncClient(transport)
         val plan = approvedPlan()
         val original = plan.copy()
-        val data = CoreV4SyncClient.planData(plan, emptyList(), shareTitles = false, observedAt = NOW)
+        val data = CoreV4SyncClient.planData(plan, emptyList(), observedAt = NOW)
         val (request, body) = request(client, CoreV4Category.DAY_PLAN, data)
 
         val failure = assertThrows(CoreV4SyncException::class.java) {
@@ -229,7 +524,7 @@ class CoreV4SyncClientTest {
     fun incompatibleGoalAndTrainingIdsAreRejectedInsteadOfReplaced() {
         val badGoal = goal().copy(id = "goal-local-1")
         val goalFailure = assertThrows(CoreV4SyncException::class.java) {
-            CoreV4SyncClient.goalData(listOf(badGoal), emptyMap(), 1, NOW, shareTitles = false)
+            CoreV4SyncClient.goalData(listOf(badGoal), emptyMap(), 1, NOW)
         }
         assertEquals(CoreV4FailureKind.PROTOCOL, goalFailure.kind)
 
@@ -339,6 +634,7 @@ class CoreV4SyncClientTest {
         private const val REVISION_ID = "30000000-0000-4000-8000-000000000001"
         private const val ACTIVITY_ID = "40000000-0000-4000-8000-000000000001"
         private const val EVENT_ID = "50000000-0000-4000-8000-000000000001"
+        private const val EVENT_ID_2 = "50000000-0000-4000-8000-000000000002"
         private const val GOAL_ID = "60000000-0000-4000-8000-000000000001"
 
         private fun approvedPlan(): DayPlan {
@@ -386,7 +682,7 @@ class CoreV4SyncClientTest {
         )
 
         private fun planData(): JSONObject =
-            CoreV4SyncClient.planData(approvedPlan(), emptyList(), shareTitles = false, observedAt = NOW)
+            CoreV4SyncClient.planData(approvedPlan(), emptyList(), observedAt = NOW)
 
         private fun usageSummary() = UsageSummary(
             windowStart = 1_798_000_000_000L,
@@ -428,5 +724,15 @@ class CoreV4SyncClientTest {
             sourceUpdatedAt = NOW,
             syncState = TrainingReferenceSyncState.FRESH,
         )
+    }
+
+    private class MemoryV4Persistence : CoreV4SyncPersistence {
+        private var state: String? = null
+
+        override fun read(): String? = state
+
+        override fun write(value: String) {
+            state = value
+        }
     }
 }

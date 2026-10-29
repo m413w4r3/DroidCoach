@@ -169,13 +169,32 @@ data class CoreV4SyncPresentation(
     val pendingCount: Int,
 )
 
+internal interface CoreV4SyncPersistence {
+    fun read(): String?
+    fun write(value: String)
+}
+
+private class SharedPreferencesCoreV4SyncPersistence(context: Context) : CoreV4SyncPersistence {
+    private val preferences = context.applicationContext
+        .getSharedPreferences(AndroidCoreV4SyncStore.PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    override fun read(): String? = preferences.getString(CORE_V4_STATE_KEY, null)
+
+    override fun write(value: String) {
+        check(preferences.edit().putString(CORE_V4_STATE_KEY, value).commit()) {
+            "Unable to persist V4 sync state"
+        }
+    }
+}
+
 /**
  * Versioned V4 state is isolated from the V1 outbox. Exact request bodies stay local
  * until a receipt arrives, so retries never reuse an idempotency key with changed bytes.
  */
-class AndroidCoreV4SyncStore(context: Context) {
-    private val preferences = context.applicationContext
-        .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+class AndroidCoreV4SyncStore internal constructor(
+    private val persistence: CoreV4SyncPersistence,
+) {
+    constructor(context: Context) : this(SharedPreferencesCoreV4SyncPersistence(context))
 
     @Synchronized
     fun consents(): List<CoreV4ConsentRecord> = CoreV4Category.entries.map(::consent)
@@ -222,9 +241,9 @@ class AndroidCoreV4SyncStore(context: Context) {
             val keys = pending.keys().asSequence().toList()
             keys.forEach { key ->
                 val pendingCategory = pending.optJSONObject(key)?.optString("category")
-                if (pendingCategory == category.name ||
-                    (category == CoreV4Category.DAY_PLAN && pendingCategory == CoreV4Category.ACTIVITY_STATUS.name)
-                ) pending.remove(key)
+                if (pendingCategory == category.name && category != CoreV4Category.ACTIVITY_STATUS) {
+                    pending.remove(key)
+                }
             }
             root.put(KEY_PENDING, pending)
         }
@@ -285,16 +304,6 @@ class AndroidCoreV4SyncStore(context: Context) {
             writeRoot(root)
         }
     }
-
-    @Synchronized
-    fun setShareTitles(enabled: Boolean) {
-        val root = readRoot()
-        root.put(KEY_SHARE_TITLES, enabled)
-        writeRoot(root)
-    }
-
-    @Synchronized
-    fun shareTitles(): Boolean = readRoot().optBoolean(KEY_SHARE_TITLES, false)
 
     /**
      * Returns a durable request for this source revision. Snapshot retries read the stored
@@ -420,6 +429,31 @@ class AndroidCoreV4SyncStore(context: Context) {
         }
 
     @Synchronized
+    fun pendingProjections(category: CoreV4Category): List<CoreV4PendingProjection> {
+        val pending = readRoot().optJSONObject(KEY_PENDING) ?: return emptyList()
+        return pending.keys().asSequence()
+            .mapNotNull { key ->
+                pending.optJSONObject(key)
+                    ?.takeIf { it.optString("category") == category.name }
+                    ?.let { it.toPending(key) }
+            }
+            .sortedBy { it.request.data.optLong("sequence", Long.MAX_VALUE) }
+            .toList()
+    }
+
+    @Synchronized
+    fun latestPlanReceiptVersion(planId: String): Int? {
+        val prefix = "plan:" + planId + ":consent:"
+        val receipts = readRoot().optJSONObject(KEY_RECEIPTS) ?: return null
+        return receipts.keys().asSequence()
+            .filter { it.startsWith(prefix) }
+            .mapNotNull { receipts.optJSONObject(it) }
+            .filter { it.optString("category") == CoreV4Category.DAY_PLAN.name }
+            .mapNotNull { it.optInt("version").takeIf { version -> version > 0 } }
+            .maxOrNull()
+    }
+
+    @Synchronized
     fun nextSourceVersion(sourceKey: String, fingerprint: String): Int {
         require(fingerprint.matches(HEX_256))
         val root = readRoot()
@@ -455,27 +489,10 @@ class AndroidCoreV4SyncStore(context: Context) {
     }
 
     @Synchronized
-    fun pruneStaleStatusRequests(planId: String, planVersion: Int) {
-        val root = readRoot()
-        val pending = root.optJSONObject(KEY_PENDING) ?: return
-        val keys = pending.keys().asSequence().toList()
-        keys.forEach { key ->
-            val row = pending.optJSONObject(key) ?: return@forEach
-            if (row.optString("category") == CoreV4Category.ACTIVITY_STATUS.name) {
-                val data = runCatching { JSONObject(row.getString("body")).getJSONObject("data") }.getOrNull()
-                if (data != null && data.optString("plan_id") == planId &&
-                    data.optInt("plan_version") != planVersion
-                ) {
-                    pending.remove(key)
-                }
-            }
-        }
-        root.put(KEY_PENDING, pending)
-        writeRoot(root)
-    }
-
-    @Synchronized
     fun purgePendingProjection(category: CoreV4Category) {
+        require(category != CoreV4Category.ACTIVITY_STATUS) {
+            "Status requests reserve a global sequence and cannot be purged locally."
+        }
         val root = readRoot()
         val pending = root.optJSONObject(KEY_PENDING) ?: return
         pending.keys().asSequence().toList().forEach { key ->
@@ -542,7 +559,7 @@ class AndroidCoreV4SyncStore(context: Context) {
     }
 
     private fun readRoot(): JSONObject {
-        val raw = preferences.getString(KEY_STATE, null) ?: return JSONObject().put("schema_version", SCHEMA_VERSION)
+        val raw = persistence.read() ?: return JSONObject().put("schema_version", SCHEMA_VERSION)
         return runCatching {
             JSONObject(raw).also { require(it.optInt("schema_version") == SCHEMA_VERSION) }
         }.getOrElse { JSONObject().put("schema_version", SCHEMA_VERSION) }
@@ -550,9 +567,7 @@ class AndroidCoreV4SyncStore(context: Context) {
 
     private fun writeRoot(root: JSONObject) {
         root.put("schema_version", SCHEMA_VERSION)
-        check(preferences.edit().putString(KEY_STATE, root.toString()).commit()) {
-            "Unable to persist V4 sync state"
-        }
+        persistence.write(root.toString())
     }
 
     private fun JSONObject.toConsent(category: CoreV4Category) = CoreV4ConsentRecord(
@@ -597,7 +612,6 @@ class AndroidCoreV4SyncStore(context: Context) {
 
     companion object {
         const val PREFERENCES_NAME = "atlas_core_v4_sync"
-        private const val KEY_STATE = "state_v4"
         private const val KEY_CONSENTS = "consents"
         private const val KEY_PENDING_CONSENTS = "pending_consents"
         private const val KEY_PENDING = "pending_projections"
@@ -607,7 +621,6 @@ class AndroidCoreV4SyncStore(context: Context) {
         private const val KEY_SOURCE_VERSIONS = "source_versions"
         private const val KEY_STATUS_SEQUENCES = "status_sequences"
         private const val KEY_STATUS_SEQUENCE = "status_sequence"
-        private const val KEY_SHARE_TITLES = "share_titles"
         private const val KEY_STATUS_CODE = "last_status_code"
         private const val KEY_STATUS_MESSAGE = "last_status_message"
         private const val KEY_STATUS_AT = "last_status_at"
@@ -615,3 +628,5 @@ class AndroidCoreV4SyncStore(context: Context) {
         private val HEX_256 = Regex("[0-9a-f]{64}")
     }
 }
+
+private const val CORE_V4_STATE_KEY = "state_v4"

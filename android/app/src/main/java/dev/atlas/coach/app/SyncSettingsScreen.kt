@@ -52,11 +52,9 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
     val v4Store = remember(context) { AndroidSyncStorage.v4(context) }
     val v4WorkManager = remember(context) { WorkManager.getInstance(context) }
     var v4Consents by remember(v4Store) { mutableStateOf(v4Store.consents()) }
-    var v4ShareTitles by remember(v4Store) { mutableStateOf(v4Store.shareTitles()) }
     var v4Presentation by remember(v4Store) { mutableStateOf(v4Store.presentation()) }
     val refreshV4 = {
         v4Consents = v4Store.consents()
-        v4ShareTitles = v4Store.shareTitles()
         v4Presentation = v4Store.presentation()
     }
     val immediateWork = remember(v4WorkManager) {
@@ -205,29 +203,6 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             v4Store.setConsent(CoreV4Category.TRAINING_PLAN, enabled)
             CoreV4SyncScheduler.schedule(context)
             refreshV4()
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = v4ShareTitles,
-                onCheckedChange = {
-                    v4Store.setShareTitles(it)
-                    v4ShareTitles = it
-                    CoreV4SyncScheduler.schedule(context)
-                    refreshV4()
-                },
-                modifier = Modifier.semantics { contentDescription = "Partager les titres V4" },
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Partager les titres du plan et des objectifs", color = MaterialTheme.colorScheme.onSurface)
-                Text(
-                    "Désactivé par défaut. Notes, messages et détails privés restent exclus.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
         Column(
             Modifier.fillMaxWidth().border(

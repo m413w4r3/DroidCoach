@@ -123,6 +123,54 @@ interface CoreV4HttpTransport {
     fun cancel() = Unit
 }
 
+internal fun interface CoreV4CancelableConnection {
+    fun cancel()
+}
+
+/** Serializes transport cancellation with connection registration. */
+internal class CoreV4TransportStartGate {
+    private val lock = Any()
+    private var cancelled = false
+    private var registered: CoreV4CancelableConnection? = null
+
+    fun register(connection: CoreV4CancelableConnection): Boolean = synchronized(lock) {
+        if (cancelled) {
+            connection.cancel()
+            false
+        } else {
+            registered = connection
+            true
+        }
+    }
+
+    fun mayStart(connection: CoreV4CancelableConnection): Boolean = synchronized(lock) {
+        !cancelled && registered === connection
+    }
+
+    fun start(connection: CoreV4CancelableConnection, action: () -> Unit): Boolean = synchronized(lock) {
+        if (cancelled || registered !== connection) {
+            false
+        } else {
+            action()
+            true
+        }
+    }
+
+    fun complete(connection: CoreV4CancelableConnection) {
+        synchronized(lock) {
+            if (registered === connection) registered = null
+        }
+    }
+
+    fun cancel() {
+        val connection = synchronized(lock) {
+            cancelled = true
+            registered.also { registered = null }
+        }
+        connection?.cancel()
+    }
+}
+
 /** Fixed V4 routes, bounded HTTP, local schema validation and typed server errors. */
 class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
     private val idempotencyBodies = ConcurrentHashMap<String, String>()
@@ -329,7 +377,7 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
             return Instant.ofEpochMilli(epochMillis).toString()
         }
 
-        fun planData(plan: DayPlan, events: List<PlanStatusEvent>, shareTitles: Boolean, observedAt: String): JSONObject {
+        fun planData(plan: DayPlan, events: List<PlanStatusEvent>, observedAt: String): JSONObject {
             require(plan.state == PlanState.APPROVED) { "Only an approved Android plan can be projected." }
             requireUtc(observedAt, "observed_at")
             val latest = events.filter { it.planId == plan.planId && it.planVersion == plan.version }
@@ -349,7 +397,7 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
                         rows.put(JSONObject()
                             .put("activity_id", activity.activityId)
                             .put("kind", activity.kind.name)
-                            .put("title", if (shareTitles) activity.title.take(80) else genericTitle(activity.kind))
+                            .put("title", genericTitle(activity.kind))
                             .put("status", activity.status.name)
                             .put("scheduled_local", JSONObject()
                                 .put("local_date", activity.scheduledLocal.localDate)
@@ -427,7 +475,6 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
             progress: Map<String, GoalProgress>,
             version: Int,
             observedAt: String,
-            shareTitles: Boolean,
         ): JSONObject {
             require(version >= 1)
             requireUtc(observedAt, "observed_at")
@@ -435,7 +482,7 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
                 requireUuid(goal.id, "goal_id")
                 JSONObject()
                     .put("goal_id", goal.id)
-                    .put("title", if (shareTitles) goal.title.take(80) else "Objectif " + (index + 1))
+                    .put("title", "Objectif " + (index + 1))
                     .put("status", goal.status.name)
                     .put("progress_value", progress[goal.id]?.currentValue ?: JSONObject.NULL)
                     .put("unit", goal.metric.wireValue.take(32))
@@ -759,9 +806,11 @@ class CoreV4UrlConnectionTransport(
     debuggable: Boolean,
     private val connectTimeoutMillis: Int = 4_000,
     private val readTimeoutMillis: Int = 4_000,
+    private val requestAllowed: (CoreV4HttpRequest) -> Boolean = { true },
+    private val requestStart: ((CoreV4HttpRequest, () -> Unit) -> Boolean)? = null,
 ) : CoreV4HttpTransport {
     private val base: String
-    @Volatile private var activeConnection: HttpURLConnection? = null
+    private val startGate = CoreV4TransportStartGate()
 
     init {
         if (!CoreV4SyncClient.validBackendUrl(baseUrl, debuggable) ||
@@ -771,9 +820,20 @@ class CoreV4UrlConnectionTransport(
     }
 
     override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+        if (!requestAllowed(request)) throw CoreV4SyncException(CoreV4FailureKind.CONSENT, false)
+        val bytes = request.body.toByteArray(Charsets.UTF_8)
+        if (bytes.size > CoreV4SyncClient.MAX_REQUEST_BYTES) {
+            throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false)
+        }
         val connection = URL(base + request.path).openConnection() as HttpURLConnection
-        activeConnection = connection
+        val registration = CoreV4CancelableConnection { connection.disconnect() }
+        if (!startGate.register(registration)) {
+            throw CoreV4SyncException(CoreV4FailureKind.CONSENT, false)
+        }
         try {
+            if (!startGate.mayStart(registration) || !requestAllowed(request)) {
+                throw CoreV4SyncException(CoreV4FailureKind.CONSENT, false)
+            }
             connection.instanceFollowRedirects = false
             connection.requestMethod = "POST"
             connection.connectTimeout = connectTimeoutMillis
@@ -782,13 +842,21 @@ class CoreV4UrlConnectionTransport(
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.doOutput = true
-            connection.outputStream.use { output ->
-                val bytes = request.body.toByteArray(Charsets.UTF_8)
-                if (bytes.size > CoreV4SyncClient.MAX_REQUEST_BYTES) {
-                    throw CoreV4SyncException(CoreV4FailureKind.PROTOCOL, false)
+            var outputStream: java.io.OutputStream? = null
+            val started = startGate.start(registration) {
+                val startConnection = { outputStream = connection.outputStream }
+                val authorized = requestStart?.invoke(request, startConnection) ?: run {
+                    if (requestAllowed(request)) {
+                        startConnection()
+                        true
+                    } else {
+                        false
+                    }
                 }
-                output.write(bytes)
+                if (!authorized) throw CoreV4SyncException(CoreV4FailureKind.CONSENT, false)
             }
+            if (!started) throw CoreV4SyncException(CoreV4FailureKind.CONSENT, false)
+            checkNotNull(outputStream).use { output -> output.write(bytes) }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.use { input ->
@@ -808,12 +876,12 @@ class CoreV4UrlConnectionTransport(
             }.orEmpty()
             return CoreV4HttpResponse(status, text)
         } finally {
-            activeConnection = null
+            startGate.complete(registration)
             connection.disconnect()
         }
     }
 
     override fun cancel() {
-        activeConnection?.disconnect()
+        startGate.cancel()
     }
 }
