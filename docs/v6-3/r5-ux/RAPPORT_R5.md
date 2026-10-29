@@ -4,7 +4,7 @@
 - **Branche** : `feat/atlas-v6-3-ux-daily-use`
 - **Base `origin/main`** : `566668ac9cd0778f43d7f4d90a93c6a45645935c`
 - **SHA final intégré** : `16ed8415972fbf884547a01815e0cc04c6af368c`
-- **Statut** : R5 code, tests JVM/lint/build et recette AVD terminés ; **Pixel physique absent** ; **aucun push**.
+- **Statut** : R5 code, tests JVM/lint/build, recette AVD et **validation Pixel ciblée** terminés ; revue **GO_WITH_LIMITATIONS** ; **push final effectué sur `main`**.
 
 ## 1. Livré
 
@@ -62,13 +62,13 @@
 - **Insights** : lecture des plans passés sur le thread de composition (fichiers locaux de petite taille) ; une optimisation reste possible si la liste devient longue.
 - **Zéros factuels** : une période avec un document local mais aucune action affiche des zéros dérivés ; l'état `Données insuffisantes` est couvert par les tests pour les périodes réellement vides.
 - **AVD seulement** : TalkBack complet, rotation et police 2× sur Pixel ne sont pas rejoués ; la police 2× et le paysage restent couverts par les suites existantes.
-- **Aucun push** : `origin/main` reste à `566668a`.
+- **Push final** : effectué sur `main` après validation Pixel + revue + GO ; `origin/main` contient le code validé `16ed841` et les docs de clôture.
 
 ## 6. Suite
 
 1. ~~Reconnecter le Pixel, installer l'APK final, rejouer les parcours et capturer les écrans expurgés.~~ Fait le 2026-10-29.
 2. ~~Revue indépendante finale.~~ Fait : GO_WITH_LIMITATIONS, aucun P0/P1, P2 corrigés.
-3. Push sur `main` après validation Pixel + revue + GO ; le propriétaire a pré-autorisé le push final.
+3. ~~Push sur `main` après validation Pixel + revue + GO.~~ Fait.
 
 ## 7. Revue indépendante
 

@@ -4,7 +4,7 @@
 - **Branche** : `feat/atlas-v6-3-ux-daily-use`
 - **HEAD** : `7d7b5f5`
 - **Base `origin/main`** : `566668ac9cd0778f43d7f4d90a93c6a45645935c`
-- **Statut** : code et tests AVD terminés ; **validation Pixel ciblée effectuée le 2026-10-29** ; revue indépendante **GO_WITH_LIMITATIONS** ; **pas de push au moment de la rédaction**.
+- **Statut** : code et tests AVD terminés ; **validation Pixel ciblée effectuée le 2026-10-29** ; revue indépendante **GO_WITH_LIMITATIONS** ; **push final effectué sur `main`** après validation et revue.
 
 ## Résultat
 
@@ -38,7 +38,7 @@ La passe rend les parcours **Coach** et **Planning** directs, allège l'accueil,
 - Rotation, TalkBack complet et police 2× sur Pixel non exécutés dans cette passe ; la police 2× et le paysage restent couverts par l'AVD API 37.
 - Le backend relayé réel n'a pas été rejoué ; les états locaux et les tests existants couvrent le mode local. Le mode hors ligne a été validé via le mode `Hors ligne` de l'application, puis le mode `Relais` a été restauré.
 - Revue indépendante finale exécutée sur le code R5 : **GO_WITH_LIMITATIONS**, aucun P0/P1.
-- **Aucun push** n'a été effectué pendant la rédaction de ce rapport.
+- **Push final** effectué sur `main` après validation Pixel et revue indépendante (voir le registre R5 pour le SHA).
 
 ## Validation Pixel du 2026-10-29
 
