@@ -597,8 +597,9 @@ def test_cache_finalization_failure_keeps_request_pending_without_redispatch(tmp
         )
 
     client = ASGITestClient(app)
-    first = post_chat(client, chat_body())
-    replay = post_chat(client, chat_body())
+    replay_body = chat_body()
+    first = post_chat(client, replay_body)
+    replay = post_chat(client, replay_body)
 
     assert first.status_code == 200
     validate("chat-response.schema.json", first.json())
