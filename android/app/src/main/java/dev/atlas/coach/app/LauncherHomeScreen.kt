@@ -377,7 +377,7 @@ private fun LauncherHomeContent(
                             }
                         }
 
-                        HomeNextActionCard(nextAction, nextActionGoalTitle)
+                        HomeNextActionCard(nextAction, nextActionGoalTitle, planController, controller)
                         LauncherNextActionPlanButton(nextAction, openPlan)
 
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -529,7 +529,7 @@ private fun LauncherHomeContent(
                         }
                     }
 
-                    HomeNextActionCard(nextAction, nextActionGoalTitle)
+                    HomeNextActionCard(nextAction, nextActionGoalTitle, planController, controller)
                     LauncherNextActionPlanButton(nextAction, openPlan)
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

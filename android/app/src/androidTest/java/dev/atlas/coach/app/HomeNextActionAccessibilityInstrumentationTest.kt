@@ -51,9 +51,11 @@ class HomeNextActionAccessibilityInstrumentationTest {
         }
 
         composeRule.onAllNodesWithContentDescription(
-            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final.",
+            "Prochaine action : Préparer le dossier. Prévue, 09:30 – 09:31, 1 minute, priorité requise, objectif Dossier final. Actions : Démarrer, Reporter.",
         ).assertCountEquals(1)
         composeRule.onNodeWithTag("home_next_action_card").assertIsDisplayed()
+        composeRule.onNodeWithText("Démarrer").assertIsDisplayed()
+        composeRule.onNodeWithText("Reporter").assertIsDisplayed()
     }
 
     @Test

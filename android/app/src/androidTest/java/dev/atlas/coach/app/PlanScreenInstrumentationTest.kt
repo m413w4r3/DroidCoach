@@ -2,6 +2,7 @@ package dev.atlas.coach.app
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.CompositionLocalProvider
@@ -13,7 +14,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -137,7 +140,6 @@ class PlanScreenInstrumentationTest {
                     nowMinute = 17 * 60,
                     onMove = {},
                     onEdit = {},
-                    onStatus = {},
                     onRemove = {},
                 )
             }
@@ -149,6 +151,99 @@ class PlanScreenInstrumentationTest {
         assertTrue(firstTop < secondTop && secondTop < thirdTop)
         composeRule.onNodeWithText("Prochaine").assertIsDisplayed()
         composeRule.onNodeWithText("À venir · 18:30 – 19:00 · 30 min").assertIsDisplayed()
+    }
+
+    @Test
+    fun activeRowsExposeOnePrimaryActionAndTerminalRowsHaveNoActions() {
+        val planned = activity(ID_1, "Marche", 16 * 60 + 30)
+        val done = activity(ID_2, "Lecture terminée", 17 * 60).copy(status = ActivityStatus.DONE)
+
+        composeRule.setContent {
+            AtlasTheme {
+                Column {
+                    PlanActivityRow(
+                        activity = planned,
+                        timing = PlanActivityTiming.UPCOMING,
+                        isNext = true,
+                        onMove = {}, onEdit = {}, onRemove = {}, onPrimary = {}, onReport = {},
+                    )
+                    PlanActivityRow(
+                        activity = done,
+                        timing = PlanActivityTiming.PAST,
+                        isNext = false,
+                        onMove = {}, onEdit = {}, onRemove = {},
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("plan_activity_primary_$ID_1").assertIsDisplayed()
+        composeRule.onNodeWithTag("plan_activity_report_$ID_1").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("plan_activity_primary_$ID_2").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("plan_activity_report_$ID_2").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("16:30 – 17:00. Marche. État : Prévue. Actions : Démarrer, Reporter.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun reportSheetShowsConflictsAndCrossDateFailureAfterConfirmation() {
+        val source = activity(ID_1, "Lecture", 10 * 60, duration = 45)
+        val conflict = activity(ID_2, "Rendez-vous", 10 * 60 + 30, duration = 30)
+        var submitted: PlanReportTarget? = null
+        val plan = dayPlan(version = 1, revisionId = REVISION_ID, activities = listOf(source, conflict), updatedAt = 1L)
+
+        composeRule.setContent {
+            AtlasTheme {
+                PlanReportBottomSheet(
+                    plan = plan,
+                    activity = source,
+                    onDismiss = {},
+                    onConfirm = { submitted = it; false },
+                    failureMessage = { "CROSS_DATE_UNSUPPORTED : report vers une autre date indisponible." },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Reporter l’activité").assertIsDisplayed()
+        composeRule.onNodeWithText("Conflit avec :").assertIsDisplayed()
+        composeRule.onNodeWithText("Rendez-vous · 10:30 – 11:00").assertIsDisplayed()
+        composeRule.onNodeWithTag("plan_report_confirm").assertIsNotEnabled()
+
+        composeRule.onNodeWithTag("plan_report_choice_tomorrow").performClick()
+        composeRule.onNodeWithText("Les conflits de cette autre date ne sont pas chargés.").assertIsDisplayed()
+        composeRule.onNodeWithTag("plan_report_confirm").performScrollTo().performClick()
+        composeRule.onNodeWithText("CROSS_DATE_UNSUPPORTED : report vers une autre date indisponible.")
+            .performScrollTo().assertIsDisplayed()
+        assertTrue(submitted?.localDate == "2026-10-27")
+    }
+
+    @Test
+    fun actionTargetsStayAtLeast48DpAtDoubleScaleInLandscapeLayout() {
+        val target = activity(ID_1, "Marche", 16 * 60 + 30)
+        composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        composeRule.setContent {
+            val originalDensity = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(originalDensity.density, 2f)) {
+                AtlasTheme {
+                    PlanActivityRow(
+                        activity = target,
+                        timing = PlanActivityTiming.UPCOMING,
+                        isNext = true,
+                        onMove = {}, onEdit = {}, onRemove = {}, onPrimary = {}, onReport = {},
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("plan_activity_primary_$ID_1").assertIsDisplayed()
+        composeRule.onNodeWithTag("plan_activity_report_$ID_1").assertIsDisplayed()
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val primaryHeightDp = composeRule.onNodeWithTag("plan_activity_primary_$ID_1")
+            .fetchSemanticsNode().boundsInRoot.height / density
+        val reportHeightDp = composeRule.onNodeWithTag("plan_activity_report_$ID_1")
+            .fetchSemanticsNode().boundsInRoot.height / density
+        assertTrue(primaryHeightDp >= 48f)
+        assertTrue(reportHeightDp >= 48f)
     }
 
     @Test
@@ -166,7 +261,6 @@ class PlanScreenInstrumentationTest {
                         isNext = true,
                         onMove = {},
                         onEdit = {},
-                        onStatus = {},
                         onRemove = { showConfirmation = true },
                     )
                     if (showConfirmation) {
@@ -187,11 +281,72 @@ class PlanScreenInstrumentationTest {
         composeRule.onNodeWithContentDescription("Plus d’actions pour Marche").performClick()
         composeRule.onNodeWithText("Déplacer").assertIsDisplayed()
         composeRule.onNodeWithText("Modifier").assertIsDisplayed()
-        composeRule.onNodeWithText("Changer le statut").assertIsDisplayed()
+        composeRule.onNodeWithText("Ajouter une note").assertIsDisplayed()
+        composeRule.onNodeWithText("Annuler").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Pas fait").assertCountEquals(0)
         composeRule.onNodeWithText("Supprimer l’activité").performClick()
         composeRule.onNodeWithText("Supprimer cette activité ?").assertIsDisplayed()
         composeRule.onNodeWithText("Supprimer l’activité").performClick()
         composeRule.onNodeWithText("Suppression confirmée").assertIsDisplayed()
+    }
+
+    @Test
+    fun missedMenuActionAppearsOnlyAfterTheScheduledSlotEnds() {
+        val target = activity(ID_1, "Marche", 16 * 60 + 30)
+        composeRule.setContent {
+            AtlasTheme {
+                PlanActivityRow(
+                    activity = target,
+                    timing = PlanActivityTiming.PAST,
+                    isNext = false,
+                    onMove = {}, onEdit = {}, onRemove = {},
+                    canMarkMissed = false,
+                )
+            }
+        }
+        composeRule.onNodeWithContentDescription("Plus d’actions pour Marche").performClick()
+        composeRule.onAllNodesWithText("Pas fait").assertCountEquals(0)
+    }
+
+    @Test
+    fun missedMenuActionAppearsAfterTheScheduledSlotEnds() {
+        val target = activity(ID_1, "Marche", 16 * 60 + 30)
+        composeRule.setContent {
+            AtlasTheme {
+                PlanActivityRow(
+                    activity = target,
+                    timing = PlanActivityTiming.PAST,
+                    isNext = false,
+                    onMove = {}, onEdit = {}, onRemove = {},
+                    canMarkMissed = true,
+                )
+            }
+        }
+        composeRule.onNodeWithContentDescription("Plus d’actions pour Marche").performClick()
+        composeRule.onNodeWithText("Pas fait").assertIsDisplayed()
+        composeRule.onNodeWithText("Annuler").assertIsDisplayed()
+    }
+
+    @Test
+    fun terminalActivityMenuKeepsOnlyTheNoteAction() {
+        val target = activity(ID_1, "Lecture terminée", 10 * 60).copy(status = ActivityStatus.DONE)
+        composeRule.setContent {
+            AtlasTheme {
+                PlanActivityRow(
+                    activity = target,
+                    timing = PlanActivityTiming.PAST,
+                    isNext = false,
+                    onMove = {}, onEdit = {}, onRemove = {},
+                    canMarkMissed = false,
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Plus d’actions pour Lecture terminée").performClick()
+        composeRule.onNodeWithText("Ajouter une note").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Modifier").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Annuler").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Supprimer l’activité").assertCountEquals(0)
     }
 
     @Test

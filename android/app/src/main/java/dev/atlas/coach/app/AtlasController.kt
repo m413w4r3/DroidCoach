@@ -3403,6 +3403,31 @@ class AtlasController @JvmOverloads constructor(
         startFocusTransaction(plan, directive.id, goalId, successMessage = focusStartMessage(plan))
     }
 
+    /** Starts one Focus session linked to a plan activity, or opens the already-linked active session. */
+    fun startFocusForPlanActivity(planId: String, activityId: String, planLocalDate: String, title: String): Boolean {
+        require(planId.isNotBlank() && activityId.isNotBlank() && planLocalDate.isNotBlank() && title.isNotBlank())
+        val active = focusSession?.takeIf { it.status in setOf(FocusStatus.RUNNING, FocusStatus.PAUSED) }
+        if (active != null) {
+            if (active.planId == planId && active.activityId == activityId && active.planLocalDate == planLocalDate) {
+                runCatching { navigationState.navigate(AtlasScreenId.FOCUS) }
+                return true
+            }
+            latestMessage = "Une session Focus est déjà active. Aucun second minuteur n'a été démarré."
+            touch()
+            return false
+        }
+        val plan = FocusPlan.fromPreset(FocusPreset.POMODORO_25_5).copy(taskTitle = title.take(80))
+        return startFocusTransaction(
+            plan = plan,
+            directiveId = directive.id,
+            goalId = null,
+            successMessage = focusStartMessage(plan),
+            linkedPlanId = planId,
+            linkedActivityId = activityId,
+            linkedPlanLocalDate = planLocalDate,
+        )
+    }
+
     private fun focusStartMessage(plan: FocusPlan): String =
         if (plan.continuous) {
             "Focus continu démarré · " + plan.workSeconds + "s de concentration par cycle."
@@ -3416,6 +3441,9 @@ class AtlasController @JvmOverloads constructor(
         directiveId: String?,
         goalId: String?,
         successMessage: String,
+        linkedPlanId: String? = null,
+        linkedActivityId: String? = null,
+        linkedPlanLocalDate: String? = null,
     ): Boolean = synchronized(goalFocusTransactionLock) {
         if (capabilities[CAP_FOCUS] != true) {
             latestMessage = "Le focus est désactivé dans les paramètres."
@@ -3443,9 +3471,20 @@ class AtlasController @JvmOverloads constructor(
             touch()
             return@synchronized false
         }
+        val linkedStart = if (linkedPlanId != null && linkedActivityId != null && linkedPlanLocalDate != null) {
+            preparedStart.copy(
+                session = preparedStart.session.copy(
+                    planId = linkedPlanId,
+                    activityId = linkedActivityId,
+                    planLocalDate = linkedPlanLocalDate,
+                ),
+            )
+        } else {
+            preparedStart
+        }
         val preparedGoalLink = try {
             goalId?.let {
-                goalPanelCoordinator.prepareFocusLink(it, preparedStart.session.id, startedAtUtcMillis)
+                goalPanelCoordinator.prepareFocusLink(it, linkedStart.session.id, startedAtUtcMillis)
             }
         } catch (error: Exception) {
             latestMessage = error.message ?: "Impossible de lier la session à cet objectif."
@@ -3461,7 +3500,7 @@ class AtlasController @JvmOverloads constructor(
         } ?: focusHistoryEntries
         val candidate = try {
             stateMap() + mapOf(
-                "focus" to preparedStart.session.toMap(),
+                "focus" to linkedStart.session.toMap(),
                 "focusHistory" to nextHistory.map(FocusSession::toMap),
                 "goals" to (preparedGoalLink?.goalsSubdocument ?: goalsSubdocument),
                 "latestMessage" to successMessage,
@@ -3498,12 +3537,12 @@ class AtlasController @JvmOverloads constructor(
 
         // S3 candidates are assignment-only: publish the committed state before any external effect.
         focusHistoryEntries = nextHistory
-        focusSnapshot = focusEngine.publishPreparedStart(preparedStart)
+        focusSnapshot = focusEngine.publishPreparedStart(linkedStart)
         if (preparedGoalLink != null) {
             goalPanelCoordinator.publishCommittedFocusLink(preparedGoalLink)
             goalsSubdocument = preparedGoalLink.goalsSubdocument
         }
-        if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) runCatching { phaseAlarms.schedule(preparedStart.session) }
+        if (capabilities[CAP_FOCUS_NOTIFICATIONS] == true) runCatching { phaseAlarms.schedule(linkedStart.session) }
         runCatching { enqueueSyncEvent(SyncEventType.FOCUS_STARTED, SyncDataCategory.FOCUS) }
         latestMessage = successMessage
         touch()

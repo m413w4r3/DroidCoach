@@ -2,9 +2,12 @@ package dev.atlas.coach.app
 
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.LocalSchedule
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanChange
+import dev.atlas.coach.plan.PlanOrigin
+import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.Priority
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -69,6 +72,39 @@ class PlanUiLogicTest {
     }
 
     @Test
+    fun activityActionsFollowStatusAndMissedWaitsForTheSlotEnd() {
+        assertEquals("Démarrer", PlanUiLogic.primaryActionLabel(ActivityStatus.PLANNED))
+        assertEquals("Terminé", PlanUiLogic.primaryActionLabel(ActivityStatus.IN_PROGRESS))
+        assertEquals(null, PlanUiLogic.primaryActionLabel(ActivityStatus.DONE))
+        assertEquals(null, PlanUiLogic.primaryActionLabel(ActivityStatus.CANCELLED))
+        assertEquals(null, PlanUiLogic.primaryActionLabel(ActivityStatus.MISSED))
+        assertEquals(null, PlanUiLogic.primaryActionLabel(ActivityStatus.POSTPONED))
+
+        val planned = activity(ID_1, "Lecture", 10 * 60, duration = 45)
+        assertEquals(false, PlanUiLogic.canMarkMissed(planned, nowMinute = 10 * 60 + 44))
+        assertEquals(true, PlanUiLogic.canMarkMissed(planned, nowMinute = 10 * 60 + 45))
+        assertEquals(false, PlanUiLogic.canMarkMissed(planned.copy(status = ActivityStatus.DONE), nowMinute = 23 * 60))
+    }
+
+    @Test
+    fun reportChoicesKeepDurationAndIdentifySameDayConflicts() {
+        val source = activity(ID_1, "Lecture", 10 * 60, duration = 45)
+        val conflict = activity(ID_2, "Rendez-vous", 10 * 60 + 30, duration = 30)
+        val dayPlan = dayPlan(listOf(source, conflict))
+
+        val plus15 = PlanUiLogic.reportTarget(DATE, source, PlanReportChoice.PLUS_15)!!
+        assertEquals(PlanReportTarget(DATE, 10 * 60 + 15, 45), plus15)
+        assertEquals(listOf(conflict), PlanUiLogic.reportConflicts(dayPlan, source, plus15))
+
+        val tomorrow = PlanUiLogic.reportTarget(DATE, source, PlanReportChoice.TOMORROW)!!
+        assertEquals("2026-10-27", tomorrow.localDate)
+        assertEquals(10 * 60, tomorrow.startMinute)
+        assertEquals(45, tomorrow.durationMinutes)
+        assertEquals(emptyList<PlanActivity>(), PlanUiLogic.reportConflicts(dayPlan, source, tomorrow))
+        assertNull(PlanUiLogic.reportTarget(DATE, source, PlanReportChoice.CUSTOM, customStartMinute = 1_420))
+    }
+
+    @Test
     fun emptyStateAndProgressLabelsDistinguishMissingPlanFromFreeDay() {
         assertEquals("Aucun programme pour cette date", PlanUiLogic.emptyStateLabel(false, 0))
         assertEquals("Journée libre", PlanUiLogic.emptyStateLabel(true, 0))
@@ -122,6 +158,20 @@ class PlanUiLogicTest {
         priority = Priority.IMPORTANT,
         createdRevisionId = REVISION_ID,
         lastRevisionId = REVISION_ID,
+    )
+
+    private fun dayPlan(activities: List<PlanActivity>) = DayPlan(
+        planId = PLAN_ID,
+        localDate = DATE,
+        timezone = "Europe/Paris",
+        version = 1,
+        currentRevisionId = REVISION_ID,
+        state = PlanState.APPROVED,
+        activities = activities,
+        createdAt = 0L,
+        updatedAt = 0L,
+        approvedAt = 0L,
+        origin = PlanOrigin.LOCAL,
     )
 
     private companion object {
