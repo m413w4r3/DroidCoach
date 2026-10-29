@@ -192,7 +192,7 @@ class SecondLotTextDensityInstrumentationTest {
     }
 
     private fun isolatedContext(): Context {
-        val base = InstrumentationRegistry.getInstrumentation().context
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
         val namespace = "second_lot_${UUID.randomUUID()}"
         return object : ContextWrapper(base) {
             override fun getApplicationContext(): Context = this

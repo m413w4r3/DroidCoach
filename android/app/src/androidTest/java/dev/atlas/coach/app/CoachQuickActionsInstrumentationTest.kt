@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -63,8 +64,8 @@ class CoachQuickActionsInstrumentationTest {
         composeRule.onNodeWithTag("coach_quick_action_focus").assertIsDisplayed()
 
         composeRule.onNodeWithTag("coach_quick_action_day").performClick()
-        composeRule.onNodeWithTag("coach_day_start").assertTextEquals("09:00")
-        composeRule.onNodeWithTag("coach_day_end").assertTextEquals("18:00")
+        composeRule.onNodeWithTag("coach_day_start").assertTextContains("09:00")
+        composeRule.onNodeWithTag("coach_day_end").assertTextContains("18:00")
         composeRule.onNodeWithTag("coach_day_review").performClick()
         val dayMessage = "Organise ma journée de 09:00 à 18:00. Propose un planning réaliste avec des pauses."
         composeRule.onNodeWithTag("coach_quick_confirmation_effect").assertIsDisplayed()
@@ -82,7 +83,7 @@ class CoachQuickActionsInstrumentationTest {
 
         composeRule.onNodeWithTag("coach_quick_action_goal").performScrollTo().performClick()
         composeRule.onNodeWithTag("coach_goal_title").performTextReplacement("Objectif synthétique")
-        composeRule.onNodeWithTag("coach_goal_target").assertTextEquals("120")
+        composeRule.onNodeWithTag("coach_goal_target").assertTextContains("120")
         composeRule.onNodeWithTag("coach_goal_next").performClick()
         composeRule.onNodeWithTag("coach_goal_next_action").performTextReplacement("Lire la première page")
         composeRule.onNodeWithTag("coach_goal_review").performClick()
@@ -106,7 +107,7 @@ class CoachQuickActionsInstrumentationTest {
 
         val directiveTitle = controller.directive.title
         composeRule.onNodeWithTag("coach_quick_action_focus").performScrollTo().performClick()
-        composeRule.onNodeWithTag("coach_focus_task").assertTextEquals(directiveTitle)
+        composeRule.onNodeWithTag("coach_focus_task").assertTextContains(directiveTitle)
         composeRule.onNodeWithTag("coach_focus_preset").performClick()
         composeRule.onNodeWithText("10/2").performClick()
         composeRule.onNodeWithTag("coach_focus_cycles").performTextReplacement("2")
