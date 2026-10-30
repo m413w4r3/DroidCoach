@@ -13,6 +13,7 @@ services:
       - path: ./backend/compose.env.example
     secrets:
       - atlas_token
+      - atlas_tool_token
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m,mode=1777
@@ -40,3 +41,5 @@ volumes:
 secrets:
   atlas_token:
     file: ${ATLAS_TOKEN_FILE:?Set_ATLAS_TOKEN_FILE_before_running_compose}
+  atlas_tool_token:
+    file: ${ATLAS_TOOL_TOKEN_FILE:?Set_ATLAS_TOOL_TOKEN_FILE_before_running_compose}
