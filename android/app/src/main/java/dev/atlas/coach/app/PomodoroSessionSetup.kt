@@ -60,7 +60,6 @@ internal fun PomodoroSessionSetup(
             onValueChange = { taskTitle = it.take(FocusPlan.MAX_TASK_TITLE_LENGTH) },
             modifier = Modifier.fillMaxWidth().testTag("focus_task_title"),
             label = { Text("Tâche") },
-            supportingText = { Text("Titre modifiable avant le démarrage.") },
             singleLine = true,
         )
         PomodoroStepper(
