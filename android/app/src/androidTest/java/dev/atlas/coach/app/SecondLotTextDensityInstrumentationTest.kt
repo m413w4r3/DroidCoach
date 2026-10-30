@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -18,6 +19,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -31,6 +34,7 @@ import dev.atlas.coach.training.SportPlanParseResult
 import dev.atlas.coach.training.SportPlanUiState
 import dev.atlas.coach.training.SyncState
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -116,6 +120,10 @@ class SecondLotTextDensityInstrumentationTest {
         composeRule.onAllNodesWithText(humanState.label).onFirst().performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("PC ATLAS").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Modifier l'appairage").performScrollTo().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithText("PC appairé").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Connecter").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithText("Sélectionnez le mode « Relais » pour connecter le téléphone au PC.")
+            .performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("URL du relais").assertCountEquals(0)
         composeRule.onNodeWithText("Avancé").performScrollTo().performClick()
         composeRule.onNodeWithText("URL du relais").performScrollTo().assertIsDisplayed()
@@ -128,7 +136,63 @@ class SecondLotTextDensityInstrumentationTest {
     }
 
     @Test
-    fun syncKeepsStatusCategoriesAndSwitchVisibleWithConfigurationAdvanced() {
+    fun relayFirstUseShowsPairingFieldsAndExplainsDisabledConnect() {
+        val context = isolatedContext()
+        val relay = AtlasController(context).relaySettings
+        composeRule.runOnUiThread {
+            relay.selectMode(RelayTransportMode.RELAY)
+            relay.clearCredentials()
+        }
+
+        setScreen(context, "Connexion relayée") {
+            RelaySettingsScreen(relay)
+        }
+
+        composeRule.onNodeWithText("Appairer ce téléphone").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("1. Sur le PC, créez un appareil et copiez ses informations d'appairage.")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("URL du relais").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Identifiant serveur (serverId)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Clé publique X25519 du PC").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Identifiant de l'appareil (UUID)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Jeton d'appareil").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Connecter").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithText(
+            "Appairage absent : créez l'appareil sur le PC, puis saisissez ici les informations fournies.",
+        ).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun relayPairingFormRunsRealValidationForSyntheticInvalidValuesWithoutSavingCredentials() {
+        val context = isolatedContext()
+        val relay = AtlasController(context).relaySettings
+        composeRule.runOnUiThread {
+            relay.selectMode(RelayTransportMode.OFFLINE)
+            relay.clearCredentials()
+        }
+
+        setScreen(context, "Connexion relayée") {
+            RelaySettingsScreen(relay)
+        }
+
+        fun replaceField(label: String, value: String) {
+            val field = composeRule.onNodeWithText(label).performScrollTo()
+            field.performTextClearance()
+            field.performTextInput(value)
+        }
+        replaceField("URL du relais", "synthetic-invalid-url")
+        replaceField("Identifiant serveur (serverId)", "synthetic invalid id")
+        replaceField("Clé publique X25519 du PC", "synthetic-invalid-key")
+        replaceField("Identifiant de l'appareil (UUID)", "synthetic-invalid-uuid")
+        replaceField("Jeton d'appareil", "synthetic-invalid-token")
+
+        composeRule.onNodeWithText("Enregistrer l'appairage").performScrollTo().performClick()
+        composeRule.onNodeWithText("URL de relais invalide").performScrollTo().assertIsDisplayed()
+        assertFalse(relay.credentialsConfigured)
+    }
+
+    @Test
+    fun syncShowsBackendConnectionFieldsWithoutOpeningAdvancedConfiguration() {
         val context = isolatedContext()
         val controller = AtlasController(context)
 
@@ -140,9 +204,11 @@ class SecondLotTextDensityInstrumentationTest {
         composeRule.onNodeWithTag("sync_enabled_switch").assertIsDisplayed()
         composeRule.onNodeWithText("Catégories partagées").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Focus").performScrollTo().assertIsDisplayed()
-        composeRule.onAllNodesWithTag("sync_backend_url").assertCountEquals(0)
-        composeRule.onNodeWithText("Configuration avancée").performScrollTo().performClick()
         composeRule.onNodeWithTag("sync_backend_url").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("sync_backend_token").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("sync_save_configuration").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Configuration avancée").performScrollTo().performClick()
+        composeRule.onNodeWithTag("sync_now").performScrollTo().assertIsDisplayed()
     }
 
     @Test

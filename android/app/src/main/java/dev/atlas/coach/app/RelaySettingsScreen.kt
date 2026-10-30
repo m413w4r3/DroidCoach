@@ -62,11 +62,16 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
         relay.state == RelayConnectionState.ERROR -> "La connexion au PC a échoué. Consultez le détail technique si le problème persiste."
         else -> connection.detail
     }
+    val connectDisabledReasons = relayConnectDisabledReasons(
+        mode = relay.mode,
+        credentialsConfigured = relay.credentialsConfigured,
+        state = relay.state,
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Connexion relayée", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "État et appairage du PC.",
+            "Cette connexion relie le téléphone au PC. Le partage backend règle séparément les données Sync envoyées.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -157,9 +162,37 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
         } else {
             AtlasSection("Appairer ce téléphone") {
                 Text(
-                    "Créez l'appareil sur le PC ; son jeton à usage unique se saisit dans Avancé.",
+                    "1. Sur le PC, créez un appareil et copiez ses informations d'appairage.\n" +
+                        "2. Collez-les ci-dessous, puis enregistrez.\n" +
+                        "3. Choisissez « Relais » pour connecter le téléphone au PC.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                RelayPairingFields(
+                    relayUrl = relayUrl,
+                    onRelayUrlChange = { relayUrl = it },
+                    serverId = serverId,
+                    onServerIdChange = { serverId = it },
+                    serverPublicKey = serverPublicKey,
+                    onServerPublicKeyChange = { serverPublicKey = it },
+                    deviceId = deviceId,
+                    onDeviceIdChange = { deviceId = it },
+                    token = token,
+                    onTokenChange = { token = it },
+                    paired = false,
+                    editing = true,
+                    onSave = {
+                        val result = relay.saveConfiguration(
+                            relayUrl,
+                            serverId,
+                            serverPublicKey,
+                            deviceId,
+                            token.ifBlank { null },
+                        )
+                        message = result.exceptionOrNull()?.message
+                            ?: "Appairage enregistré. Le jeton n'est plus affiché."
+                        if (result.isSuccess) token = ""
+                    },
                 )
             }
         }
@@ -168,8 +201,7 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
             AtlasSecondaryButton(
                 label = "Connecter",
                 onClick = { relay.connect() },
-                enabled = relay.isRelayMode && relay.credentialsConfigured &&
-                    relay.state !in setOf(RelayConnectionState.RELAY_CONNECTED, RelayConnectionState.RELAY_CONNECTING),
+                enabled = connectDisabledReasons.isEmpty(),
             )
             AtlasSecondaryButton(
                 label = "Déconnecter",
@@ -182,6 +214,13 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                 ),
             )
         }
+        if (connectDisabledReasons.isNotEmpty()) {
+            Text(
+                connectDisabledReasons.joinToString(" "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         OutlinedButton(
             modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
@@ -191,94 +230,26 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
         if (advancedExpanded) {
             AtlasSection("Avancé") {
                 Text(
-                    "Ces valeurs servent au diagnostic et à la configuration de la liaison.",
+                    "Diagnostics et détails de la liaison.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = relayUrl,
-                    onValueChange = { relayUrl = it },
-                    label = { Text("URL du relais") },
-                    placeholder = { Text(RelaySettings.DEFAULT_RELAY_URL) },
-                    singleLine = true,
-                    enabled = !relay.credentialsConfigured || editingIdentity,
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = serverId,
-                    onValueChange = { serverId = it },
-                    label = { Text("Identifiant serveur (serverId)") },
-                    singleLine = true,
-                    enabled = !relay.credentialsConfigured || editingIdentity,
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = serverPublicKey,
-                    onValueChange = { serverPublicKey = it },
-                    label = { Text("Clé publique X25519 du PC") },
-                    singleLine = true,
-                    enabled = !relay.credentialsConfigured || editingIdentity,
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = deviceId,
-                    onValueChange = { deviceId = it },
-                    label = { Text("Identifiant de l'appareil (UUID)") },
-                    singleLine = true,
-                    enabled = !relay.credentialsConfigured || editingIdentity,
-                )
                 if (relay.credentialsConfigured) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = token,
-                        onValueChange = { token = it },
-                        label = { Text("Jeton d'appareil") },
-                        placeholder = { Text("Laisser vide pour conserver le jeton") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        enabled = editingIdentity,
-                    )
-                    if (editingIdentity) {
-                        AtlasPrimaryButton(
-                            label = "Enregistrer et appliquer",
-                            onClick = {
-                                val result = relay.saveConfiguration(
-                                    relayUrl,
-                                    serverId,
-                                    serverPublicKey,
-                                    deviceId,
-                                    token.ifBlank { null },
-                                )
-                                message = result.exceptionOrNull()?.message
-                                    ?: "Configuration enregistrée. Le jeton n'est plus affiché."
-                                if (result.isSuccess) {
-                                    token = ""
-                                    editingIdentity = false
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
-                        )
-                    }
-                } else {
-                    Text(
-                        "La valeur du jeton n'est jamais réaffichée.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = token,
-                        onValueChange = { token = it },
-                        label = { Text("Jeton d'appareil") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    )
-                    AtlasPrimaryButton(
-                        label = "Enregistrer l'appairage",
-                        onClick = {
+                    Text("Identifiants techniques de l'appareil appairé.", style = MaterialTheme.typography.bodySmall)
+                    RelayPairingFields(
+                        relayUrl = relayUrl,
+                        onRelayUrlChange = { relayUrl = it },
+                        serverId = serverId,
+                        onServerIdChange = { serverId = it },
+                        serverPublicKey = serverPublicKey,
+                        onServerPublicKeyChange = { serverPublicKey = it },
+                        deviceId = deviceId,
+                        onDeviceIdChange = { deviceId = it },
+                        token = token,
+                        onTokenChange = { token = it },
+                        paired = true,
+                        editing = editingIdentity,
+                        onSave = {
                             val result = relay.saveConfiguration(
                                 relayUrl,
                                 serverId,
@@ -287,10 +258,18 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                                 token.ifBlank { null },
                             )
                             message = result.exceptionOrNull()?.message
-                                ?: "Appairage enregistré. Le jeton n'est plus affiché."
-                            if (result.isSuccess) token = ""
+                                ?: "Configuration enregistrée. Le jeton n'est plus affiché."
+                            if (result.isSuccess) {
+                                token = ""
+                                editingIdentity = false
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+                    )
+                } else {
+                    Text(
+                        "Les informations d'appairage se saisissent dans la section visible ci-dessus.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 technicalError?.let {
@@ -331,6 +310,108 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
             },
             dismissButton = { TextButton(onClick = { showClear = false }) { Text("Annuler") } },
         )
+    }
+}
+
+@Composable
+private fun RelayPairingFields(
+    relayUrl: String,
+    onRelayUrlChange: (String) -> Unit,
+    serverId: String,
+    onServerIdChange: (String) -> Unit,
+    serverPublicKey: String,
+    onServerPublicKeyChange: (String) -> Unit,
+    deviceId: String,
+    onDeviceIdChange: (String) -> Unit,
+    token: String,
+    onTokenChange: (String) -> Unit,
+    paired: Boolean,
+    editing: Boolean,
+    onSave: () -> Unit,
+) {
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = relayUrl,
+        onValueChange = onRelayUrlChange,
+        label = { Text("URL du relais") },
+        placeholder = { Text(RelaySettings.DEFAULT_RELAY_URL) },
+        singleLine = true,
+        enabled = editing,
+    )
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = serverId,
+        onValueChange = onServerIdChange,
+        label = { Text("Identifiant serveur (serverId)") },
+        singleLine = true,
+        enabled = editing,
+    )
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = serverPublicKey,
+        onValueChange = onServerPublicKeyChange,
+        label = { Text("Clé publique X25519 du PC") },
+        singleLine = true,
+        enabled = editing,
+    )
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = deviceId,
+        onValueChange = onDeviceIdChange,
+        label = { Text("Identifiant de l'appareil (UUID)") },
+        singleLine = true,
+        enabled = editing,
+    )
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = token,
+        onValueChange = onTokenChange,
+        label = { Text("Jeton d'appareil") },
+        placeholder = {
+            Text(if (paired) "Laisser vide pour conserver le jeton" else "Jeton fourni lors de la création sur le PC")
+        },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        enabled = editing,
+    )
+    if (paired) {
+        if (editing) {
+            AtlasPrimaryButton(
+                label = "Enregistrer et appliquer",
+                onClick = onSave,
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+            )
+        }
+    } else {
+        Text(
+            "Le jeton est protégé par Android Keystore et n'est jamais réaffiché.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AtlasPrimaryButton(
+            label = "Enregistrer l'appairage",
+            onClick = onSave,
+            modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
+        )
+    }
+}
+
+internal fun relayConnectDisabledReasons(
+    mode: RelayTransportMode,
+    credentialsConfigured: Boolean,
+    state: RelayConnectionState,
+): List<String> = buildList {
+    if (!credentialsConfigured) {
+        add("Appairage absent : créez l'appareil sur le PC, puis saisissez ici les informations fournies.")
+    }
+    if (mode != RelayTransportMode.RELAY) {
+        add("Sélectionnez le mode « Relais » pour connecter le téléphone au PC.")
+    }
+    when (state) {
+        RelayConnectionState.RELAY_CONNECTED -> add("Le téléphone est déjà connecté au PC.")
+        RelayConnectionState.RELAY_CONNECTING -> add("Connexion au PC en cours.")
+        else -> Unit
     }
 }
 

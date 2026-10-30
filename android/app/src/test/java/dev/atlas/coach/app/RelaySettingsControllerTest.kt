@@ -3,6 +3,7 @@ package dev.atlas.coach.app
 import dev.atlas.coach.sync.relay.RelayConnectionState
 import dev.atlas.coach.sync.relay.RelayFailure
 import dev.atlas.coach.sync.relay.RelayFailureKind
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -36,5 +37,44 @@ class RelaySettingsControllerTest {
         )
 
         assertEquals(revoked.message, lastError)
+    }
+
+    @Test
+    fun connectDisabledReasonsCoverMissingPairingModeAndConnectionState() {
+        assertEquals(
+            listOf(
+                "Appairage absent : créez l'appareil sur le PC, puis saisissez ici les informations fournies.",
+                "Sélectionnez le mode « Relais » pour connecter le téléphone au PC.",
+            ),
+            relayConnectDisabledReasons(
+                mode = RelayTransportMode.OFFLINE,
+                credentialsConfigured = false,
+                state = RelayConnectionState.OFFLINE,
+            ),
+        )
+        assertEquals(
+            listOf("Le téléphone est déjà connecté au PC."),
+            relayConnectDisabledReasons(
+                mode = RelayTransportMode.RELAY,
+                credentialsConfigured = true,
+                state = RelayConnectionState.RELAY_CONNECTED,
+            ),
+        )
+        assertEquals(
+            listOf("Connexion au PC en cours."),
+            relayConnectDisabledReasons(
+                mode = RelayTransportMode.RELAY,
+                credentialsConfigured = true,
+                state = RelayConnectionState.RELAY_CONNECTING,
+            ),
+        )
+        assertEquals(
+            emptyList<String>(),
+            relayConnectDisabledReasons(
+                mode = RelayTransportMode.RELAY,
+                credentialsConfigured = true,
+                state = RelayConnectionState.OFFLINE,
+            ),
+        )
     }
 }
