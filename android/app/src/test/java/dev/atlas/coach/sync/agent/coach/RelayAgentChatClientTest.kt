@@ -93,13 +93,23 @@ class RelayAgentChatClientTest {
     fun capabilityUnavailableIsReturnedAfterPreDispatchAudit() {
         var audits = 0
         var executorCalls = 0
+        var beforeDispatchCalls = 0
+        var payloadFactoryCalls = 0
         var operation: String? = null
         val mandate = AgentMandate.default()
         val context = context(mandate, 1_800_000_000_000L, emptyMap())
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { requestedOperation, _, _, _, _ ->
+            executor = RelayChatRequestExecutor { requestedOperation, _, _, payloadFactory, beforeDispatch ->
                 operation = requestedOperation
                 executorCalls++
+                assertEquals("The consent audit must precede capability negotiation", 1, audits)
+                // Model a missing V4 capability: an unexpected fallback would reach dispatch.
+                if (requestedOperation != RelayAgentChatClient.V4_CHAT_OPERATION) {
+                    beforeDispatchCalls++
+                    assertTrue(beforeDispatch())
+                    payloadFactoryCalls++
+                    payloadFactory()
+                }
                 RelayCallResult.RemoteError("OPERATION_UNAVAILABLE", "remote token must not be shown", false)
             },
             freshRequestContext = { requestContext(mandate, context, 1_800_000_000_000L) },
@@ -116,10 +126,12 @@ class RelayAgentChatClientTest {
         assertEquals("OPERATION_UNAVAILABLE", chatError.remoteCode)
         assertEquals("v4.coach.chat.request", operation)
         val errorMessage = requireNotNull(chatError.message)
-        assertTrue(errorMessage.contains("aucun repli V2"))
+        assertTrue(errorMessage.contains("Aucun repli V2"))
         assertFalse(errorMessage.contains("token"))
         assertEquals(1, audits)
         assertEquals(1, executorCalls)
+        assertEquals(0, beforeDispatchCalls)
+        assertEquals(0, payloadFactoryCalls)
     }
 
     @Test
