@@ -6,7 +6,7 @@ ATLAS cherche à transformer les objectifs choisis par son utilisateur en **acti
 
 Le coach est **ferme mais contestable** : chaque pouvoir est défini dans un mandat explicite, borné, vérifiable et révocable. L'IA propose ; ATLAS et les services autorisés exécutent uniquement des actions validées. Le contrôle des fonctions essentielles du téléphone et une pause d'urgence restent disponibles sans Internet.
 
-**État du projet (26 octobre 2026) :** **V6.2 clôturée** (`GO_WITH_LIMITATIONS`). **V6.3 en cours** : un premier jalon local (programme journalier L1 + sonde calendrier en lecture seule L2) est intégré sur la branche locale `feat/atlas-v6-3`, testé JVM/lint/build, **non qualifié sur Pixel** et sans écriture calendrier, wger ni Bridge. Voir le [rapport d'étape V6.3](docs/v6-3/RAPPORT_V63.md). Plateforme de qualification : **Android 17 / API 37, Pixel physique et AVD**. Dépôt : [DroidCoach](https://github.com/m413w4r3/DroidCoach).
+**État du projet (30 octobre 2026) :** **V6.2 clôturée** (`GO_WITH_LIMITATIONS`). Le code local V6.3 est intégré et les vérifications locales passent au SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` (**GO local avec limites**). La clôture runtime V6.3 reste **BLOCKED** : l'APK final n'a pas été qualifié sur Pixel, les six outils ne sont pas prouvés dans OpenClaw réel et A4-4 reste bloqué par la transformation amont 4001→1012. Etar, wger et la localisation ne sont pas livrés. Voir le [rapport final V6.3](docs/v6-3/v63-operational/RAPPORT_FINAL_V63.md). Plateforme de qualification prévue : **Android 17 / API 37, Pixel physique et AVD**. Dépôt : [DroidCoach](https://github.com/m413w4r3/DroidCoach).
 
 ## L'expérience recherchée
 
@@ -110,17 +110,11 @@ La CI GitHub exécute les vérifications JVM/lint/build/backend ; les validation
 - Documents de référence : [produit](docs/01-produit.md), [spécification initiale](docs/00-specification-initiale.md), [direction visuelle](docs/06-direction-visuelle.md), [sources tierces](THIRD_PARTY_NOTICES.md).
 - Les intégrations Etar, wger et localisation doivent faire l'objet de **contrats et tests adaptés aux versions réellement installées**, plutôt que de forks globaux non justifiés.
 
-## Prochaine étape : cadrage V6.3
+## Clôture V6.3 — preuves et étapes restantes
 
-Concevoir des **tranches verticales utilisables** avant le prompt d'implémentation. Arbitrages encore ouverts :
-1. **Calendrier** : quel calendrier local sélectionner, permissions de lecture/écriture, mode d'approbation et gestion des conflits/récurrences ?
-2. **wger** : instance et mode d'accès, API REST vs MCP expérimental, opérations autorisées, source de vérité des performances et règles d'adaptation.
-3. **Localisation** : signaux minimaux nécessaires, activation liée au planning, exactitude acceptable, confidentialité et comportement sans permission.
-4. **Mémoire et planification** : quels événements conserver, comment expliquer/revoir l'apprentissage, quelles replanifications nécessitent confirmation et comment tenir sans serveur.
-5. **Engagement** : applications sélectionnées, intensité de la friction launcher, exceptions, protocole de dérogation et expérimentation d'accessibilité isolée.
-6. **Ordre de livraison** : prioriser une journée planifiée et révisable de bout en bout, puis élargir l'intégration à wger, au contexte géographique et aux contrôles plus forts sans perdre la fiabilité Android 17.
+Le SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` a un verdict **GO local** après suites backend, JVM Android et relais PC, lint et builds. Cela ne constitue pas une clôture runtime complète : la qualification Pixel sur l'APK final et la preuve OpenClaw réelle restent bloquées, comme A4-4. Le détail des preuves, avertissements et limites figure dans le [rapport final V6.3](docs/v6-3/v63-operational/RAPPORT_FINAL_V63.md).
 
-**Aucune des intégrations V6.3 ci-dessus n'est validée par les preuves V6.2.** Les décisions techniques et les pouvoirs accordés au Coach restent à spécifier avant développement.
+Etar, wger, localisation et les autres objectifs de conception décrits plus haut restent des intégrations ciblées non livrées. La qualification runtime devra utiliser l'APK hashé, prouver séparément les outils OpenClaw et traiter le blocage du relais amont avant de déclarer la clôture V6.3.
 
 ## Licence et crédits
 
