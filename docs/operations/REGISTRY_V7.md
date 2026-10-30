@@ -64,6 +64,7 @@
 - **Revues indépendantes** : V7-01C `ACCEPT` (aucun P0/P1, un P2 de preuve sur les logs) ; V7-03B `REJECT` (P1 request_id enveloppe≠payload, P2 codec d'erreur V4, preuves de tests incomplètes). V7-03C corrige ces points. Une notification de fin ne vaut pas acceptation.
 - **Intégration** : V7-01C mergé (`9331f88`) et V7-01B evidence mergé (`2cb1214`) sur la branche d'intégration ; suite backend complète `344 passed, 1 skipped` avec `ATLAS_DB_PATH` temporaire. V7-03B n'est pas intégré.
 - **Audit V7-01B en cours** : reprise en lecture seule pour qualifier l'anomalie `exec tool.result ok` malgré `excluded`, la réalité de la corrélation native à 7 ms, et la sémantique `tools.effective`/`alsoAllow` du plugin optionnel. Aucune configuration live ne sera modifiée avant ce résultat et une autorisation ciblée.
+- **Catalogue Gateway (lecture parent)** : `tools.catalog` liste bien les six outils `atlas_*` sous `plugin:atlas_core_tools`, tous `optional: true`, plus d'autres plugins. Le catalogue ne prouve donc pas la projection session ; `tools.effective` reste FAIL. La politique agent contient `profile=minimal`, `deny=[gateway,session_status,presence]`, `alsoAllow=[six outils]` ; la cause de l'absence des six dans la projection est encore à établir.
 
 ## 4. Verdicts
 
