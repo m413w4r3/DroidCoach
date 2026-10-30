@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BackendClient, assertLoopbackHttpUrl } from "../src/backend.js";
+import { readPrivateV4AndroidToken } from "../src/connector.js";
 import { DeviceRegistry } from "../src/device-registry.js";
 import { RemoteError } from "../src/errors.js";
 import { ConnectorMetrics } from "../src/metrics.js";
@@ -447,6 +448,105 @@ describe("closed operations and backend adapter", () => {
     expect(chat?.url).toBe("http://127.0.0.1:8100/v4/agent/chat");
     expect(chat?.url).not.toContain("/v2/agent/chat");
     expect(calls.every((call) => !JSON.parse(call.body ?? "{}").device_id)).toBe(true);
+  });
+
+  it("uses the private Android bearer for V4 and keeps the service bearer on V2", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-auth-test-"));
+    const tokenFile = join(directory, "android-token");
+    const androidToken = "synthetic-android-bearer-never-log";
+    await writeFile(tokenFile, androidToken, { mode: 0o600 });
+    await chmod(tokenFile, 0o600);
+    const loadedToken = await readPrivateV4AndroidToken(tokenFile);
+    const calls: Array<{ url: string; authorization: string | null; contract: string | null; schema: string | null; capability: string | null; requestId: string | null }> = [];
+    let rejectV4 = false;
+    const serviceToken = "synthetic-service-bearer";
+    const pairedDeviceId = "paired-device-synthetic";
+    const logSpies = [
+      vi.spyOn(console, "log").mockImplementation(() => {}),
+      vi.spyOn(console, "warn").mockImplementation(() => {}),
+      vi.spyOn(console, "error").mockImplementation(() => {}),
+    ];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      serviceToken,
+      v4Enabled: true,
+      pairedDeviceToken: (deviceId) => deviceId === pairedDeviceId ? loadedToken : undefined,
+      fetcher: async (input, init) => {
+        const headers = new Headers(init?.headers);
+        calls.push({
+          url: String(input),
+          authorization: headers.get("authorization"),
+          contract: headers.get("x-atlas-contract-version"),
+          schema: headers.get("x-atlas-schema-version"),
+          capability: headers.get("x-atlas-capability"),
+          requestId: headers.get("x-atlas-request-id"),
+        });
+        if (rejectV4 && String(input).includes("/v4/")) {
+          return new Response(JSON.stringify({ error: { code: "AUTH_REQUIRED", message: androidToken, retryable: false } }), { status: 401 });
+        }
+        return new Response(JSON.stringify({ accepted: true }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    });
+    const v4 = v4Payloads().find((entry) => entry.operation === "v4.coach.chat.request")!;
+
+    try {
+      await expect(backend.execute(v4.operation, v4.payload)).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+      await expect(backend.execute(v4.operation, v4.payload, undefined, "unpaired-device-synthetic")).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+      expect(calls).toHaveLength(0);
+
+      const missingTokenBackend = new BackendClient({
+        baseUrl: "http://127.0.0.1:8100",
+        serviceToken,
+        v4Enabled: true,
+        pairedDeviceToken: () => undefined,
+        fetcher: async () => { throw new Error("unexpected backend call"); },
+      });
+      await expect(missingTokenBackend.execute(v4.operation, v4.payload, undefined, pairedDeviceId)).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+
+      await backend.execute(v4.operation, v4.payload, undefined, pairedDeviceId);
+      expect(calls[0]).toMatchObject({
+        url: "http://127.0.0.1:8100/v4/agent/chat",
+        authorization: `Bearer ${androidToken}`,
+        contract: "4",
+        schema: "4",
+        capability: "coach.chat",
+        requestId: v4.payload.request_id,
+      });
+
+      await backend.execute("coach.status", {});
+      expect(calls[1]?.authorization).toBe(`Bearer ${serviceToken}`);
+
+      rejectV4 = true;
+      const error = await backend.execute(v4.operation, v4.payload, undefined, pairedDeviceId).catch((caught: unknown) => caught);
+      expect(error).toMatchObject({ code: "BACKEND_REJECTED" });
+      expect(JSON.stringify(error)).not.toContain(androidToken);
+      expect(JSON.stringify(error)).not.toContain(serviceToken);
+      expect(String(error)).not.toContain(androidToken);
+      expect(String(error)).not.toContain(serviceToken);
+      expect(logSpies.flatMap((spy) => spy.mock.calls).flat().join(" ")).not.toContain(androidToken);
+
+      await chmod(tokenFile, 0o644);
+      const unsafeFileToken = await readPrivateV4AndroidToken(tokenFile);
+      const unsafeFileBackend = new BackendClient({
+        baseUrl: "http://127.0.0.1:8100",
+        v4Enabled: true,
+        pairedDeviceToken: () => unsafeFileToken,
+        fetcher: async () => { throw new Error("unsafe token file reached backend"); },
+      });
+      await expect(unsafeFileBackend.execute(v4.operation, v4.payload, undefined, pairedDeviceId)).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+
+      const absentFileToken = await readPrivateV4AndroidToken(join(directory, "missing-token-file"));
+      const absentFileBackend = new BackendClient({
+        baseUrl: "http://127.0.0.1:8100",
+        v4Enabled: true,
+        pairedDeviceToken: () => absentFileToken,
+        fetcher: async () => { throw new Error("missing token file reached backend"); },
+      });
+      await expect(absentFileBackend.execute(v4.operation, v4.payload, undefined, pairedDeviceId)).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+    } finally {
+      for (const spy of logSpies) spy.mockRestore();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("preserves safe V4 upstream error details and keeps the V2 session open", async () => {
