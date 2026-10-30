@@ -21,21 +21,29 @@ Base wave9 : `92ce000745f8188153fff4ab60933da0287fdc89`
 - Le plugin `atlas_core_tools` 0.1.0 est installé dans l'environnement OpenClaw mais désactivé (`enabled=false`). Le Gateway n'a pas été redémarré.
 - Les intégrations Etar, wger et localisation ne sont pas livrées ni déclarées PASS.
 
-Les preuves déléguées disponibles sont rattachées au profil `codex/gpt-6-luna / xhigh`. Les IDs de session et les profils des lignes de commande locales ne sont pas fournis dans les éléments de clôture ; ils ne sont pas inférés ici.
+## Sessions finales
+
+| Rôle | Tâche / session | Modèle et effort effectifs |
+|---|---|---|
+| Android JVM et builds | `V63-FINAL-ANDROID-TEST` — `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6` | `codex/gpt-6-luna / xhigh` |
+| Backend | `V63-FINAL-BACKEND-TEST` — `ff5f4f41-e72a-4a32-b708-3bebed1b9d3c` | `codex/gpt-6-luna / xhigh` |
+| Relais PC | `V63-FINAL-RELAY-TEST` — `7114dedd-7bc8-49ea-9d77-a544e65baf37` | `codex/gpt-6-luna / xhigh` |
+| Revue finale du code | `V63-REVIEW-FINAL-CODE` — `8c374793-f73b-4e94-a409-67e3a9d7aa2f` | `codex/gpt-6-luna / xhigh` |
+| Harnais E2E | `V63-E2E-HARNESS` — `fed39621-d635-41bd-bd83-006f47a4c159` | `codex/gpt-6-luna / xhigh` |
 
 ## Tableau de preuves locales
 
 | Domaine | Résultat au SHA final | Environnement et commande | Portée / limite |
 |---|---|---|---|
-| Backend | 316 collectés, 315 passed, 0 failed, 1 skipped préexistant ; 21,91 s | Python 3.12.3, pytest 8.4.0, environnement isolé ; `/tmp/atlas-test-venv/bin/python -m pytest -ra` | Skip : `test_real_gateway_plan_returns_valid_proposals`, qui requiert `ATLAS_REAL_GATEWAY=1`. Aucun accès Gateway réel. |
-| Relais PC | Typecheck PASS ; build PASS ; 17 fichiers, 89 passed / 0 failed / 0 skipped, 5,89 s total | Relais local `127.0.0.1:4400` ; ligne de commande exacte non transmise | Vérification locale seulement. Le flake historique `session.test.ts` n'a pas été reproduit dans le run final 89/89. |
-| Android JVM | 865 tests ; 0 échec, 0 erreur, 0 ignoré ; 114 suites XML ; 26 s | `GRADLE_USER_HOME=/tmp/atlas-gradle-home` ; ligne de commande exacte non transmise | Aucun test instrumenté inclus. |
-| `assembleDebugAndroidTest` | PASS, 19 s | Build local avec `GRADLE_USER_HOME=/tmp/atlas-gradle-home` | Aucun test instrumenté n'a été exécuté. Avertissement de dépréciation `MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. |
-| `lintDebug` | PASS, 0 erreur / 87 avertissements | Build local avec `GRADLE_USER_HOME=/tmp/atlas-gradle-home` | UseKtx 42, ApplySharedPref 12, ObsoleteSdkInt 14, GradleDependency 7, SetTextI18n 6, DiscouragedApi 2, NewerVersionAvailable 2, AndroidGradlePluginVersion 1, OldTargetApi 1. |
-| `assembleDebug` | PASS, 140 s | Build local avec `GRADLE_USER_HOME=/tmp/atlas-gradle-home` | Produit l'APK hashé décrit ci-dessous. |
-| Revue indépendante | `ACCEPTED — GO`, aucun P0/P1 | Revue statique sur `d7a30c1` ; profil communiqué `codex/gpt-6-luna / xhigh` | Le relecteur n'a pas relancé les tests. |
+| Backend | 316 collectés, 315 passed, 0 failed, 1 skipped préexistant ; 21,91 s | Depuis `backend/`, Python 3.12.3, pytest 8.4.0, environnement isolé ; `/tmp/atlas-test-venv/bin/python -m pytest -ra` (lanceur avec `/usr/bin/time`) | Session `V63-FINAL-BACKEND-TEST`, `ff5f4f41-e72a-4a32-b708-3bebed1b9d3c`, `codex/gpt-6-luna / xhigh`. Skip : `test_real_gateway_plan_returns_valid_proposals`, qui requiert `ATLAS_REAL_GATEWAY=1`. Aucun accès Gateway réel. |
+| Relais PC | Typecheck PASS ; build PASS ; 17 fichiers, 89 passed / 0 failed / 0 skipped, 5,89 s total | Depuis `integrations/relay/pc`: `./node_modules/.bin/tsc -p tsconfig.json --noEmit`, `npm run build`, `npm test` ; relais local `127.0.0.1:4400` | Session `V63-FINAL-RELAY-TEST`, `7114dedd-7bc8-49ea-9d77-a544e65baf37`, `codex/gpt-6-luna / xhigh`. Vérification locale seulement. Le flake historique `session.test.ts` n'a pas été reproduit dans le run final 89/89. |
+| Android JVM | 865 tests ; 0 échec, 0 erreur, 0 ignoré ; 114 suites XML ; 26 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest` | Session `V63-FINAL-ANDROID-TEST`, `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté inclus. |
+| `assembleDebugAndroidTest` | PASS, 19 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebugAndroidTest` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté n'a été exécuté. Avertissement de dépréciation `MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. |
+| `lintDebug` | PASS, 0 erreur / 87 avertissements | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. UseKtx 42, ApplySharedPref 12, ObsoleteSdkInt 14, GradleDependency 7, SetTextI18n 6, DiscouragedApi 2, NewerVersionAvailable 2, AndroidGradlePluginVersion 1, OldTargetApi 1. |
+| `assembleDebug` | PASS, 140 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Produit l'APK hashé décrit ci-dessous. |
+| Revue indépendante | `ACCEPTED — GO`, aucun P0/P1 | Revue statique sur `d7a30c1` | Session `V63-REVIEW-FINAL-CODE`, `8c374793-f73b-4e94-a409-67e3a9d7aa2f`, `codex/gpt-6-luna / xhigh`. Le relecteur n'a pas relancé les tests. |
 
-Les preuves de suite JVM et de relais sont rapportées par compteurs, mais leurs commandes complètes n'ont pas été transmises. Le seul moyen exact de reproduire ces deux lignes est de récupérer la sortie de campagne d'origine ; les noms de tâches Gradle ne sont pas devinés dans ce rapport.
+Le harnais E2E (ciblé 3/3 et JVM 863/863 sur `c83f87f`) est rattaché à la session `V63-E2E-HARNESS`, `fed39621-d635-41bd-bd83-006f47a4c159`, `codex/gpt-6-luna / xhigh`.
 
 ## APK final conservé
 
@@ -90,13 +98,25 @@ Impact constaté : divergence possible entre le journal ACK et le plan local. Au
 
 ## Commandes de reproduction consignées
 
-Commande fournie pour le backend :
+Commandes consignées, avec leur répertoire de travail :
 
 ```sh
+# Depuis backend/ ; le lanceur ajoutait seulement /usr/bin/time
 /tmp/atlas-test-venv/bin/python -m pytest -ra
+
+# Depuis integrations/relay/pc/
+./node_modules/.bin/tsc -p tsconfig.json --noEmit
+npm run build
+npm test
+
+# Depuis android/ ; les commandes ont été lancées dans cet ordre
+GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest
+GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebugAndroidTest
+GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug
+GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug
 ```
 
-Tâches Android rapportées au SHA final : `testDebugUnitTest` (commande d'invocation exacte non transmise), `assembleDebugAndroidTest`, `lintDebug` et `assembleDebug`, avec `GRADLE_USER_HOME=/tmp/atlas-gradle-home`. La commande JVM exacte et les lignes de commande typecheck/build/tests du relais PC ne sont pas disponibles dans les faits de clôture. Ce rapport n'a pas relancé les suites.
+Ce rapport documentaire n'a pas relancé les suites.
 
 Le résultat final des matrices R01-R12 et T01-T12 se trouve dans [RECETTE_V63.md](RECETTE_V63.md) et dans la matrice canonique [ARCHITECTURE_V63.md §16](ARCHITECTURE_V63.md). R01-R12 restent NOT_RUN/BLOCKED et aucun PASS runtime n'est déclaré.
 
