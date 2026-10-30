@@ -33,6 +33,7 @@ import dev.atlas.coach.sync.agent.coach.RelayAgentChatClient
 import dev.atlas.coach.sync.agent.coach.RelayChatRequestExecutor
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Ack
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckDeliveryState
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckResultCode
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4DeliveryResult
@@ -286,6 +287,25 @@ class E2eV63Test {
         assertEquals(initialPlan, controller.plan)
         assertTrue(inbox.ackHistory(a1.proposalId).isEmpty())
 
+        val lockedProposal = proposal(807, InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
+            initialPlan, activityId, targetStart = 600)
+        inbox.mergePulled(InboxV4PullPage(listOf(lockedProposal), null, false), 8)
+        assertEquals(A1PolicyRejection.ACTIVITY_LOCKED,
+            controller.inspectA1InboxProposal(lockedProposal.proposalId)?.rejection)
+        assertTrue("locked proposal rejection is durably acknowledged", controller.applyInboxProposal(
+            proposalId = lockedProposal.proposalId,
+            planRevisionCapabilityEnabled = false,
+            dayPlanConsentGranted = true,
+            dayPlanConsentVersion = 3,
+            a1CapabilityEnabled = { true },
+            currentDayPlanConsent = { true to 3L },
+        ))
+        assertEquals(initialPlan, controller.plan)
+        val lockedAck = inbox.ackHistory(lockedProposal.proposalId).single()
+        assertEquals(InboxV4AckState.VALIDATION_REJECTED, lockedAck.state)
+        assertEquals(InboxV4AckResultCode.VALIDATION_FAILED, lockedAck.resultCode)
+        assertNull(lockedAck.proof)
+
         assertTrue(controller.setA1ActivityPolicy(A1ActivityPolicy(
             activityId = activityId,
             activityClass = A1ActivityClass.READING,
@@ -316,7 +336,8 @@ class E2eV63Test {
             a1CapabilityEnabled = { true },
             currentDayPlanConsent = { true to 3L },
         ))
-        assertEquals(firstApplied.version, controller.plan!!.version)
+        assertEquals(firstApplied, controller.plan)
+        assertEquals(listOf(firstAck), inbox.ackHistory(a1.proposalId))
 
         val staleProposal = proposal(806, InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
             initialPlan, activityId, targetStart = 720)
@@ -330,7 +351,10 @@ class E2eV63Test {
             currentDayPlanConsent = { true to 3L },
         ))
         assertEquals(firstApplied, controller.plan)
-        assertEquals(InboxV4AckState.STALE_VERSION, inbox.ackHistory(staleProposal.proposalId).single().state)
+        val staleAck = inbox.ackHistory(staleProposal.proposalId).single()
+        assertEquals(InboxV4AckState.STALE_VERSION, staleAck.state)
+        assertEquals(InboxV4AckResultCode.STALE_VERSION, staleAck.resultCode)
+        assertNull(staleAck.proof)
 
         assertTrue(controller.undoA1(a1.proposalId))
         assertEquals(initialPlan.version + 2, controller.plan!!.version)
@@ -340,12 +364,18 @@ class E2eV63Test {
         )
         assertEquals(1, persisted.a1State.quotaByLocalDate.values.single())
 
+        val planBeforeUserRefusals = requireNotNull(controller.plan)
         assertTrue(controller.rejectInboxProposal(a0.proposalId, consentVersion = 3))
         assertTrue(controller.rejectInboxProposal(a2.proposalId, consentVersion = 3))
-        assertEquals(InboxV4AckState.REJECTED, inbox.ackHistory(a0.proposalId).single().state)
-        assertNull(inbox.ackHistory(a0.proposalId).single().proof)
-        assertEquals(InboxV4AckState.REJECTED, inbox.ackHistory(a2.proposalId).single().state)
-        assertEquals(initialPlan.version + 2, controller.plan!!.version)
+        assertEquals(planBeforeUserRefusals, controller.plan)
+        val a0Ack = inbox.ackHistory(a0.proposalId).single()
+        assertEquals(InboxV4AckState.REJECTED, a0Ack.state)
+        assertEquals(InboxV4AckResultCode.USER_REJECTED, a0Ack.resultCode)
+        assertNull(a0Ack.proof)
+        val a2Ack = inbox.ackHistory(a2.proposalId).single()
+        assertEquals(InboxV4AckState.REJECTED, a2Ack.state)
+        assertEquals(InboxV4AckResultCode.USER_REJECTED, a2Ack.resultCode)
+        assertNull(a2Ack.proof)
 
         val secondProposal = proposal(804, InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
             requireNotNull(controller.plan), activityId, targetStart = 660)
@@ -362,7 +392,9 @@ class E2eV63Test {
         val thirdProposal = proposal(805, InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
             secondApplied, activityId, targetStart = 780)
         inbox.mergePulled(InboxV4PullPage(listOf(thirdProposal), null, false), 8)
-        assertFalse(controller.applyInboxProposal(
+        assertEquals(A1PolicyRejection.QUOTA_EXCEEDED,
+            controller.inspectA1InboxProposal(thirdProposal.proposalId)?.rejection)
+        assertTrue("quota rejection is durably acknowledged", controller.applyInboxProposal(
             proposalId = thirdProposal.proposalId,
             planRevisionCapabilityEnabled = false,
             dayPlanConsentGranted = true,
@@ -371,12 +403,13 @@ class E2eV63Test {
             currentDayPlanConsent = { true to 3L },
         ))
         assertEquals(secondApplied, controller.plan)
-        assertEquals(A1PolicyRejection.QUOTA_EXCEEDED,
-            controller.inspectA1InboxProposal(thirdProposal.proposalId)?.rejection)
         persisted = PlanV5JsonCodec.decodeStore(File(directory, "day-plan-${date}.json").readText())
         assertEquals(2, persisted.a1State.quotaByLocalDate.values.single())
         assertEquals(InboxV4AckState.APPLIED, inbox.ackHistory(secondProposal.proposalId).single().state)
-        assertEquals(InboxV4AckState.VALIDATION_REJECTED, inbox.ackHistory(thirdProposal.proposalId).single().state)
+        val quotaAck = inbox.ackHistory(thirdProposal.proposalId).single()
+        assertEquals(InboxV4AckState.VALIDATION_REJECTED, quotaAck.state)
+        assertEquals(InboxV4AckResultCode.VALIDATION_FAILED, quotaAck.resultCode)
+        assertNull(quotaAck.proof)
 
         val pendingIds = inbox.pendingAcks().map { it.ack.ackId }
         assertTrue(pendingIds.isNotEmpty())
