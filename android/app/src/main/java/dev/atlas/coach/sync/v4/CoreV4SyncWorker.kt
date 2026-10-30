@@ -30,6 +30,19 @@ import dev.atlas.coach.sync.AndroidSyncStorage
 import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.CoreV4ConsentRecord
 import dev.atlas.coach.sync.SharedPreferencesBearerTokenStore
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpException
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpTransport
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4LocalStore
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Ack
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckDeliveryState
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4DeliveryResult
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4MergeResult
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalParser
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalParseResult
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ReplayResult
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Transport
 import dev.atlas.coach.usage.android.SharedPreferencesGlobalUsageStores
 import java.io.File
 import java.security.MessageDigest
@@ -39,13 +52,18 @@ import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 
+private const val MAX_PULL_PAGES_PER_RUN = 4
+private const val PLAN_REVISION_CAPABILITY = "planRevision"
+
 /** One bounded outbound pass. It reads local sources only and never changes plans or domain events. */
 class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     @Volatile private var activeClient: CoreV4SyncClient? = null
+    @Volatile private var activeInboxTransport: InboxV4HttpTransport? = null
 
     override fun doWork(): Result {
         val store = AndroidSyncStorage.v4(applicationContext)
         var client: CoreV4SyncClient? = null
+        var retryInbox = false
         try {
             store.recordFailure("RUNNING", "Synchronisation V4 en cours.")
             val syncConfig = AndroidSyncStorage.settings(applicationContext).read()
@@ -97,6 +115,28 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
                 if (isStopped) return Result.success()
             }
 
+            val dayPlanConsent = consent.getValue(CoreV4Category.DAY_PLAN).snapshot
+            if (dayPlanConsent.state == CoreV4ConsentState.GRANTED) {
+                try {
+                    retryInbox = syncProposalInbox(
+                        store = store,
+                        baseUrl = syncConfig.baseUrl,
+                        bearerToken = token,
+                        debuggable = debuggable,
+                        consentVersion = dayPlanConsent.version.toLong(),
+                        mayPull = planRevisionCapabilityEnabled(applicationContext) &&
+                            planSnapshot?.plan?.state == PlanState.APPROVED,
+                    ) || retryInbox
+                } catch (error: InboxV4HttpException) {
+                    store.recordFailure(error.kind.name, error.message ?: "Erreur de synchronisation inbox V4.")
+                    retryInbox = error.retryable || retryInbox
+                } catch (_: Exception) {
+                    store.recordFailure("INBOX_LOCAL_ERROR", "L'inbox V4 locale est temporairement indisponible.")
+                    retryInbox = true
+                }
+                if (isStopped) return Result.success()
+            }
+
             val usageConsent = consent.getValue(CoreV4Category.USAGE_SUMMARY).snapshot
             if (usageConsent.state == CoreV4ConsentState.GRANTED) {
                 pushUsage(store, client, token, usageConsent, now)
@@ -116,7 +156,10 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
             if (store.presentation().code == "RUNNING") {
                 store.recordFailure("NO_PENDING_SOURCE", "Aucune nouvelle projection locale n'est disponible.")
             }
-            return Result.success()
+            return if (retryInbox) Result.retry() else Result.success()
+        } catch (error: InboxV4HttpException) {
+            store.recordFailure(error.kind.name, error.message ?: "Erreur de synchronisation inbox V4.")
+            return if (error.retryable) Result.retry() else Result.failure()
         } catch (error: CoreV4SyncException) {
             store.recordFailure(error.kind.name, error.message ?: "Erreur de synchronisation V4.")
             return if (error.retryable) Result.retry() else Result.failure()
@@ -131,11 +174,91 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
 
     override fun onStopped() {
         activeClient?.cancel()
+        activeInboxTransport?.cancel()
         super.onStopped()
     }
 
     private fun syncConsentFirst(store: dev.atlas.coach.sync.AndroidCoreV4SyncStore, client: CoreV4SyncClient, token: String) {
         syncPendingCoreV4ConsentsFirst(store, client, token) { isStopped }
+    }
+
+    private fun syncProposalInbox(
+        store: AndroidCoreV4SyncStore,
+        baseUrl: String,
+        bearerToken: String,
+        debuggable: Boolean,
+        consentVersion: Long,
+        mayPull: Boolean,
+    ): Boolean {
+        val inbox = InboxV4LocalStore.repository(
+            File(applicationContext.filesDir, "plans/${InboxV4LocalStore.FILE_NAME}"),
+        )
+        val transport = InboxV4HttpTransport(
+            baseUrl = baseUrl,
+            bearerToken = bearerToken,
+            consentVersion = consentVersion,
+            debuggable = debuggable,
+            requestAllowed = { request ->
+                !isStopped && inboxV4RequestStillAuthorized(store, request, consentVersion) &&
+                    (request.path != InboxV4HttpTransport.PULL_ROUTE || planRevisionCapabilityEnabled(applicationContext))
+            },
+            requestStart = { request, start ->
+                store.withExclusiveState {
+                    if (isStopped || !inboxV4RequestStillAuthorized(store, request, consentVersion) ||
+                        (request.path == InboxV4HttpTransport.PULL_ROUTE && !planRevisionCapabilityEnabled(applicationContext))
+                    ) {
+                        false
+                    } else {
+                        start()
+                        true
+                    }
+                }
+            },
+        )
+        activeInboxTransport = transport
+        try {
+            inbox.expireDue(consentVersion)
+            val replayPolicy = replayInboxV4AcksForConsentVersion(inbox, transport, consentVersion)
+            if (replayPolicy.blockedByConsentVersion > 0) {
+                store.recordFailure(
+                    "INBOX_ACK_BLOCKED",
+                    "${replayPolicy.blockedByConsentVersion} ACK inbox restent bloqués après un changement de consentement DAY_PLAN; réconciliation requise.",
+                )
+            }
+            val ackFailures = transport.drainObservedFailures()
+            ackFailures.lastOrNull()?.let { failure ->
+                store.recordFailure(failure.kind.name, failure.message ?: "Erreur de livraison ACK inbox V4.")
+            }
+            val retry = if (ackFailures.isNotEmpty()) {
+                ackFailures.any { it.retryable }
+            } else {
+                replayPolicy.retryableUncertainty
+            }
+            if (!mayPull || isStopped) return retry
+
+            repeat(MAX_PULL_PAGES_PER_RUN) {
+                if (isStopped) return retry
+                val page = transport.pullRaw(inbox.cursor(), InboxV4HttpTransport.PAGE_SIZE)
+                val merged = ingestInboxV4Page(
+                    inbox = inbox,
+                    rawProposals = page.proposals,
+                    nextCursor = page.nextCursor,
+                    truncated = page.truncated,
+                    pageSize = InboxV4HttpTransport.PAGE_SIZE,
+                )
+                if (!page.truncated || merged.deferredForCapacity > 0 || merged.conflicts > 0) return retry
+            }
+            return retry
+        } finally {
+            activeInboxTransport = null
+            transport.cancel()
+        }
+    }
+
+    private fun planRevisionCapabilityEnabled(context: Context): Boolean {
+        val capabilities = LocalStateStore(AndroidStateBackend(context.applicationContext))
+            .read()["capabilities"] as? Map<*, *> ?: return false
+        return capabilities[PLAN_REVISION_CAPABILITY] == true
     }
 
     private fun pushApprovedPlan(
@@ -587,6 +710,98 @@ internal fun coreV4RequestStillAuthorized(
                 })
         }
     }.getOrDefault(false)
+}
+
+internal fun inboxV4RequestStillAuthorized(
+    store: AndroidCoreV4SyncStore,
+    request: CoreV4HttpRequest,
+    expectedConsentVersion: Long,
+): Boolean = runCatching {
+    val ackRoute = Regex("^/v4/agent/proposals/[0-9a-f-]{36}/ack$")
+    val isPull = request.path == InboxV4HttpTransport.PULL_ROUTE
+    if (!isPull && !ackRoute.matches(request.path)) return false
+    val body = JSONObject(request.body)
+    if (body.optInt("contract_version") != CoreV4SyncClient.CONTRACT_VERSION ||
+        body.optInt("schema_version") != CoreV4SyncClient.SCHEMA_VERSION ||
+        body.optString("capability") != "proposal.ack" ||
+        body.optLong("consent_version", -1L) != expectedConsentVersion
+    ) return false
+    val consent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+    consent.state == CoreV4ConsentState.GRANTED &&
+        consent.version.toLong() == expectedConsentVersion && consent.syncedVersion == consent.version
+}.getOrDefault(false)
+
+/**
+ * Quarantines a changed server echo of a locally uncertain proposal once, then consumes the page.
+ * InboxV4Repository's quarantine and ACK history are currently unbounded; retention sizing and
+ * migration belong in a separate repository ticket rather than this worker's pagination path.
+ */
+internal fun ingestInboxV4Page(
+    inbox: InboxV4Repository,
+    rawProposals: List<String>,
+    nextCursor: String?,
+    truncated: Boolean,
+    pageSize: Int,
+): InboxV4MergeResult {
+    val known = inbox.all()
+    val knownIds = known.mapTo(mutableSetOf()) { it.proposal.proposalId }
+    val knownKeys = known.mapTo(mutableSetOf()) { it.proposal.idempotencyKey }
+    val uncertainEchoes = rawProposals.filter { raw ->
+        val proposal = (InboxV4ProposalParser.parse(raw) as? InboxV4ProposalParseResult.Parsed)?.proposal
+            ?: return@filter false
+        proposal.state == InboxV4ProposalState.UNCERTAIN &&
+            (proposal.proposalId in knownIds || proposal.idempotencyKey in knownKeys)
+    }
+    val first = inbox.ingestRawPage(rawProposals, nextCursor, truncated, pageSize)
+    if (uncertainEchoes.isEmpty() || first.conflicts == 0) return first
+
+    // The first merge persisted these state-mismatch payloads in quarantine. Reingest the
+    // remaining valid items so that malformed payloads are not quarantined a second time and
+    // a quarantined uncertain echo cannot hold the cursor forever.
+    return inbox.ingestRawPage(
+        rawProposals = rawProposals.filterNot { it in uncertainEchoes }.filter { raw ->
+            InboxV4ProposalParser.parse(raw) is InboxV4ProposalParseResult.Parsed
+        },
+        nextCursor = nextCursor,
+        truncated = truncated,
+        pageSize = pageSize,
+    )
+}
+
+internal data class InboxV4AckReplayPolicyResult(
+    val replay: InboxV4ReplayResult,
+    val blockedByConsentVersion: Int,
+    val retryableUncertainty: Boolean,
+)
+
+/** Keeps old-version ACKs visible in the durable outbox without silently replaying them. */
+internal fun replayInboxV4AcksForConsentVersion(
+    inbox: InboxV4Repository,
+    delegate: InboxV4Transport,
+    currentConsentVersion: Long,
+): InboxV4AckReplayPolicyResult {
+    val pendingBefore = inbox.pendingAcks()
+    val blockedIds = pendingBefore
+        .filter { it.ack.consentVersion != currentConsentVersion }
+        .mapTo(mutableSetOf()) { it.ack.ackId }
+    val replayableIds = pendingBefore
+        .filter { it.ack.consentVersion == currentConsentVersion }
+        .mapTo(mutableSetOf()) { it.ack.ackId }
+    val replay = inbox.replayPendingAcks(object : InboxV4Transport {
+        override fun pull(cursor: String?, pageSize: Int) = delegate.pull(cursor, pageSize)
+
+        override fun ack(ack: InboxV4Ack): InboxV4DeliveryResult =
+            if (ack.consentVersion == currentConsentVersion) delegate.ack(ack)
+            else InboxV4DeliveryResult.Offline
+    })
+    val pendingAfter = inbox.pendingAcks().associateBy { it.ack.ackId }
+    return InboxV4AckReplayPolicyResult(
+        replay = replay,
+        blockedByConsentVersion = blockedIds.size,
+        retryableUncertainty = replayableIds.any {
+            pendingAfter[it]?.deliveryState == InboxV4AckDeliveryState.UNCERTAIN
+        },
+    )
 }
 
 /** Linearizes consent revocation with the point that opens the HTTP request body. */
