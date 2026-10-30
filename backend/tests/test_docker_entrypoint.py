@@ -154,6 +154,8 @@ def test_main_starts_demo_when_gateway_secret_is_absent(tmp_path, monkeypatch):
             (
                 program,
                 arguments,
+                os.environ.get("ATLAS_TOKEN"),
+                os.environ.get("ATLAS_TOOL_TOKEN"),
                 os.environ.get("ATLAS_AGENT_ADAPTER"),
                 os.environ.get("OPENCLAW_GATEWAY_TOKEN"),
             )
@@ -164,7 +166,16 @@ def test_main_starts_demo_when_gateway_secret_is_absent(tmp_path, monkeypatch):
 
     ENTRYPOINT.main(tmp_path)
 
-    assert executions == [("uvicorn", ["uvicorn"], "mock", None)]
+    assert executions == [
+        (
+            "uvicorn",
+            ["uvicorn"],
+            "synthetic-android-token",
+            "synthetic-tool-token",
+            "mock",
+            None,
+        )
+    ]
 
 
 @pytest.mark.parametrize("duplicate", ["synthetic-android-token", "synthetic-tool-token"])
