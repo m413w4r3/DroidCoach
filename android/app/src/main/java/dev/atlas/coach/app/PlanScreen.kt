@@ -1164,18 +1164,19 @@ private fun A1BoundedSection(
     var draftActivityClass by rememberSaveable { mutableStateOf(A1ActivityClass.PROTECTED.name) }
     var draftActivityUnlocked by rememberSaveable { mutableStateOf(false) }
     var showUndoConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showConfiguration by rememberSaveable { mutableStateOf(false) }
     val undoReceipt = remember(controller, controller.revision, plan?.version) {
         controller.activeA1UndoReceipt()
     }
     val editingActivity = editingActivityId?.let { id -> plan?.activities?.firstOrNull { it.activityId == id } }
 
-    AtlasSection("A1 · déplacements bornés") {
+    AtlasSection("Réorganisation A1") {
         Text(
-            "A1 est une autorisation locale distincte des révisions du Coach. Les propositions viennent de l'inbox; aucune n'est appliquée sans votre confirmation.",
+            "Propose des déplacements limités, après votre confirmation.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Capability A1", modifier = Modifier.weight(1f))
+            Text("Autoriser A1", modifier = Modifier.weight(1f))
             Switch(
                 checked = capabilityEnabled,
                 onCheckedChange = { enabled ->
@@ -1186,8 +1187,8 @@ private fun A1BoundedSection(
             )
         }
         Text(
-            if (consent?.enabled == true) "Consentement local actif · version ${consent.version}."
-            else "Aucun consentement A1 actif. Les activités non classées restent protégées.",
+            if (consent?.enabled == true) "Consentement local actif."
+            else "Consentement inactif · activités non classées protégées.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("a1_consent_state"),
@@ -1207,48 +1208,62 @@ private fun A1BoundedSection(
                 },
             )
         }
-        if (plan == null) {
-            Text("Créez le programme du jour pour enregistrer un consentement A1 versionné.", style = MaterialTheme.typography.bodySmall)
-        } else {
+        AtlasSecondaryButton(
+            if (showConfiguration) "Masquer A1" else "Configurer A1",
+            onClick = { showConfiguration = !showConfiguration },
+            modifier = Modifier.testTag("a1_configuration_toggle"),
+        )
+        if (showConfiguration) {
             Text(
-                "Classez chaque activité explicitement. Aucun titre ni texte d'activité n'est analysé pour lui attribuer une classe.",
+                "A1 est une autorisation locale distincte des révisions du Coach. Les propositions viennent de l'inbox; aucune n'est appliquée sans votre confirmation.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            plan.activities.forEach { activity ->
-                val activityPolicy = remember(controller, controller.revision, activity.activityId) {
-                    controller.a1ActivityPolicy(activity.activityId) ?: A1ActivityPolicy.legacyProtected(activity.activityId)
-                }
-                Card(modifier = Modifier.fillMaxWidth().testTag("a1_activity_${activity.activityId}")) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(activity.title, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Classe · ${a1ClassLabel(activityPolicy.activityClass)} · ${if (activityPolicy.unlocked) "déverrouillée" else "protégée"}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        AtlasSecondaryButton("Régler le classement A1", onClick = {
-                            draftActivityClass = activityPolicy.activityClass.name
-                            draftActivityUnlocked = activityPolicy.unlocked
-                            editingActivityId = activity.activityId
-                        })
+            consent?.let {
+                Text("Version du consentement : ${it.version}.", style = MaterialTheme.typography.bodySmall)
+            }
+            if (plan == null) {
+                Text("Créez le programme du jour pour enregistrer un consentement A1 versionné.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(
+                    "Classez chaque activité explicitement. Aucun titre ni texte d'activité n'est analysé pour lui attribuer une classe.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                plan.activities.forEach { activity ->
+                    val activityPolicy = remember(controller, controller.revision, activity.activityId) {
+                        controller.a1ActivityPolicy(activity.activityId) ?: A1ActivityPolicy.legacyProtected(activity.activityId)
+                    }
+                    Card(modifier = Modifier.fillMaxWidth().testTag("a1_activity_${activity.activityId}")) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(activity.title, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Classe · ${a1ClassLabel(activityPolicy.activityClass)} · ${if (activityPolicy.unlocked) "déverrouillée" else "protégée"}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            AtlasSecondaryButton("Régler le classement A1", onClick = {
+                                draftActivityClass = activityPolicy.activityClass.name
+                                draftActivityUnlocked = activityPolicy.unlocked
+                                editingActivityId = activity.activityId
+                            })
+                        }
                     }
                 }
-            }
-            undoReceipt?.let { receipt ->
-                Card(modifier = Modifier.fillMaxWidth().testTag("a1_undo_available")) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        AtlasStatus("Révision A1 enregistrée", AtlasStatusKind.ACTIVE)
-                        Text(
-                            "Version ${receipt.versionAfter} · annulation disponible pendant 15 minutes si le programme reste exactement à cette version. Le quota restera consommé.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        AtlasSecondaryButton("Examiner l'annulation", onClick = { showUndoConfirmation = true })
+                undoReceipt?.let { receipt ->
+                    Card(modifier = Modifier.fillMaxWidth().testTag("a1_undo_available")) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            AtlasStatus("Révision A1 enregistrée", AtlasStatusKind.ACTIVE)
+                            Text(
+                                "Version ${receipt.versionAfter} · annulation disponible pendant 15 minutes si le programme reste exactement à cette version. Le quota restera consommé.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            AtlasSecondaryButton("Examiner l'annulation", onClick = { showUndoConfirmation = true })
+                        }
                     }
                 }
             }

@@ -164,7 +164,7 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
         FocusStatus.RUNNING -> "En cours · ${focus.phase.focusPhaseLabel()}"
         FocusStatus.PAUSED -> "En pause"
         FocusStatus.FINISHED -> "Dernière session terminée"
-        FocusStatus.CANCELLED, FocusStatus.IDLE, null -> "Prêt à démarrer"
+        FocusStatus.CANCELLED, FocusStatus.IDLE, null -> null
     }
     val focusActionLabel = when (focus?.status) {
         FocusStatus.PAUSED -> "Reprendre le focus"
@@ -266,7 +266,7 @@ internal fun HomeScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER
 
 @Composable
 private fun HomeFocusQuickCard(
-    stateLabel: String,
+    stateLabel: String?,
     actionLabel: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -274,7 +274,9 @@ private fun HomeFocusQuickCard(
     Card(modifier = modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Focus", style = MaterialTheme.typography.labelLarge)
-            Text(stateLabel, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            stateLabel?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             AtlasSecondaryButton(actionLabel, onClick, modifier = Modifier.fillMaxWidth().testTag("home_shortcut_focus"))
         }
     }
