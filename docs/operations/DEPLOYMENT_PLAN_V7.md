@@ -156,3 +156,14 @@ docker compose -f compose.yaml up -d --force-recreate atlas-core
 | Appairer le Pixel / activer V4 / consentir | permet le chat réel | sauvegarde app-only | révocation/désactivation | **requise** |
 
 Aucune de ces opérations n'est exécutée par le plan seul. Le parent demandera une autorisation ciblée après les preuves isolées.
+
+## 6. Demande d'autorisation ciblée (à accorder explicitement)
+
+Le propriétaire doit répondre en nommant les scopes autorisés, par exemple « j'autorise A et B, pas C/D ». Chaque scope reste réversible par la procédure de sa section.
+
+- **A — OpenClaw Gateway** : sauvegarde horodatée de `~/.openclaw/openclaw.json`, des identités/workspace et de la base de sessions ; modification atomique de `coreBaseUrl` vers `127.0.0.1:8100`, alignement du `tokenFile` outil sur une copie privée `0600` du token Core, ajustement minimal de l'allowlist plugin si l'audit le justifie ; redémarrage contrôlé du service utilisateur `openclaw-gateway.service` ; vérification `tools.catalog`, `tools.effective`, appel natif sûr et absence d'`exec` ; rollback par restauration + redémarrage.
+- **B — Core live** : copie SQLite cohérente (`PRAGMA quick_check=ok`, hash), conservation du volume `atlas-core-data` et de l'image actuelle, build depuis le SHA d'intégration, `docker compose -f compose.yaml -f compose.openclaw.yaml up -d --force-recreate atlas-core` avec les secrets privés, vérification des sept capabilities et d'un chat V4 réel `agent_status=ok` sans fallback mock ; rollback `docker compose -f compose.yaml up -d --force-recreate atlas-core`, sans `down -v`.
+- **C — Relais/proxy/connecteur** : démarrage du relais épinglé `127.0.0.1:4402`, du proxy filtrant `127.0.0.1:4400`, du connecteur avec V4 activé et bearer Android dédié ; vérification `/health`, `/ready`, session authentifiée, refus d'un appareil inconnu/révoqué ; le Funnel public `8443→4400` est déjà confirmé, aucun autre changement Tailscale n'est demandé ; arrêt des seuls processus créés pour le test et conservation de l'état.
+- **D — Pixel Android 17/API 37** : sauvegarde app-only vérifiée, installation de l'APK V7 si nécessaire, appairage, activation du toggle V4 et du consentement de partage, envoi d'un message synthétique, vérification de la sync/inbox/ACK, puis application ou rejet d'une proposition ; rollback par révocation de l'appareil et désactivation du toggle, sans `pm clear` ni désinstallation par défaut. Un seul opérateur ADB, consentement ciblé et `android17-device-qa`.
+
+Tant que ces autorisations ne sont pas données, le parent ne modifie ni le Gateway, ni le Core live, ni le relais, ni le Pixel.
