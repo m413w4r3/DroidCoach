@@ -82,6 +82,12 @@ data class A1InboxReview(
     val valid: Boolean get() = rejection == null && diff.isNotEmpty()
 }
 
+private sealed interface PersistedA1Application {
+    data class Applied(val proof: InboxV4ApplicationProof) : PersistedA1Application
+    data object NotApplied : PersistedA1Application
+    data object Unknown : PersistedA1Application
+}
+
 /**
  * UI-facing owner of the local day plan. It never talks to the network and never
  * authorizes an effect: a local revision is previewed, then confirmed by an explicit
@@ -240,17 +246,70 @@ class PlanController(
 
         var allTerminalized = true
         pending.forEach { entry ->
-            if (!appendInboxAck(
+            val terminalized = when (val application = persistedA1Application(entry.proposal)) {
+                is PersistedA1Application.Applied -> appendAppliedInboxAck(
+                    entry,
+                    consentVersion,
+                    application.proof,
+                )
+                PersistedA1Application.NotApplied -> appendInboxAck(
                     entry,
                     consentVersion,
                     InboxV4AckState.VALIDATION_REJECTED,
                     InboxV4AckResultCode.VALIDATION_FAILED,
                     null,
-                )) {
+                )
+                PersistedA1Application.Unknown -> false
+            }
+            if (!terminalized) {
                 allTerminalized = false
             }
         }
         return allTerminalized
+    }
+
+    private fun persistedA1Application(proposal: InboxV4Proposal): PersistedA1Application {
+        val planFiles = runCatching {
+            directory.listFiles { file ->
+                file.isFile && file.name.startsWith("day-plan-") && file.name.endsWith(".json")
+            }
+        }.getOrNull() ?: return PersistedA1Application.Unknown
+        if (planFiles.isEmpty()) return PersistedA1Application.Unknown
+
+        var matchingPlanCount = 0
+        var matchingProof: InboxV4ApplicationProof? = null
+        val revisionId = PlanRevisionMapper.revisionId(proposal.proposalId)
+        for (file in planFiles) {
+            val document = runCatching {
+                PlanV5JsonCodec.decodeStore(file.readText(Charsets.UTF_8))
+            }.getOrNull() ?: return PersistedA1Application.Unknown
+            if (document.store.dayPlan.planId != proposal.planId) continue
+            matchingPlanCount++
+            if (matchingPlanCount > 1) return PersistedA1Application.Unknown
+
+            val receipt = document.a1State.receipts.singleOrNull { it.proposalId == proposal.proposalId }
+                ?: continue
+            if (receipt.planId != proposal.planId ||
+                receipt.versionBefore.toLong() != proposal.baseVersion ||
+                receipt.versionAfter != receipt.versionBefore + 1 ||
+                receipt.revisionId != revisionId
+            ) return PersistedA1Application.Unknown
+            val proof = runCatching {
+                InboxV4ApplicationProof(
+                    planId = receipt.planId,
+                    appliedPlanVersion = receipt.versionAfter.toLong(),
+                    revisionId = receipt.revisionId,
+                    scopeHash = "sha256:${receipt.scopeHash}",
+                    effectIds = receipt.effectIds,
+                )
+            }.getOrNull() ?: return PersistedA1Application.Unknown
+            if (matchingProof != null) return PersistedA1Application.Unknown
+            matchingProof = proof
+        }
+
+        if (matchingPlanCount != 1) return PersistedA1Application.Unknown
+        return matchingProof?.let { PersistedA1Application.Applied(it) }
+            ?: PersistedA1Application.NotApplied
     }
 
     fun setA1ActivityPolicy(policy: A1ActivityPolicy): Boolean = when (

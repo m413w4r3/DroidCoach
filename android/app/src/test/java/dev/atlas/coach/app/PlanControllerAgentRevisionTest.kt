@@ -23,6 +23,7 @@ import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Fixtures
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4PullPage
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Storage
 import dev.atlas.coach.sync.agent.inbox.v4.InMemoryInboxV4Storage
 import java.io.File
 import java.time.Instant
@@ -307,6 +308,71 @@ class PlanControllerAgentRevisionTest {
     }
 
     @Test
+    fun a1RevocationAcknowledgesDurableApplicationAndKeepsUnknownAckPending() {
+        val storage = ToggleFailInboxV4Storage()
+        val inbox = InboxV4Repository(
+            storage = storage,
+            now = { Instant.ofEpochMilli(A1_NOW) },
+        )
+        val setup = a1Setup(inboxRepository = inbox)
+        val proposalId = queueA1Proposal(setup, number = 16)
+        val originalVersion = setup.controller.plan!!.version
+
+        assertFalse(applyInbox(setup, proposalId, onA1Committed = { _, _ -> storage.failWrites = true }))
+        assertEquals(2, storage.failedWrites) // APPLIED and the fallback UNCERTAIN write both failed.
+        assertEquals(originalVersion + 1, setup.controller.plan!!.version)
+        assertEquals(660, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+        assertEquals(InboxV4ProposalState.RECEIVED, inbox.get(proposalId)?.proposal?.state)
+        assertTrue(inbox.ackHistory(proposalId).isEmpty())
+
+        val appliedStore = PlanV5JsonCodec.decodeStore(
+            File(setup.directory, "day-plan-${setup.controller.today}.json").readText(),
+        )
+        val receipt = appliedStore.a1State.receipts.single { it.proposalId == proposalId }
+        assertEquals(originalVersion + 1, receipt.versionAfter)
+
+        assertTrue(setup.controller.setA1Consent(false, inboxConsentVersion = 3L))
+        assertEquals(false, setup.controller.a1Consent()?.enabled)
+        assertEquals(4, storage.failedWrites) // Revocation preserves the receipt and cannot persist either ACK.
+        assertEquals(InboxV4ProposalState.RECEIVED, inbox.get(proposalId)?.proposal?.state)
+        assertTrue(inbox.ackHistory(proposalId).isEmpty())
+        assertEquals(receipt, PlanV5JsonCodec.decodeStore(
+            File(setup.directory, "day-plan-${setup.controller.today}.json").readText(),
+        ).a1State.receipts.single { it.proposalId == proposalId })
+
+        assertFalse(setup.controller.setA1Consent(true, inboxConsentVersion = 3L))
+        assertEquals(false, setup.controller.a1Consent()?.enabled)
+        assertEquals(6, storage.failedWrites)
+
+        storage.failWrites = false
+        assertTrue(setup.controller.setA1Consent(true, inboxConsentVersion = 3L))
+        assertEquals(true, setup.controller.a1Consent()?.enabled)
+        val appliedAck = inbox.ackHistory(proposalId).single()
+        assertEquals(InboxV4AckState.APPLIED, appliedAck.state)
+        assertEquals(receipt.planId, appliedAck.proof?.planId)
+        assertEquals(receipt.versionAfter.toLong(), appliedAck.proof?.appliedPlanVersion)
+        assertEquals(receipt.revisionId, appliedAck.proof?.revisionId)
+        assertEquals("sha256:${receipt.scopeHash}", appliedAck.proof?.scopeHash)
+        assertEquals(receipt.effectIds, appliedAck.proof?.effectIds)
+        assertEquals(InboxV4ProposalState.APPLIED, inbox.get(proposalId)?.proposal?.state)
+
+        val unappliedSetup = a1Setup()
+        val unappliedProposalId = queueA1Proposal(unappliedSetup, number = 17)
+        assertTrue(unappliedSetup.controller.setA1Consent(false, inboxConsentVersion = 3L))
+        assertEquals(
+            InboxV4ProposalState.VALIDATION_REJECTED,
+            unappliedSetup.inbox.get(unappliedProposalId)?.proposal?.state,
+        )
+        assertEquals(
+            InboxV4AckState.VALIDATION_REJECTED,
+            unappliedSetup.inbox.ackHistory(unappliedProposalId).single().state,
+        )
+        assertTrue(PlanV5JsonCodec.decodeStore(
+            File(unappliedSetup.directory, "day-plan-${unappliedSetup.controller.today}.json").readText(),
+        ).a1State.receipts.isEmpty())
+    }
+
+    @Test
     fun a1ReviewRequiresExplicitPerActivityUnlockAndDisplaysValidatedDiff() {
         val setup = a1Setup(unlocked = false)
         val proposalId = queueA1Proposal(setup, number = 3)
@@ -473,9 +539,10 @@ class PlanControllerAgentRevisionTest {
     private fun a1Setup(
         unlocked: Boolean = true,
         grantConsent: Boolean = true,
+        inboxRepository: InboxV4Repository? = null,
     ): A1TestSetup {
         val directory = temporaryFolder.newFolder()
-        val inbox = InboxV4Repository(
+        val inbox = inboxRepository ?: InboxV4Repository(
             storage = InMemoryInboxV4Storage(),
             now = { Instant.ofEpochMilli(A1_NOW) },
         )
@@ -610,4 +677,23 @@ class PlanControllerAgentRevisionTest {
         private val A1_NOW: Long = Instant.parse("2026-10-29T08:10:00Z").toEpochMilli()
         private val A1_DAY: LocalDate = LocalDate.of(2026, 10, 29)
     }
+}
+
+private class ToggleFailInboxV4Storage : InboxV4Storage {
+    private val delegate = InMemoryInboxV4Storage()
+    var failWrites = false
+    var failedWrites = 0
+        private set
+
+    override fun read(): String? = delegate.read()
+
+    override fun write(serializedState: String) {
+        if (failWrites) {
+            failedWrites++
+            throw IllegalStateException("synthetic inbox write failure")
+        }
+        delegate.write(serializedState)
+    }
+
+    override fun quarantine(raw: String, reason: String): String? = delegate.quarantine(raw, reason)
 }
