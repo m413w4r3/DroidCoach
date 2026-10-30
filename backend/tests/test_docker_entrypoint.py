@@ -63,7 +63,7 @@ def test_optional_gateway_secret_is_exported_without_printing_its_value(tmp_path
     clear_token_environment(monkeypatch)
     write_core_secrets(tmp_path)
     gateway_token = "synthetic-openclaw-gateway-token"
-    (tmp_path / "openclaw_gateway_token").write_text(f"{gateway_token}\r\n", encoding="ascii")
+    (tmp_path / "openclaw_gateway_token").write_text(f" \t{gateway_token}\t \r\n", encoding="ascii")
 
     ENTRYPOINT.load_and_export_secrets(tmp_path)
 
@@ -73,7 +73,20 @@ def test_optional_gateway_secret_is_exported_without_printing_its_value(tmp_path
     assert gateway_token not in captured.err
 
 
-@pytest.mark.parametrize("secret_bytes", [b"", b"gateway\nforged", b"gateway\x00forged", b"\xff"])
+@pytest.mark.parametrize(
+    "secret_bytes",
+    [
+        b"",
+        b" \t\r\n ",
+        b"gateway\nforged",
+        b"gateway with-space",
+        b"gateway\twith-tab",
+        b"gateway\x00forged",
+        b"gateway\x01forged",
+        b"gateway\x7fforged",
+        b"\xff",
+    ],
+)
 def test_optional_gateway_secret_empty_or_malformed_fails(tmp_path, monkeypatch, secret_bytes):
     clear_token_environment(monkeypatch)
     write_core_secrets(tmp_path)
@@ -85,6 +98,73 @@ def test_optional_gateway_secret_empty_or_malformed_fails(tmp_path, monkeypatch,
     assert "ATLAS_TOKEN" not in os.environ
     assert "ATLAS_TOOL_TOKEN" not in os.environ
     assert "OPENCLAW_GATEWAY_TOKEN" not in os.environ
+
+
+def test_main_execs_application_with_trimmed_tokens_in_environment(tmp_path, monkeypatch):
+    clear_token_environment(monkeypatch)
+    write_core_secrets(
+        tmp_path,
+        android_token=" \tsynthetic-android-token \r\n",
+        tool_token="\tsynthetic-tool-token\t",
+    )
+    gateway_token = "synthetic-openclaw-gateway-token"
+    (tmp_path / "openclaw_gateway_token").write_text(f" \t{gateway_token}\t \r\n", encoding="ascii")
+    executions = []
+
+    def fake_execvp(program, arguments):
+        executions.append(
+            (
+                program,
+                arguments,
+                {
+                    "ATLAS_TOKEN": os.environ.get("ATLAS_TOKEN"),
+                    "ATLAS_TOOL_TOKEN": os.environ.get("ATLAS_TOOL_TOKEN"),
+                    "OPENCLAW_GATEWAY_TOKEN": os.environ.get("OPENCLAW_GATEWAY_TOKEN"),
+                },
+            )
+        )
+
+    monkeypatch.setattr(ENTRYPOINT.sys, "argv", ["entrypoint", "uvicorn", "--port", "8100"])
+    monkeypatch.setattr(ENTRYPOINT.os, "execvp", fake_execvp)
+
+    ENTRYPOINT.main(tmp_path)
+
+    assert executions == [
+        (
+            "uvicorn",
+            ["uvicorn", "--port", "8100"],
+            {
+                "ATLAS_TOKEN": "synthetic-android-token",
+                "ATLAS_TOOL_TOKEN": "synthetic-tool-token",
+                "OPENCLAW_GATEWAY_TOKEN": gateway_token,
+            },
+        )
+    ]
+
+
+def test_main_starts_demo_when_gateway_secret_is_absent(tmp_path, monkeypatch):
+    clear_token_environment(monkeypatch)
+    monkeypatch.setenv("ATLAS_AGENT_ADAPTER", "mock")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "stale-synthetic-token")
+    write_core_secrets(tmp_path)
+    executions = []
+
+    def fake_execvp(program, arguments):
+        executions.append(
+            (
+                program,
+                arguments,
+                os.environ.get("ATLAS_AGENT_ADAPTER"),
+                os.environ.get("OPENCLAW_GATEWAY_TOKEN"),
+            )
+        )
+
+    monkeypatch.setattr(ENTRYPOINT.sys, "argv", ["entrypoint", "uvicorn"])
+    monkeypatch.setattr(ENTRYPOINT.os, "execvp", fake_execvp)
+
+    ENTRYPOINT.main(tmp_path)
+
+    assert executions == [("uvicorn", ["uvicorn"], "mock", None)]
 
 
 @pytest.mark.parametrize("duplicate", ["synthetic-android-token", "synthetic-tool-token"])

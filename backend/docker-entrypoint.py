@@ -11,7 +11,7 @@ DEFAULT_SECRETS_DIR = Path("/run/secrets")
 def read_secret(path: Path, name: str, *, optional: bool = False) -> str | None:
     try:
         with open(path, encoding="ascii") as secret_file:
-            token = secret_file.read().rstrip("\r\n")
+            token = secret_file.read().strip()
     except FileNotFoundError:
         if optional:
             return None
@@ -21,7 +21,10 @@ def read_secret(path: Path, name: str, *, optional: bool = False) -> str | None:
     except OSError:
         raise SystemExit(f"{name} secret is unavailable") from None
 
-    if not token or "\n" in token or "\r" in token or "\x00" in token:
+    if not token or any(
+        character.isspace() or ord(character) < 0x20 or ord(character) == 0x7F
+        for character in token
+    ):
         raise SystemExit(f"{name} secret is empty or malformed")
     return token
 
