@@ -409,10 +409,10 @@ class E2eV63Test {
     ) = InboxV4Fixtures.proposal(
         proposalId = testUuid(number),
         idempotencyKey = testUuid(number + 100),
-        expiresAt = Instant.parse(NOW).plusSeconds(60 * 60),
+        expiresAt = Instant.parse(NOW).plusSeconds(29 * 60),
     ).copy(
         createdAt = Instant.parse(NOW),
-        expiresAt = Instant.parse(NOW).plusSeconds(60 * 60),
+        expiresAt = Instant.parse(NOW).plusSeconds(29 * 60),
         planId = plan.planId,
         baseVersion = plan.version.toLong(),
         justification = "Proposition synthétique à confirmer.",

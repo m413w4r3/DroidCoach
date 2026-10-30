@@ -10,7 +10,6 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -62,9 +61,9 @@ class E2eV63InstrumentationTest {
 
         composeRule.onNodeWithTag("agent_v4_chat_toggle").assertIsDisplayed()
         composeRule.onNodeWithText("Désactivée par défaut. Le chat utilise la route V2.").assertIsDisplayed()
-        val v4Switch = composeRule.onNode(
+        val v4Switch = composeRule.onAllNodes(
             isToggleable().and(hasAnyAncestor(hasTestTag("agent_v4_chat_toggle"))),
-        )
+        )[0]
         v4Switch.assertIsOff()
         v4Switch.performClick()
         v4Switch.assertIsOn()
