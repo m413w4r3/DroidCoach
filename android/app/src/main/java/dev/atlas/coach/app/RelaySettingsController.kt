@@ -87,7 +87,17 @@ class RelaySettingsController(
         private set
     var deviceId by mutableStateOf(settings.deviceId)
         private set
-    var state by mutableStateOf(if (settings.mode == RelayTransportMode.OFFLINE) RelayConnectionState.OFFLINE else RelayConnectionState.LOCAL)
+    var state by mutableStateOf(
+        when (settings.mode) {
+            RelayTransportMode.OFFLINE -> RelayConnectionState.OFFLINE
+            RelayTransportMode.DIRECT -> RelayConnectionState.LOCAL
+            RelayTransportMode.RELAY -> if (credentialStore.credentials() == null) {
+                RelayConnectionState.PAIRING_REQUIRED
+            } else {
+                RelayConnectionState.OFFLINE
+            }
+        },
+    )
         private set
     var lastConnectedAtUtcMillis by mutableStateOf(settings.lastConnectedAtUtcMillis)
         private set
@@ -161,7 +171,11 @@ class RelaySettingsController(
         this.serverPublicKey = updated.serverPublicKey
         this.deviceId = updated.deviceId
         credentialsConfigured = credentialStore.credentials() != null
-        if (mode == RelayTransportMode.RELAY) startTransport()
+        if (mode == RelayTransportMode.RELAY) {
+            stopTransport()
+            state = RelayConnectionState.OFFLINE
+            lastError = null
+        }
         return Result.success(Unit)
     }
 
@@ -172,7 +186,10 @@ class RelaySettingsController(
         mode = newMode
         stopTransport()
         when (newMode) {
-            RelayTransportMode.RELAY -> startTransport()
+            RelayTransportMode.RELAY -> {
+                state = if (credentialsConfigured) RelayConnectionState.OFFLINE else RelayConnectionState.PAIRING_REQUIRED
+                lastError = if (credentialsConfigured) null else "Aucun appareil appairé"
+            }
             RelayTransportMode.OFFLINE -> state = RelayConnectionState.OFFLINE
             RelayTransportMode.DIRECT -> state = RelayConnectionState.LOCAL
         }
@@ -181,7 +198,6 @@ class RelaySettingsController(
     fun connect() {
         if (mode != RelayTransportMode.RELAY) {
             selectMode(RelayTransportMode.RELAY)
-            return
         }
         startTransport(force = true)
     }
@@ -199,7 +215,13 @@ class RelaySettingsController(
     fun setV4ChatEnabled(enabled: Boolean) {
         if (v4ChatOptIn == enabled) return
         v4ChatOptIn = enabled
-        if (mode == RelayTransportMode.RELAY) startTransport(force = true)
+        if (mode == RelayTransportMode.RELAY && state in setOf(
+                RelayConnectionState.RELAY_CONNECTED,
+                RelayConnectionState.RELAY_CONNECTING,
+            )
+        ) {
+            startTransport(force = true)
+        }
     }
 
     fun clearCredentials() {
@@ -217,22 +239,8 @@ class RelaySettingsController(
         }
     }
 
-    fun onAppResumed() {
-        if (mode != RelayTransportMode.RELAY) return
-        if (state in setOf(
-                RelayConnectionState.RELAY_CONNECTED,
-                RelayConnectionState.RELAY_CONNECTING,
-                RelayConnectionState.PAIRING_REQUIRED,
-                RelayConnectionState.AUTH_REQUIRED,
-                RelayConnectionState.REVOKED,
-            )
-        ) return
-        if (credentialStore.credentials() == null) {
-            state = RelayConnectionState.PAIRING_REQUIRED
-            return
-        }
-        startTransport()
-    }
+    /** Connections are started only by the explicit Connect action, never on app resume. */
+    fun onAppResumed() = Unit
 
     /** Non-null only in RELAY mode with an open, authenticated session. */
     fun relayPlanRevisionClient(requestAllowed: () -> Boolean): PlanRevisionProposalClient? {

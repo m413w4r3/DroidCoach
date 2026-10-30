@@ -127,6 +127,54 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        AtlasSection("Connexion au backend") {
+            Text(
+                "Renseignez l'adresse du backend et son jeton d'accès. Les catégories et consentements règlent séparément les données partagées.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text("URL du backend", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth().testTag("sync_backend_url"),
+                value = baseUrl,
+                onValueChange = { baseUrl = it },
+                label = null,
+                placeholder = { Text("https://serveur.example") },
+                singleLine = true,
+            )
+            Text("Jeton Bearer", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth().testTag("sync_backend_token"),
+                value = token,
+                onValueChange = { token = it },
+                label = null,
+                placeholder = { Text(if (controller.syncTokenConfigured) "Jeton enregistré · laisser vide pour le garder" else "Saisir le jeton") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            Button(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("sync_save_configuration"),
+                onClick = {
+                    controller.saveSyncConfiguration(baseUrl, token.ifBlank { null })
+                    token = ""
+                    CoreV4SyncScheduler.schedule(context)
+                    refreshV4()
+                },
+            ) { Text("Enregistrer la connexion") }
+            if (controller.syncTokenConfigured) {
+                Text("Jeton enregistré et chiffré; sa valeur n'est pas affichée.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = controller::clearSyncToken) {
+                    Text("Supprimer le jeton")
+                }
+            }
+            Text(
+                "Le jeton est chiffré avec Android Keystore. HTTP n'est permis qu'en debug vers 10.0.2.2, 127.0.0.1 ou localhost; les builds release exigent HTTPS.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Text("Catégories partagées", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         AtlasRule()
         SyncCategoryRow("Focus", "Démarrages, pauses et fins; sans nom de tâche.", SyncDataCategory.FOCUS, controller)
@@ -239,41 +287,6 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
 
         if (advancedExpanded) {
             AtlasSection("Configuration avancée") {
-                Text("URL du backend", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth().testTag("sync_backend_url"),
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it },
-                    label = null,
-                    placeholder = { Text("https://serveur.example") },
-                    singleLine = true,
-                )
-                Text("Jeton Bearer", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth().testTag("sync_backend_token"),
-                    value = token,
-                    onValueChange = { token = it },
-                    label = null,
-                    placeholder = { Text(if (controller.syncTokenConfigured) "Jeton enregistré · laisser vide pour le garder" else "Saisir le jeton") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                )
-                Button(
-                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("sync_save_configuration"),
-                    onClick = {
-                        controller.saveSyncConfiguration(baseUrl, token.ifBlank { null })
-                        token = ""
-                        CoreV4SyncScheduler.schedule(context)
-                        refreshV4()
-                    },
-                ) { Text("Enregistrer la configuration") }
-                if (controller.syncTokenConfigured) {
-                    Text("Jeton enregistré et chiffré; sa valeur n'est pas affichée.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
-                    OutlinedButton(modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp), onClick = controller::clearSyncToken) {
-                        Text("Supprimer le jeton")
-                    }
-                }
                 Button(
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("sync_now"),
                     enabled = !controller.syncInProgress,
@@ -289,16 +302,6 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
                     enabled = syncEnabled || controller.syncPendingCount > 0,
                     onClick = { showDisableSync = true },
                 ) { Text("Désactiver et purger") }
-                Text(
-                    "Le jeton est chiffré avec Android Keystore. HTTP n'est permis qu'en debug vers 10.0.2.2, 127.0.0.1 ou localhost; les builds release exigent HTTPS.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "Le relais chiffré joint le PC sans VPN ; le mode direct reste disponible.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
