@@ -1143,6 +1143,12 @@ class AtlasController @JvmOverloads constructor(
     }
 
     fun handleNotificationIntent(intent: Intent?) {
+        if (intent?.action == A1PlanNotificationPublisher.ACTION_OPEN_A1_PLAN) {
+            navigationState.navigate(AtlasScreenId.PLAN)
+            latestMessage = "Le programme a été mis à jour. Ouvrez le planning pour le consulter."
+            touch()
+            return
+        }
         if (intent?.action == PlanActivityNotificationRuntime.ACTION_OPEN_PLAN_ACTIVITY) {
             val actionRequest = PlanActivityNotificationRuntime.targetFromIntent(intent)
             if (actionRequest == null || capabilities[CAP_PLAN_ACTIVITY_NOTIFICATIONS] != true ||
@@ -4744,6 +4750,8 @@ class AtlasController @JvmOverloads constructor(
         const val CAP_CONTENT = "content"
         const val CAP_COACH = "coach"
         const val CAP_PLAN_REVISION = "planRevision"
+        const val CAP_A1_BOUNDED = "a1Bounded"
+        const val DEFAULT_CAP_A1_BOUNDED = false
         const val CAP_SIMULATED_RULES = "simulatedRules"
         const val CAP_APP_TRACKING = "appTrackingConsent"
         const val CAP_LAUNCHER_HOME = "launcherHome"
@@ -4789,13 +4797,14 @@ class AtlasController @JvmOverloads constructor(
         private val PROACTIVE_QUIET_HOURS_START: LocalTime = LocalTime.of(22, 0)
         private const val PROACTIVE_EVENT_DEBOUNCE_MILLIS = 100L
 
-        private fun readCapabilities(values: Map<String, Any?>?): Map<String, Boolean> {
+        internal fun readCapabilities(values: Map<String, Any?>?): Map<String, Boolean> {
             val defaults = mapOf(
                 CAP_FOCUS to true,
                 CAP_HABITS to true,
                 CAP_CONTENT to true,
                 CAP_COACH to true,
                 CAP_PLAN_REVISION to false,
+                CAP_A1_BOUNDED to DEFAULT_CAP_A1_BOUNDED,
                 CAP_SIMULATED_RULES to true,
                 CAP_APP_TRACKING to false,
                 CAP_LAUNCHER_HOME to false,

@@ -47,6 +47,11 @@ import dev.atlas.coach.app.ui.AtlasStatus
 import dev.atlas.coach.app.ui.AtlasStatusKind
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.A1ActivityClass
+import dev.atlas.coach.plan.A1ActivityPolicy
+import dev.atlas.coach.plan.A1BoundedRevisionPolicy
+import dev.atlas.coach.plan.A1ExternalLinkState
+import dev.atlas.coach.plan.A1MoveDiff
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
@@ -299,10 +304,20 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             )
         }
 
+        if (!selectedTomorrow) {
+            A1BoundedSection(
+                controller = controller,
+                atlasController = atlasController,
+                onPendingA1ActionCancelled = { reviewingInboxProposalId = null },
+            )
+        }
+
         PlanInboxSection(
             controller = controller,
             enabled = !selectedTomorrow,
             capabilityEnabled = atlasController?.capabilities?.get(AtlasController.CAP_PLAN_REVISION) == true,
+            a1CapabilityEnabled = atlasController?.capabilities?.get(AtlasController.CAP_A1_BOUNDED) == true,
+            a1CapabilityEnabledProvider = { atlasController?.capabilities?.get(AtlasController.CAP_A1_BOUNDED) == true },
             pendingAckCount = controller.inboxPendingAckCount,
             selectedProposalId = reviewingInboxProposalId,
             onSelectProposal = { reviewingInboxProposalId = it },
@@ -959,6 +974,8 @@ private fun PlanInboxSection(
     controller: PlanController,
     enabled: Boolean,
     capabilityEnabled: Boolean,
+    a1CapabilityEnabled: Boolean,
+    a1CapabilityEnabledProvider: () -> Boolean,
     pendingAckCount: Int,
     selectedProposalId: String?,
     onSelectProposal: (String?) -> Unit,
@@ -980,6 +997,7 @@ private fun PlanInboxSection(
     val consent = remember(controller, controller.revision) {
         runCatching { AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot }.getOrNull()
     }
+    val a1Consent = remember(controller, controller.revision) { runCatching(controller::a1Consent).getOrNull() }
     val reviewable = entries.filter { it.proposal.state in setOf(
         InboxV4ProposalState.PENDING_ANDROID,
         InboxV4ProposalState.RECEIVED,
@@ -1030,6 +1048,21 @@ private fun PlanInboxSection(
 
     selected?.let { entry ->
         val proposal = entry.proposal
+        val isA1 = proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK
+        val a1Review = remember(controller, controller.revision, proposal.proposalId) {
+            if (isA1) controller.inspectA1InboxProposal(proposal.proposalId) else null
+        }
+        val inboxConsentProvider = {
+            val latestConsent = runCatching {
+                AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot
+            }.getOrNull()
+            (latestConsent?.state == CoreV4ConsentState.GRANTED) to (latestConsent?.version?.toLong() ?: 0L)
+        }
+        val canApply = if (isA1) {
+            a1CapabilityEnabled && a1Consent?.enabled == true && a1Review?.valid == true
+        } else {
+            capabilityEnabled
+        }
         AlertDialog(
             onDismissRequest = onDismissReview,
             title = { Text("Revoir la proposition ${proposal.proposalId.take(8)}") },
@@ -1043,8 +1076,7 @@ private fun PlanInboxSection(
                     when (proposal.confirmationMode) {
                         InboxV4ConfirmationMode.A0_USER_REVIEW -> Text("Chaque changement ci-dessous sera revu avant son application locale.")
                         InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK -> Text(
-                            "A1 n'est pas applicable depuis cette inbox. Son activation exige le parcours A1 dédié, à fournir dans un ticket suivant; aucune révision ne sera appliquée ici.",
-                            color = MaterialTheme.colorScheme.error,
+                            "A1 utilise le consentement local et la capability A1. Chaque proposition reste soumise à votre confirmation et à la validation des bornes locales.",
                         )
                         InboxV4ConfirmationMode.A2_USER_CONFIRMATION -> Text(
                             "Cette proposition A2 requiert votre confirmation spécifique avant toute application.",
@@ -1054,39 +1086,48 @@ private fun PlanInboxSection(
                         "Programme ${proposal.planId.take(8)} · version de base ${proposal.baseVersion}",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    proposal.changes.forEachIndexed { index, change ->
-                        Text("${index + 1}. ${renderInboxChange(change, controller.plan)}", style = MaterialTheme.typography.bodyMedium)
+                    if (isA1) {
+                        A1InboxReviewDetails(controller.plan, a1Review)
+                    } else {
+                        proposal.changes.forEachIndexed { index, change ->
+                            Text("${index + 1}. ${renderInboxChange(change, controller.plan)}", style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
-                    if (!capabilityEnabled) {
+                    if (isA1 && !a1CapabilityEnabled) {
+                        Text("Activez la capability A1 dans le parcours A1 pour appliquer cette proposition.", color = MaterialTheme.colorScheme.error)
+                    } else if (isA1 && a1Consent?.enabled != true) {
+                        Text("Le consentement local A1 est absent ou révoqué.", color = MaterialTheme.colorScheme.error)
+                    } else if (!isA1 && !capabilityEnabled) {
                         Text("Activez les révisions par le coach pour appliquer cette proposition.", color = MaterialTheme.colorScheme.error)
                     }
                     if (consent?.state != CoreV4ConsentState.GRANTED) {
-                        Text("Le consentement DAY_PLAN doit être actif pour appliquer cette proposition.", color = MaterialTheme.colorScheme.error)
+                        Text(
+                            if (isA1) "L'autorisation DAY_PLAN de l'inbox doit rester active pour recevoir et acquitter cette proposition; elle est distincte du consentement local A1."
+                            else "Le consentement DAY_PLAN doit être actif pour appliquer cette proposition.",
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             },
             confirmButton = {
                 TextButton(
-                    enabled = capabilityEnabled && consent?.state == CoreV4ConsentState.GRANTED &&
-                        proposal.confirmationMode != InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
+                    enabled = canApply && consent?.state == CoreV4ConsentState.GRANTED,
                     onClick = {
-                        val latestConsent = runCatching {
-                            AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot
-                        }.getOrNull()
                         if (controller.applyInboxProposal(
                                 proposalId = proposal.proposalId,
                                 planRevisionCapabilityEnabled = capabilityEnabled,
-                                dayPlanConsentGranted = latestConsent?.state == CoreV4ConsentState.GRANTED,
-                                dayPlanConsentVersion = latestConsent?.version?.toLong() ?: 0L,
+                                dayPlanConsentGranted = consent?.state == CoreV4ConsentState.GRANTED,
+                                dayPlanConsentVersion = consent?.version?.toLong() ?: 0L,
+                                a1CapabilityEnabled = a1CapabilityEnabledProvider,
+                                currentDayPlanConsent = inboxConsentProvider,
+                                onA1Committed = { plan, receipt ->
+                                    A1PlanNotificationPublisher.publish(context, plan, receipt)
+                                },
                             )
                         ) onDismissReview()
                     },
                 ) {
-                    Text(if (proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK) {
-                        "A1 indisponible dans l'inbox"
-                    } else {
-                        "Confirmer et appliquer"
-                    })
+                    Text(if (isA1) "Confirmer et appliquer A1" else "Confirmer et appliquer")
                 }
             },
             dismissButton = {
@@ -1104,6 +1145,302 @@ private fun PlanInboxSection(
             },
         )
     }
+}
+
+@Composable
+private fun A1BoundedSection(
+    controller: PlanController,
+    atlasController: AtlasController?,
+    onPendingA1ActionCancelled: () -> Unit,
+) {
+    if (atlasController == null) return
+    val plan = controller.plan
+    val consent = remember(controller, controller.revision) { runCatching(controller::a1Consent).getOrNull() }
+    val capabilityEnabled = atlasController.capabilities[AtlasController.CAP_A1_BOUNDED] == true
+    var consentDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var consentDialogGrant by rememberSaveable { mutableStateOf(true) }
+    var editingActivityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var draftActivityClass by rememberSaveable { mutableStateOf(A1ActivityClass.PROTECTED.name) }
+    var draftActivityUnlocked by rememberSaveable { mutableStateOf(false) }
+    var showUndoConfirmation by rememberSaveable { mutableStateOf(false) }
+    val undoReceipt = remember(controller, controller.revision, plan?.version) {
+        controller.activeA1UndoReceipt()
+    }
+    val editingActivity = editingActivityId?.let { id -> plan?.activities?.firstOrNull { it.activityId == id } }
+
+    AtlasSection("A1 · déplacements bornés") {
+        Text(
+            "A1 est une autorisation locale distincte des révisions du Coach. Les propositions viennent de l'inbox; aucune n'est appliquée sans votre confirmation.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Capability A1", modifier = Modifier.weight(1f))
+            Switch(
+                checked = capabilityEnabled,
+                onCheckedChange = { enabled ->
+                    atlasController.setCapability(AtlasController.CAP_A1_BOUNDED, enabled)
+                    onPendingA1ActionCancelled()
+                },
+                modifier = Modifier.testTag("a1_capability_toggle"),
+            )
+        }
+        Text(
+            if (consent?.enabled == true) "Consentement local actif · version ${consent.version}."
+            else "Aucun consentement A1 actif. Les activités non classées restent protégées.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("a1_consent_state"),
+        )
+        if (consent?.enabled == true) {
+            AtlasSecondaryButton("Révoquer le consentement A1", onClick = {
+                consentDialogGrant = false
+                consentDialogOpen = true
+            })
+        } else {
+            AtlasSecondaryButton(
+                "Donner le consentement A1",
+                enabled = plan != null,
+                onClick = {
+                    consentDialogGrant = true
+                    consentDialogOpen = true
+                },
+            )
+        }
+        if (plan == null) {
+            Text("Créez le programme du jour pour enregistrer un consentement A1 versionné.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text(
+                "Classez chaque activité explicitement. Aucun titre ni texte d'activité n'est analysé pour lui attribuer une classe.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            plan.activities.forEach { activity ->
+                val activityPolicy = remember(controller, controller.revision, activity.activityId) {
+                    controller.a1ActivityPolicy(activity.activityId) ?: A1ActivityPolicy.legacyProtected(activity.activityId)
+                }
+                Card(modifier = Modifier.fillMaxWidth().testTag("a1_activity_${activity.activityId}")) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(activity.title, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Classe · ${a1ClassLabel(activityPolicy.activityClass)} · ${if (activityPolicy.unlocked) "déverrouillée" else "protégée"}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        AtlasSecondaryButton("Régler le classement A1", onClick = {
+                            draftActivityClass = activityPolicy.activityClass.name
+                            draftActivityUnlocked = activityPolicy.unlocked
+                            editingActivityId = activity.activityId
+                        })
+                    }
+                }
+            }
+            undoReceipt?.let { receipt ->
+                Card(modifier = Modifier.fillMaxWidth().testTag("a1_undo_available")) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(AtlasSpacing.medium),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AtlasStatus("Révision A1 enregistrée", AtlasStatusKind.ACTIVE)
+                        Text(
+                            "Version ${receipt.versionAfter} · annulation disponible pendant 15 minutes si le programme reste exactement à cette version. Le quota restera consommé.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        AtlasSecondaryButton("Examiner l'annulation", onClick = { showUndoConfirmation = true })
+                    }
+                }
+            }
+        }
+    }
+
+    if (consentDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { consentDialogOpen = false },
+            title = { Text(if (consentDialogGrant) "Consentement local A1" else "Révoquer le consentement A1 ?") },
+            text = {
+                Text(if (consentDialogGrant) {
+                    "A1 pourra déplacer, uniquement après une confirmation explicite, jusqu'à 3 activités classées et déverrouillées, de 120 minutes maximum chacune, avec 2 applications par jour local. Les activités liées, obligatoires et protégées restent intactes. Toute application crée un reçu; l'annulation est possible pendant 15 minutes si la version du programme n'a pas changé. Ce consentement local est distinct du partage DAY_PLAN et du Coach."
+                } else {
+                    "La révocation incrémente la version du consentement et bloque les nouvelles applications A1. Les confirmations A1 en attente sont fermées. Une modification déjà enregistrée reste visible; son annulation disponible peut encore être demandée dans les 15 minutes."
+                })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (controller.setA1Consent(consentDialogGrant)) onPendingA1ActionCancelled()
+                    consentDialogOpen = false
+                }) { Text(if (consentDialogGrant) "Accorder le consentement" else "Révoquer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { consentDialogOpen = false }) { Text("Annuler") }
+            },
+        )
+    }
+
+    editingActivity?.let { activity ->
+        val selectedClass = runCatching { A1ActivityClass.valueOf(draftActivityClass) }
+            .getOrDefault(A1ActivityClass.PROTECTED)
+        AlertDialog(
+            onDismissRequest = { editingActivityId = null },
+            title = { Text("Classement A1 · ${activity.title}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Choisissez explicitement une classe. PROTECTED est le défaut; le titre ne décide jamais de ce choix.")
+                    A1ActivityClass.values().forEach { activityClass ->
+                        TextButton(onClick = {
+                            draftActivityClass = activityClass.name
+                            if (activityClass == A1ActivityClass.PROTECTED) draftActivityUnlocked = false
+                        }) {
+                            Text(if (activityClass == selectedClass) "● ${a1ClassLabel(activityClass)}" else "○ ${a1ClassLabel(activityClass)}")
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Déverrouiller · confirme que l'activité est locale et sans lien externe",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Switch(
+                            checked = draftActivityUnlocked && selectedClass != A1ActivityClass.PROTECTED,
+                            enabled = selectedClass != A1ActivityClass.PROTECTED,
+                            onCheckedChange = { draftActivityUnlocked = it },
+                            modifier = Modifier.testTag("a1_activity_unlock_toggle"),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val activityClass = runCatching { A1ActivityClass.valueOf(draftActivityClass) }
+                        .getOrDefault(A1ActivityClass.PROTECTED)
+                    val unlocked = draftActivityUnlocked && activityClass != A1ActivityClass.PROTECTED
+                    controller.setA1ActivityPolicy(
+                        A1ActivityPolicy(
+                            activityId = activity.activityId,
+                            activityClass = activityClass,
+                            unlocked = unlocked,
+                            externalLinkState = if (unlocked) A1ExternalLinkState.NONE else A1ExternalLinkState.UNKNOWN,
+                        ),
+                    )
+                    editingActivityId = null
+                    onPendingA1ActionCancelled()
+                }) { Text("Enregistrer le classement") }
+            },
+            dismissButton = { TextButton(onClick = { editingActivityId = null }) { Text("Annuler") } },
+        )
+    }
+
+    undoReceipt?.takeIf { showUndoConfirmation }?.let { receipt ->
+        AlertDialog(
+            onDismissRequest = { showUndoConfirmation = false },
+            title = { Text("Annuler la révision A1 ?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Cette opération crée une nouvelle version du programme. Elle est possible uniquement avant l'échéance et si la version courante correspond toujours au reçu.")
+                    receipt.diff.forEach { move ->
+                        val activity = plan?.activities?.firstOrNull { it.activityId == move.activityId }
+                        Text(
+                            "${activity?.title ?: "Activité ${move.activityId.take(8)}"} · " +
+                                "${PlanController.timeLabel(move.to.startMinute)} → ${PlanController.timeLabel(move.from.startMinute)}",
+                        )
+                    }
+                    Text("Le quota de ${receipt.quotaUsed}/${A1BoundedRevisionPolicy.MAX_APPLICATIONS_PER_LOCAL_DATE} application(s) reste consommé.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    controller.undoA1(receipt.proposalId)
+                    showUndoConfirmation = false
+                }) { Text("Confirmer l'annulation") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUndoConfirmation = false }) { Text("Conserver la révision") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun A1InboxReviewDetails(
+    currentPlan: dev.atlas.coach.plan.DayPlan?,
+    review: A1InboxReview?,
+) {
+    if (review == null) {
+        Text("La validation locale A1 n'a pas pu être chargée. Aucun changement ne sera appliqué.", color = MaterialTheme.colorScheme.error)
+        return
+    }
+    Text(
+        "${if (review.valid) "Diff validé" else "Proposition A1 · diff non validé"} · " +
+            "programme v${review.proposalBaseVersion} → v${review.currentPlanVersion ?: "?"}",
+        style = MaterialTheme.typography.labelLarge,
+    )
+    review.diff.forEachIndexed { index, move ->
+        val activity = currentPlan?.activities?.firstOrNull { it.activityId == move.activityId }
+        Text(
+            "${index + 1}. ${activity?.title ?: "Activité ${move.activityId.take(8)}"} · " +
+                "${PlanController.timeLabel(move.from.startMinute)} → ${PlanController.timeLabel(move.to.startMinute)} " +
+                "(${moveDistanceLabel(move)}) · ${move.from.durationMinutes} min",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    Text(
+        "Bornes · max. ${A1BoundedRevisionPolicy.MAX_MOVED_ACTIVITIES} activités, " +
+            "±${A1BoundedRevisionPolicy.MAX_MOVE_MINUTES} min chacune; même date, durée et statut. " +
+            "Quota local ${review.quotaLocalDate} · ${review.quotaUsed}/${review.quotaLimit} déjà utilisé(s).",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    review.rejection?.let { rejection ->
+        Text("Validation A1 refusée · ${a1RejectionLabel(rejection)}. Aucun effet ne sera exécuté.", color = MaterialTheme.colorScheme.error)
+    }
+}
+
+private fun moveDistanceLabel(move: A1MoveDiff): String {
+    val delta = move.to.startMinute - move.from.startMinute
+    return if (delta > 0) "+$delta min" else "$delta min"
+}
+
+private fun a1ClassLabel(activityClass: A1ActivityClass): String = when (activityClass) {
+    A1ActivityClass.READING -> "Lecture"
+    A1ActivityClass.CHINESE -> "Chinois"
+    A1ActivityClass.LEISURE -> "Loisir"
+    A1ActivityClass.PERSONAL -> "Personnel"
+    A1ActivityClass.PROTECTED -> "Protégée"
+}
+
+private fun a1RejectionLabel(rejection: dev.atlas.coach.plan.A1PolicyRejection): String = when (rejection) {
+    dev.atlas.coach.plan.A1PolicyRejection.PLAN_NOT_FOUND -> "programme introuvable"
+    dev.atlas.coach.plan.A1PolicyRejection.PLAN_NOT_MODIFIABLE -> "programme non modifiable"
+    dev.atlas.coach.plan.A1PolicyRejection.PLAN_ID_MISMATCH -> "programme différent"
+    dev.atlas.coach.plan.A1PolicyRejection.STALE_VERSION -> "version de base périmée"
+    dev.atlas.coach.plan.A1PolicyRejection.CONSENT_DISABLED -> "consentement absent ou révoqué"
+    dev.atlas.coach.plan.A1PolicyRejection.CONSENT_VERSION_MISMATCH -> "version de consentement différente"
+    dev.atlas.coach.plan.A1PolicyRejection.PROPOSAL_NOT_YET_VALID -> "proposition pas encore valide"
+    dev.atlas.coach.plan.A1PolicyRejection.PROPOSAL_EXPIRED -> "proposition expirée"
+    dev.atlas.coach.plan.A1PolicyRejection.PROPOSAL_TTL_TOO_LONG -> "durée de validité hors borne"
+    dev.atlas.coach.plan.A1PolicyRejection.EMPTY_CHANGESET -> "aucun déplacement"
+    dev.atlas.coach.plan.A1PolicyRejection.ADD_OR_REMOVE_FORBIDDEN -> "ajout ou retrait interdit"
+    dev.atlas.coach.plan.A1PolicyRejection.CONTENT_CHANGE_FORBIDDEN -> "changement de contenu interdit"
+    dev.atlas.coach.plan.A1PolicyRejection.STATUS_CHANGE_FORBIDDEN -> "changement de statut interdit"
+    dev.atlas.coach.plan.A1PolicyRejection.INVALID_DATE_OR_TIMEZONE -> "date ou fuseau différent"
+    dev.atlas.coach.plan.A1PolicyRejection.ACTIVITY_NOT_FOUND -> "activité introuvable"
+    dev.atlas.coach.plan.A1PolicyRejection.ACTIVITY_NOT_PLANNED -> "activité non planifiée"
+    dev.atlas.coach.plan.A1PolicyRejection.REQUIRED_ACTIVITY -> "activité obligatoire protégée"
+    dev.atlas.coach.plan.A1PolicyRejection.PROTECTED_ACTIVITY_KIND -> "type d'activité protégé"
+    dev.atlas.coach.plan.A1PolicyRejection.TRAINING_LINK_FORBIDDEN -> "activité liée à un entraînement"
+    dev.atlas.coach.plan.A1PolicyRejection.POLICY_UNKNOWN -> "classement inconnu"
+    dev.atlas.coach.plan.A1PolicyRejection.ACTIVITY_PROTECTED -> "activité protégée"
+    dev.atlas.coach.plan.A1PolicyRejection.ACTIVITY_LOCKED -> "activité encore verrouillée"
+    dev.atlas.coach.plan.A1PolicyRejection.EXTERNAL_LINK_UNKNOWN -> "lien externe non vérifié"
+    dev.atlas.coach.plan.A1PolicyRejection.EXTERNAL_LINK_FORBIDDEN -> "activité liée à un service externe"
+    dev.atlas.coach.plan.A1PolicyRejection.MOVE_LIMIT_EXCEEDED -> "trop d'activités déplacées"
+    dev.atlas.coach.plan.A1PolicyRejection.MOVE_DISTANCE_EXCEEDED -> "déplacement hors borne"
+    dev.atlas.coach.plan.A1PolicyRejection.QUOTA_EXCEEDED -> "quota journalier atteint"
+    dev.atlas.coach.plan.A1PolicyRejection.IDEMPOTENCY_CONFLICT -> "identifiant de proposition réutilisé"
+    dev.atlas.coach.plan.A1PolicyRejection.REVISION_ID_CONFLICT -> "identifiant de révision réutilisé"
+    dev.atlas.coach.plan.A1PolicyRejection.STORAGE_FAILURE -> "écriture durable impossible"
+    dev.atlas.coach.plan.A1PolicyRejection.STALE_STATE -> "état local modifié"
+    dev.atlas.coach.plan.A1PolicyRejection.INVALID_PROPOSAL -> "proposition invalide"
 }
 
 private fun inboxModeLabel(mode: InboxV4ConfirmationMode): String = when (mode) {
