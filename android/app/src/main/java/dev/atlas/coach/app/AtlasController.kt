@@ -271,6 +271,35 @@ internal fun buildHumanPlanActivityCoachMessage(activityTitle: String, note: Str
     return "À propos de «${humanPlanActivityTitle(activityTitle, activityId)}» : ${cleanNote.replace(Regex("\\s+"), " ")}"
 }
 
+/** UI-only reasons why the conversation cannot currently reach the selected agent. */
+internal enum class AgentConversationAccessIssue {
+    AGENT_DISABLED,
+    MANDATE_REVOKED,
+    MANDATE_SUSPENDED,
+    MANDATE_EXPIRED,
+    SHARED_DATA_CONSENT_REQUIRED,
+    ACCESS_BLOCKED,
+    ACCESS_UPDATE_PENDING,
+    ACCESS_UNAVAILABLE,
+}
+
+/** Missing transport details are informational; they do not gate the send button. */
+internal enum class AgentConversationTransportIssue {
+    DIRECT_UNAVAILABLE,
+    RELAY_NOT_PAIRED,
+    RELAY_AUTH_REQUIRED,
+    RELAY_REVOKED,
+    RELAY_OFFLINE,
+    RELAY_ERROR,
+    RELAY_INACTIVE,
+}
+
+internal data class AgentConversationAvailability(
+    val localCoachEnabled: Boolean,
+    val accessIssue: AgentConversationAccessIssue?,
+    val transportIssue: AgentConversationTransportIssue?,
+)
+
 /** Owns the small, synchronous local graph used by the Compose demo. */
 class AtlasController @JvmOverloads constructor(
     context: Context,
@@ -843,6 +872,27 @@ class AtlasController @JvmOverloads constructor(
     val agentEffectHistory: List<AgentEffectRecord> get() = agentEffectJournal.entries().asReversed()
     val agentSuggestions: List<String> get() = agentSuggestionsSnapshot
     val isAgentEnabled: Boolean get() = isAgentRequestAllowed()
+    /** Read-only presentation projection; send authorization remains in isAgentRequestAllowed(). */
+    internal val agentConversationAvailability: AgentConversationAvailability
+        get() = AgentConversationAvailability(
+            localCoachEnabled = capabilities[CAP_COACH] == true,
+            accessIssue = agentConversationAccessIssue(),
+            transportIssue = when (relaySettings.mode) {
+                RelayTransportMode.OFFLINE -> null
+                RelayTransportMode.DIRECT -> if (agentStatus == AgentStatus.CONNECTED) null else {
+                    AgentConversationTransportIssue.DIRECT_UNAVAILABLE
+                }
+                RelayTransportMode.RELAY -> when (relaySettings.state) {
+                    RelayConnectionState.RELAY_CONNECTED, RelayConnectionState.RELAY_CONNECTING -> null
+                    RelayConnectionState.PAIRING_REQUIRED -> AgentConversationTransportIssue.RELAY_NOT_PAIRED
+                    RelayConnectionState.AUTH_REQUIRED -> AgentConversationTransportIssue.RELAY_AUTH_REQUIRED
+                    RelayConnectionState.REVOKED -> AgentConversationTransportIssue.RELAY_REVOKED
+                    RelayConnectionState.OFFLINE -> AgentConversationTransportIssue.RELAY_OFFLINE
+                    RelayConnectionState.ERROR -> AgentConversationTransportIssue.RELAY_ERROR
+                    RelayConnectionState.LOCAL -> AgentConversationTransportIssue.RELAY_INACTIVE
+                }
+            },
+        )
     val coachGoals: List<GoalsPanelEntry> get() = goalPanelCoordinator.entries()
     val goalFocusLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.focusLinkOptions()
     val goalHabitLinkOptions: List<GoalPanelLinkOption> get() = goalPanelCoordinator.habitLinkOptions()
@@ -1658,6 +1708,34 @@ class AtlasController @JvmOverloads constructor(
             !locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled()
         ) return false
         return true
+    }
+
+    /** Mirrors the existing authorization gate only to explain its first blocking condition. */
+    private fun agentConversationAccessIssue(): AgentConversationAccessIssue? {
+        if (capabilities[CAP_AGENT] != true) return AgentConversationAccessIssue.AGENT_DISABLED
+        val mandate = agentMandateStore.current()
+        if (mandate.revoked) return AgentConversationAccessIssue.MANDATE_REVOKED
+        if (mandate.suspended) return AgentConversationAccessIssue.MANDATE_SUSPENDED
+        val now = clock.nowMillis()
+        if (now >= mandate.expiresAtUtcMillis) return AgentConversationAccessIssue.MANDATE_EXPIRED
+        if (agentAuthorizationCommitInProgress.get()) return AgentConversationAccessIssue.ACCESS_UPDATE_PENDING
+        if (!agentConsentMigrationReady.get()) return AgentConversationAccessIssue.SHARED_DATA_CONSENT_REQUIRED
+        if (revocationBarrier.isAgentBlocked()) return AgentConversationAccessIssue.ACCESS_BLOCKED
+
+        val categories = agentContextCoordinator.effectiveMandate(mandate).sharedDataCategories
+        val consentDates = agentContextCoordinator.consentDates()
+        if (categories.any { category -> consentDates[category]?.let { it in 1L..now } != true }) {
+            return AgentConversationAccessIssue.SHARED_DATA_CONSENT_REQUIRED
+        }
+        if (AgentContextCategory.APP_USAGE_SUMMARY.wireValue in categories && !usageConsentActive) {
+            return AgentConversationAccessIssue.SHARED_DATA_CONSENT_REQUIRED
+        }
+        if (AgentContextCategory.LOCATION_SUMMARY.wireValue in categories &&
+            !locationPanelCoordinator.consentStore.isLocationSummarySharingEnabled()
+        ) {
+            return AgentConversationAccessIssue.SHARED_DATA_CONSENT_REQUIRED
+        }
+        return if (isAgentRequestAllowed()) null else AgentConversationAccessIssue.ACCESS_UNAVAILABLE
     }
 
     private fun isAgentContextVisible(): Boolean {
