@@ -14,9 +14,11 @@ RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt \
 
 COPY --chown=10001:10001 atlas_backend ./backend/atlas_backend
 COPY --from=contracts --chown=10001:10001 . ./contracts
+COPY --chown=10001:10001 docker-entrypoint.py /usr/local/bin/atlas-core-entrypoint.py
 
 WORKDIR /app/backend
 
 USER 10001:10001
 
+ENTRYPOINT ["python", "/usr/local/bin/atlas-core-entrypoint.py"]
 CMD ["uvicorn", "atlas_backend.main:app", "--host", "127.0.0.1", "--port", "8100"]
