@@ -289,7 +289,8 @@ def create_app(
         if adapter_setting not in {"mock", "openclaw"}:
             raise ValueError("ATLAS_AGENT_ADAPTER must be mock or openclaw")
         active_agent = OpenClawAgentAdapter() if adapter_setting == "openclaw" else MockAgentAdapter()
-    legacy_agent = active_agent if active_agent.status().adapter == "mock" else MockAgentAdapter()
+    active_agent_mode = active_agent.status().adapter
+    legacy_agent = active_agent if active_agent_mode == "mock" else MockAgentAdapter()
     bearer = HTTPBearer(scheme_name="bearerAuth", auto_error=False)
 
     @asynccontextmanager
@@ -385,8 +386,8 @@ def create_app(
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=MAX_REQUEST_BYTES)
 
     @app.get("/health", tags=["system"])
-    def health() -> dict[str, str]:
-        return {"status": "ok", "mode": "mock"}
+    async def health() -> dict[str, str]:
+        return {"status": "ok", "mode": active_agent_mode}
 
     @app.get("/v1/directives/current", response_model=DirectiveOut, dependencies=auth, tags=["directives"])
     def current_directive() -> DirectiveOut:

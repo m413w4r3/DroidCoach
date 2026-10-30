@@ -1,6 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import uuid4
+
+import httpx
+
+from atlas_backend.agent import AgentStatus, MockAgentAdapter
+from atlas_backend.main import create_app
+
+
+def get_health(app):
+    async def request_health():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get("/health")
+
+    return asyncio.run(request_health())
 
 
 def event_body(event_id=None):
@@ -12,10 +27,38 @@ def event_body(event_id=None):
     }
 
 
-def test_health_is_public_and_reports_mock_mode(client):
-    response = client.get("/health")
+def test_health_is_public_and_reports_mock_mode(tmp_path, token, monkeypatch):
+    monkeypatch.delenv("ATLAS_AGENT_ADAPTER", raising=False)
+    app = create_app(db_path=tmp_path / "health-mock.sqlite3", token=token)
+    response = get_health(app)
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "mode": "mock"}
+    assert token not in response.text
+
+
+def test_health_reports_selected_openclaw_mode_without_connectivity_or_token_leaks(tmp_path):
+    class UnavailableOpenClawAdapter(MockAgentAdapter):
+        def __init__(self):
+            self.status_calls = 0
+
+        def status(self) -> AgentStatus:
+            self.status_calls += 1
+            return AgentStatus(
+                adapter="openclaw",
+                connected=False,
+                breaker="open",
+                quota={"limited": True},
+            )
+
+    token = "health-test-token-must-not-leak"
+    agent = UnavailableOpenClawAdapter()
+    app = create_app(db_path=tmp_path / "health-openclaw.sqlite3", token=token, agent=agent)
+    assert agent.status_calls == 1
+    response = get_health(app)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "mode": "openclaw"}
+    assert token not in response.text
+    assert agent.status_calls == 1
 
 
 def test_auth_rejects_missing_and_incorrect_token(client):
