@@ -80,7 +80,7 @@
 
 | Verdict | État | Preuve / limite |
 |---|---|---|
-| GO_CORE | GO_LIVE (B) | Core live `mode=openclaw`, sept capabilities V4 vraies, chat V4 réel HTTP 200 `agent_status=ok`, image `00b88ef…`, volume conservé ; `adapter.connected=false` reste un champ à expliquer, non bloquant pour le chat |
+| GO_CORE | GO_LIVE (B) | Core live `mode=openclaw`, sept capabilities V4 vraies, chat V4 réel HTTP 200 `agent_status=ok`, image `00b88ef…`, volume conservé ; `/v2/agent/status` passe à `connected=true` après le premier succès |
 | GO_OPENCLAW_TOOLS | PARTIAL — A+B | Code Mode/exec désactivé et vérifié ; six outils catalogués ; plugin natif atteint le Core live et reçoit le gate `CONSENT_REQUIRED` ; chemin client disponible ; preuve des six en exécution avec données consenties après D |
 | GO_REMOTE_NETWORK | GO_PUBLIC_V1 (C partiel) | Funnel `8443→4400` confirmé ; relais 4402, proxy 4400, connecteur `relay_connected=true` ; WSS public Noise/auth/V1 PASS ; V4/Pixel et A4-4 non qualifiés |
 | GO_ANDROID_SYNC | BLOCKED | V7-03C en cours ; transport relayé non encore accepté ; aucun reçu runtime |

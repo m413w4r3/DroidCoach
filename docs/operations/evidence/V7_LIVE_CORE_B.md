@@ -26,8 +26,10 @@ Aucune donnée personnelle n’est reproduite ; le Core live n’avait aucune pr
 - `/internal/v4/capabilities` (token outil, en-têtes V4) : HTTP 200, les sept flags vrais :
   `day_plan.read`, `activity_status.read`, `plan_revision.propose`, `usage_summary.read`,
   `goal_progress.read`, `training_plan.read`, `coach.chat`.
-- `/v2/agent/status` (token Android) : HTTP 200, `adapter=openclaw`, `connected=false`
-  (le statut de connectivité de l’adaptateur n’est pas l’oracle du chat ; voir ci-dessous).
+- `/v2/agent/status` (token Android) : HTTP 200, `adapter=openclaw`. Juste après la bascule,
+  `connected=false` car l’adaptateur ne marque la connexion qu’après un premier succès ; après le
+  chat V4 réel, le même endpoint retourne `connected=true`, `breaker=closed`,
+  quota journalier non limité.
 - Chat V4 réel synthétique, sans catégorie partagée :
   `POST /v4/agent/chat` HTTP **200**, `agent_status=ok`, `tool_state=none`,
   `tool_call_count=0`, `proposal_ids=[]`, réponse non vide (46 caractères). Aucun fallback mock.
@@ -41,8 +43,9 @@ Aucune donnée personnelle n’est reproduite ; le Core live n’avait aucune pr
 
 ## Limites et rollback
 
-- `adapter.connected=false` sur `/v2/agent/status` reste à expliquer ; le chat V4 réel prouve que
-  l’adaptateur et le Gateway fonctionnent. Ne pas utiliser ce champ comme verdict produit.
+- `adapter.connected=false` avant le premier chat est un marqueur de succès initial, pas une
+  panne : après le chat V4 réel, `/v2/agent/status` retourne `connected=true`. Le chat V4 reste
+  l’oracle fonctionnel.
 - Le Pixel n’a pas encore de consentement ni de projection V4 ; les outils natifs et le coach
   resteront sans données tant que D n’a pas synchronisé.
 - Rollback : `docker tag atlas-core-atlas-core:pre-v7 atlas-core-atlas-core:latest`, puis
