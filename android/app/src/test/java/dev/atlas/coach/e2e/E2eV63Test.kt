@@ -321,7 +321,7 @@ class E2eV63Test {
         val staleProposal = proposal(806, InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
             initialPlan, activityId, targetStart = 720)
         inbox.mergePulled(InboxV4PullPage(listOf(staleProposal), null, false), 8)
-        assertFalse(controller.applyInboxProposal(
+        assertTrue("stale proposal rejection is durably acknowledged", controller.applyInboxProposal(
             proposalId = staleProposal.proposalId,
             planRevisionCapabilityEnabled = false,
             dayPlanConsentGranted = true,
