@@ -9,7 +9,7 @@ Base wave9 : `92ce000745f8188153fff4ab60933da0287fdc89`
 
 **GO local du code** au SHA `43214ad6678a1c2576783d3af6a38559de168053` : le lot UI est intégré localement ; la JVM Android compte 866 tests, sans échec ni test ignoré ; lint, compilation AndroidTest et build de l’APK passent. Les preuves backend/relais antérieures restent liées à `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` et n’ont pas été relancées sur le SHA UI.
 
-Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke de plusieurs écrans PASS, mais aucun test instrumenté n’a été exécuté sur cet APK et la qualification complète reste ouverte. Le test instrumenté E2E 1/1 documenté précédemment concernait l’APK `d7a30c1`, pas celui de `43214ad`. **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée** demeure lié à la preuve sur Gateway réel avec Core synthétique au SHA `d7a30c1`; après redémarrage, le Gateway est actif mais aucun service n’écoute sur `18100`, donc la production n’est pas disponible. L’exploitation backend/relais est `READY_FOR_DESIGN` pour un Core-only Compose et reste bloquée pour les services absents ; Docker n’est pas implémenté. A4-4 reste **BLOCKED** par la transformation amont 4001→1012. La clôture runtime complète V6.3 n’est pas prononcée.
+Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke ciblé PASS, mais aucun test instrumenté n’a été exécuté sur cet APK et la qualification complète reste ouverte. Le test instrumenté E2E 1/1 documenté précédemment concernait l’APK `d7a30c1`, pas celui de `43214ad`. La preuve runtime OpenClaw antérieure est **INVALIDÉE** après traces `exec` et réponses `AUTH_REQUIRED`. Lors de la nouvelle tentative, le Gateway a redémarré, le plugin était chargé et l’agent Atlas visible ; `tools.catalog` listait 15 outils de plugin, dont les six outils Atlas, mais `tools.effective` pour Atlas était vide (0 outil). Aucun tour Atlas ni appel d’outil n’a été exécuté. La variable `ATLAS_CORE_TOOLS_TOKEN` était absente. `GO_OPENCLAW_TOOLS` reste **BLOCKED**, sans GO ; la configuration a été restaurée byte-for-byte vers `18100` (hash `1d78935…`), Gateway actif/health OK. Le diagnostic indique que le profil exclut les 66 outils cœur, dont exec/process/FS/web fetch, mais le catalogue effectif vide ne certifie pas la surface. L’inventaire runtime vide et le signal `exec` antérieur restent un risque **P1 à auditer** ; P2 : le Core de la tentative était mock/vide. Le Core-only Docker protégé est actif avec verdict **GO limité** : deux secrets distincts Android/outil. La route V4 outil est protégée ; la revue Docker est **ACCEPTED_LIMITED** avec P2 et le redémarrage hôte non testé. Relais/proxy restent non résolus et A4-4 est **BLOCKED** (4001→1012). La clôture V6.3 reste non prononcée.
 
 ## Périmètre livré et provenance
 
@@ -19,7 +19,7 @@ Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke de plus
 - Merge `d7a30c1` du harnais E2E, depuis `c83f87f78f79b8d74427266df9772c7bd36b4bfd`. Les commits `a27b3a7`, `3aad1d3`, `ced76d4` et `c83f87f` sont test-only.
 - Les lots UI intégrés après `d7a30c1` : Accueil/Focus/A1 (`2ecb10f`), Coach (`e59b1ff`), Connexion/appairage (`22856c6`) et correction de texte (`9e0863c`). Le code final est `43214ad6678a1c2576783d3af6a38559de168053`.
 - Le harnais ciblé passe 3/3 et la suite JVM 863/863 sur `c83f87f` ; ces tests sont inclus dans 865/865 au SHA `d7a30c1`. La JVM UI finale compte 866 tests au SHA `43214ad`. L’E2E backend est inclus dans les 315 tests backend passés au SHA d7a30c1. Ces résultats locaux ne prouvent pas un fil rouge réseau/Gateway/ACK runtime.
-- Le plugin `atlas_core_tools` 0.1.0 a été activé et chargé sur le Gateway OpenClaw pour la preuve runtime avec Core synthétique. Le Core de test a ensuite été arrêté ; le plugin reste configuré sur `127.0.0.1:18100`, où aucun Core n'écoute actuellement.
+- Le plugin `atlas_core_tools` 0.1.0 est chargé sur le Gateway OpenClaw et l’agent Atlas était visible lors de la tentative finale. `tools.catalog` listait 15 outils de plugin dont les six Atlas, mais `tools.effective` pour Atlas était vide (0 outil) ; aucun tour ni appel Atlas n’a eu lieu. `ATLAS_CORE_TOOLS_TOKEN` était absente. La tentative précédente et la revue R2 restent invalidées après traces `exec` et réponses `AUTH_REQUIRED`. La configuration a été restaurée byte-for-byte vers `127.0.0.1:18100` (hash `1d78935…`) ; Gateway actif/health OK. `GO_OPENCLAW_TOOLS` est **BLOCKED**. Le diagnostic du profil exclut les 66 outils cœur, dont exec/process/FS/web fetch, mais ne certifie pas la surface lorsque `tools.effective` est vide ; le risque P1 `exec` reste à auditer. Le Core de cette tentative était mock/vide (P2).
 - Les intégrations Etar, wger et localisation ne sont pas livrées ni déclarées PASS.
 
 ## Sessions et provenance des preuves
@@ -36,9 +36,9 @@ Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke de plus
 | UI Connexion | `0cf1ddb4-8939-49f3-a931-d55e482a37e5` | `codex/gpt-6-luna / xhigh` |
 | Vérification Android/UI | `a6aa74e5-e8cd-449d-b05c-a47b90465dec` | `codex/gpt-6-luna / xhigh` |
 | Qualification Pixel finale | `a363ffe5-ec91-4982-a772-cee217ff73af` | `codex/gpt-6-luna / xhigh` |
-| Preuve runtime OpenClaw | `765804f3-6467-4902-957d-525ef72ee41a` | `codex/gpt-6-luna / xhigh` |
-| Revue indépendante runtime R2 | `a4920cea-3024-4712-8e09-349d27c97832` | `codex/gpt-6-luna / xhigh` |
-| État OpenClaw post-redémarrage | Relevé post-redémarrage ; aucun nouvel appel outil | La session `765804f3-6467-4902-957d-525ef72ee41a` (`codex/gpt-6-luna / xhigh`) est celle des appels runtime antérieurs au redémarrage. |
+| Tentative runtime OpenClaw — INVALIDÉE | `765804f3-6467-4902-957d-525ef72ee41a` | `codex/gpt-6-luna / xhigh` |
+| Revue runtime R2 — invalidée pour cette preuve | `a4920cea-3024-4712-8e09-349d27c97832` | `codex/gpt-6-luna / xhigh` |
+| Tentative OpenClaw finale | Identifiant non indiqué dans le complément final ; `tools.effective` Atlas = 0, aucun tour exécuté | Résultat fourni par le complément final parent ; diagnostic : exclusion de 66 outils cœur, surface live non certifiée |
 
 ## Preuves locales par SHA
 
@@ -61,7 +61,7 @@ Le harnais E2E (ciblé 3/3 et JVM 863/863 sur `c83f87f`) est rattaché à la ses
 
 L’APK final UI installé est lié au code intégré `43214ad6678a1c2576783d3af6a38559de168053` : version `0.1.0`, versionCode `1`, 17 326 339 octets, SHA-256 `a315ed0473593b2c38730eadd15cd18fa5aab721cc6d46ee3941be833fa2a515`. Pixel 9 Pro XL, Android 17/API 37, `sdk_full=37.1`. `adb install -r` a réussi ; l’APK relu après installation a le hash attendu. Certificat V2 identique à l’APK précédent (`da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`). HOME `dev.atlas.coach` et permissions inchangés ; permissions calendrier, notifications et localisation restent refusées. Une sauvegarde privée app-only a été vérifiée avant installation ; aucun chemin, contenu ni empreinte n’est publié.
 
-Smoke UI après défilement, sans capture :
+Le smoke couvre **six écrans pour cinq retours UI** : Accueil, Focus, Plan, Coach et Connexion. Le retour Connexion comprend deux écrans distincts : Connexion relayée et Partage backend. Observations après défilement, sans capture :
 
 - Accueil — PASS : « Prêt à démarrer » absent ; carte et bouton Focus présents.
 - Focus — PASS : texte « Titre modifiable avant le démarrage. » absent ; champ Tâche présent.
@@ -86,32 +86,34 @@ La preuve est liée au SHA source `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` et 
 
 La qualification Pixel reste **PARTIELLE** : Focus manuel, notifications, calendrier, localisation, offline, accessibilité et parcours A2/A1 complet restent non exécutés.
 
-### OpenClaw — preuve runtime limitée à Core synthétique, liée à d7a30c1
+### OpenClaw — preuve antérieure invalidée ; tentative finale BLOCKED
 
-OpenClaw `2026.10.5` build `1b58cb9` : `openclaw-gateway.service` actif, health OK et stable pendant le suivi. Le plugin `atlas_core_tools` est installé, activé et chargé. Configuration validée : `coreBaseUrl=http://127.0.0.1:18100`, profil `minimal`, `alsoAllow` contient exactement les six outils imposés, `deny` couvre Gateway/session_status/presence, aucune clé `allow`.
+La tentative OpenClaw liée à `d7a30c1` et sa revue R2 ne constituent plus une preuve runtime acceptée. Les traces comportent des appels `exec` et des réponses `AUTH_REQUIRED`. La tentative finale a redémarré le Gateway avec `coreBaseUrl=8100` et était configurée pour le token outil maître, mais `ATLAS_CORE_TOOLS_TOKEN` était absente. Gateway/plugin chargés, agent Atlas visible, `tools.catalog` à 15 outils de plugin dont six Atlas, mais `tools.effective` pour Atlas vide (0 outil). Aucun tour Atlas ni appel des six outils n’a été exécuté. La configuration a ensuite été restaurée byte-for-byte vers `18100` (hash `1d78935…`), Gateway actif/health OK. OpenClaw runtime et R01 restent **BLOCKED / INVALIDÉ** ; `GO_OPENCLAW_TOOLS` est **BLOCKED**.
 
-Les fichiers installés correspondent aux builds liés à `d7a30c1` : `contracts.js` SHA-256 `f1f2dd020e16070016270b2e37301a6785a5962b505f0b631c9e132c530e2d52`, `core-client.js` `9ebcd06fec80139af9904d46570bc46a05acd05589654fa7d7f58b40f9a87eca`, `index.js` `ff418b3493c6c680a51b9eb51356695071c6b165e23758d055fc75f638a3cb0a`; plugin installé 84 696 943 octets, SHA-256 `4286e9171da52f40ad3f6e45c501b23b14704037cce476752e8e816c5b624926` ; hash de la configuration initiale `f35713bcd6bc56bd7081b7c38c3d4fd129c2bd1fd5822fe07602b7d5ed46265c`. Le résumé public assaini `/tmp/v63-openclaw-runtime-proof-summary.json` a le SHA-256 `c971a36e079976b564338b33090785347170a754dbfab1977aa1a75cea822630`.
+Le diagnostic indique que le profil exclut les 66 outils cœur, dont exec/process/FS/web fetch. Le catalogue live Atlas est toutefois vide et ne certifie donc pas la surface effective ; les traces `exec` de la tentative antérieure restent un risque **P1 à auditer**, non résolu. La nouvelle observation ne prouve aucune invocation d’outil. P2 : le Core utilisé pour cette tentative était mock/vide. L’ancienne revue R2 est invalidée et ne peut pas accepter ce nouvel essai.
 
-Les six outils ont été découverts et invoqués via le Gateway réel avec un Core isolé synthétique : `atlas_get_day_plan` a retourné READY/FRESH v2 ; `atlas_get_activity_status`, PLANNED/FRESH/ANDROID_SYNC ; `atlas_propose_plan_revision`, PENDING_ANDROID/A0_USER_REVIEW/NONE_AT_CORE. `atlas_get_usage_summary`, `atlas_get_goal_progress` et `atlas_get_training_plan` ont retourné un `DATA_UNAVAILABLE` structuré sur projection synthétique vide. Aucun outil interdit n'a été exposé ; aucune mutation Android et aucun ACK (0) n'ont eu lieu.
+### OpenClaw — état courant
 
-La revue indépendante runtime R2 (`a4920cea-3024-4712-8e09-349d27c97832`, `codex/gpt-6-luna / xhigh`) conclut **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée**. Le Core synthétique a été arrêté par SIGTERM ; aucun listener ne restait sur `18100` à 14:08:57. Le Gateway est resté actif et health OK ; son PID `93429` est resté stable pendant le suivi de revue, sans redémarrage de suivi. Le plugin reste activé et configuré sur `18100`, mais aucun Core réel compatible n'est disponible sur 18100 ; les outils ne sont donc pas disponibles en production. Le Core live `8100` n'a pas été utilisé. Cette preuve ne qualifie ni la disponibilité production ni le chemin Android→Core/Gateway ; R01 reste partiel.
+La configuration est restaurée byte-for-byte vers `18100` (hash `1d78935…`) ; le Gateway est actif/health OK et le plugin chargé. Aucun outil Atlas n’est effectif pour l’agent, aucun tour n’a été exécuté ; aucun parcours Android→Gateway ni disponibilité OpenClaw en production n’est démontré. `GO_OPENCLAW_TOOLS` reste **BLOCKED**.
 
-### OpenClaw — état post-redémarrage
+### Exploitation backend/relais — Core-only Docker actif, GO limité
 
-Après redémarrage, `openclaw-gateway.service` est actif depuis 15:12, health HTTP 200, `NRestarts=0`. `atlas_core_tools` reste activé/chargé ; la configuration actuelle a le SHA-256 `1d78935cc5b83d7a6a4c9795831bed7f43bc3b6b6c2c693ae1f0838bf2a7bb38`, avec les six outils, profil minimal et deny Gateway/session_status/presence. Aucun listener ne répond sur `18100` ; le Core synthétique reste arrêté et aucun Core réel n’est disponible. Aucun nouvel appel d’outil n’a été effectué après redémarrage. L’acceptation runtime reste limitée à la preuve antérieure sur `d7a30c1` avec Core synthétique ; elle ne démontre pas la disponibilité production.
+Le lot Docker Core-only est implémenté par `0f6f6ed`, `e4cbc04`, `0572c71` et `e32836c`, intégré par le merge `a863d66`. Cinq fichiers ont été ajoutés : `backend/Dockerfile`, `backend/.dockerignore`, `compose.yaml`, `backend/compose.env.example` et `backend/DOCKER_CORE.md`. Le projet Compose est `atlas-core`, avec volume stable `atlas-core-data`, SQLite sous `/data/atlas.sqlite3` et `restart: unless-stopped`. Le conteneur utilise `network_mode: host`, expose uniquement l’écoute loopback `127.0.0.1:8100` sans port publié, s’exécute en UID/GID 10001 sans `cap_add`, avec racine en lecture seule, `cap_drop: ALL` et `no-new-privileges`. Le healthcheck interroge `/health`.
 
-### Exploitation backend/relais — plan prêt pour conception
+Commandes consignées depuis la racine du dépôt : `docker compose config`, `docker compose build --no-cache`, `docker compose up -d`, `docker compose down`, puis `docker compose up -d`. La configuration Compose est valide ; build et démarrage ont réussi ; `/health` a répondu HTTP 200 et le conteneur était healthy. Après redémarrage du Core, la santé a été rétablie. Après `down` puis `up`, le volume stable a conservé le marqueur de vérification, ensuite supprimé ; aucun `down -v` n’a été utilisé. Une copie SQLite a été vérifiée par hash et `PRAGMA quick_check=ok`. L’ancien volume `v63-p1-arch-review_atlas-core-data` a été conservé comme repli. La revue Docker indépendante est **ACCEPTED_LIMITED** avec P2 sur format token, healthcheck et rotation ; le redémarrage hôte n’a pas été testé.
 
-État observé après redémarrage : `8000` est occupé par `cti-bulletin-backend-1`, hors ATLAS ; `18789` est le Gateway OpenClaw. Aucun listener n’est présent sur `4400` (proxy), `4401` (métriques), `4402` (relais), `8100` (Core), `8770` ou `18100`. Le port `8770` correspond à une route privée tailnet hors périmètre ATLAS, de propriétaire non identifié ; il ne doit pas être réattribué. Les services de test `4400/4402` ont été arrêtés en fin de R3-B ; le proxy systemd du dépôt n’est pas installé ; le script R3-A utilise `docker run --rm` sans politique de redémarrage.
+Les secrets Android et outil sont distincts. Les maîtres privés sont en mode `0600` hors dépôt ; les copies Compose en mode `0444` dans un répertoire `0700`. Aucune valeur n’est dans Git, l’image Docker ou `Config.Env`. La route `/internal/v4/capabilities` répond HTTP 200 avec le token outil et les en-têtes requis, et HTTP 401 avec le seul token Android ou sans token. `/health` répond 200 et le Core reste actif. La revue Docker indépendante est **ACCEPTED_LIMITED** ; ses P2 couvrent le format des tokens, le healthcheck et la rotation. Le redémarrage hôte n’a pas été testé. La santé et la conservation observée du volume bornent le verdict **GO limité** ; elles ne démontrent pas la persistance après redémarrage hôte.
 
-Docker 27.1.1 et Compose 2.29.1 sont installés, daemon actif, sans conteneur ATLAS/Relay/OpenClaw ni image Docker/Compose ATLAS dans le dépôt. Aucun fichier SQLite n’a été trouvé aux emplacements documentés ; le Core utilise par défaut `backend/data/atlas.sqlite3` ou `ATLAS_DB_PATH`. Le plan est **READY_FOR_DESIGN** pour un Core-only Compose : Dockerfile, volume persistant hors worktree, healthcheck `/health`, `restart: unless-stopped`, binding loopback et secrets montés hors image. Les services relais/proxy `4400/4402` et la route `8770` sont à traiter séparément après décision. Aucune implémentation Docker n’a été faite ; l’exploitation backend/relais reste **BLOCKED**.
+Le Core utilise deux secrets distincts : un pour l’authentification Android et un pour l’outil V4. Aucun secret n’est reproduit. La route `/internal/v4/capabilities` renvoie HTTP 200 avec le token outil et les en-têtes requis ; elle renvoie HTTP 401 avec le seul token Android ou sans token. Ce contrôle établit la protection de la route Core, pas la réussite d’un appel depuis OpenClaw.
+
+État courant consigné : Core actif sur `127.0.0.1:8100` avec le volume stable. `4400` (proxy), `4401` (métriques), `4402` (relais) et `8770` restent absents. Le Gateway OpenClaw est actif/health OK, plugin chargé, mais le catalogue live Atlas est vide ; sa configuration a été restaurée vers `18100`. `8000` est occupé par `cti-bulletin-backend-1`, hors ATLAS ; `18789` est le Gateway OpenClaw, hors Compose. Le port `8770` reste une route privée tailnet hors périmètre ATLAS, de propriétaire non identifié ; il ne doit pas être réattribué. Le Core sur `8100` ne valide pas l’intégration OpenClaw. Relais/proxy et `8770` restent non résolus ; A4-4 est **BLOCKED** par la transformation amont 4001→1012.
 
 ## APK antérieur d7a30c1 conservé
 
 - Nom : `app-debug.apk`; `versionName=0.1.0`, `versionCode=1`.
 - Taille : **15 740 291 octets**.
 - SHA-256 : `08f45c3743df80b57f653ba41472514e8d006fc3068aca47be041f96a20975c9`.
-- Copie durable : espace d’artefacts QA privé hors dépôt, sous-dossier `V63-FINAL-d7a30c1/app-debug.apk`.
+- Copie durable : artefact APK privé hors dépôt, identifié par son SHA-256 `08f45c3743df80b57f653ba41472514e8d006fc3068aca47be041f96a20975c9`.
 - Permissions : dossier `0700`, fichier `0600` ; `cmp` a confirmé une copie identique.
 
 Cet APK exact a été installé pendant la qualification Pixel partielle antérieure. L’APK UI final installé au SHA `43214ad` a un hash différent, donné dans la section smoke UI ci-dessus.
@@ -121,7 +123,7 @@ Cet APK exact a été installé pendant la qualification Pixel partielle antéri
 - Android reste l'autorité du plan local et des effets appliqués ; un état projeté par le Core n'est pas une preuve de l'état courant du téléphone.
 - Les propositions IA ne suffisent pas à autoriser une mutation. A0 reste le défaut ; A1 dépend d'un consentement distinct, révocable et vérifié par des règles déterministes. Refus ou révocation ne doivent pas produire d'effet.
 - Les catégories protégées ou non classées restent verrouillées. Les limites locales A1 décrites par D63-36 — quotas, versions, périmètre et annulation — restent bornées ; cette preuve locale ne remplace pas une qualification runtime.
-- Le plugin OpenClaw est activé avec allowlist des six outils imposés ; la preuve d'invocation via Gateway est limitée au Core synthétique. Aucun outil interdit, shell ou contrôle Android n'a été exposé.
+- La preuve OpenClaw antérieure et la revue R2 sont invalidées. La tentative finale est **BLOCKED** : catalogue statique de 15 outils de plugin dont six Atlas, mais `tools.effective` Atlas = 0 et aucun tour exécuté. `ATLAS_CORE_TOOLS_TOKEN` était absente ; le profil diagnostiqué exclut les 66 outils cœur, mais la surface n’est pas certifiée et le signal `exec` antérieur reste P1 à auditer. Le Core protégé utilise deux secrets distincts ; `/internal/v4/capabilities` répond 200 avec le token outil et les en-têtes requis, 401 avec le seul token Android ou sans token.
 - Aucune donnée personnelle, secret, token ou contenu de sauvegarde n'est reproduit dans ce rapport. Une sauvegarde privée antérieure au run Pixel existe et est référencée dans le journal QA privé ; aucun contenu, chemin personnel ni empreinte de sauvegarde n'est reproduit ici.
 
 ## Limites runtime restantes
@@ -132,7 +134,7 @@ La qualification de l'APK UI final au SHA `43214ad` est **PASS_PARTIEL** : insta
 
 ### OpenClaw
 
-**GO_OPENCLAW_TOOLS ACCEPTED, portée limitée** après revue indépendante R2 : six outils découverts et invoqués via Gateway réel avec Core synthétique. La disponibilité production n'est pas démontrée : Core test arrêté, aucun listener sur `18100`, aucun Core réel compatible sur 18100 et plugin activé toujours configuré vers cette adresse. Aucun fil Android→Core réel, aucune mutation Android et aucun ACK ne sont prouvés. La preuve de cas négatifs, idempotence et redémarrage reste à compléter pour R01.
+**BLOCKED / INVALIDÉ** : la tentative antérieure et son acceptation R2 sont invalidées après traces `exec` et réponses `AUTH_REQUIRED`. La tentative finale a chargé Gateway/plugin et rendu l’agent visible ; le catalogue statique comptait 15 outils de plugin dont six Atlas, mais `tools.effective` Atlas était vide (0 outil), donc aucun tour ni appel n’a été exécuté. `ATLAS_CORE_TOOLS_TOKEN` était absente ; la configuration a été restaurée byte-for-byte vers `18100` (hash `1d78935…`), Gateway actif/health OK. `GO_OPENCLAW_TOOLS` reste **BLOCKED**. Le profil diagnostiqué exclut les 66 outils cœur, mais le catalogue vide ne certifie pas la surface ; le signal `exec` antérieur reste P1 à auditer. Le Core répond 200 sur `/internal/v4/capabilities` avec le token outil et les en-têtes requis, 401 avec le seul token Android ou sans token ; cela ne valide pas OpenClaw.
 
 ### Relais A4-4
 
@@ -177,16 +179,16 @@ GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug
 GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug
 ```
 
-Les opérations runtime rapportées proviennent des sessions Pixel `a363ffe5-ec91-4982-a772-cee217ff73af`, OpenClaw `765804f3-6467-4902-957d-525ef72ee41a` et revue R2 `a4920cea-3024-4712-8e09-349d27c97832`. Le dossier ne fournit pas de ligne de commande littérale complète pour l'installation Pixel ni pour les appels Gateway ; seule l'opération `adb install -r` est attestée PASS, et l'instrumentation est identifiée par `E2eV63InstrumentationTest`. Aucune métadonnée privée n'est nécessaire pour cette reproduction documentaire. `FocusGaugeInstrumentationTest` est resté non lancé ; aucune invocation `am instrument` n'a été exécutée pour ce test.
+Les sessions Pixel `a363ffe5-ec91-4982-a772-cee217ff73af`, OpenClaw antérieure invalidée `765804f3-6467-4902-957d-525ef72ee41a` et revue R2 invalidée `a4920cea-3024-4712-8e09-349d27c97832` sont consignées. Le résultat final de la nouvelle tentative est fourni par le complément parent ; son identifiant et sa commande ne sont pas indiqués. Il rapporte un catalogue statique de 15 outils de plugin dont six Atlas, `tools.effective` Atlas vide et aucun tour exécuté. Pour Pixel, `adb install -r` est attesté PASS ; l’instrumentation précédente est identifiée par `E2eV63InstrumentationTest`. `FocusGaugeInstrumentationTest` est resté non lancé ; aucune invocation `am instrument` n'a été exécutée pour ce test. Aucun chemin ou contenu privé n’est requis pour cette reproduction documentaire.
 
 Ce rapport documentaire n'a pas relancé les suites.
 
-Le résultat final des matrices R01-R12 et T01-T12 se trouve dans [RECETTE_V63.md](RECETTE_V63.md) et dans la matrice canonique [ARCHITECTURE_V63.md §16](ARCHITECTURE_V63.md). R01, R10 et R12 sont partiels ; R02/R03/R07/R08 restent BLOCKED et R04/R05/R06/R09/R11 restent NOT_RUN. Aucun PASS runtime complet n'est déclaré.
+Le résultat final des matrices R01-R12 et T01-T12 se trouve dans [RECETTE_V63.md](RECETTE_V63.md) et dans la matrice canonique [ARCHITECTURE_V63.md §16](ARCHITECTURE_V63.md). R10 et R12 sont **PASS_PARTIEL** ; R01/R02/R03/R07/R08 restent **BLOCKED** et R04/R05/R06/R09/R11 restent **NOT_RUN**. Aucun PASS runtime complet n'est déclaré.
 
 ## Étapes de clôture restantes
 
 1. Compléter sur l'APK final les parcours Pixel restants : Focus, notifications, calendrier, localisation, offline, accessibilité et A1/A2.
-2. Rendre disponible un Core réel compatible sur l'endpoint attendu, prouver la disponibilité production et le chemin Android→Core/Gateway, puis compléter R01 (cas négatifs, idempotence, redémarrage) sans extrapoler du Core synthétique.
+2. Auditer le signal P1 `exec`, rendre non vide et certifier le catalogue live OpenClaw, puis prouver les appels autorisés et le chemin Android→Core/Gateway ; compléter R01 (cas négatifs, idempotence, redémarrage) sans extrapoler du catalogue statique.
 3. Corriger l'image amont A4-4 pour préserver le protocole 4001, puis refaire le contrôle relais correspondant.
 4. Corriger le P2 d'expiration en réconciliant le reçu avant toute expiration et en laissant un état inconnu en attente.
 5. Compléter les autres recettes NOT_RUN. Les intégrations Etar, wger et localisation demeurent hors du périmètre livré.
