@@ -2,6 +2,8 @@ package dev.atlas.coach.sync.agent.inbox.v4
 
 import dev.atlas.coach.sync.v4.CoreV4HttpRequest
 import dev.atlas.coach.sync.v4.CoreV4HttpResponse
+import dev.atlas.coach.sync.v4.CoreV4FailureKind
+import dev.atlas.coach.sync.v4.CoreV4SyncException
 import dev.atlas.coach.sync.v4.CoreV4SyncClient
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,6 +30,7 @@ enum class InboxV4HttpFailureKind {
     OFFLINE,
     PROTOCOL,
     CONFIGURATION,
+    IDEMPOTENCY_CONFLICT,
 }
 
 class InboxV4HttpException(
@@ -45,17 +48,19 @@ class InboxV4HttpException(
         InboxV4HttpFailureKind.OFFLINE -> "Le Core inbox V4 est hors ligne."
         InboxV4HttpFailureKind.PROTOCOL -> "La réponse inbox V4 ne respecte pas le contrat."
         InboxV4HttpFailureKind.CONFIGURATION -> "La configuration inbox V4 n'est pas autorisée."
+        InboxV4HttpFailureKind.IDEMPOTENCY_CONFLICT -> "Une clé d'idempotence inbox V4 est déjà liée à un autre contenu."
     } + (statusCode?.let { " HTTP $it." } ?: "") +
         (errorCode?.takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,64}")) }?.let { " ($it)" } ?: ""),
 )
 
 fun interface InboxV4HttpPoster {
     fun post(request: CoreV4HttpRequest): CoreV4HttpResponse
+    fun cancel() = Unit
 }
 
 /** Android initiated V4 pull and ACK over two fixed routes and the configured backend origin. */
 class InboxV4HttpTransport(
-    baseUrl: String,
+    baseUrl: String?,
     private val bearerToken: String,
     private val consentVersion: Long,
     debuggable: Boolean,
@@ -63,8 +68,9 @@ class InboxV4HttpTransport(
     private val requestAllowed: (CoreV4HttpRequest) -> Boolean = { true },
     private val requestStart: ((CoreV4HttpRequest, () -> Unit) -> Boolean)? = null,
     private val connectionFactory: ((URL) -> HttpURLConnection)? = null,
+    private val sessionAuthenticated: Boolean = false,
 ) : InboxV4Transport {
-    private val base: String
+    private val base: String?
     private val connectionLock = Any()
     private val failureLock = Any()
     private val observedFailures = mutableListOf<InboxV4HttpException>()
@@ -72,10 +78,14 @@ class InboxV4HttpTransport(
     private var activeConnection: HttpURLConnection? = null
 
     init {
-        if (!CoreV4SyncClient.validBackendUrl(baseUrl, debuggable)) {
+        if (sessionAuthenticated) {
+            if (poster == null || baseUrl != null || bearerToken.isNotEmpty()) {
+                throw InboxV4HttpException(InboxV4HttpFailureKind.CONFIGURATION, retryable = false)
+            }
+        } else if (baseUrl == null || !CoreV4SyncClient.validBackendUrl(baseUrl, debuggable)) {
             throw InboxV4HttpException(InboxV4HttpFailureKind.CONFIGURATION, retryable = false)
         }
-        if (bearerToken.isBlank() || bearerToken.length > MAX_TOKEN_LENGTH) {
+        if (!sessionAuthenticated && (bearerToken.isBlank() || bearerToken.length > MAX_TOKEN_LENGTH)) {
             throw InboxV4HttpException(
                 InboxV4HttpFailureKind.AUTHENTICATION,
                 retryable = false,
@@ -88,7 +98,7 @@ class InboxV4HttpTransport(
         if (CONNECT_TIMEOUT_MILLIS !in 1..10_000 || READ_TIMEOUT_MILLIS !in 1..10_000) {
             throw InboxV4HttpException(InboxV4HttpFailureKind.CONFIGURATION, retryable = false)
         }
-        base = baseUrl.trimEnd('/')
+        base = baseUrl?.trimEnd('/')
     }
 
     /** Keeps malformed and future proposal objects intact for the local quarantine path. */
@@ -169,6 +179,7 @@ class InboxV4HttpTransport(
             activeConnection.also { activeConnection = null }
         }
         connection?.disconnect()
+        poster?.cancel()
     }
 
     override fun toString(): String = "InboxV4HttpTransport(base=[configured], bearerToken=[redacted])"
@@ -176,7 +187,7 @@ class InboxV4HttpTransport(
     private fun execute(path: String, body: String): CoreV4HttpResponse {
         if (!isAllowedPath(path)) throw InboxV4HttpException(InboxV4HttpFailureKind.CONFIGURATION, false)
         if (body.toByteArray(Charsets.UTF_8).size > MAX_REQUEST_BYTES) protocolFailure()
-        val request = CoreV4HttpRequest(path, bearerToken, body)
+        val request = CoreV4HttpRequest(path, if (sessionAuthenticated) "" else bearerToken, body)
         if (synchronized(connectionLock) { cancelled } || !requestAllowed(request)) {
             throw InboxV4HttpException(InboxV4HttpFailureKind.CONSENT, retryable = false, statusCode = 403)
         }
@@ -184,6 +195,13 @@ class InboxV4HttpTransport(
             (poster ?: InboxV4HttpPoster(::postConfigured)).post(request)
         } catch (error: InboxV4HttpException) {
             throw error
+        } catch (error: CoreV4SyncException) {
+            throw InboxV4HttpException(
+                kind = error.kind.toInboxFailureKind(),
+                retryable = error.retryable,
+                statusCode = error.httpStatus,
+                errorCode = error.errorCode,
+            )
         } catch (_: IOException) {
             throw InboxV4HttpException(InboxV4HttpFailureKind.OFFLINE, retryable = true)
         } catch (_: Exception) {
@@ -215,8 +233,9 @@ class InboxV4HttpTransport(
     }
 
     private fun postConfigured(request: CoreV4HttpRequest): CoreV4HttpResponse {
+        val configuredBase = base ?: throw InboxV4HttpException(InboxV4HttpFailureKind.CONFIGURATION, false)
         val url = try {
-            URL(base + request.path)
+            URL(configuredBase + request.path)
         } catch (_: Exception) {
             throw InboxV4HttpException(InboxV4HttpFailureKind.OFFLINE, retryable = true)
         }
@@ -308,6 +327,18 @@ class InboxV4HttpTransport(
 
     private fun protocolFailure(): Nothing =
         throw InboxV4HttpException(InboxV4HttpFailureKind.PROTOCOL, retryable = false)
+
+    private fun CoreV4FailureKind.toInboxFailureKind(): InboxV4HttpFailureKind = when (this) {
+        CoreV4FailureKind.AUTHENTICATION -> InboxV4HttpFailureKind.AUTHENTICATION
+        CoreV4FailureKind.CONSENT -> InboxV4HttpFailureKind.CONSENT
+        CoreV4FailureKind.CONFLICT -> InboxV4HttpFailureKind.CONFLICT
+        CoreV4FailureKind.REJECTED -> InboxV4HttpFailureKind.REJECTED
+        CoreV4FailureKind.UNAVAILABLE -> InboxV4HttpFailureKind.UNAVAILABLE
+        CoreV4FailureKind.OFFLINE -> InboxV4HttpFailureKind.OFFLINE
+        CoreV4FailureKind.PROTOCOL -> InboxV4HttpFailureKind.PROTOCOL
+        CoreV4FailureKind.CONFIGURATION -> InboxV4HttpFailureKind.CONFIGURATION
+        CoreV4FailureKind.IDEMPOTENCY_CONFLICT -> InboxV4HttpFailureKind.IDEMPOTENCY_CONFLICT
+    }
 
     companion object {
         const val PULL_ROUTE = "/v4/agent/proposals/pull"

@@ -74,6 +74,43 @@ class AtlasRemoteProtocolTest {
     }
 
     @Test
+    fun v2ErrorsAcceptOnlyBoundedHttpAndRemoteCodeMetadata() {
+        fun v2Error() = JSONObject()
+            .put("protocol", AtlasRemoteProtocol.PROTOCOL_V2)
+            .put("kind", "error")
+            .put("request_id", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+            .put("session_id", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+            .put("error", JSONObject()
+                .put("code", "HTTP_503")
+                .put("message", "Service unavailable")
+                .put("retryable", true)
+                .put("http_status", 503)
+                .put("remote_code", "CORE_UNAVAILABLE"))
+            .put("completed_at", "2026-10-30T12:00:00Z")
+        fun withErrorMutation(mutation: (JSONObject) -> Unit): JSONObject = v2Error().also {
+            mutation(it.getJSONObject("error"))
+        }
+
+        AtlasRemoteProtocol.validate(v2Error(), AtlasRemoteProtocol.PROTOCOL_V2)
+        assertThrows(RelayProtocolException::class.java) {
+            AtlasRemoteProtocol.validate(withErrorMutation { it.put("stack", "details") }, AtlasRemoteProtocol.PROTOCOL_V2)
+        }
+        assertThrows(RelayProtocolException::class.java) {
+            AtlasRemoteProtocol.validate(withErrorMutation { it.put("http_status", 200) }, AtlasRemoteProtocol.PROTOCOL_V2)
+        }
+        assertThrows(RelayProtocolException::class.java) {
+            AtlasRemoteProtocol.validate(withErrorMutation { it.put("remote_code", "X".repeat(65)) }, AtlasRemoteProtocol.PROTOCOL_V2)
+        }
+        assertThrows(RelayProtocolException::class.java) {
+            AtlasRemoteProtocol.validate(
+                withErrorMutation { it.put("code", "BACKEND_REJECTED") }
+                    .put("protocol", AtlasRemoteProtocol.PROTOCOL),
+                AtlasRemoteProtocol.PROTOCOL,
+            )
+        }
+    }
+
+    @Test
     fun enforcesRequestExpiryAndRequestByteLimit() {
         val now = Instant.parse("2026-10-26T12:00:00Z")
         fun request(expires: Instant, payload: JSONObject = JSONObject()) = AtlasRemoteProtocol.request(

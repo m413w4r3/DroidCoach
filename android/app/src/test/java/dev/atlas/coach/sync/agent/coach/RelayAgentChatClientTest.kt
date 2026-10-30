@@ -50,7 +50,7 @@ class RelayAgentChatClientTest {
         var auditCompletedBeforeExecutor = false
         var keySeen: String? = null
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, idempotencyKey, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, idempotencyKey, payloadFactory, beforeDispatch, _ ->
                 executorEntered = true
                 assertTrue("audit must complete before relay executor invocation", auditCompletedBeforeExecutor)
                 assertEquals("fresh context must be prepared before relay executor invocation", 1, freshContextCalls)
@@ -99,7 +99,7 @@ class RelayAgentChatClientTest {
         val mandate = AgentMandate.default()
         val context = context(mandate, 1_800_000_000_000L, emptyMap())
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { requestedOperation, _, _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { requestedOperation, _, _, payloadFactory, beforeDispatch, _ ->
                 operation = requestedOperation
                 executorCalls++
                 assertEquals("The consent audit must precede capability negotiation", 1, audits)
@@ -148,7 +148,7 @@ class RelayAgentChatClientTest {
             var payloadCalls = 0
             var audits = 0
             val client = RelayAgentChatClient(
-                executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
+                executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch, _ ->
                     executorCalls++
                     if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                     else {
@@ -182,7 +182,7 @@ class RelayAgentChatClientTest {
         var executorCalls = 0
         var payloadCalls = 0
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch, _ ->
                 executorCalls++
                 if (!beforeDispatch()) {
                     RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
@@ -219,7 +219,7 @@ class RelayAgentChatClientTest {
         var timeoutMillisSeen: Long? = null
         var timeoutCalls = 0
         val timeoutClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, timeoutMillis, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, timeoutMillis, _, _, beforeDispatch, _ ->
                 timeoutMillisSeen = timeoutMillis
                 timeoutCalls++
                 assertTrue(beforeDispatch())
@@ -236,7 +236,7 @@ class RelayAgentChatClientTest {
         assertEquals("timeout remains uncertain and is never automatically replayed", 1, timeoutCalls)
 
         val malformedClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch, _ ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(JSONObject().put("reply", "x".repeat(4_001)).put("proposals", JSONArray())
                     .put("agent_status", "connected"), replayed = false)
@@ -258,7 +258,7 @@ class RelayAgentChatClientTest {
         var executorCalls = 0
         var auditBeforeExecutor = false
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch, _ ->
                 executorCalls++
                 assertTrue(auditBeforeExecutor)
                 assertEquals(1, auditCount)
@@ -291,7 +291,7 @@ class RelayAgentChatClientTest {
         var sent = 0
         var executorCalls = 0
         val auditFailureClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch, _ ->
                 executorCalls++
                 if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                 else {
@@ -314,7 +314,7 @@ class RelayAgentChatClientTest {
         assertEquals(0, payloadCalls)
 
         val malformedStatusClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
+                executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch, _ ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(chatResult().put("agent_status", "connected-but-unknown"), replayed = false)
             },
@@ -347,7 +347,7 @@ class RelayAgentChatClientTest {
             reason = "Synthetic proposal",
             requiredLevel = ProposalLevel.CONFIRM,
         )
-        val executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
+        val executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch, _ ->
             assertTrue(beforeDispatch())
             RelayCallResult.Success(chatResult(proposal), replayed = false)
         }
@@ -488,7 +488,7 @@ class RelayAgentChatClientTest {
         var auditedCategories: List<String>? = null
         var sentBody: JSONObject? = null
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { requestedOperation, _, key, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { requestedOperation, _, key, payloadFactory, beforeDispatch, _ ->
                 calls++
                 operation = requestedOperation
                 assertEquals("v4.coach.chat.request", requestedOperation)
@@ -530,6 +530,48 @@ class RelayAgentChatClientTest {
     }
 
     @Test
+    fun v4ChatPassesItsPayloadRequestIdAsTheRelayEnvelopeRequestId() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val requestId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        val proposalId = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        var envelopeRequestId: String? = null
+        var payloadRequestId: String? = null
+        val executor = object : RelayChatRequestExecutor {
+            override fun execute(
+                operation: String,
+                timeoutMillis: Long,
+                idempotencyKey: String,
+                payloadFactory: () -> JSONObject,
+                beforeDispatch: () -> Boolean,
+                requestId: String?,
+            ): RelayCallResult {
+                assertEquals("v4.coach.chat.request", operation)
+                assertEquals(requestId, idempotencyKey)
+                assertTrue(beforeDispatch())
+                envelopeRequestId = requestId
+                payloadRequestId = payloadFactory().getString("request_id")
+                return RelayCallResult.Success(
+                    v4ChatResult(requireNotNull(requestId), proposalId, "none", 0),
+                    replayed = false,
+                )
+            }
+        }
+        val client = RelayAgentChatClient(
+            executor = executor,
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { true },
+            v4ChatEnabled = true,
+        )
+
+        client.chat("conversation-v4", "synthetic message", mandate, context, requestId)
+
+        assertEquals(requestId, envelopeRequestId)
+        assertEquals(requestId, payloadRequestId)
+    }
+
+    @Test
     fun v4SharingUsesOnlyGrantedAndSyncedCategoriesAtOneConsentVersion() {
         val sharing = v4ChatSharing(listOf(
             consentRecord(CoreV4Category.DAY_PLAN, 2, CoreV4ConsentState.GRANTED, 2),
@@ -551,7 +593,7 @@ class RelayAgentChatClientTest {
         val sharing = AgentChatV4Sharing(2, setOf("GOAL_PROGRESS"))
         var payloadCalls = 0
         val revokedAtDispatch = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch, _ ->
                 if (!beforeDispatch()) {
                     RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                 } else {
@@ -589,7 +631,7 @@ class RelayAgentChatClientTest {
         typedCases.forEach { (code, expectedKind) ->
             var operation: String? = null
             val client = RelayAgentChatClient(
-                executor = RelayChatRequestExecutor { requestedOperation, _, _, _, _ ->
+                executor = RelayChatRequestExecutor { requestedOperation, _, _, _, _, _ ->
                     operation = requestedOperation
                     RelayCallResult.RemoteError(code, "Bearer secret-must-not-appear", false)
                 },
@@ -609,12 +651,92 @@ class RelayAgentChatClientTest {
     }
 
     @Test
+    fun v4GenericRemoteErrorsUseHttpStatusAfterExplicitCodesAndRemainSanitized() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val sharing = AgentChatV4Sharing(2, setOf("GOAL_PROGRESS"))
+        var remoteError = RelayCallResult.RemoteError(
+            "BACKEND_REJECTED",
+            "Bearer secret-must-not-appear",
+            retryable = false,
+            httpStatus = 401,
+        )
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, _, _, _, _ -> remoteError },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { true },
+            v4ChatEnabled = true,
+            v4Sharing = { sharing },
+        )
+        fun assertKind(error: RelayCallResult.RemoteError, expected: AgentChatFailureKind) {
+            remoteError = error
+            val thrown = runCatching {
+                client.chat("conversation-v4", "synthetic", mandate, context,
+                    "22222222-2222-4222-8222-222222222222")
+            }.exceptionOrNull() as AgentChatException
+            assertEquals(expected, thrown.kind)
+            assertFalse(thrown.message.orEmpty().contains("secret-must-not-appear"))
+        }
+
+        listOf(
+            401 to AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+            403 to AgentChatFailureKind.CONSENT_DENIED,
+            408 to AgentChatFailureKind.RESULT_UNCERTAIN,
+            409 to AgentChatFailureKind.CONFLICT,
+            422 to AgentChatFailureKind.INVALID_REQUEST,
+            503 to AgentChatFailureKind.SERVICE_UNAVAILABLE,
+        ).forEach { (status, expected) ->
+            assertKind(
+                RelayCallResult.RemoteError(
+                    "BACKEND_REJECTED",
+                    "Bearer secret-must-not-appear",
+                    retryable = false,
+                    httpStatus = status,
+                ),
+                expected,
+            )
+        }
+
+        assertKind(
+            RelayCallResult.RemoteError(
+                "AUTH_REQUIRED",
+                "Bearer secret-must-not-appear",
+                retryable = false,
+                httpStatus = 422,
+            ),
+            AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+        )
+        assertKind(
+            RelayCallResult.RemoteError(
+                "BACKEND_REJECTED",
+                "Bearer secret-must-not-appear",
+                retryable = false,
+                httpStatus = 422,
+                remoteCode = "AUTH_REQUIRED",
+            ),
+            AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+        )
+        listOf(200, 399, 600).forEach { status ->
+            assertKind(
+                RelayCallResult.RemoteError(
+                    "BACKEND_REJECTED",
+                    "Bearer secret-must-not-appear",
+                    retryable = false,
+                    httpStatus = status,
+                ),
+                AgentChatFailureKind.REMOTE_ERROR,
+            )
+        }
+    }
+
+    @Test
     fun v4MalformedResponseIsRejectedWithoutExposingRemoteText() {
         val now = 1_800_000_000_000L
         val mandate = AgentMandate.default()
         val context = context(mandate, now, emptyMap())
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch, _ ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(JSONObject().put("reply", "bad token=secret"), replayed = false)
             },

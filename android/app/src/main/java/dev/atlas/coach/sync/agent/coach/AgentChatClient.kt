@@ -5,6 +5,8 @@ import dev.atlas.coach.sync.agent.AgentActionType
 import dev.atlas.coach.sync.agent.ProposalLevel
 import dev.atlas.coach.sync.agent.ProposalV2
 import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
+import dev.atlas.coach.sync.relay.AtlasRemoteProtocol
+import dev.atlas.coach.sync.relay.RelayBackendTransport
 import dev.atlas.coach.sync.relay.RelayCallResult
 import org.json.JSONArray
 import org.json.JSONObject
@@ -288,7 +290,34 @@ fun interface RelayChatRequestExecutor {
         idempotencyKey: String,
         payloadFactory: () -> JSONObject,
         beforeDispatch: () -> Boolean,
+        requestId: String?,
     ): RelayCallResult
+}
+
+/** Bridges chat dispatch to the relay while preserving the V4 body/envelope request ID. */
+internal class RelayBackendChatRequestExecutor(
+    private val transport: RelayBackendTransport,
+) : RelayChatRequestExecutor {
+    override fun execute(
+        operation: String,
+        timeoutMillis: Long,
+        idempotencyKey: String,
+        payloadFactory: () -> JSONObject,
+        beforeDispatch: () -> Boolean,
+        requestId: String?,
+    ): RelayCallResult {
+        if (operation == "v4.coach.chat.request" && requestId == null) {
+            return RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)
+        }
+        return transport.executeDeferred(
+            operation = operation,
+            timeoutMillis = timeoutMillis,
+            idempotencyKey = idempotencyKey,
+            requestId = requestId ?: AtlasRemoteProtocol.newUuid(),
+            payloadFactory = payloadFactory,
+            beforeDispatch = beforeDispatch,
+        )
+    }
 }
 
 /** Builds a fresh, consent-filtered payload at relay dispatch time and never retries a sent request. */
@@ -345,24 +374,28 @@ class RelayAgentChatClient(
             )
         }
 
+        val operation = if (v4ChatEnabled) V4_CHAT_OPERATION else V2_CHAT_OPERATION
+        val beforeDispatch = {
+            runCatching(requestAllowed).getOrDefault(false) &&
+                !dispatchMandate.revoked && !dispatchMandate.suspended &&
+                System.currentTimeMillis() < dispatchMandate.expiresAtUtcMillis &&
+                runCatching { snapshotStillAuthorized(dispatchSnapshot) }.getOrDefault(false) &&
+                (!v4ChatEnabled || runCatching { v4SharingStillAuthorized(dispatchV4Sharing) }.getOrDefault(false))
+        }
+        val payloadFactory = {
+            if (v4ChatEnabled) {
+                AgentChatV4RequestBody.build(conversationId, message, idempotencyKey, dispatchV4Sharing)
+            } else {
+                AgentChatRequestBody.build(conversationId, message, dispatchMandate, dispatchSnapshot)
+            }
+        }
         val result = executor.execute(
-            operation = if (v4ChatEnabled) V4_CHAT_OPERATION else V2_CHAT_OPERATION,
+            operation = operation,
             timeoutMillis = RELAY_CHAT_TIMEOUT_MILLIS,
             idempotencyKey = idempotencyKey,
-            beforeDispatch = {
-                runCatching(requestAllowed).getOrDefault(false) &&
-                    !dispatchMandate.revoked && !dispatchMandate.suspended &&
-                    System.currentTimeMillis() < dispatchMandate.expiresAtUtcMillis &&
-                    runCatching { snapshotStillAuthorized(dispatchSnapshot) }.getOrDefault(false) &&
-                    (!v4ChatEnabled || runCatching { v4SharingStillAuthorized(dispatchV4Sharing) }.getOrDefault(false))
-            },
-            payloadFactory = {
-                if (v4ChatEnabled) {
-                    AgentChatV4RequestBody.build(conversationId, message, idempotencyKey, dispatchV4Sharing)
-                } else {
-                    AgentChatRequestBody.build(conversationId, message, dispatchMandate, dispatchSnapshot)
-                }
-            },
+            payloadFactory = payloadFactory,
+            beforeDispatch = beforeDispatch,
+            requestId = if (v4ChatEnabled) idempotencyKey else null,
         )
 
         when (result) {
@@ -374,8 +407,17 @@ class RelayAgentChatClient(
                 }
             }
             is RelayCallResult.RemoteError -> {
-                val code = result.code.takeIf { it.matches(REMOTE_CODE_PATTERN) }
-                val (kind, safeMessage) = remoteFailure(code)
+                val code = result.remoteCode?.takeIf { it.matches(REMOTE_CODE_PATTERN) }
+                    ?: result.code.takeIf { it.matches(REMOTE_CODE_PATTERN) }
+                val status = result.httpStatus
+                val codedFailure = remoteFailure(code)
+                val (kind, safeMessage) = if (codedFailure.first != AgentChatFailureKind.REMOTE_ERROR) {
+                    codedFailure
+                } else if (status != null && status in 400..599) {
+                    remoteFailure("HTTP_$status")
+                } else {
+                    codedFailure
+                }
                 throw AgentChatException(kind, safeMessage, code)
             }
             is RelayCallResult.Failure -> {

@@ -26,15 +26,29 @@ import dev.atlas.coach.sync.relay.RelayFailure
 import dev.atlas.coach.sync.relay.RelayFailureKind
 import dev.atlas.coach.sync.relay.RelayPlanRevisionClient
 import dev.atlas.coach.sync.relay.RelaySettings
-import dev.atlas.coach.sync.agent.coach.RelayChatRequestExecutor
+import dev.atlas.coach.sync.agent.coach.RelayBackendChatRequestExecutor
 import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.v4.CoreV4ConsentState
+import dev.atlas.coach.sync.v4.RelayBackendCoreV4Session
+import dev.atlas.coach.sync.v4.RelayCoreV4Session
+import dev.atlas.coach.sync.v4.RelayCoreV4SessionRegistry
 import java.util.Base64
 
 internal const val V4_CHAT_DEFAULT_ENABLED = false
 
 internal fun relayChatCapabilities(v4ChatEnabled: Boolean): Set<String> =
     setOf("plan.revision", if (v4ChatEnabled) "v4.coach.chat" else "coach.chat")
+
+internal fun relaySessionCapabilities(v4ChatEnabled: Boolean): Set<String> =
+    relayChatCapabilities(v4ChatEnabled) + setOf(
+        "v4.day_plan.snapshot.write",
+        "v4.activity_status.write",
+        "v4.usage_summary.write",
+        "v4.goal_progress.write",
+        "v4.training_plan.write",
+        "v4.proposal.ack",
+        "v4.consent.state.write",
+    )
 
 /** Chooses one version-consistent set; the V4 chat contract carries a single consent version. */
 internal fun v4ChatSharing(records: List<dev.atlas.coach.sync.CoreV4ConsentRecord>): AgentChatV4Sharing {
@@ -71,6 +85,7 @@ class RelaySettingsController(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var settings: RelaySettings = settingsStore.read()
     @Volatile private var transport: RelayBackendTransport? = null
+    @Volatile private var coreV4Session: RelayCoreV4Session? = null
     private val coreV4SyncStore = AndroidCoreV4SyncStore(context.applicationContext)
     @Volatile private var transportGeneration = 0L
     private var activeListener: ((RelayConnectionState) -> Unit)? = null
@@ -259,15 +274,7 @@ class RelaySettingsController(
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
         val selectedV4 = v4ChatOptIn
-        val executor = RelayChatRequestExecutor { operation, timeoutMillis, idempotencyKey, payloadFactory, beforeDispatch ->
-            active.executeDeferred(
-                operation = operation,
-                timeoutMillis = timeoutMillis,
-                idempotencyKey = idempotencyKey,
-                payloadFactory = payloadFactory,
-                beforeDispatch = beforeDispatch,
-            )
-        }
+        val executor = RelayBackendChatRequestExecutor(active)
         return RelayAgentChatClient(
             executor,
             freshRequestContext,
@@ -323,7 +330,7 @@ class RelaySettingsController(
                 maxReconnectAttempts = 8,
                 maxQueuedRequests = 16,
                 maxConcurrentRequests = 4,
-                requestedCapabilities = relayChatCapabilities(v4ChatOptIn),
+                requestedCapabilities = relaySessionCapabilities(v4ChatOptIn),
             )
         } catch (_: Exception) {
             state = RelayConnectionState.ERROR
@@ -357,6 +364,10 @@ class RelaySettingsController(
         activeListener = listener
         activeFailureListener = failureListener
         transport = created
+        RelayBackendCoreV4Session(created).also { session ->
+            coreV4Session = session
+            RelayCoreV4SessionRegistry.install(session)
+        }
         state = RelayConnectionState.RELAY_CONNECTING
         lastError = null
     }
@@ -371,6 +382,8 @@ class RelaySettingsController(
         }
         activeListener = null
         activeFailureListener = null
+        coreV4Session?.let(RelayCoreV4SessionRegistry::clear)
+        coreV4Session = null
         val active = transport
         transport = null
         if (active != null) runCatching { active.close() }
