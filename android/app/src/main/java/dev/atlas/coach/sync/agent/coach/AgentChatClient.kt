@@ -407,8 +407,17 @@ class RelayAgentChatClient(
                 }
             }
             is RelayCallResult.RemoteError -> {
-                val code = result.code.takeIf { it.matches(REMOTE_CODE_PATTERN) }
-                val (kind, safeMessage) = remoteFailure(code)
+                val code = result.remoteCode?.takeIf { it.matches(REMOTE_CODE_PATTERN) }
+                    ?: result.code.takeIf { it.matches(REMOTE_CODE_PATTERN) }
+                val status = result.httpStatus
+                val codedFailure = remoteFailure(code)
+                val (kind, safeMessage) = if (codedFailure.first != AgentChatFailureKind.REMOTE_ERROR) {
+                    codedFailure
+                } else if (status != null && status in 400..599) {
+                    remoteFailure("HTTP_$status")
+                } else {
+                    codedFailure
+                }
                 throw AgentChatException(kind, safeMessage, code)
             }
             is RelayCallResult.Failure -> {

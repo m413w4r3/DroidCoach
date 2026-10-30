@@ -651,6 +651,86 @@ class RelayAgentChatClientTest {
     }
 
     @Test
+    fun v4GenericRemoteErrorsUseHttpStatusAfterExplicitCodesAndRemainSanitized() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val sharing = AgentChatV4Sharing(2, setOf("GOAL_PROGRESS"))
+        var remoteError = RelayCallResult.RemoteError(
+            "BACKEND_REJECTED",
+            "Bearer secret-must-not-appear",
+            retryable = false,
+            httpStatus = 401,
+        )
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, _, _, _, _ -> remoteError },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { true },
+            v4ChatEnabled = true,
+            v4Sharing = { sharing },
+        )
+        fun assertKind(error: RelayCallResult.RemoteError, expected: AgentChatFailureKind) {
+            remoteError = error
+            val thrown = runCatching {
+                client.chat("conversation-v4", "synthetic", mandate, context,
+                    "22222222-2222-4222-8222-222222222222")
+            }.exceptionOrNull() as AgentChatException
+            assertEquals(expected, thrown.kind)
+            assertFalse(thrown.message.orEmpty().contains("secret-must-not-appear"))
+        }
+
+        listOf(
+            401 to AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+            403 to AgentChatFailureKind.CONSENT_DENIED,
+            408 to AgentChatFailureKind.RESULT_UNCERTAIN,
+            409 to AgentChatFailureKind.CONFLICT,
+            422 to AgentChatFailureKind.INVALID_REQUEST,
+            503 to AgentChatFailureKind.SERVICE_UNAVAILABLE,
+        ).forEach { (status, expected) ->
+            assertKind(
+                RelayCallResult.RemoteError(
+                    "BACKEND_REJECTED",
+                    "Bearer secret-must-not-appear",
+                    retryable = false,
+                    httpStatus = status,
+                ),
+                expected,
+            )
+        }
+
+        assertKind(
+            RelayCallResult.RemoteError(
+                "AUTH_REQUIRED",
+                "Bearer secret-must-not-appear",
+                retryable = false,
+                httpStatus = 422,
+            ),
+            AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+        )
+        assertKind(
+            RelayCallResult.RemoteError(
+                "BACKEND_REJECTED",
+                "Bearer secret-must-not-appear",
+                retryable = false,
+                httpStatus = 422,
+                remoteCode = "AUTH_REQUIRED",
+            ),
+            AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+        )
+        listOf(200, 399, 600).forEach { status ->
+            assertKind(
+                RelayCallResult.RemoteError(
+                    "BACKEND_REJECTED",
+                    "Bearer secret-must-not-appear",
+                    retryable = false,
+                    httpStatus = status,
+                ),
+                AgentChatFailureKind.REMOTE_ERROR,
+            )
+        }
+    }
+
+    @Test
     fun v4MalformedResponseIsRejectedWithoutExposingRemoteText() {
         val now = 1_800_000_000_000L
         val mandate = AgentMandate.default()
