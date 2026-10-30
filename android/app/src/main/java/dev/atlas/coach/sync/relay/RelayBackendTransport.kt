@@ -32,6 +32,8 @@ class RelayBackendTransport internal constructor(
     private val heartbeatIntervalMillis: Long = 15_000,
     private val heartbeatTimeoutMillis: Long = 8_000,
 ) : AutoCloseable {
+    private val applicationProtocol = AtlasRemoteProtocol.protocolForCapabilities(config.requestedCapabilities)
+
     init {
         require(heartbeatIntervalMillis > 0 && heartbeatTimeoutMillis > 0) {
             "heartbeat interval and timeout must be positive"
@@ -109,7 +111,7 @@ class RelayBackendTransport internal constructor(
         payloadFactory: () -> JSONObject,
         beforeDispatch: () -> Boolean = { true },
     ): RelayCallResult {
-        if (operation !in AtlasRemoteProtocol.OPERATIONS || timeoutMillis <= 0) {
+        if (!AtlasRemoteProtocol.supportsOperation(applicationProtocol, operation) || timeoutMillis <= 0) {
             return RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)
         }
         val requiredCapability = AtlasRemoteProtocol.requiredCapability(operation)
@@ -215,7 +217,12 @@ class RelayBackendTransport internal constructor(
             return
         }
         val hello = try {
-            AtlasRemoteProtocol.hello(credentials, CLIENT_VERSION, config.requestedCapabilities)
+            AtlasRemoteProtocol.hello(
+                credentials,
+                CLIENT_VERSION,
+                config.requestedCapabilities,
+                protocol = applicationProtocol,
+            )
                 .toString().toByteArray(Charsets.UTF_8)
         }
         catch (_: Exception) {
@@ -227,7 +234,7 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun handleApplicationFrame(bytes: ByteArray) {
-        val envelope = try { AtlasRemoteProtocol.parse(bytes) } catch (error: Exception) {
+        val envelope = try { AtlasRemoteProtocol.parse(bytes, applicationProtocol) } catch (error: Exception) {
             failProtocol(error)
             return
         }
@@ -367,7 +374,7 @@ class RelayBackendTransport internal constructor(
 
     private fun handlePing(envelope: JSONObject) {
         val pong = JSONObject()
-            .put("protocol", AtlasRemoteProtocol.PROTOCOL)
+            .put("protocol", applicationProtocol)
             .put("kind", "pong")
             .put("nonce", envelope.getString("nonce"))
         if (!client.sendTextFrame(AtlasRemoteProtocol.encode(pong))) failProtocol(RelayProtocolException("could not reply to ping"))
@@ -406,7 +413,7 @@ class RelayBackendTransport internal constructor(
             } else {
                 val nonce = AtlasRemoteProtocol.newUuid().replace("-", "").take(32)
                 val ping = JSONObject()
-                    .put("protocol", AtlasRemoteProtocol.PROTOCOL)
+                    .put("protocol", applicationProtocol)
                     .put("kind", "ping")
                     .put("nonce", nonce)
                 val encoded = runCatching { AtlasRemoteProtocol.encode(ping) }.getOrNull()
@@ -476,6 +483,7 @@ class RelayBackendTransport internal constructor(
                         createdAt = pending.createdAt,
                         expiresAt = pending.expiresAt,
                         payload = payload,
+                        protocol = applicationProtocol,
                     )
                 } catch (_: Exception) {
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
@@ -511,7 +519,7 @@ class RelayBackendTransport internal constructor(
 
     private fun sendCancel(targetRequestId: String) {
         val cancel = JSONObject()
-            .put("protocol", AtlasRemoteProtocol.PROTOCOL)
+            .put("protocol", applicationProtocol)
             .put("kind", "cancel")
             .put("request_id", AtlasRemoteProtocol.newUuid())
             .put("target_request_id", targetRequestId)

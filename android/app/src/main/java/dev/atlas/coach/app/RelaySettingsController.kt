@@ -9,9 +9,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.atlas.coach.plan.PlanRevisionProposalClient
 import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
+import dev.atlas.coach.sync.agent.coach.AgentChatV4Sharing
 import dev.atlas.coach.sync.agent.coach.AgentChatClient
 import dev.atlas.coach.sync.agent.coach.AgentRequestContext
 import dev.atlas.coach.sync.agent.coach.RelayAgentChatClient
+import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.relay.AndroidRelaySettingsStore
 import dev.atlas.coach.sync.relay.KeystoreRelayCredentialStore
 import dev.atlas.coach.sync.relay.RelayBackendTransport
@@ -26,7 +28,29 @@ import dev.atlas.coach.sync.relay.RelayPlanRevisionClient
 import dev.atlas.coach.sync.relay.RelaySettings
 import dev.atlas.coach.sync.agent.coach.RelayChatRequestExecutor
 import dev.atlas.coach.sync.relay.RelayTransportMode
+import dev.atlas.coach.sync.v4.CoreV4ConsentState
 import java.util.Base64
+
+internal const val V4_CHAT_DEFAULT_ENABLED = false
+
+internal fun relayChatCapabilities(v4ChatEnabled: Boolean): Set<String> =
+    setOf("plan.revision", if (v4ChatEnabled) "v4.coach.chat" else "coach.chat")
+
+/** Chooses one version-consistent set; the V4 chat contract carries a single consent version. */
+internal fun v4ChatSharing(records: List<dev.atlas.coach.sync.CoreV4ConsentRecord>): AgentChatV4Sharing {
+    val eligible = records.filter { record ->
+        record.snapshot.state == CoreV4ConsentState.GRANTED &&
+            record.snapshot.syncedVersion == record.snapshot.version
+    }
+    val selected = eligible.groupBy { it.snapshot.version }.entries.maxWithOrNull(
+        compareBy<Map.Entry<Int, List<dev.atlas.coach.sync.CoreV4ConsentRecord>>> { it.value.size }
+            .thenBy { it.key },
+    )
+    return AgentChatV4Sharing(
+        consentVersion = selected?.key ?: records.maxOfOrNull { it.snapshot.version } ?: 1,
+        sharedCategories = selected?.value.orEmpty().mapTo(linkedSetOf()) { it.snapshot.category.wireValue },
+    )
+}
 
 /**
  * Owns the optional relayed connection. It never opens a socket in DIRECT or
@@ -47,6 +71,7 @@ class RelaySettingsController(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var settings: RelaySettings = settingsStore.read()
     @Volatile private var transport: RelayBackendTransport? = null
+    private val coreV4SyncStore = AndroidCoreV4SyncStore(context.applicationContext)
     @Volatile private var transportGeneration = 0L
     private var activeListener: ((RelayConnectionState) -> Unit)? = null
     private var activeFailureListener: ((RelayFailure) -> Unit)? = null
@@ -70,6 +95,9 @@ class RelaySettingsController(
         private set
     var credentialsConfigured by mutableStateOf(credentialStore.credentials() != null)
         private set
+    private var v4ChatOptIn by mutableStateOf(V4_CHAT_DEFAULT_ENABLED)
+        private set
+    val v4ChatEnabled: Boolean get() = v4ChatOptIn
 
     /** WebSocket close code observed by the active transport; 4001 is the revocation close. */
     val lastCloseCode: Int? get() = transport?.lastCloseCode
@@ -138,6 +166,7 @@ class RelaySettingsController(
     }
 
     fun selectMode(newMode: RelayTransportMode) {
+        if (newMode != RelayTransportMode.RELAY) v4ChatOptIn = V4_CHAT_DEFAULT_ENABLED
         settingsStore.updateMode(newMode)
         settings = settings.copy(mode = newMode)
         mode = newMode
@@ -164,6 +193,13 @@ class RelaySettingsController(
             RelayTransportMode.OFFLINE -> RelayConnectionState.OFFLINE
             RelayTransportMode.DIRECT -> RelayConnectionState.LOCAL
         }
+    }
+
+    /** V4 is an explicit session capability and starts disabled on every app launch. */
+    fun setV4ChatEnabled(enabled: Boolean) {
+        if (v4ChatOptIn == enabled) return
+        v4ChatOptIn = enabled
+        if (mode == RelayTransportMode.RELAY) startTransport(force = true)
     }
 
     fun clearCredentials() {
@@ -214,9 +250,10 @@ class RelaySettingsController(
     ): AgentChatClient? {
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
-        val executor = RelayChatRequestExecutor { timeoutMillis, idempotencyKey, payloadFactory, beforeDispatch ->
+        val selectedV4 = v4ChatOptIn
+        val executor = RelayChatRequestExecutor { operation, timeoutMillis, idempotencyKey, payloadFactory, beforeDispatch ->
             active.executeDeferred(
-                operation = "coach.chat.request",
+                operation = operation,
                 timeoutMillis = timeoutMillis,
                 idempotencyKey = idempotencyKey,
                 payloadFactory = payloadFactory,
@@ -229,6 +266,11 @@ class RelaySettingsController(
             onContextWritten,
             requestAllowed,
             snapshotStillAuthorized,
+            v4ChatEnabled = selectedV4,
+            v4Sharing = { v4ChatSharing(coreV4SyncStore.consents()) },
+            v4SharingStillAuthorized = { selected ->
+                v4ChatSharing(coreV4SyncStore.consents()) == selected
+            },
         )
     }
 
@@ -273,8 +315,7 @@ class RelaySettingsController(
                 maxReconnectAttempts = 8,
                 maxQueuedRequests = 16,
                 maxConcurrentRequests = 4,
-                // An older paired device without coach.chat must be paired again before relay chat.
-                requestedCapabilities = setOf("plan.revision", "coach.chat"),
+                requestedCapabilities = relayChatCapabilities(v4ChatOptIn),
             )
         } catch (_: Exception) {
             state = RelayConnectionState.ERROR

@@ -230,6 +230,31 @@ internal fun AgentCoachScreen(
                 }
             }
         }
+        if (controller.relaySettings.mode == dev.atlas.coach.sync.relay.RelayTransportMode.RELAY) {
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag("agent_v4_chat_toggle"),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Conversation V4", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        if (controller.relaySettings.v4ChatEnabled) {
+                            "Route V4 uniquement. En cas d'indisponibilité, aucun repli V2 ne sera tenté."
+                        } else {
+                            "Désactivée par défaut. Le chat utilise la route V2."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = controller.relaySettings.v4ChatEnabled,
+                    onCheckedChange = controller.relaySettings::setV4ChatEnabled,
+                    enabled = controller.capabilities[AtlasController.CAP_COACH] == true,
+                )
+            }
+        }
         TextButton(
             modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_refresh"),
             onClick = controller::pullAgentInbox,

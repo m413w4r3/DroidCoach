@@ -10,9 +10,10 @@ import java.time.OffsetDateTime
 import java.util.Base64
 import java.util.UUID
 
-/** Strict codec for the frozen atlas.remote.v1 envelope schema. */
+/** Strict codec for the frozen relay V1/V2 envelope schemas. */
 object AtlasRemoteProtocol {
     const val PROTOCOL = "atlas.remote.v1"
+    const val PROTOCOL_V2 = "atlas.remote.v2"
     const val MAX_APPLICATION_FRAME_BYTES = 65_536
     const val MAX_REQUEST_BYTES = 32_768
     const val MAX_RESPONSE_BYTES = 262_144
@@ -21,19 +22,35 @@ object AtlasRemoteProtocol {
     val OPERATIONS = setOf(
         "backend.health", "coach.status", "plan.today.read", "plan.revision.request",
         "plan.revision.result", "sport.plan.read", "sync.status", "coach.chat.request",
+        "v4.coach.chat.request", "v4.proposals.pull",
     )
     val ERROR_CODES = setOf(
         "INVALID_REQUEST", "UNKNOWN_OPERATION", "PAYLOAD_TOO_LARGE", "EXPIRED", "AUTH_REQUIRED",
         "AUTH_FAILED", "DEVICE_REVOKED", "RATE_LIMITED", "IDEMPOTENCY_CONFLICT", "BACKEND_UNAVAILABLE",
         "BACKEND_REJECTED", "OPERATION_UNAVAILABLE", "CANCELLED", "INTERNAL",
+        "HTTP_401", "HTTP_403", "HTTP_408", "HTTP_409", "HTTP_422", "HTTP_503",
     )
-    val HELLO_CAPABILITIES = setOf("plan.revision", "coach.chat", "coach.status", "plan.today", "sport.plan", "sync.status")
+    val HELLO_CAPABILITIES = setOf(
+        "plan.revision", "coach.chat", "v4.coach.chat", "v4.proposal.ack",
+        "coach.status", "plan.today", "sport.plan", "sync.status",
+    )
+    private val V1_HELLO_CAPABILITIES = HELLO_CAPABILITIES - setOf("v4.coach.chat", "v4.proposal.ack")
+    private val V1_OPERATIONS = OPERATIONS - setOf("v4.coach.chat.request", "v4.proposals.pull")
     private val uuidPattern = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     private val tokenPattern = Regex("^[A-Za-z0-9_-]{43}$")
     private val idempotencyPattern = Regex("^[A-Za-z0-9._:-]{1,160}$")
     private val noncePattern = Regex("^[A-Za-z0-9+/]{22}==$")
 
-    fun parse(bytes: ByteArray): JSONObject {
+    fun protocolForCapabilities(capabilities: Set<String>): String =
+        if (capabilities.any { it.startsWith("v4.") }) PROTOCOL_V2 else PROTOCOL
+
+    fun supportsOperation(protocol: String, operation: String): Boolean = when (protocol) {
+        PROTOCOL -> operation in V1_OPERATIONS
+        PROTOCOL_V2 -> operation in OPERATIONS
+        else -> false
+    }
+
+    fun parse(bytes: ByteArray, expectedProtocol: String = PROTOCOL): JSONObject {
         if (bytes.size > MAX_APPLICATION_FRAME_BYTES) fail("application frame too large")
         val text = try {
             Charsets.UTF_8.newDecoder()
@@ -46,30 +63,31 @@ object AtlasRemoteProtocol {
         val envelope = try { JSONObject(text) } catch (error: Exception) {
             throw RelayProtocolException("invalid JSON envelope", error)
         }
-        validateMeasured(envelope, bytes.size)
+        validateMeasured(envelope, bytes.size, expectedProtocol)
         return envelope
     }
 
     fun encode(envelope: JSONObject): ByteArray {
         val bytes = envelope.toString().toByteArray(Charsets.UTF_8)
-        validateMeasured(envelope, bytes.size)
+        validateMeasured(envelope, bytes.size, string(envelope, "protocol"))
         return bytes
     }
 
     /** Used by schema-focused tests and builders; size is measured as UTF-8 JSON bytes. */
-    fun validate(envelope: JSONObject) {
-        validateMeasured(envelope, envelope.toString().toByteArray(Charsets.UTF_8).size)
+    fun validate(envelope: JSONObject, expectedProtocol: String = string(envelope, "protocol")) {
+        validateMeasured(envelope, envelope.toString().toByteArray(Charsets.UTF_8).size, expectedProtocol)
     }
 
-    private fun validateMeasured(envelope: JSONObject, encodedSize: Int) {
+    private fun validateMeasured(envelope: JSONObject, encodedSize: Int, expectedProtocol: String) {
         if (encodedSize > MAX_APPLICATION_FRAME_BYTES) fail("application frame too large")
         if (encodedSize < 2) fail("empty envelope")
-        requireString(envelope, "protocol", PROTOCOL)
+        if (expectedProtocol !in setOf(PROTOCOL, PROTOCOL_V2)) fail("unsupported protocol")
+        requireString(envelope, "protocol", expectedProtocol)
         when (val kind = string(envelope, "kind")) {
-            "hello" -> validateHello(envelope)
+            "hello" -> validateHello(envelope, expectedProtocol)
             "hello_ok" -> validateHelloOk(envelope)
-            "request" -> validateRequest(envelope, encodedSize)
-            "response" -> validateResponse(envelope, encodedSize)
+            "request" -> validateRequest(envelope, encodedSize, expectedProtocol)
+            "response" -> validateResponse(envelope, encodedSize, expectedProtocol)
             "error" -> validateError(envelope)
             "cancel" -> validateCancel(envelope)
             "ping", "pong" -> validatePingPong(envelope)
@@ -85,13 +103,16 @@ object AtlasRemoteProtocol {
         clientVersion: String,
         requestedCapabilities: Set<String>,
         now: Instant = Instant.now(),
+        protocol: String = PROTOCOL,
     ): JSONObject {
         require(clientVersion.isNotBlank() && clientVersion.length <= 40)
         require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= 8)
-        require(requestedCapabilities.all { it in HELLO_CAPABILITIES })
+        require(protocol in setOf(PROTOCOL, PROTOCOL_V2))
+        val allowedCapabilities = if (protocol == PROTOCOL) V1_HELLO_CAPABILITIES else HELLO_CAPABILITIES
+        require(requestedCapabilities.all { it in allowedCapabilities })
         val nonce = ByteArray(16).also(java.security.SecureRandom()::nextBytes)
         val envelope = JSONObject()
-            .put("protocol", PROTOCOL)
+            .put("protocol", protocol)
             .put("kind", "hello")
             .put("device_id", credentials.deviceId)
             .put("client_nonce", Base64.getEncoder().encodeToString(nonce))
@@ -99,7 +120,7 @@ object AtlasRemoteProtocol {
             .put("capabilities", JSONArray(requestedCapabilities.sorted()))
             .put("auth", JSONObject().put("scheme", "device-token-v1").put("token", credentials.deviceToken))
             .put("timestamp", now.toString())
-        validate(envelope)
+        validate(envelope, protocol)
         return envelope
     }
 
@@ -111,14 +132,15 @@ object AtlasRemoteProtocol {
         createdAt: Instant,
         expiresAt: Instant,
         payload: JSONObject,
+        protocol: String = PROTOCOL,
     ): JSONObject {
         val envelope = JSONObject()
-            .put("protocol", PROTOCOL).put("kind", "request")
+            .put("protocol", protocol).put("kind", "request")
             .put("request_id", requestId).put("session_id", sessionId)
             .put("operation", operation).put("idempotency_key", idempotencyKey)
             .put("created_at", createdAt.toString()).put("expires_at", expiresAt.toString())
             .put("payload", payload)
-        validate(envelope)
+        validate(envelope, protocol)
         return envelope
     }
 
@@ -129,6 +151,8 @@ object AtlasRemoteProtocol {
     fun requiredCapability(operation: String): String? = when (operation) {
         "plan.revision.request", "plan.revision.result" -> "plan.revision"
         "coach.chat.request" -> "coach.chat"
+        "v4.coach.chat.request" -> "v4.coach.chat"
+        "v4.proposals.pull" -> "v4.proposal.ack"
         else -> null
     }
 
@@ -148,7 +172,7 @@ object AtlasRemoteProtocol {
         return decoded
     }
 
-    private fun validateHello(value: JSONObject) {
+    private fun validateHello(value: JSONObject, protocol: String) {
         exactKeys(value, setOf("protocol", "kind", "device_id", "client_nonce", "client_version", "capabilities", "auth", "timestamp"))
         requireString(value, "kind", "hello")
         requireUuid(value, "device_id")
@@ -161,7 +185,8 @@ object AtlasRemoteProtocol {
         val seen = mutableSetOf<String>()
         for (i in 0 until capabilities.length()) {
             val cap = stringValue(capabilities.get(i), "capability")
-            if (cap !in HELLO_CAPABILITIES || !seen.add(cap)) fail("invalid capability")
+            val allowedCapabilities = if (protocol == PROTOCOL) V1_HELLO_CAPABILITIES else HELLO_CAPABILITIES
+            if (cap !in allowedCapabilities || !seen.add(cap)) fail("invalid capability")
         }
         val auth = objectValue(value, "auth")
         exactKeys(auth, setOf("scheme", "token"))
@@ -188,12 +213,12 @@ object AtlasRemoteProtocol {
         if (integer(value, "max_response_bytes") !in 1024L..MAX_RESPONSE_BYTES.toLong()) fail("invalid response limit")
     }
 
-    private fun validateRequest(value: JSONObject, encodedSize: Int) {
+    private fun validateRequest(value: JSONObject, encodedSize: Int, protocol: String) {
         exactKeys(value, setOf("protocol", "kind", "request_id", "session_id", "operation", "idempotency_key", "created_at", "expires_at", "payload"))
         requireString(value, "kind", "request")
         requireUuid(value, "request_id")
         requireUuid(value, "session_id")
-        requireOperation(value)
+        requireOperation(value, protocol)
         val key = string(value, "idempotency_key")
         if (!idempotencyPattern.matches(key)) fail("invalid idempotency_key")
         val createdAt = parseTimestamp(value, "created_at")
@@ -205,12 +230,12 @@ object AtlasRemoteProtocol {
         if (encodedSize > MAX_REQUEST_BYTES) fail("request too large")
     }
 
-    private fun validateResponse(value: JSONObject, encodedSize: Int) {
+    private fun validateResponse(value: JSONObject, encodedSize: Int, protocol: String) {
         exactKeys(value, setOf("protocol", "kind", "request_id", "session_id", "operation", "status", "result", "completed_at", "replayed"))
         requireString(value, "kind", "response")
         requireUuid(value, "request_id")
         requireUuid(value, "session_id")
-        requireOperation(value)
+        requireOperation(value, protocol)
         requireString(value, "status", "OK")
         objectValue(value, "result")
         parseTimestamp(value, "completed_at")
@@ -246,8 +271,8 @@ object AtlasRemoteProtocol {
         if (nonce.isEmpty() || nonce.length > 32) fail("invalid nonce")
     }
 
-    private fun requireOperation(value: JSONObject) {
-        if (string(value, "operation") !in OPERATIONS) fail("unknown operation")
+    private fun requireOperation(value: JSONObject, protocol: String) {
+        if (!supportsOperation(protocol, string(value, "operation"))) fail("unknown operation")
     }
 
     private fun requireUuid(value: JSONObject, key: String) {

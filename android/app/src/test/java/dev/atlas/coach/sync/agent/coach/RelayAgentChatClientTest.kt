@@ -7,7 +7,14 @@ import dev.atlas.coach.sync.agent.context.AgentContextAssembler
 import dev.atlas.coach.sync.agent.context.AgentContextDomainViews
 import dev.atlas.coach.sync.agent.context.AgentContextSnapshot
 import dev.atlas.coach.sync.agent.context.AgentContextDomainConsent
+import dev.atlas.coach.sync.relay.AtlasRemoteProtocol
 import dev.atlas.coach.sync.relay.RelayCallResult
+import dev.atlas.coach.sync.relay.RelayCredentials
+import dev.atlas.coach.sync.relay.RelayProtocolException
+import dev.atlas.coach.sync.CoreV4ConsentRecord
+import dev.atlas.coach.sync.v4.CoreV4Category
+import dev.atlas.coach.sync.v4.CoreV4ConsentSnapshot
+import dev.atlas.coach.sync.v4.CoreV4ConsentState
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -15,7 +22,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import java.util.Base64
 import java.util.UUID
+import dev.atlas.coach.app.V4_CHAT_DEFAULT_ENABLED
+import dev.atlas.coach.app.relayChatCapabilities
+import dev.atlas.coach.app.v4ChatSharing
 
 class RelayAgentChatClientTest {
     @Test
@@ -39,7 +50,7 @@ class RelayAgentChatClientTest {
         var auditCompletedBeforeExecutor = false
         var keySeen: String? = null
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, idempotencyKey, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, idempotencyKey, payloadFactory, beforeDispatch ->
                 executorEntered = true
                 assertTrue("audit must complete before relay executor invocation", auditCompletedBeforeExecutor)
                 assertEquals("fresh context must be prepared before relay executor invocation", 1, freshContextCalls)
@@ -82,26 +93,45 @@ class RelayAgentChatClientTest {
     fun capabilityUnavailableIsReturnedAfterPreDispatchAudit() {
         var audits = 0
         var executorCalls = 0
+        var beforeDispatchCalls = 0
+        var payloadFactoryCalls = 0
+        var operation: String? = null
         val mandate = AgentMandate.default()
         val context = context(mandate, 1_800_000_000_000L, emptyMap())
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, _ ->
+            executor = RelayChatRequestExecutor { requestedOperation, _, _, payloadFactory, beforeDispatch ->
+                operation = requestedOperation
                 executorCalls++
-                RelayCallResult.RemoteError("OPERATION_UNAVAILABLE", "coach.chat is unavailable", false)
+                assertEquals("The consent audit must precede capability negotiation", 1, audits)
+                // Model a missing V4 capability: an unexpected fallback would reach dispatch.
+                if (requestedOperation != RelayAgentChatClient.V4_CHAT_OPERATION) {
+                    beforeDispatchCalls++
+                    assertTrue(beforeDispatch())
+                    payloadFactoryCalls++
+                    payloadFactory()
+                }
+                RelayCallResult.RemoteError("OPERATION_UNAVAILABLE", "remote token must not be shown", false)
             },
             freshRequestContext = { requestContext(mandate, context, 1_800_000_000_000L) },
             onContextWritten = { audits++; true },
+            v4ChatEnabled = true,
         )
 
         val error = runCatching {
             client.chat(null, "synthetic", mandate, context, "chat-send-unsupported")
         }.exceptionOrNull()
 
-        assertTrue(error is AgentChatException)
-        assertEquals(AgentChatFailureKind.OPERATION_UNAVAILABLE, (error as AgentChatException).kind)
-        assertEquals("OPERATION_UNAVAILABLE", error.remoteCode)
+        val chatError = error as? AgentChatException ?: throw AssertionError("Expected an agent chat error")
+        assertEquals(AgentChatFailureKind.OPERATION_UNAVAILABLE, chatError.kind)
+        assertEquals("OPERATION_UNAVAILABLE", chatError.remoteCode)
+        assertEquals("v4.coach.chat.request", operation)
+        val errorMessage = requireNotNull(chatError.message)
+        assertTrue(errorMessage.contains("Aucun repli V2"))
+        assertFalse(errorMessage.contains("token"))
         assertEquals(1, audits)
         assertEquals(1, executorCalls)
+        assertEquals(0, beforeDispatchCalls)
+        assertEquals(0, payloadFactoryCalls)
     }
 
     @Test
@@ -118,7 +148,7 @@ class RelayAgentChatClientTest {
             var payloadCalls = 0
             var audits = 0
             val client = RelayAgentChatClient(
-                executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
+                executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
                     executorCalls++
                     if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                     else {
@@ -152,7 +182,7 @@ class RelayAgentChatClientTest {
         var executorCalls = 0
         var payloadCalls = 0
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
                 executorCalls++
                 if (!beforeDispatch()) {
                     RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
@@ -189,7 +219,7 @@ class RelayAgentChatClientTest {
         var timeoutMillisSeen: Long? = null
         var timeoutCalls = 0
         val timeoutClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { timeoutMillis, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, timeoutMillis, _, _, beforeDispatch ->
                 timeoutMillisSeen = timeoutMillis
                 timeoutCalls++
                 assertTrue(beforeDispatch())
@@ -206,7 +236,7 @@ class RelayAgentChatClientTest {
         assertEquals("timeout remains uncertain and is never automatically replayed", 1, timeoutCalls)
 
         val malformedClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(JSONObject().put("reply", "x".repeat(4_001)).put("proposals", JSONArray())
                     .put("agent_status", "connected"), replayed = false)
@@ -228,7 +258,7 @@ class RelayAgentChatClientTest {
         var executorCalls = 0
         var auditBeforeExecutor = false
         val client = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
                 executorCalls++
                 assertTrue(auditBeforeExecutor)
                 assertEquals(1, auditCount)
@@ -261,7 +291,7 @@ class RelayAgentChatClientTest {
         var sent = 0
         var executorCalls = 0
         val auditFailureClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, payloadFactory, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
                 executorCalls++
                 if (!beforeDispatch()) RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
                 else {
@@ -284,7 +314,7 @@ class RelayAgentChatClientTest {
         assertEquals(0, payloadCalls)
 
         val malformedStatusClient = RelayAgentChatClient(
-            executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
                 assertTrue(beforeDispatch())
                 RelayCallResult.Success(chatResult().put("agent_status", "connected-but-unknown"), replayed = false)
             },
@@ -317,7 +347,7 @@ class RelayAgentChatClientTest {
             reason = "Synthetic proposal",
             requiredLevel = ProposalLevel.CONFIRM,
         )
-        val executor = RelayChatRequestExecutor { _, _, _, beforeDispatch ->
+        val executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
             assertTrue(beforeDispatch())
             RelayCallResult.Success(chatResult(proposal), replayed = false)
         }
@@ -366,6 +396,240 @@ class RelayAgentChatClientTest {
         assertFalse(body.getJSONObject("shared_context").toString().contains("focus"))
     }
 
+    @Test
+    fun v4CapabilityIsOptInAndNegotiatesOnlyTheFixedChatOperation() {
+        assertFalse(V4_CHAT_DEFAULT_ENABLED)
+        assertEquals(setOf("plan.revision", "coach.chat"), relayChatCapabilities(false))
+        assertEquals(setOf("plan.revision", "v4.coach.chat"), relayChatCapabilities(true))
+        assertEquals(AtlasRemoteProtocol.PROTOCOL, AtlasRemoteProtocol.protocolForCapabilities(relayChatCapabilities(false)))
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, AtlasRemoteProtocol.protocolForCapabilities(relayChatCapabilities(true)))
+        assertEquals("v4.coach.chat", AtlasRemoteProtocol.requiredCapability("v4.coach.chat.request"))
+        assertTrue(setOf("HTTP_401", "HTTP_403", "HTTP_408", "HTTP_409", "HTTP_422", "HTTP_503")
+            .all { it in AtlasRemoteProtocol.ERROR_CODES })
+
+        val credential = RelayCredentials(
+            deviceId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            deviceToken = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32)),
+            remoteStaticPublicKey = ByteArray(32),
+        )
+        val now = Instant.parse("2026-10-30T12:00:00Z")
+        val v4Protocol = AtlasRemoteProtocol.protocolForCapabilities(relayChatCapabilities(true))
+        val hello = AtlasRemoteProtocol.hello(
+            credential,
+            "v4-test",
+            relayChatCapabilities(true),
+            now,
+            protocol = v4Protocol,
+        )
+        val negotiatedRequest = AtlasRemoteProtocol.request(
+            requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            operation = "v4.coach.chat.request",
+            idempotencyKey = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            createdAt = now,
+            expiresAt = now.plusSeconds(30),
+            payload = AgentChatV4RequestBody.build(
+                conversationId = "conversation-v4",
+                message = "synthetic request",
+                requestId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                sharing = AgentChatV4Sharing.EMPTY,
+                sentAt = now,
+            ),
+            protocol = v4Protocol,
+        )
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, hello.getString("protocol"))
+        assertEquals(setOf("plan.revision", "v4.coach.chat"),
+            (0 until hello.getJSONArray("capabilities").length()).map { hello.getJSONArray("capabilities").getString(it) }.toSet())
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, negotiatedRequest.getString("protocol"))
+        val parsedV2Request = AtlasRemoteProtocol.parse(AtlasRemoteProtocol.encode(negotiatedRequest), v4Protocol)
+        assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, parsedV2Request.getString("protocol"))
+        assertEquals("v4.coach.chat.request", parsedV2Request.getString("operation"))
+        assertEquals("v4.proposal.ack", AtlasRemoteProtocol.requiredCapability("v4.proposals.pull"))
+        val v1HelloFailure = runCatching {
+            AtlasRemoteProtocol.hello(credential, "v1-test", relayChatCapabilities(true), now)
+        }.exceptionOrNull()
+        assertTrue("V1 must reject V4 capabilities", v1HelloFailure is IllegalArgumentException)
+        val arbitraryRouteFailure = runCatching {
+            AtlasRemoteProtocol.request(
+                requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                operation = "/v2/agent/chat",
+                idempotencyKey = "fixed-route-test",
+                createdAt = now,
+                expiresAt = now.plusSeconds(30),
+                payload = JSONObject(),
+            )
+        }.exceptionOrNull()
+        assertTrue("The request builder must reject arbitrary routes", arbitraryRouteFailure is RelayProtocolException)
+        val v4UnderV1Failure = runCatching {
+            AtlasRemoteProtocol.request(
+                requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                operation = "v4.coach.chat.request",
+                idempotencyKey = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                createdAt = now,
+                expiresAt = now.plusSeconds(30),
+                payload = JSONObject(),
+            )
+        }.exceptionOrNull()
+        assertTrue("V1 must reject V4 operations", v4UnderV1Failure is RelayProtocolException)
+    }
+
+    @Test
+    fun v4ChatUsesStrictContractAndSurfacesBackendToolStateAndProposalIdsWithoutV2Fallback() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val requestId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        val proposalId = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        val sharing = AgentChatV4Sharing(3, setOf("DAY_PLAN", "GOAL_PROGRESS"))
+        var operation: String? = null
+        var calls = 0
+        var auditedCategories: List<String>? = null
+        var sentBody: JSONObject? = null
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { requestedOperation, _, key, payloadFactory, beforeDispatch ->
+                calls++
+                operation = requestedOperation
+                assertEquals("v4.coach.chat.request", requestedOperation)
+                assertEquals(requestId, key)
+                assertTrue(beforeDispatch())
+                sentBody = payloadFactory()
+                RelayCallResult.Success(v4ChatResult(requestId, proposalId, "partial", 6), replayed = false)
+            },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { auditedCategories = it.consentedCategories; true },
+            v4ChatEnabled = true,
+            v4Sharing = { sharing },
+            v4SharingStillAuthorized = { it == sharing },
+        )
+
+        val response = client.chat("conversation-v4", "synthetic message", mandate, context, requestId)
+
+        assertEquals(1, calls)
+        assertEquals("v4.coach.chat.request", operation)
+        assertEquals(
+            setOf("contract_version", "schema_version", "request_id", "capability", "sent_at", "conversation_id", "message", "consent_version", "shared_categories"),
+            requireNotNull(sentBody).keys().asSequence().toSet(),
+        )
+        assertEquals(4, sentBody?.getInt("contract_version"))
+        assertEquals("coach.chat", sentBody?.getString("capability"))
+        assertEquals(requestId, sentBody?.getString("request_id"))
+        assertEquals(setOf("DAY_PLAN", "GOAL_PROGRESS"),
+            (0 until requireNotNull(sentBody).getJSONArray("shared_categories").length())
+                .map { sentBody!!.getJSONArray("shared_categories").getString(it) }.toSet())
+        assertFalse(sentBody?.has("shared_context") == true)
+        assertEquals(emptyList<String>(), auditedCategories)
+        assertEquals(AgentStatus.CONNECTED, response.status)
+        assertTrue(response.reply.contains("État des outils : partial (6 appel(s))"))
+        assertTrue(response.reply.contains("$proposalId"))
+        assertTrue(response.reply.contains("Contenu à synchroniser via la boîte de réception"))
+        assertFalse(response.reply.contains("pour le détail"))
+        assertTrue(response.proposals.isEmpty())
+        assertTrue(response.reply.length <= 4_000)
+    }
+
+    @Test
+    fun v4SharingUsesOnlyGrantedAndSyncedCategoriesAtOneConsentVersion() {
+        val sharing = v4ChatSharing(listOf(
+            consentRecord(CoreV4Category.DAY_PLAN, 2, CoreV4ConsentState.GRANTED, 2),
+            consentRecord(CoreV4Category.GOAL_PROGRESS, 2, CoreV4ConsentState.GRANTED, 2),
+            consentRecord(CoreV4Category.TRAINING_PLAN, 1, CoreV4ConsentState.GRANTED, 1),
+            consentRecord(CoreV4Category.USAGE_SUMMARY, 3, CoreV4ConsentState.GRANTED, 2),
+            consentRecord(CoreV4Category.ACTIVITY_STATUS, 3, CoreV4ConsentState.REVOKED, 3),
+        ))
+
+        assertEquals(2, sharing.consentVersion)
+        assertEquals(setOf("DAY_PLAN", "GOAL_PROGRESS"), sharing.sharedCategories)
+    }
+
+    @Test
+    fun v4ConsentRevocationBlocksDispatchAndRemoteErrorsAreTypedAndSanitized() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val sharing = AgentChatV4Sharing(2, setOf("GOAL_PROGRESS"))
+        var payloadCalls = 0
+        val revokedAtDispatch = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, _, payloadFactory, beforeDispatch ->
+                if (!beforeDispatch()) {
+                    RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
+                } else {
+                    payloadCalls++
+                    payloadFactory()
+                    RelayCallResult.Success(v4ChatResult(
+                        "11111111-1111-4111-8111-111111111111",
+                        "44444444-4444-4444-8444-444444444444",
+                        "none",
+                        0,
+                    ), replayed = false)
+                }
+            },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { true },
+            v4ChatEnabled = true,
+            v4Sharing = { sharing },
+            v4SharingStillAuthorized = { false },
+        )
+        val consentError = runCatching {
+            revokedAtDispatch.chat("conversation-v4", "synthetic", mandate, context,
+                "11111111-1111-4111-8111-111111111111")
+        }.exceptionOrNull()
+        assertEquals(AgentChatFailureKind.POLICY_DENIED, (consentError as AgentChatException).kind)
+        assertEquals(0, payloadCalls)
+
+        val typedCases = listOf(
+            "HTTP_401" to AgentChatFailureKind.AUTHENTICATION_REQUIRED,
+            "HTTP_403" to AgentChatFailureKind.CONSENT_DENIED,
+            "HTTP_408" to AgentChatFailureKind.RESULT_UNCERTAIN,
+            "HTTP_409" to AgentChatFailureKind.CONFLICT,
+            "HTTP_422" to AgentChatFailureKind.INVALID_REQUEST,
+            "HTTP_503" to AgentChatFailureKind.SERVICE_UNAVAILABLE,
+        )
+        typedCases.forEach { (code, expectedKind) ->
+            var operation: String? = null
+            val client = RelayAgentChatClient(
+                executor = RelayChatRequestExecutor { requestedOperation, _, _, _, _ ->
+                    operation = requestedOperation
+                    RelayCallResult.RemoteError(code, "Bearer secret-must-not-appear", false)
+                },
+                freshRequestContext = { requestContext(mandate, context, now) },
+                onContextWritten = { true },
+                v4ChatEnabled = true,
+                v4Sharing = { sharing },
+            )
+            val error = runCatching {
+                client.chat("conversation-v4", "synthetic", mandate, context,
+                    "22222222-2222-4222-8222-222222222222")
+            }.exceptionOrNull() as AgentChatException
+            assertEquals(expectedKind, error.kind)
+            assertFalse(error.message.orEmpty().contains("secret-must-not-appear"))
+            assertEquals("v4.coach.chat.request", operation)
+        }
+    }
+
+    @Test
+    fun v4MalformedResponseIsRejectedWithoutExposingRemoteText() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch ->
+                assertTrue(beforeDispatch())
+                RelayCallResult.Success(JSONObject().put("reply", "bad token=secret"), replayed = false)
+            },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { true },
+            v4ChatEnabled = true,
+        )
+        val error = runCatching {
+            client.chat("conversation-v4", "synthetic", mandate, context,
+                "33333333-3333-4333-8333-333333333333")
+        }.exceptionOrNull() as AgentChatException
+        assertEquals(AgentChatFailureKind.INVALID_RESPONSE, error.kind)
+        assertFalse(error.message.orEmpty().contains("secret"))
+    }
+
     private fun context(
         mandate: AgentMandate,
         now: Long,
@@ -389,4 +653,31 @@ class RelayAgentChatClientTest {
         .put("reply", "A next step.")
         .put("proposals", JSONArray().also { proposals -> proposal?.let { proposals.put(it.toJson()) } })
         .put("agent_status", "connected")
+
+    private fun v4ChatResult(
+        requestId: String,
+        proposalId: String,
+        toolState: String,
+        toolCallCount: Int,
+    ): JSONObject = JSONObject()
+        .put("contract_version", 4)
+        .put("schema_version", 4)
+        .put("request_id", requestId)
+        .put("reply", "A V4 next step.")
+        .put("proposal_ids", JSONArray().put(proposalId))
+        .put("agent_status", "ok")
+        .put("tool_state", toolState)
+        .put("tool_call_count", toolCallCount)
+
+    private fun consentRecord(
+        category: CoreV4Category,
+        version: Int,
+        state: CoreV4ConsentState,
+        syncedVersion: Int,
+    ) = CoreV4ConsentRecord(
+        snapshot = CoreV4ConsentSnapshot(category, version, state, syncedVersion),
+        requestId = UUID.randomUUID().toString(),
+        idempotencyKey = UUID.randomUUID().toString(),
+        sentAt = "2026-10-30T12:00:00Z",
+    )
 }
