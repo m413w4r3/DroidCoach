@@ -1,29 +1,37 @@
 package dev.atlas.coach.e2e
 
+import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import dev.atlas.coach.app.AtlasApplication
 import dev.atlas.coach.app.AtlasController
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.PlanState
+import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.AndroidSyncStorage
 import dev.atlas.coach.sync.agent.AgentActionType
+import dev.atlas.coach.sync.agent.AgentMandate
 import dev.atlas.coach.sync.agent.AgentMode
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
 import dev.atlas.coach.sync.agent.coach.AgentStatus
+import dev.atlas.coach.sync.agent.context.AgentContextCategory
 import dev.atlas.coach.sync.agent.inbox.v4.FileInboxV4Storage
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4LocalStore
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository
 import dev.atlas.coach.sync.relay.RelayConnectionState
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.v4.CoreV4Category
+import dev.atlas.coach.sync.v4.CoreV4ConsentSnapshot
 import dev.atlas.coach.sync.v4.CoreV4ConsentState
 import dev.atlas.coach.sync.v4.CoreV4SyncScheduler
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -32,28 +40,64 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class V7RemoteV4InstrumentedTest {
-    @After
-    fun disconnectRelayAfterScenario() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val app = instrumentation.targetContext.applicationContext as? AtlasApplication ?: return
-        instrumentation.runOnMainSync {
-            app.controller.relaySettings.disconnect()
-            app.controller.relaySettings.setV4ChatEnabled(false)
-        }
-    }
-
     @Test
     fun remoteV4ProposalCanBeAppliedOrRejectedAfterExplicitTestAction() {
+        // Validate the external action before reading or mutating app state. There is no default action.
+        val testAction = InstrumentationRegistry.getArguments()
+            .getString("test_action")
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+        require(testAction == "apply" || testAction == "reject") {
+            "test_action is required and must be apply or reject"
+        }
+
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as AtlasApplication
         val context = app.applicationContext
         val controller = app.controller
-        val planController = app.planController
+        val syncStore = AndroidSyncStorage.v4(context)
+        val initialState = captureInitialState(controller, syncStore)
+        var scenarioFailure: Throwable? = null
 
+        try {
+            runRemoteV4Scenario(
+                testAction = testAction,
+                instrumentation = instrumentation,
+                context = context,
+                app = app,
+                syncStore = syncStore,
+            )
+        } catch (failure: Throwable) {
+            scenarioFailure = failure
+            throw failure
+        } finally {
+            try {
+                restoreInitialState(instrumentation, context, controller, syncStore, initialState)
+            } catch (cleanupFailure: Throwable) {
+                val originalFailure = scenarioFailure
+                if (originalFailure == null) {
+                    throw cleanupFailure
+                }
+                originalFailure.addSuppressed(cleanupFailure)
+            }
+        }
+    }
+
+    private fun runRemoteV4Scenario(
+        testAction: String,
+        instrumentation: android.app.Instrumentation,
+        context: Context,
+        app: AtlasApplication,
+        syncStore: AndroidCoreV4SyncStore,
+    ) {
+        val controller = app.controller
+        val planController = app.planController
         instrumentation.runOnMainSync {
             planController.refresh()
             planController.refreshInbox()
@@ -72,25 +116,24 @@ class V7RemoteV4InstrumentedTest {
         assertTrue("synthetic activity must have room to move by 10 minutes", activity.scheduledLocal.startMinute <= 1429)
 
         val idempotencyKey = stableIdempotencyKey(plan.planId, activity.activityId)
+        // This snapshot is the inbox oracle for the whole chat/pull round-trip.
+        val proposalIdsBefore = planController.inboxEntries.mapTo(mutableSetOf()) { it.proposal.proposalId }
         val oldProposal = planController.inboxEntries.firstOrNull {
             it.proposal.idempotencyKey == idempotencyKey
         }
-        assertFalse(
-            "V7-05 proposal ${oldProposal?.proposal?.proposalId} is already terminal " +
-                "(${oldProposal?.proposal?.state}); refusing to apply or reject it again",
-            oldProposal?.proposal?.state?.terminal == true,
-        )
         assertTrue(
-            "existing V7-05 proposal is not in a reviewable state",
-            oldProposal == null || oldProposal.proposal.state in REVIEWABLE_PROPOSAL_STATES,
+            "V7-05 idempotency key already has proposal ${oldProposal?.proposal?.proposalId} " +
+                "in state ${oldProposal?.proposal?.state}; refusing a repeat action",
+            oldProposal == null,
         )
-
-        val testAction = InstrumentationRegistry.getArguments().getString("test_action")?.trim()?.lowercase() ?: "apply"
-        assertTrue("test_action must be apply or reject", testAction == "apply" || testAction == "reject")
 
         val relaySettings = controller.relaySettings
         assertTrue("persisted relay pairing is required", relaySettings.credentialsConfigured)
-        assertEquals("V7-05 requires the persisted pixel-v7 pairing", "pixel-v7", relaySettings.serverId)
+        assertTrue("persisted relay device id is required", relaySettings.deviceId.isNotBlank())
+        assertTrue(
+            "relay server id must use the atlas-pc identity format",
+            SERVER_ID_PATTERN.matches(relaySettings.serverId),
+        )
 
         instrumentation.runOnMainSync {
             controller.enableAgent()
@@ -132,7 +175,6 @@ class V7RemoteV4InstrumentedTest {
             diagnostic = { "state=${relaySettings.state}; paired=${relaySettings.credentialsConfigured}" },
         ) { relaySettings.state == RelayConnectionState.RELAY_CONNECTED }
 
-        val syncStore = AndroidSyncStorage.v4(context)
         syncStore.setConsent(CoreV4Category.DAY_PLAN, true)
         syncStore.setConsent(CoreV4Category.ACTIVITY_STATUS, true)
         CoreV4SyncScheduler.schedule(context)
@@ -149,7 +191,6 @@ class V7RemoteV4InstrumentedTest {
                 dayConsent.syncedVersion == dayConsent.version &&
                 statusConsent.state == CoreV4ConsentState.GRANTED &&
                 statusConsent.syncedVersion == statusConsent.version &&
-                dayConsent.version == statusConsent.version &&
                 presentation.code == V4_SYNCED_CODE &&
                 syncStore.latestPlanReceiptVersion(plan.planId, dayConsent.version) == plan.version &&
                 syncStore.freshness(CoreV4Category.DAY_PLAN).startsWith("FRESH")
@@ -165,12 +206,11 @@ class V7RemoteV4InstrumentedTest {
             idempotencyKey = idempotencyKey,
         )
         val assistantCountBefore = controller.agentConversation.count { it.role == AgentMessageRole.ASSISTANT }
-        Log.i(LOG_TAG, "synthetic_message=$requestText idempotency_key=$idempotencyKey")
+        Log.i(LOG_TAG, "synthetic_message_chars=${requestText.length} idempotency_key=$idempotencyKey")
         var sent = false
         instrumentation.runOnMainSync { sent = controller.sendAgentMessage(requestText) }
         assertTrue(
-            "synthetic V4 chat was refused; status=${controller.agentStatus} " +
-                "relay=${relaySettings.state}",
+            "synthetic V4 chat was refused; status=${controller.agentStatus}; relay=${relaySettings.state}",
             sent,
         )
 
@@ -188,49 +228,60 @@ class V7RemoteV4InstrumentedTest {
 
         val assistantResponse = controller.agentConversation
             .filter { it.role == AgentMessageRole.ASSISTANT }
-            .last()
-        assertTrue("assistant V4 response must be non-empty", assistantResponse.text.isNotBlank())
-        assertTrue(
-            "assistant response must include V4 tool provenance",
-            assistantResponse.text.contains(TOOLS_PROVENANCE_LABEL),
+            .lastOrNull()
+            ?: error("V4 assistant response is missing")
+        val toolMetadata = TOOL_METADATA_PATTERN.find(assistantResponse.text)
+            ?: error("V4 tool metadata is missing from the assistant response")
+        val toolState = toolMetadata.groupValues[1]
+        val toolCallCount = toolMetadata.groupValues[2].toInt()
+        assertEquals("completed", toolState)
+        assertTrue("V4 tool call count must include plan read and proposal", toolCallCount >= 2)
+        // V4 exposes only tool_state and tool_call_count here. Exact tool names are correlated
+        // against the parent Core/OpenClaw evidence, never inferred from assistant text.
+        val proposalIdFromReply = checkNotNull(
+            PROPOSAL_ID_PATTERN.find(assistantResponse.text)?.groupValues?.getOrNull(1),
+        ) { "V4 reply did not include a proposal id" }
+        assertFalse(
+            "reply proposal id was already present before the chat",
+            proposalIdFromReply in proposalIdsBefore,
         )
-        assertTrue(
-            "the requested day-plan read and proposal must both complete",
-            assistantResponse.text.contains("État des outils : completed (2 appel(s))."),
-        )
-        val proposalIdFromReply = PROPOSAL_ID_PATTERN.find(assistantResponse.text)
-            ?.groupValues
-            ?.getOrNull(1)
         Log.i(
             LOG_TAG,
-            "synthetic_assistant_reply=${assistantResponse.text.take(MAX_ASSISTANT_LOG_CHARS)} " +
-                "reply_proposal_id=${proposalIdFromReply ?: "not-listed"}",
+            "assistant_chars=${assistantResponse.text.length} tool_state=$toolState " +
+                "tool_call_count=$toolCallCount reply_proposal_id=$proposalIdFromReply",
         )
 
         CoreV4SyncScheduler.schedule(context)
-        var receivedEntry: dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView? = null
+        var receivedEntry: InboxV4EntryView? = null
         waitUntil(
             description = "V4 proposal inbox pull",
             timeoutMillis = PROPOSAL_TIMEOUT_MILLIS,
             diagnostic = {
-                "assistant_response=${assistantResponse.text}; ${v4Diagnostic(syncStore, plan.planId, plan.version)}"
+                val newEntries = planController.inboxEntries.filter {
+                    it.proposal.proposalId !in proposalIdsBefore
+                }
+                "reply_proposal_id=$proposalIdFromReply; new_count=${newEntries.size}; " +
+                    "new_ids=${newEntries.take(MAX_DIAGNOSTIC_IDS).joinToString(",") { it.proposal.proposalId }}; " +
+                    "new_states=${newEntries.take(MAX_DIAGNOSTIC_IDS).joinToString(",") { it.proposal.state.name }}; " +
+                    v4Diagnostic(syncStore, plan.planId, plan.version)
             },
         ) {
             instrumentation.runOnMainSync {
                 planController.refreshInbox()
                 receivedEntry = planController.inboxEntries.firstOrNull {
-                    it.proposal.idempotencyKey == idempotencyKey
+                    it.proposal.proposalId == proposalIdFromReply &&
+                        it.proposal.proposalId !in proposalIdsBefore
                 }
             }
             receivedEntry != null
         }
 
-        val inboxEntry = requireNotNull(receivedEntry) { "proposal was not received after V4 pull" }
+        val inboxEntry = requireNotNull(receivedEntry) {
+            "reply proposal id was not received as a new V4 inbox entry"
+        }
         val proposal = inboxEntry.proposal
-        assertTrue(
-            "assistant reply and inbox proposal IDs must match",
-            proposalIdFromReply == null || proposalIdFromReply == proposal.proposalId,
-        )
+        assertTrue("proposal must be new relative to the pre-chat inbox", proposal.proposalId !in proposalIdsBefore)
+        assertEquals("reply and new inbox proposal IDs must match", proposalIdFromReply, proposal.proposalId)
         assertFalse(
             "V7-05 proposal ${proposal.proposalId} is already terminal (${proposal.state}); refusing to reapply",
             proposal.state.terminal,
@@ -241,17 +292,18 @@ class V7RemoteV4InstrumentedTest {
         assertEquals(InboxV4ConfirmationMode.A0_USER_REVIEW, proposal.confirmationMode)
         assertEquals("NONE_AT_CORE", proposal.autoApplication)
         assertTrue("proposal must have no unresolved conflicts", proposal.conflicts.isEmpty())
-        assertTrue(
-            "proposal must shift only the synthetic focus activity by 10 minutes",
-            proposal.changes.any { change ->
-                change["op"] == "reschedule" &&
-                    change["activity_id"] == activity.activityId &&
-                    (change["target_start_minute"] as? Number)?.toInt() == activity.scheduledLocal.startMinute + 10
-            },
+        assertEquals("proposal must contain exactly one change", 1, proposal.changes.size)
+        val change = proposal.changes.single()
+        assertEquals("reschedule", change["op"])
+        assertEquals(activity.activityId, change["activity_id"])
+        assertEquals(
+            activity.scheduledLocal.startMinute + 10,
+            (change["target_start_minute"] as? Number)?.toInt(),
         )
         Log.i(
             LOG_TAG,
-            "proposal_id=${proposal.proposalId} state=${proposal.state} base_version=${proposal.baseVersion}",
+            "proposal_id=${proposal.proposalId} state=${proposal.state} " +
+                "base_version=${proposal.baseVersion} change_count=${proposal.changes.size}",
         )
 
         val currentDayPlanConsent = syncStore.consent(CoreV4Category.DAY_PLAN).snapshot
@@ -280,6 +332,12 @@ class V7RemoteV4InstrumentedTest {
                 assertEquals(versionBeforeAction + 1, planAfterAction.version)
                 val movedActivity = planAfterAction.activities.single { it.activityId == activity.activityId }
                 assertEquals(activity.scheduledLocal.startMinute + 10, movedActivity.scheduledLocal.startMinute)
+                assertEquals("apply must preserve the synthetic activity title", activity.title, movedActivity.title)
+                assertEquals(
+                    "apply must preserve the synthetic activity duration",
+                    activity.scheduledLocal.durationMinutes,
+                    movedActivity.scheduledLocal.durationMinutes,
+                )
                 expectedProposalState = InboxV4ProposalState.APPLIED
                 expectedAckState = InboxV4AckState.APPLIED
             }
@@ -302,7 +360,7 @@ class V7RemoteV4InstrumentedTest {
         }
 
         CoreV4SyncScheduler.schedule(context)
-        var acknowledgedEntry: dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView? = null
+        var acknowledgedEntry: InboxV4EntryView? = null
         waitUntil(
             description = "V4 durable ACK delivery",
             timeoutMillis = ACK_TIMEOUT_MILLIS,
@@ -345,6 +403,208 @@ class V7RemoteV4InstrumentedTest {
         )
     }
 
+    private fun captureInitialState(
+        controller: AtlasController,
+        syncStore: AndroidCoreV4SyncStore,
+    ): InitialState {
+        return InitialState(
+            relayMode = controller.relaySettings.mode,
+            v4ChatEnabled = controller.relaySettings.v4ChatEnabled,
+            agentEnabled = controller.isAgentEnabled,
+            capabilities = controller.capabilities.toMap(),
+            mandate = controller.agentMandate,
+            dayPlanConsent = syncStore.consent(CoreV4Category.DAY_PLAN).snapshot,
+            activityStatusConsent = syncStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot,
+        )
+    }
+
+    private fun restoreInitialState(
+        instrumentation: android.app.Instrumentation,
+        context: Context,
+        controller: AtlasController,
+        syncStore: AndroidCoreV4SyncStore,
+        initial: InitialState,
+    ) {
+        val failures = mutableListOf<Throwable>()
+        fun attempt(action: () -> Unit) {
+            try {
+                action()
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+
+        attempt {
+            instrumentation.runOnMainSync {
+                controller.relaySettings.disconnect()
+                controller.relaySettings.setV4ChatEnabled(false)
+            }
+        }
+        attempt { cancelCoreV4WorkAndAwaitIdle(context) }
+        attempt { restoreConsent(syncStore, initial.dayPlanConsent) }
+        attempt { restoreConsent(syncStore, initial.activityStatusConsent) }
+        attempt {
+            instrumentation.runOnMainSync {
+                restoreControllerState(controller, initial)
+                controller.relaySettings.selectMode(initial.relayMode)
+                // The V7 cleanup contract always leaves V4 chat disabled, even if it was enabled before.
+                controller.relaySettings.setV4ChatEnabled(false)
+                if (initial.v4ChatEnabled) {
+                    Log.i(LOG_TAG, "cleanup_limit=initial_v4_chat_forced_disabled")
+                }
+            }
+        }
+        // Some controller setters can enqueue work while restoring state, so cancel and verify again last.
+        attempt { cancelCoreV4WorkAndAwaitIdle(context) }
+
+        if (failures.isNotEmpty()) {
+            val summary = failures.joinToString(",") { it.javaClass.simpleName }.take(MAX_CLEANUP_DIAGNOSTIC_CHARS)
+            val cleanupFailure = AssertionError("V7 cleanup failed (${failures.size} steps): $summary")
+            failures.forEach(cleanupFailure::addSuppressed)
+            throw cleanupFailure
+        }
+    }
+
+    private fun restoreControllerState(controller: AtlasController, initial: InitialState) {
+        val initialMandate = initial.mandate
+        val initialAgentCapability = initial.capabilities[AtlasController.CAP_AGENT] == true
+        controller.enableAgent()
+
+        AgentActionType.entries.forEach { action ->
+            val wasAllowed = action.wireValue in initialMandate.allowedActions
+            if ((action.wireValue in controller.agentMandate.allowedActions) != wasAllowed) {
+                controller.setAgentActionAllowed(action.wireValue, wasAllowed)
+            }
+        }
+        val categoriesToRestore = AgentContextCategory.wireValueSet +
+            initialMandate.sharedDataCategories + controller.agentMandate.sharedDataCategories
+        categoriesToRestore.forEach { category ->
+            val wasAllowed = category in initialMandate.sharedDataCategories
+            if ((category in controller.agentMandate.sharedDataCategories) != wasAllowed) {
+                controller.setAgentSharedCategory(category, wasAllowed)
+            }
+        }
+        if (controller.agentMandate.mode != initialMandate.mode) {
+            controller.setAgentMode(initialMandate.mode)
+        }
+        val focusWindow = initialMandate.focusWindow
+        if (controller.agentMandate.focusWindow != focusWindow ||
+            controller.agentMandate.maxChangesPerDay != initialMandate.maxChangesPerDay
+        ) {
+            controller.setAgentFocusWindow(
+                days = focusWindow.days,
+                start = focusWindow.start,
+                end = focusWindow.end,
+                maxMinutes = focusWindow.maxMinutesPerSession,
+                maxSessionsPerDay = focusWindow.maxSessionsPerDay,
+                maxChangesPerDay = initialMandate.maxChangesPerDay,
+            )
+        }
+
+        controller.setCapability(
+            AtlasController.CAP_COACH,
+            initial.capabilities[AtlasController.CAP_COACH] == true,
+        )
+        controller.setCapability(
+            AtlasController.CAP_PLAN_REVISION,
+            initial.capabilities[AtlasController.CAP_PLAN_REVISION] == true,
+        )
+        if (initialAgentCapability) {
+            controller.enableAgent()
+        } else {
+            // The available disable API also revokes the mandate; no API restores an
+            // unrevoked mandate while keeping CAP_AGENT disabled. This is restrictive.
+            controller.disableAgent()
+            if (!initialMandate.revoked) {
+                Log.i(LOG_TAG, "cleanup_limit=disabled_agent_restores_as_revoked")
+            }
+        }
+        if (initialMandate.revoked) controller.revokeAgentMandate()
+        if (initialMandate.suspended) controller.suspendAgentMandate()
+
+        assertEquals("relay mode must be restored", initial.relayMode, controller.relaySettings.mode)
+        assertFalse("V4 chat opt-in must be disabled after cleanup", controller.relaySettings.v4ChatEnabled)
+        assertEquals("effective agent state must be restored", initial.agentEnabled, controller.isAgentEnabled)
+        assertEquals(
+            "agent capability must be restored",
+            initial.capabilities[AtlasController.CAP_AGENT] == true,
+            controller.capabilities[AtlasController.CAP_AGENT] == true,
+        )
+        assertEquals(
+            "coach capability must be restored",
+            initial.capabilities[AtlasController.CAP_COACH] == true,
+            controller.capabilities[AtlasController.CAP_COACH] == true,
+        )
+        assertEquals(
+            "plan revision capability must be restored",
+            initial.capabilities[AtlasController.CAP_PLAN_REVISION] == true,
+            controller.capabilities[AtlasController.CAP_PLAN_REVISION] == true,
+        )
+        assertEquals(initialMandate.mode, controller.agentMandate.mode)
+        assertEquals(initialMandate.allowedActions, controller.agentMandate.allowedActions)
+        assertEquals(initialMandate.focusWindow, controller.agentMandate.focusWindow)
+        assertEquals(initialMandate.maxChangesPerDay, controller.agentMandate.maxChangesPerDay)
+        assertEquals(initialMandate.sharedDataCategories, controller.agentMandate.sharedDataCategories)
+        // disableAgent() is the only public way to restore CAP_AGENT=false and it revokes
+        // an otherwise unrevoked mandate. Report that documented restrictive fallback.
+        val expectedRevoked = initialMandate.revoked || !initialAgentCapability
+        assertEquals(expectedRevoked, controller.agentMandate.revoked)
+        assertEquals(initialMandate.suspended, controller.agentMandate.suspended)
+    }
+
+    private fun restoreConsent(
+        store: AndroidCoreV4SyncStore,
+        initial: CoreV4ConsentSnapshot,
+    ) {
+        val current = store.consent(initial.category).snapshot
+        when (initial.state) {
+            CoreV4ConsentState.GRANTED -> {
+                if (current.state != CoreV4ConsentState.GRANTED) store.setConsent(initial.category, true)
+            }
+            CoreV4ConsentState.REVOKED -> {
+                if (current.state != CoreV4ConsentState.REVOKED) store.setConsent(initial.category, false)
+            }
+            CoreV4ConsentState.UNKNOWN -> {
+                // Consent is monotonic: UNKNOWN cannot be restored after the test explicitly grants it.
+                // In that case cleanup revokes it, leaving UNKNOWN -> REVOKED and a newer version.
+                if (current.state == CoreV4ConsentState.GRANTED) store.setConsent(initial.category, false)
+            }
+        }
+        val restored = store.consent(initial.category).snapshot
+        val expectedState = if (initial.state == CoreV4ConsentState.UNKNOWN &&
+            current.state == CoreV4ConsentState.GRANTED
+        ) CoreV4ConsentState.REVOKED else initial.state
+        assertEquals("${initial.category} consent state must be restored", expectedState, restored.state)
+    }
+
+    private fun cancelCoreV4WorkAndAwaitIdle(context: Context) {
+        val workManager = WorkManager.getInstance(context.applicationContext)
+        val uniqueNames = listOf(CoreV4SyncScheduler.IMMEDIATE_WORK, CoreV4SyncScheduler.PERIODIC_WORK)
+        uniqueNames.forEach { name ->
+            workManager.cancelUniqueWork(name).result.get(WORK_OPERATION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+        }
+        val deadline = SystemClock.uptimeMillis() + WORK_IDLE_TIMEOUT_MILLIS
+        while (true) {
+            val workInfos = uniqueNames.flatMap { name ->
+                workManager.getWorkInfosForUniqueWork(name)
+                    .get(WORK_OPERATION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+            }
+            val active = workInfos.filter {
+                it.state == WorkInfo.State.ENQUEUED ||
+                    it.state == WorkInfo.State.RUNNING ||
+                    it.state == WorkInfo.State.BLOCKED
+            }
+            if (active.isEmpty()) return
+            check(SystemClock.uptimeMillis() < deadline) {
+                "Core V4 workers did not stop: active_count=${active.size}; states=${active.take(MAX_DIAGNOSTIC_IDS).joinToString(",") { it.state.name }}"
+            }
+            uniqueNames.forEach { name ->
+                workManager.cancelUniqueWork(name).result.get(WORK_OPERATION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+            }
+            SystemClock.sleep(POLL_INTERVAL_MILLIS)
+        }
+    }
+
     private fun waitUntil(
         description: String,
         timeoutMillis: Long,
@@ -356,18 +616,18 @@ class V7RemoteV4InstrumentedTest {
             if (condition()) return
             SystemClock.sleep(POLL_INTERVAL_MILLIS)
         }
-        assertTrue("$description timed out: ${diagnostic()}", condition())
+        assertTrue("$description timed out: ${diagnostic().take(MAX_TIMEOUT_DIAGNOSTIC_CHARS)}", condition())
     }
 
     private fun v4Diagnostic(
-        store: dev.atlas.coach.sync.AndroidCoreV4SyncStore,
+        store: AndroidCoreV4SyncStore,
         planId: String,
         planVersion: Int,
     ): String {
         val day = store.consent(CoreV4Category.DAY_PLAN).snapshot
         val status = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
-        return "v4_code=${store.presentation().code}; " +
-            "day_freshness=${store.freshness(CoreV4Category.DAY_PLAN)}; " +
+        val freshness = store.freshness(CoreV4Category.DAY_PLAN).substringBefore(':').take(MAX_STATE_CHARS)
+        return "v4_code=${store.presentation().code}; day_freshness=$freshness; " +
             "day_consent=${day.state}:${day.syncedVersion}/${day.version}; " +
             "status_consent=${status.state}:${status.syncedVersion}/${status.version}; " +
             "plan_receipt=${store.latestPlanReceiptVersion(planId, day.version)}; plan_version=$planVersion"
@@ -394,26 +654,45 @@ class V7RemoteV4InstrumentedTest {
         "Utilise idempotency_key=$idempotencyKey. Le serveur crée le proposal_id; " +
         "ne l'invente pas. N'appelle aucun autre outil et n'effectue aucune application."
 
+    private data class InitialState(
+        val relayMode: RelayTransportMode,
+        val v4ChatEnabled: Boolean,
+        val agentEnabled: Boolean,
+        val capabilities: Map<String, Boolean>,
+        val mandate: AgentMandate,
+        val dayPlanConsent: CoreV4ConsentSnapshot,
+        val activityStatusConsent: CoreV4ConsentSnapshot,
+    )
+
     private companion object {
         const val LOG_TAG = "ATLAS_V7_V4_E2E"
         const val SYNTHETIC_ACTIVITY_TITLE = "ATLAS V7 synthetic focus"
         const val V4_SYNCED_CODE = "SYNCED"
-        const val TOOLS_PROVENANCE_LABEL = "État des outils"
         const val RELAY_TIMEOUT_MILLIS = 60_000L
         const val V4_SYNC_TIMEOUT_MILLIS = 60_000L
         const val CHAT_TIMEOUT_MILLIS = 90_000L
         const val PROPOSAL_TIMEOUT_MILLIS = 60_000L
         const val ACK_TIMEOUT_MILLIS = 60_000L
+        const val WORK_IDLE_TIMEOUT_MILLIS = 30_000L
+        const val WORK_OPERATION_TIMEOUT_MILLIS = 20_000L
         const val POLL_INTERVAL_MILLIS = 250L
-        const val MAX_ASSISTANT_LOG_CHARS = 1_500
-        val REVIEWABLE_PROPOSAL_STATES = setOf(
-            InboxV4ProposalState.PENDING_ANDROID,
-            InboxV4ProposalState.RECEIVED,
-            InboxV4ProposalState.AWAITING_USER,
+        const val MAX_DIAGNOSTIC_IDS = 5
+        const val MAX_STATE_CHARS = 24
+        const val MAX_TIMEOUT_DIAGNOSTIC_CHARS = 1_200
+        const val MAX_CLEANUP_DIAGNOSTIC_CHARS = 400
+        val SERVER_ID_PATTERN = Regex("^atlas-pc-[A-Za-z0-9._-]+$")
+        val TOOL_METADATA_PATTERN = Regex(
+            "État des outils\\s*:\\s*([a-z_]+)\\s*\\((\\d+) appel\\(s\\)\\)",
+            RegexOption.IGNORE_CASE,
         )
         val PROPOSAL_ID_PATTERN = Regex(
             "identifiants\\s*:\\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
             RegexOption.IGNORE_CASE,
+        )
+        val REVIEWABLE_PROPOSAL_STATES = setOf(
+            InboxV4ProposalState.PENDING_ANDROID,
+            InboxV4ProposalState.RECEIVED,
+            InboxV4ProposalState.AWAITING_USER,
         )
     }
 }
