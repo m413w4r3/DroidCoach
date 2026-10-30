@@ -1,0 +1,35 @@
+services:
+  atlas-core:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      additional_contexts:
+        contracts: ./contracts
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: ./backend/compose.env.example
+    environment:
+      ATLAS_TOKEN: ${ATLAS_TOKEN:-}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    volumes:
+      - atlas-core-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  atlas-core-data:
