@@ -111,12 +111,13 @@ class RelayAgentChatClientTest {
             client.chat(null, "synthetic", mandate, context, "chat-send-unsupported")
         }.exceptionOrNull()
 
-        assertTrue(error is AgentChatException)
-        assertEquals(AgentChatFailureKind.OPERATION_UNAVAILABLE, (error as AgentChatException).kind)
-        assertEquals("OPERATION_UNAVAILABLE", error.remoteCode)
+        val chatError = error as? AgentChatException ?: throw AssertionError("Expected an agent chat error")
+        assertEquals(AgentChatFailureKind.OPERATION_UNAVAILABLE, chatError.kind)
+        assertEquals("OPERATION_UNAVAILABLE", chatError.remoteCode)
         assertEquals("v4.coach.chat.request", operation)
-        assertTrue(error.message.contains("aucun repli V2"))
-        assertFalse(error.message.contains("token"))
+        val errorMessage = requireNotNull(chatError.message)
+        assertTrue(errorMessage.contains("aucun repli V2"))
+        assertFalse(errorMessage.contains("token"))
         assertEquals(1, audits)
         assertEquals(1, executorCalls)
     }
@@ -432,10 +433,11 @@ class RelayAgentChatClientTest {
         assertEquals(AtlasRemoteProtocol.PROTOCOL_V2, parsedV2Request.getString("protocol"))
         assertEquals("v4.coach.chat.request", parsedV2Request.getString("operation"))
         assertEquals("v4.proposal.ack", AtlasRemoteProtocol.requiredCapability("v4.proposals.pull"))
-        assertThrows(IllegalArgumentException::class.java) {
+        val v1HelloFailure = runCatching {
             AtlasRemoteProtocol.hello(credential, "v1-test", relayChatCapabilities(true), now)
-        }
-        assertThrows(RelayProtocolException::class.java) {
+        }.exceptionOrNull()
+        assertTrue("V1 must reject V4 capabilities", v1HelloFailure is IllegalArgumentException)
+        val arbitraryRouteFailure = runCatching {
             AtlasRemoteProtocol.request(
                 requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
                 sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -445,8 +447,9 @@ class RelayAgentChatClientTest {
                 expiresAt = now.plusSeconds(30),
                 payload = JSONObject(),
             )
-        }
-        assertThrows(RelayProtocolException::class.java) {
+        }.exceptionOrNull()
+        assertTrue("The request builder must reject arbitrary routes", arbitraryRouteFailure is RelayProtocolException)
+        val v4UnderV1Failure = runCatching {
             AtlasRemoteProtocol.request(
                 requestId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
                 sessionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -456,7 +459,8 @@ class RelayAgentChatClientTest {
                 expiresAt = now.plusSeconds(30),
                 payload = JSONObject(),
             )
-        }
+        }.exceptionOrNull()
+        assertTrue("V1 must reject V4 operations", v4UnderV1Failure is RelayProtocolException)
     }
 
     @Test
