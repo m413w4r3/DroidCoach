@@ -78,13 +78,13 @@
 
 | Verdict | État | Preuve / limite |
 |---|---|---|
-| GO_CORE | BLOCKED | Core healthy mais `mode=mock` et capabilities V4 toutes désactivées |
-| GO_OPENCLAW_TOOLS | PARTIAL — live A | Code Mode/exec désactivé et vérifié ; `atlas_get_day_plan` natif atteint le Core live (403 attendu) ; six outils catalogués ; preuve des six en exécution et proposition après activation Core |
+| GO_CORE | GO_LIVE (B) | Core live `mode=openclaw`, sept capabilities V4 vraies, chat V4 réel HTTP 200 `agent_status=ok`, image `00b88ef…`, volume conservé ; `adapter.connected=false` reste un champ à expliquer, non bloquant pour le chat |
+| GO_OPENCLAW_TOOLS | PARTIAL — A+B | Code Mode/exec désactivé et vérifié ; six outils catalogués ; plugin natif atteint le Core live et reçoit le gate `CONSENT_REQUIRED` ; chemin client disponible ; preuve des six en exécution avec données consenties après D |
 | GO_REMOTE_NETWORK | BLOCKED (partiel) | Funnel `8443→4400` confirmé ; 4400/4401/4402 absents ; A4-4 4001→1012 non clos |
 | GO_ANDROID_SYNC | BLOCKED | V7-03C en cours ; transport relayé non encore accepté ; aucun reçu runtime |
 | GO_REMOTE_CHAT | NO-GO | Code Mode `exec` interdit non désactivé ; connecteur/Core/relais non déployés |
 | GO_PLAN_REVISION | NOT_RUN | aucune proposition appliquée puis ACK |
-| GO_DOCKER_OPERATIONS | GO_LIMITED (historique) | Core-only ; redémarrage hôte non testé |
+| GO_DOCKER_OPERATIONS | GO_LIMITED (B) | Bascule Core live avec backup SQLite, image candidate, healthcheck, rollback image conservé ; pile complète relais encore non testée |
 | GO_PIXEL | PASS_PARTIEL (historique) | APK UI installé ; pas d'E2E réel |
 | GO_PRODUCT_REMOTE | NOT_RUN | interdit sans chat réel + fil rouge sur Pixel |
 
