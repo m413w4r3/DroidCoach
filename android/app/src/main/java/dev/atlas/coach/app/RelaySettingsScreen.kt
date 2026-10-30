@@ -164,7 +164,7 @@ internal fun RelaySettingsScreen(relay: RelaySettingsController) {
                 Text(
                     "1. Sur le PC, créez un appareil et copiez ses informations d'appairage.\n" +
                         "2. Collez-les ci-dessous, puis enregistrez.\n" +
-                        "3. Choisissez « Relais » pour connecter le téléphone au PC.",
+                        "3. Choisissez « Relais », puis appuyez sur « Connecter ».",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

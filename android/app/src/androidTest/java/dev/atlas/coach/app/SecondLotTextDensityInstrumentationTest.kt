@@ -151,6 +151,8 @@ class SecondLotTextDensityInstrumentationTest {
         composeRule.onNodeWithText("Appairer ce téléphone").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("1. Sur le PC, créez un appareil et copiez ses informations d'appairage.")
             .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("3. Choisissez « Relais », puis appuyez sur « Connecter ».")
+            .performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("URL du relais").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Identifiant serveur (serverId)").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Clé publique X25519 du PC").performScrollTo().assertIsDisplayed()
