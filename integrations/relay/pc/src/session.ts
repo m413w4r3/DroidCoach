@@ -1,5 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { SecureChannel } from "@getpaseo/relay/e2ee";
+import { BackendRequestError } from "./backend.js";
 import { RemoteError, asRemoteError } from "./errors.js";
 import type { DeviceRecord, DeviceRegistry } from "./device-registry.js";
 import type { ConnectorMetrics } from "./metrics.js";
@@ -9,6 +10,7 @@ import {
   MAX_REQUEST_BYTES,
   MAX_RESPONSE_BYTES,
   PROTOCOL,
+  PROTOCOL_V2,
   PROTOCOLS,
   SESSION_SECONDS,
   capabilityForOperation,
@@ -346,12 +348,19 @@ export class PeerSession {
 
   private async sendError(error: RemoteError, requestId: string | null, protocol?: Protocol): Promise<void> {
     if (this.closed) return;
+    const upstreamStatus = this.auth?.protocol === PROTOCOL_V2 && error instanceof BackendRequestError ? error.upstreamStatus : undefined;
+    const remoteCode = this.auth?.protocol === PROTOCOL_V2 && error instanceof BackendRequestError ? error.remoteCode : undefined;
     const envelope: ErrorEnvelope = {
       protocol: this.auth?.protocol ?? protocol ?? PROTOCOL,
       kind: "error",
       request_id: requestId,
       session_id: this.auth?.sessionId ?? null,
-      error: { code: error.code, message: error.message, retryable: error.retryable },
+      error: {
+        code: error.code,
+        message: error.message,
+        retryable: error.retryable,
+        ...(upstreamStatus !== undefined ? { http_status: upstreamStatus, ...(remoteCode ? { remote_code: remoteCode } : {}) } : {}),
+      },
       completed_at: new Date(this.now()).toISOString(),
     };
     try {

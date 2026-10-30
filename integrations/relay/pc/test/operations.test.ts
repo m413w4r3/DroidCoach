@@ -3,10 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BackendClient, assertLoopbackHttpUrl } from "../src/backend.js";
+import { DeviceRegistry } from "../src/device-registry.js";
 import { RemoteError } from "../src/errors.js";
+import { ConnectorMetrics } from "../src/metrics.js";
 import { OperationExecutor } from "../src/operations.js";
-import { PROTOCOL_V2, type Operation } from "../src/protocol.js";
-import { FakeSecureChannel, hello, makeContext, paired, request } from "./helpers.js";
+import { SessionManager } from "../src/session.js";
+import { PROTOCOL, PROTOCOL_V2, type Operation } from "../src/protocol.js";
+import { FakeSecureChannel, authenticate, hello, makeContext, paired, request } from "./helpers.js";
 
 const STATE = { relayConnected: () => true, backendConfigured: () => true };
 const ID_A = "00000000-0000-4000-8000-000000000101";
@@ -444,6 +447,133 @@ describe("closed operations and backend adapter", () => {
     expect(chat?.url).toBe("http://127.0.0.1:8100/v4/agent/chat");
     expect(chat?.url).not.toContain("/v2/agent/chat");
     expect(calls.every((call) => !JSON.parse(call.body ?? "{}").device_id)).toBe(true);
+  });
+
+  it("preserves safe V4 upstream error details and keeps the V2 session open", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atlas-v4-error-preservation-test-"));
+    const registry = new DeviceRegistry(join(dir, "devices.json"));
+    const metrics = new ConnectorMetrics();
+    const calls: string[] = [];
+    const device = await registry.pair("synthetic V4 error device", ["sync.status", "v4.day_plan.snapshot.write"]);
+    const upstreamErrors = [
+      { status: 401, code: "AUTH_REQUIRED", retryable: false },
+      { status: 403, code: "CONSENT_REQUIRED", retryable: false },
+      { status: 409, code: "STALE_VERSION", retryable: false },
+      { status: 422, code: "VALIDATION_FAILED", retryable: false },
+      { status: 503, code: "UPSTREAM_UNAVAILABLE", retryable: true },
+      { status: 500, code: "UNRECOGNIZED_INTERNAL_DETAIL", retryable: true },
+    ];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      v4Enabled: true,
+      pairedDeviceToken: (deviceId) => deviceId === device.device.device_id ? "synthetic-core-android-token" : undefined,
+      fetcher: async (input) => {
+        calls.push(String(input));
+        const next = upstreamErrors.shift()!;
+        return new Response(JSON.stringify({
+          contract_version: 4,
+          schema_version: 4,
+          error: {
+            code: next.code,
+            message: "private internal text synthetic-core-android-token synthetic-private-payload",
+            retryable: next.retryable,
+            debug_payload: "synthetic-private-payload",
+          },
+        }), { status: next.status, headers: { "content-type": "application/json" } });
+      },
+    });
+    const executor = new OperationExecutor(backend, STATE);
+    const manager = new SessionManager(registry, executor, metrics, STATE);
+    const channel = new FakeSecureChannel();
+    const peer = manager.create(channel);
+
+    try {
+      await peer.receive(JSON.stringify(hello(device.device.device_id, device.token, {
+        protocol: PROTOCOL_V2,
+        capabilities: ["sync.status", "v4.day_plan.snapshot.write"],
+      })));
+      const sessionId = String(channel.lastMessage().session_id);
+      const expected = [
+        { status: 401, code: "AUTH_REQUIRED", retryable: false },
+        { status: 403, code: "CONSENT_REQUIRED", retryable: false },
+        { status: 409, code: "STALE_VERSION", retryable: false },
+        { status: 422, code: "VALIDATION_FAILED", retryable: false },
+        { status: 503, code: "UPSTREAM_UNAVAILABLE", retryable: true },
+      ];
+      const basePayload = v4Payloads()[0]!.payload;
+
+      for (const [index, error] of expected.entries()) {
+        const requestId = `00000000-0000-4000-8000-${String(201 + index).padStart(12, "0")}`;
+        const payload = { ...basePayload, request_id: requestId, idempotency_key: requestId };
+        const operationRequest = { ...v4Request("v4.plan.snapshot.upsert", payload), session_id: sessionId };
+        await peer.receive(JSON.stringify(operationRequest));
+
+        const envelope = channel.lastMessage();
+        expect(envelope).toMatchObject({
+          protocol: PROTOCOL_V2,
+          kind: "error",
+          request_id: requestId,
+          error: {
+            code: "BACKEND_REJECTED",
+            retryable: error.retryable,
+            http_status: error.status,
+            remote_code: error.code,
+          },
+        });
+        expect(JSON.stringify(envelope)).not.toContain("private internal text");
+        expect(JSON.stringify(envelope)).not.toContain("synthetic-core-android-token");
+        expect(JSON.stringify(envelope)).not.toContain("synthetic-private-payload");
+        expect(channel.closeEvents).toHaveLength(0);
+      }
+
+      const genericRequestId = "00000000-0000-4000-8000-000000000299";
+      const genericPayload = { ...basePayload, request_id: genericRequestId, idempotency_key: genericRequestId };
+      await peer.receive(JSON.stringify({ ...v4Request("v4.plan.snapshot.upsert", genericPayload), session_id: sessionId }));
+      const genericEnvelope = channel.lastMessage();
+      expect(genericEnvelope).toMatchObject({
+        kind: "error",
+        error: { code: "BACKEND_UNAVAILABLE", retryable: false, http_status: 500 },
+      });
+      expect((genericEnvelope.error as Record<string, unknown>).remote_code).toBeUndefined();
+      expect(JSON.stringify(genericEnvelope)).not.toContain("UNRECOGNIZED_INTERNAL_DETAIL");
+      expect(JSON.stringify(genericEnvelope)).not.toContain("private internal text");
+      expect(channel.closeEvents).toHaveLength(0);
+
+      await peer.receive(JSON.stringify({ ...request(sessionId, "sync.status"), protocol: PROTOCOL_V2 }));
+      expect(channel.lastMessage()).toMatchObject({ kind: "response", operation: "sync.status" });
+      expect(channel.closeEvents).toHaveLength(0);
+      expect(calls).toHaveLength(6);
+      expect(calls.every((url) => new URL(url).pathname === "/v4/sync/day-plan-snapshots")).toBe(true);
+    } finally {
+      peer.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the PROTOCOL_V1 error envelope unchanged", async () => {
+    const context = await makeContext({
+      fetcher: async () => new Response(JSON.stringify({
+        error: { code: "AUTH_REQUIRED", message: "synthetic private upstream detail", retryable: false },
+      }), { status: 401, headers: { "content-type": "application/json" } }),
+    });
+    try {
+      const session = await authenticate(context);
+      const legacyRequest = request(session.sessionId, "coach.status");
+      await session.peer.receive(JSON.stringify(legacyRequest));
+      const envelope = session.channel.lastMessage();
+      expect(envelope).toMatchObject({
+        protocol: PROTOCOL,
+        kind: "error",
+        request_id: legacyRequest.request_id,
+        error: { code: "BACKEND_REJECTED", message: "backend rejected request", retryable: false },
+      });
+      expect(Object.keys(envelope.error as Record<string, unknown>).sort()).toEqual(["code", "message", "retryable"]);
+      expect(JSON.stringify(envelope)).not.toContain("synthetic private upstream detail");
+      expect(session.channel.closeEvents).toHaveLength(0);
+      session.peer.close();
+    } finally {
+      await context.dispose();
+    }
   });
 
   it("rejects unknown V4 fields and invalid schemas before fetch", async () => {
