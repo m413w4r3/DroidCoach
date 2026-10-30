@@ -11,8 +11,8 @@ services:
     restart: unless-stopped
     env_file:
       - path: ./backend/compose.env.example
-    environment:
-      ATLAS_TOKEN: ${ATLAS_TOKEN:-}
+    secrets:
+      - atlas_token
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m,mode=1777
@@ -36,3 +36,7 @@ services:
 volumes:
   atlas-core-data:
     name: atlas-core-data
+
+secrets:
+  atlas_token:
+    file: ${ATLAS_TOKEN_FILE:?Set_ATLAS_TOKEN_FILE_before_running_compose}
