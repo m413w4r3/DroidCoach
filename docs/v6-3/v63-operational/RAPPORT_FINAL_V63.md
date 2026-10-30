@@ -31,11 +31,14 @@ Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke de plus
 | Relais PC | `V63-FINAL-RELAY-TEST` — `7114dedd-7bc8-49ea-9d77-a544e65baf37` | `codex/gpt-6-luna / xhigh` |
 | Revue finale du code | `V63-REVIEW-FINAL-CODE` — `8c374793-f73b-4e94-a409-67e3a9d7aa2f` | `codex/gpt-6-luna / xhigh` |
 | Harnais E2E | `V63-E2E-HARNESS` — `fed39621-d635-41bd-bd83-006f47a4c159` | `codex/gpt-6-luna / xhigh` |
-| Qualification Pixel finale | `a363ffe5-ec91-4982-a772-cee217ff73af` | Profil non consigné |
-| Preuve runtime OpenClaw | `765804f3-6467-4902-957d-525ef72ee41a` | Profil non consigné |
+| UI copy / Accueil-Focus-A1 | `38e59a4a-d330-4ec2-a211-7920f6898d92` | `codex/gpt-6-luna / xhigh` |
+| UI Coach | `4421f8db-c232-4bff-bdb2-c2cd88e95631` | `codex/gpt-6-luna / xhigh` |
+| UI Connexion | `0cf1ddb4-8939-49f3-a931-d55e482a37e5` | `codex/gpt-6-luna / xhigh` |
+| Vérification Android/UI | `a6aa74e5-e8cd-449d-b05c-a47b90465dec` | `codex/gpt-6-luna / xhigh` |
+| Qualification Pixel finale | `a363ffe5-ec91-4982-a772-cee217ff73af` | `codex/gpt-6-luna / xhigh` |
+| Preuve runtime OpenClaw | `765804f3-6467-4902-957d-525ef72ee41a` | `codex/gpt-6-luna / xhigh` |
 | Revue indépendante runtime R2 | `a4920cea-3024-4712-8e09-349d27c97832` | `codex/gpt-6-luna / xhigh` |
-| UI/Pixel sur `43214ad` | ID non fourni avec les preuves de ce lot | Modèle/effort non fournis |
-| État OpenClaw post-redémarrage | Relevé post-redémarrage ; aucun nouvel appel outil | ID de session non fourni |
+| État OpenClaw post-redémarrage | Relevé post-redémarrage ; aucun nouvel appel outil | La session `765804f3-6467-4902-957d-525ef72ee41a` (`codex/gpt-6-luna / xhigh`) est celle des appels runtime antérieurs au redémarrage. |
 
 ## Preuves locales par SHA
 
@@ -43,11 +46,11 @@ Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke de plus
 |---|---|---|---|
 | Backend — preuve antérieure | 316 collectés, 315 passed, 0 failed, 1 skipped préexistant ; 21,91 s, au SHA `d7a30c1` | Depuis `backend/`, Python 3.12.3, pytest 8.4.0, environnement isolé ; `/tmp/atlas-test-venv/bin/python -m pytest -ra` (lanceur avec `/usr/bin/time`) | Session `V63-FINAL-BACKEND-TEST`, `ff5f4f41-e72a-4a32-b708-3bebed1b9d3c`, `codex/gpt-6-luna / xhigh`. Skip `test_real_gateway_plan_returns_valid_proposals` ; aucun Gateway réel. Non relancé pour le lot UI. |
 | Relais PC — preuve antérieure | Typecheck/build PASS ; 17 fichiers, 89 passed / 0 failed / 0 skipped, au SHA `d7a30c1` | Depuis `integrations/relay/pc`: `./node_modules/.bin/tsc -p tsconfig.json --noEmit`, `npm run build`, `npm test` ; relais local `127.0.0.1:4400` | Session `V63-FINAL-RELAY-TEST`, `7114dedd-7bc8-49ea-9d77-a544e65baf37`, `codex/gpt-6-luna / xhigh`. Preuve locale seulement, non relancée pour le lot UI. |
-| Android JVM UI | 866 tests ; 0 échec / 0 ignoré, au SHA `43214ad` | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest` | Session/modèle non fournis avec ce lot. Aucun test instrumenté inclus. |
+| Android JVM UI | 866 tests ; 0 échec / 0 ignoré, au SHA `43214ad` | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest` | Session de vérification `a6aa74e5-e8cd-449d-b05c-a47b90465dec`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté inclus. |
 | `assembleDebugAndroidTest` — référence d7a30c1 | PASS, 19 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebugAndroidTest` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté exécuté. Avertissement `MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. |
 | `lintDebug` — référence d7a30c1 | PASS, 0 erreur / 87 avertissements | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. UseKtx 42, ApplySharedPref 12, ObsoleteSdkInt 14, GradleDependency 7, SetTextI18n 6, DiscouragedApi 2, NewerVersionAvailable 2, AndroidGradlePluginVersion 1, OldTargetApi 1. |
 | `assembleDebug` — référence d7a30c1 | PASS, 140 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Produit l’ancien APK décrit ci-dessous. |
-| Android UI au SHA `43214ad` | `assembleDebugAndroidTest` PASS (compilation seule), `lintDebug` PASS (0 erreur/87 avertissements), `assembleDebug` PASS | Depuis `android/` : `./gradlew :app:assembleDebugAndroidTest`, `./gradlew :app:lintDebug`, `./gradlew :app:assembleDebug` | Session/modèle non fournis avec ce lot. `assembleDebugAndroidTest` n’a exécuté aucun test instrumenté ; les tests Compose UI ont été compilés, pas exécutés. APK : 17 326 339 octets, version 0.1.0/versionCode 1, SHA-256 `a315ed0473593b2c38730eadd15cd18fa5aab721cc6d46ee3941be833fa2a515`. |
+| Android UI au SHA `43214ad` | `assembleDebugAndroidTest` PASS (compilation seule), `lintDebug` PASS (0 erreur/87 avertissements), `assembleDebug` PASS | Depuis `android/` : `./gradlew :app:assembleDebugAndroidTest`, `./gradlew :app:lintDebug`, `./gradlew :app:assembleDebug` | Session de vérification `a6aa74e5-e8cd-449d-b05c-a47b90465dec`, `codex/gpt-6-luna / xhigh`. `assembleDebugAndroidTest` n’a exécuté aucun test instrumenté ; les tests Compose UI ont été compilés, pas exécutés. APK : 17 326 339 octets, version 0.1.0/versionCode 1, SHA-256 `a315ed0473593b2c38730eadd15cd18fa5aab721cc6d46ee3941be833fa2a515`. |
 | Revue indépendante | `ACCEPTED — GO`, aucun P0/P1 | Revue statique sur `d7a30c1` | Session `V63-REVIEW-FINAL-CODE`, `8c374793-f73b-4e94-a409-67e3a9d7aa2f`, `codex/gpt-6-luna / xhigh`. Le relecteur n'a pas relancé les tests. |
 
 Le harnais E2E (ciblé 3/3 et JVM 863/863 sur `c83f87f`) est rattaché à la session `V63-E2E-HARNESS`, `fed39621-d635-41bd-bd83-006f47a4c159`, `codex/gpt-6-luna / xhigh`.
