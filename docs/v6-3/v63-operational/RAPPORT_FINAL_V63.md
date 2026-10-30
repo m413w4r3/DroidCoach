@@ -1,15 +1,15 @@
 # ATLAS V6.3 — Rapport final de consolidation
 
 Date : **2026-10-30**
-SHA du code intégré : `d7a30c1697858e0c10d8a8496997dc4c0a321bcf`
+SHA du code final UI intégré : `43214ad6678a1c2576783d3af6a38559de168053`
 Branche du code : `v63/integration-core-v4`
 Base wave9 : `92ce000745f8188153fff4ab60933da0287fdc89`
 
 ## Verdict
 
-**GO local du code** au SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` : les suites locales backend, relais PC et Android passent, les tâches lint/build indiquées passent et la revue de code est `ACCEPTED — GO`, sans P0/P1. La revue de code était statique ; le relecteur n'a pas relancé les tests.
+**GO local du code** au SHA `43214ad6678a1c2576783d3af6a38559de168053` : le lot UI est intégré localement ; la JVM Android compte 866 tests, sans échec ni test ignoré ; lint, compilation AndroidTest et build de l’APK passent. Les preuves backend/relais antérieures restent liées à `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` et n’ont pas été relancées sur le SHA UI.
 
-La qualification Pixel de cet APK est **PASS_PARTIEL** (installation, smoke ciblé et un test instrumenté), sans qualification complète. La preuve runtime des six outils via Gateway réel est **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée** : Core synthétique seulement, production indisponible. A4-4 reste **BLOCKED** par la transformation amont 4001→1012. La clôture runtime complète V6.3 n'est pas prononcée ; plusieurs oracles R01-R12 restent partiels, NOT_RUN ou BLOCKED.
+Pixel est **PASS_PARTIEL** pour l’APK UI final : installation et smoke de plusieurs écrans PASS, mais aucun test instrumenté n’a été exécuté sur cet APK et la qualification complète reste ouverte. Le test instrumenté E2E 1/1 documenté précédemment concernait l’APK `d7a30c1`, pas celui de `43214ad`. **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée** demeure lié à la preuve sur Gateway réel avec Core synthétique au SHA `d7a30c1`; après redémarrage, le Gateway est actif mais aucun service n’écoute sur `18100`, donc la production n’est pas disponible. L’exploitation backend/relais est `READY_FOR_DESIGN` pour un Core-only Compose et reste bloquée pour les services absents ; Docker n’est pas implémenté. A4-4 reste **BLOCKED** par la transformation amont 4001→1012. La clôture runtime complète V6.3 n’est pas prononcée.
 
 ## Périmètre livré et provenance
 
@@ -17,11 +17,12 @@ La qualification Pixel de cet APK est **PASS_PARTIEL** (installation, smoke cibl
 - Merge `6d79755` pour sync V5, depuis `e77064856bdfccac6ee18afb81ac1df38ecd3e50`.
 - Merge `82e6af2` pour A1 ACK, depuis `f1e424f46548090110a4102048550d539bd54c10`.
 - Merge `d7a30c1` du harnais E2E, depuis `c83f87f78f79b8d74427266df9772c7bd36b4bfd`. Les commits `a27b3a7`, `3aad1d3`, `ced76d4` et `c83f87f` sont test-only.
-- Le harnais ciblé passe 3/3 et la suite JVM 863/863 sur `c83f87f` ; ces tests sont inclus dans les 865/865 au SHA final. L'E2E backend est inclus dans les 315 tests backend passés. Cela valide des tests locaux et ne prouve pas un fil rouge réseau/Gateway/ACK runtime.
+- Les lots UI intégrés après `d7a30c1` : Accueil/Focus/A1 (`2ecb10f`), Coach (`e59b1ff`), Connexion/appairage (`22856c6`) et correction de texte (`9e0863c`). Le code final est `43214ad6678a1c2576783d3af6a38559de168053`.
+- Le harnais ciblé passe 3/3 et la suite JVM 863/863 sur `c83f87f` ; ces tests sont inclus dans 865/865 au SHA `d7a30c1`. La JVM UI finale compte 866 tests au SHA `43214ad`. L’E2E backend est inclus dans les 315 tests backend passés au SHA d7a30c1. Ces résultats locaux ne prouvent pas un fil rouge réseau/Gateway/ACK runtime.
 - Le plugin `atlas_core_tools` 0.1.0 a été activé et chargé sur le Gateway OpenClaw pour la preuve runtime avec Core synthétique. Le Core de test a ensuite été arrêté ; le plugin reste configuré sur `127.0.0.1:18100`, où aucun Core n'écoute actuellement.
 - Les intégrations Etar, wger et localisation ne sont pas livrées ni déclarées PASS.
 
-## Sessions finales
+## Sessions et provenance des preuves
 
 | Rôle | Tâche / session | Modèle et effort effectifs |
 |---|---|---|
@@ -33,26 +34,45 @@ La qualification Pixel de cet APK est **PASS_PARTIEL** (installation, smoke cibl
 | Qualification Pixel finale | `a363ffe5-ec91-4982-a772-cee217ff73af` | Profil non consigné |
 | Preuve runtime OpenClaw | `765804f3-6467-4902-957d-525ef72ee41a` | Profil non consigné |
 | Revue indépendante runtime R2 | `a4920cea-3024-4712-8e09-349d27c97832` | `codex/gpt-6-luna / xhigh` |
+| UI/Pixel sur `43214ad` | ID non fourni avec les preuves de ce lot | Modèle/effort non fournis |
+| État OpenClaw post-redémarrage | Relevé post-redémarrage ; aucun nouvel appel outil | ID de session non fourni |
 
-## Tableau de preuves locales
+## Preuves locales par SHA
 
 | Domaine | Résultat au SHA final | Environnement et commande | Portée / limite |
 |---|---|---|---|
-| Backend | 316 collectés, 315 passed, 0 failed, 1 skipped préexistant ; 21,91 s | Depuis `backend/`, Python 3.12.3, pytest 8.4.0, environnement isolé ; `/tmp/atlas-test-venv/bin/python -m pytest -ra` (lanceur avec `/usr/bin/time`) | Session `V63-FINAL-BACKEND-TEST`, `ff5f4f41-e72a-4a32-b708-3bebed1b9d3c`, `codex/gpt-6-luna / xhigh`. Skip : `test_real_gateway_plan_returns_valid_proposals`, qui requiert `ATLAS_REAL_GATEWAY=1`. Aucun accès Gateway réel. |
-| Relais PC | Typecheck PASS ; build PASS ; 17 fichiers, 89 passed / 0 failed / 0 skipped, 5,89 s total | Depuis `integrations/relay/pc`: `./node_modules/.bin/tsc -p tsconfig.json --noEmit`, `npm run build`, `npm test` ; relais local `127.0.0.1:4400` | Session `V63-FINAL-RELAY-TEST`, `7114dedd-7bc8-49ea-9d77-a544e65baf37`, `codex/gpt-6-luna / xhigh`. Vérification locale seulement. Le flake historique `session.test.ts` n'a pas été reproduit dans le run final 89/89. |
-| Android JVM | 865 tests ; 0 échec, 0 erreur, 0 ignoré ; 114 suites XML ; 26 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest` | Session `V63-FINAL-ANDROID-TEST`, `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté inclus. |
-| `assembleDebugAndroidTest` | PASS, 19 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebugAndroidTest` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté n'a été exécuté. Avertissement de dépréciation `MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. |
-| `lintDebug` | PASS, 0 erreur / 87 avertissements | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. UseKtx 42, ApplySharedPref 12, ObsoleteSdkInt 14, GradleDependency 7, SetTextI18n 6, DiscouragedApi 2, NewerVersionAvailable 2, AndroidGradlePluginVersion 1, OldTargetApi 1. |
-| `assembleDebug` | PASS, 140 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Produit l'APK hashé décrit ci-dessous. |
+| Backend — preuve antérieure | 316 collectés, 315 passed, 0 failed, 1 skipped préexistant ; 21,91 s, au SHA `d7a30c1` | Depuis `backend/`, Python 3.12.3, pytest 8.4.0, environnement isolé ; `/tmp/atlas-test-venv/bin/python -m pytest -ra` (lanceur avec `/usr/bin/time`) | Session `V63-FINAL-BACKEND-TEST`, `ff5f4f41-e72a-4a32-b708-3bebed1b9d3c`, `codex/gpt-6-luna / xhigh`. Skip `test_real_gateway_plan_returns_valid_proposals` ; aucun Gateway réel. Non relancé pour le lot UI. |
+| Relais PC — preuve antérieure | Typecheck/build PASS ; 17 fichiers, 89 passed / 0 failed / 0 skipped, au SHA `d7a30c1` | Depuis `integrations/relay/pc`: `./node_modules/.bin/tsc -p tsconfig.json --noEmit`, `npm run build`, `npm test` ; relais local `127.0.0.1:4400` | Session `V63-FINAL-RELAY-TEST`, `7114dedd-7bc8-49ea-9d77-a544e65baf37`, `codex/gpt-6-luna / xhigh`. Preuve locale seulement, non relancée pour le lot UI. |
+| Android JVM UI | 866 tests ; 0 échec / 0 ignoré, au SHA `43214ad` | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest` | Session/modèle non fournis avec ce lot. Aucun test instrumenté inclus. |
+| `assembleDebugAndroidTest` — référence d7a30c1 | PASS, 19 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebugAndroidTest` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Aucun test instrumenté exécuté. Avertissement `MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. |
+| `lintDebug` — référence d7a30c1 | PASS, 0 erreur / 87 avertissements | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. UseKtx 42, ApplySharedPref 12, ObsoleteSdkInt 14, GradleDependency 7, SetTextI18n 6, DiscouragedApi 2, NewerVersionAvailable 2, AndroidGradlePluginVersion 1, OldTargetApi 1. |
+| `assembleDebug` — référence d7a30c1 | PASS, 140 s | Depuis `android/`, `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug` | Session Android `d9a1ad03-b7ba-43f2-a20b-ac7e66aa6ea6`, `codex/gpt-6-luna / xhigh`. Produit l’ancien APK décrit ci-dessous. |
+| Android UI au SHA `43214ad` | `assembleDebugAndroidTest` PASS (compilation seule), `lintDebug` PASS (0 erreur/87 avertissements), `assembleDebug` PASS | Depuis `android/` : `./gradlew :app:assembleDebugAndroidTest`, `./gradlew :app:lintDebug`, `./gradlew :app:assembleDebug` | Session/modèle non fournis avec ce lot. `assembleDebugAndroidTest` n’a exécuté aucun test instrumenté ; les tests Compose UI ont été compilés, pas exécutés. APK : 17 326 339 octets, version 0.1.0/versionCode 1, SHA-256 `a315ed0473593b2c38730eadd15cd18fa5aab721cc6d46ee3941be833fa2a515`. |
 | Revue indépendante | `ACCEPTED — GO`, aucun P0/P1 | Revue statique sur `d7a30c1` | Session `V63-REVIEW-FINAL-CODE`, `8c374793-f73b-4e94-a409-67e3a9d7aa2f`, `codex/gpt-6-luna / xhigh`. Le relecteur n'a pas relancé les tests. |
 
 Le harnais E2E (ciblé 3/3 et JVM 863/863 sur `c83f87f`) est rattaché à la session `V63-E2E-HARNESS`, `fed39621-d635-41bd-bd83-006f47a4c159`, `codex/gpt-6-luna / xhigh`.
 
-## Preuves runtime finales
+## Preuves runtime et état post-redémarrage
 
-### Pixel 9 Pro XL — qualification partielle
+### Pixel 9 Pro XL — smoke UI final au SHA 43214ad (`PASS_PARTIEL`)
 
-La preuve est liée au SHA source `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` et à un seul Pixel 9 Pro XL, Android 17/API 37 (`sdk_full=37.1`, correctif de sécurité 2026-09-05). Le serial est masqué.
+L’APK final UI installé est lié au code intégré `43214ad6678a1c2576783d3af6a38559de168053` : version `0.1.0`, versionCode `1`, 17 326 339 octets, SHA-256 `a315ed0473593b2c38730eadd15cd18fa5aab721cc6d46ee3941be833fa2a515`. Pixel 9 Pro XL, Android 17/API 37, `sdk_full=37.1`. `adb install -r` a réussi ; l’APK relu après installation a le hash attendu. Certificat V2 identique à l’APK précédent (`da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`). HOME `dev.atlas.coach` et permissions inchangés ; permissions calendrier, notifications et localisation restent refusées. Une sauvegarde privée app-only a été vérifiée avant installation ; aucun chemin, contenu ni empreinte n’est publié.
+
+Smoke UI après défilement, sans capture :
+
+- Accueil — PASS : « Prêt à démarrer » absent ; carte et bouton Focus présents.
+- Focus — PASS : texte « Titre modifiable avant le démarrage. » absent ; champ Tâche présent.
+- Plan — PASS : « Réorganisation A1 », « Autoriser A1 » et « Configurer A1 » présents ; « Capability A1 » absent ; ouverture/fermeture sans modification.
+- Coach — PASS pour le rendu et la garde de consentement : brouillon synthétique `test ui`, bouton Envoyer visible mais désactivé ; message « Consentement de partage manquant ou indisponible. Vérifiez les catégories de données partagées. » ; aucun envoi.
+- Connexion relayée — PASS pour l’écran : « Appairer ce téléphone » et champs URL/serverId/X25519/deviceId/jeton visibles ; Connecter désactivé avec l’explication « Appairage absent : créez l'appareil sur le PC, puis saisissez ici les informations fournies. » ; aucune valeur saisie ni connexion.
+- Partage backend — PASS pour l’écran : « Connexion au backend » et champs URL/jeton visibles ; aucune valeur saisie.
+- Aucun crash fatal observé.
+
+`assembleDebugAndroidTest` a compilé les tests, sans en exécuter. Les nouveaux tests Compose UI ont été compilés mais non exécutés. L’unique E2E instrumenté 1/1 indiqué dans la section suivante est lié à l’ancien APK `d7a30c1`, pas à celui de `43214ad`.
+
+### Pixel 9 Pro XL — E2E instrumenté antérieur lié à d7a30c1
+
+La preuve est liée au SHA source `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` et à un seul Pixel 9 Pro XL, Android 17/API 37 (`sdk_full=37.1`, correctif de sécurité 2026-09-05).
 
 - APK production installé : versionName `0.1.0`, versionCode `1`, targetSdk `36`, 15 740 291 octets, SHA-256 `08f45c3743df80b57f653ba41472514e8d006fc3068aca47be041f96a20975c9`, certificat V2 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`. `adb install -r` a réussi ; l'APK récupéré après installation est identique bit à bit au candidat. L'APK précédemment installé faisait 15 527 299 octets, SHA-256 `688e2da357d4e6d1dc163675514ee1df28378acadab02e505f5310d1b146cff1`.
 - Une sauvegarde privée app-only antérieure à l'installation (336 896 octets, 34 entrées) a été vérifiée ; extraction hors production vérifiée puis temporaire supprimée. Aucun chemin ni empreinte de sauvegarde privée n'est publié.
@@ -63,7 +83,7 @@ La preuve est liée au SHA source `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` et 
 
 La qualification Pixel reste **PARTIELLE** : Focus manuel, notifications, calendrier, localisation, offline, accessibilité et parcours A2/A1 complet restent non exécutés.
 
-### OpenClaw — preuve runtime limitée à Core synthétique
+### OpenClaw — preuve runtime limitée à Core synthétique, liée à d7a30c1
 
 OpenClaw `2026.10.5` build `1b58cb9` : `openclaw-gateway.service` actif, health OK et stable pendant le suivi. Le plugin `atlas_core_tools` est installé, activé et chargé. Configuration validée : `coreBaseUrl=http://127.0.0.1:18100`, profil `minimal`, `alsoAllow` contient exactement les six outils imposés, `deny` couvre Gateway/session_status/presence, aucune clé `allow`.
 
@@ -73,7 +93,17 @@ Les six outils ont été découverts et invoqués via le Gateway réel avec un C
 
 La revue indépendante runtime R2 (`a4920cea-3024-4712-8e09-349d27c97832`, `codex/gpt-6-luna / xhigh`) conclut **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée**. Le Core synthétique a été arrêté par SIGTERM ; aucun listener ne restait sur `18100` à 14:08:57. Le Gateway est resté actif et health OK ; son PID `93429` est resté stable pendant le suivi de revue, sans redémarrage de suivi. Le plugin reste activé et configuré sur `18100`, mais aucun Core réel compatible n'est disponible sur 18100 ; les outils ne sont donc pas disponibles en production. Le Core live `8100` n'a pas été utilisé. Cette preuve ne qualifie ni la disponibilité production ni le chemin Android→Core/Gateway ; R01 reste partiel.
 
-## APK final conservé
+### OpenClaw — état post-redémarrage
+
+Après redémarrage, `openclaw-gateway.service` est actif depuis 15:12, health HTTP 200, `NRestarts=0`. `atlas_core_tools` reste activé/chargé ; la configuration actuelle a le SHA-256 `1d78935cc5b83d7a6a4c9795831bed7f43bc3b6b6c2c693ae1f0838bf2a7bb38`, avec les six outils, profil minimal et deny Gateway/session_status/presence. Aucun listener ne répond sur `18100` ; le Core synthétique reste arrêté et aucun Core réel n’est disponible. Aucun nouvel appel d’outil n’a été effectué après redémarrage. L’acceptation runtime reste limitée à la preuve antérieure sur `d7a30c1` avec Core synthétique ; elle ne démontre pas la disponibilité production.
+
+### Exploitation backend/relais — plan prêt pour conception
+
+État observé après redémarrage : `8000` est occupé par `cti-bulletin-backend-1`, hors ATLAS ; `18789` est le Gateway OpenClaw. Aucun listener n’est présent sur `4400` (proxy), `4401` (métriques), `4402` (relais), `8100` (Core), `8770` ou `18100`. Le port `8770` correspond à une route privée tailnet hors périmètre ATLAS, de propriétaire non identifié ; il ne doit pas être réattribué. Les services de test `4400/4402` ont été arrêtés en fin de R3-B ; le proxy systemd du dépôt n’est pas installé ; le script R3-A utilise `docker run --rm` sans politique de redémarrage.
+
+Docker 27.1.1 et Compose 2.29.1 sont installés, daemon actif, sans conteneur ATLAS/Relay/OpenClaw ni image Docker/Compose ATLAS dans le dépôt. Aucun fichier SQLite n’a été trouvé aux emplacements documentés ; le Core utilise par défaut `backend/data/atlas.sqlite3` ou `ATLAS_DB_PATH`. Le plan est **READY_FOR_DESIGN** pour un Core-only Compose : Dockerfile, volume persistant hors worktree, healthcheck `/health`, `restart: unless-stopped`, binding loopback et secrets montés hors image. Les services relais/proxy `4400/4402` et la route `8770` sont à traiter séparément après décision. Aucune implémentation Docker n’a été faite ; l’exploitation backend/relais reste **BLOCKED**.
+
+## APK antérieur d7a30c1 conservé
 
 - Nom : `app-debug.apk`; `versionName=0.1.0`, `versionCode=1`.
 - Taille : **15 740 291 octets**.
@@ -81,7 +111,7 @@ La revue indépendante runtime R2 (`a4920cea-3024-4712-8e09-349d27c97832`, `code
 - Copie durable : espace d’artefacts QA privé hors dépôt, sous-dossier `V63-FINAL-d7a30c1/app-debug.apk`.
 - Permissions : dossier `0700`, fichier `0600` ; `cmp` a confirmé une copie identique.
 
-Cet APK exact a été installé pendant la qualification Pixel partielle ; cela ne signifie pas que le parcours complet est qualifié.
+Cet APK exact a été installé pendant la qualification Pixel partielle antérieure. L’APK UI final installé au SHA `43214ad` a un hash différent, donné dans la section smoke UI ci-dessus.
 
 ## Sécurité, consentement et autorité locale
 
@@ -95,7 +125,7 @@ Cet APK exact a été installé pendant la qualification Pixel partielle ; cela 
 
 ### Pixel Android 17 / API 37
 
-La qualification du Pixel final est **PASS_PARTIEL**, liée à l'APK final hashé. Installation, identité de l'APK, smoke Aujourd'hui/Plan et E2E instrumenté 1/1 sont prouvés. Focus, notifications, calendrier, localisation, offline, accessibilité et parcours A1/A2 complets restent non exécutés ; ne pas prononcer une qualification Pixel complète.
+La qualification de l'APK UI final au SHA `43214ad` est **PASS_PARTIEL** : installation, identité de l'APK et smoke UI ciblé sont prouvés ; aucun test instrumenté n'a été exécuté sur cet APK. L'E2E instrumenté 1/1 concerne uniquement l'APK antérieur `d7a30c1`. Focus manuel, notifications, calendrier, localisation, offline, accessibilité et parcours A1/A2 complets restent non exécutés ; ne pas prononcer une qualification Pixel complète.
 
 ### OpenClaw
 
@@ -144,11 +174,11 @@ GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:lintDebug
 GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleDebug
 ```
 
-Les opérations runtime rapportées proviennent des sessions Pixel `a363ffe5-ec91-4982-a772-cee217ff73af`, OpenClaw `765804f3-6467-4902-957d-525ef72ee41a` et revue R2 `a4920cea-3024-4712-8e09-349d27c97832`. Le dossier ne fournit pas de ligne de commande littérale complète pour l'installation Pixel ni pour les appels Gateway ; seule l'opération `adb install -r` est attestée PASS, et l'instrumentation est identifiée par `E2eV63InstrumentationTest`. Aucun chemin privé ni serial n'est nécessaire pour cette reproduction documentaire. `FocusGaugeInstrumentationTest` est resté non lancé ; aucune invocation `am instrument` n'a été exécutée pour ce test.
+Les opérations runtime rapportées proviennent des sessions Pixel `a363ffe5-ec91-4982-a772-cee217ff73af`, OpenClaw `765804f3-6467-4902-957d-525ef72ee41a` et revue R2 `a4920cea-3024-4712-8e09-349d27c97832`. Le dossier ne fournit pas de ligne de commande littérale complète pour l'installation Pixel ni pour les appels Gateway ; seule l'opération `adb install -r` est attestée PASS, et l'instrumentation est identifiée par `E2eV63InstrumentationTest`. Aucune métadonnée privée n'est nécessaire pour cette reproduction documentaire. `FocusGaugeInstrumentationTest` est resté non lancé ; aucune invocation `am instrument` n'a été exécutée pour ce test.
 
 Ce rapport documentaire n'a pas relancé les suites.
 
-Le résultat final des matrices R01-R12 et T01-T12 se trouve dans [RECETTE_V63.md](RECETTE_V63.md) et dans la matrice canonique [ARCHITECTURE_V63.md §16](ARCHITECTURE_V63.md). R01, R10 et R12 sont partiels ; R02/R03/R06/R07/R08 restent BLOCKED et R04/R05/R09/R11 restent NOT_RUN. Aucun PASS runtime complet n'est déclaré.
+Le résultat final des matrices R01-R12 et T01-T12 se trouve dans [RECETTE_V63.md](RECETTE_V63.md) et dans la matrice canonique [ARCHITECTURE_V63.md §16](ARCHITECTURE_V63.md). R01, R10 et R12 sont partiels ; R02/R03/R07/R08 restent BLOCKED et R04/R05/R06/R09/R11 restent NOT_RUN. Aucun PASS runtime complet n'est déclaré.
 
 ## Étapes de clôture restantes
 
