@@ -290,6 +290,8 @@ def create_app(
             raise ValueError("ATLAS_AGENT_ADAPTER must be mock or openclaw")
         active_agent = OpenClawAgentAdapter() if adapter_setting == "openclaw" else MockAgentAdapter()
     active_agent_mode = active_agent.status().adapter
+    if active_agent_mode not in {"mock", "openclaw"}:
+        raise ValueError("agent status adapter must be mock or openclaw")
     legacy_agent = active_agent if active_agent_mode == "mock" else MockAgentAdapter()
     bearer = HTTPBearer(scheme_name="bearerAuth", auto_error=False)
 
