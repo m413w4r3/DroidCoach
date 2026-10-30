@@ -201,13 +201,14 @@ def test_v4_chat_sends_only_six_tools_and_returns_exact_tool_call_id(tmp_path, m
     "calls",
     [
         [{"type": "function", "function": {"name": "atlas_get_day_plan", "arguments": "{}"}}],
+        [tool_call("call-non-printable\n", "atlas_get_day_plan", "{}")],
         [tool_call("same-id", "atlas_get_day_plan", "{}"), tool_call("same-id", "atlas_get_goal_progress", "{}")],
-        [tool_call("call-unknown", "atlas_run_shell", "{}")],
-        [tool_call("call-json", "atlas_get_day_plan", "{bad json")],
-        [tool_call("call-extra", "atlas_get_day_plan", '{"extra":true}')],
-        [tool_call("call-duplicate-key", "atlas_get_day_plan", '{"page_size":1,"page_size":2}')],
+        [{"id": "call-wrong-type", "type": "custom", "function": {"name": "atlas_get_day_plan", "arguments": "{}"}}],
+        {"id": "call-function-not-object", "type": "function", "function": []},
+        [{"id": "call-name-not-string", "type": "function", "function": {"name": None, "arguments": "{}"}}],
+        [{"id": "call-arguments-not-string", "type": "function", "function": {"name": "atlas_get_day_plan", "arguments": {}}}],
     ],
-    ids=["id-absent", "id-duplicate", "tool-unknown", "json-malformed", "field-extra", "json-duplicate-key"],
+    ids=["id-absent", "id-non-printable", "id-duplicate", "type-invalid", "function-invalid", "name-not-string", "arguments-not-string"],
 )
 def test_invalid_provider_tool_calls_are_rejected_before_dispatch(tmp_path, monkeypatch, calls):
     provider_count = 0
@@ -221,9 +222,249 @@ def test_invalid_provider_tool_calls_are_rejected_before_dispatch(tmp_path, monk
     # The request has no shared categories, and no tool can run before validation.
     response = post_chat(ASGITestClient(app), chat_body())
     assert response.status_code == 503
+    validate("chat-response.schema.json", response.json())
+    assert response.json()["agent_status"] == "unavailable"
+    assert response.json()["tool_call_count"] == len(calls)
+    assert provider_count == 1
+
+
+@pytest.mark.parametrize("calls", [None, "not-a-list", []], ids=["null", "not-a-list", "empty"])
+def test_invalid_provider_tool_call_lot_is_rejected(tmp_path, monkeypatch, calls):
+    def provider(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": "Ne pas accepter cette réponse.", "tool_calls": calls},
+        }]})
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    response = post_chat(ASGITestClient(app), chat_body())
+    assert response.status_code == 503
     validate("error.schema.json", response.json())
     assert response.json()["error"]["code"] == "UPSTREAM_UNAVAILABLE"
-    assert provider_count == 1
+
+
+def test_unknown_tool_returns_bounded_tool_error_and_model_can_correct(tmp_path, monkeypatch):
+    requests = []
+    replies = [
+        response_with_tool_calls(tool_call("call-unknown", "atlas_run_shell", '{"private":"secret"}')),
+        response_with_tool_calls(tool_call("call-corrected", "atlas_get_day_plan", "{}")),
+        final_response("Aucune action n’a été exécutée."),
+    ]
+    dispatched = []
+    original_get_day_plan = V4ToolService.atlas_get_day_plan
+
+    def observed_get_day_plan(service, device: str, arguments: dict) -> dict:
+        dispatched.append(("atlas_get_day_plan", arguments))
+        return original_get_day_plan(service, device, arguments)
+
+    monkeypatch.setattr(V4ToolService, "atlas_get_day_plan", observed_get_day_plan)
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    grant_category(app, "DAY_PLAN")
+    response = post_chat(ASGITestClient(app), chat_body(shared_categories=["DAY_PLAN"]))
+
+    assert response.status_code == 200
+    assert response.json()["tool_call_count"] == 2
+    assert response.json()["tool_state"] == "completed"
+    assert len(requests) == 3
+    messages = requests[2]["messages"]
+    assistant_calls = [call for message in messages if message["role"] == "assistant" for call in message["tool_calls"]]
+    tool_messages = [message for message in messages if message["role"] == "tool"]
+    assert [call["id"] for call in assistant_calls] == ["call-unknown", "call-corrected"]
+    assert assistant_calls[0] == tool_call("call-unknown", "atlas_run_shell", '{"private":"secret"}')
+    assert [message["tool_call_id"] for message in tool_messages] == ["call-unknown", "call-corrected"]
+    unknown_error = json.loads(tool_messages[0]["content"])
+    validate("error.schema.json", unknown_error)
+    assert unknown_error["error"]["code"] == "BAD_REQUEST"
+    assert unknown_error["error"]["capability"] is None
+    assert "secret" not in tool_messages[0]["content"]
+    assert json.loads(tool_messages[1]["content"])["data"]["state"] == "NO_PLAN"
+    assert [item[0] for item in dispatched] == ["atlas_get_day_plan"]
+
+
+@pytest.mark.parametrize(
+    "malformed_arguments",
+    ["{bad json", '{"page_size":1,"page_size":2}', "NaN"],
+    ids=["syntax", "duplicate-key", "non-standard-number"],
+)
+def test_malformed_tool_arguments_return_error_then_allow_correction(
+    tmp_path, monkeypatch, malformed_arguments
+):
+    requests = []
+    replies = [
+        response_with_tool_calls(tool_call("call-malformed", "atlas_get_day_plan", malformed_arguments)),
+        response_with_tool_calls(tool_call("call-corrected", "atlas_get_day_plan", "{}")),
+        final_response(),
+    ]
+    dispatched = []
+    original_get_day_plan = V4ToolService.atlas_get_day_plan
+
+    def observed_get_day_plan(service, device: str, arguments: dict) -> dict:
+        dispatched.append(arguments)
+        return original_get_day_plan(service, device, arguments)
+
+    monkeypatch.setattr(V4ToolService, "atlas_get_day_plan", observed_get_day_plan)
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    grant_category(app, "DAY_PLAN")
+    response = post_chat(ASGITestClient(app), chat_body(shared_categories=["DAY_PLAN"]))
+
+    assert response.status_code == 200
+    assert response.json()["tool_call_count"] == 2
+    messages = requests[2]["messages"]
+    assistant_calls = [call for message in messages if message["role"] == "assistant" for call in message["tool_calls"]]
+    tool_messages = [message for message in messages if message["role"] == "tool"]
+    assert assistant_calls[0]["function"]["arguments"] == malformed_arguments
+    assert [message["tool_call_id"] for message in tool_messages] == ["call-malformed", "call-corrected"]
+    malformed_error = json.loads(tool_messages[0]["content"])
+    validate("error.schema.json", malformed_error)
+    assert malformed_error["error"]["code"] == "BAD_REQUEST"
+    assert malformed_error["error"]["capability"] == "day_plan.read"
+    assert len(dispatched) == 1
+
+
+def test_schema_invalid_tool_arguments_return_error_then_allow_correction(tmp_path, monkeypatch):
+    requests = []
+    replies = [
+        response_with_tool_calls(tool_call("call-schema-invalid", "atlas_get_activity_status", "{}")),
+        response_with_tool_calls(tool_call(
+            "call-corrected", "atlas_get_activity_status", json.dumps({"activity_id": ACTIVITY_ID})
+        )),
+        final_response(),
+    ]
+    dispatched = []
+    original_get_activity_status = V4ToolService.atlas_get_activity_status
+
+    def observed_get_activity_status(service, device: str, arguments: dict) -> dict:
+        dispatched.append(arguments)
+        return original_get_activity_status(service, device, arguments)
+
+    monkeypatch.setattr(V4ToolService, "atlas_get_activity_status", observed_get_activity_status)
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    seed_day_plan(app)
+    grant_category(app, "ACTIVITY_STATUS")
+    response = post_chat(ASGITestClient(app), chat_body(shared_categories=["ACTIVITY_STATUS", "DAY_PLAN"]))
+
+    assert response.status_code == 200
+    assert response.json()["tool_call_count"] == 2
+    messages = requests[2]["messages"]
+    tool_messages = [message for message in messages if message["role"] == "tool"]
+    schema_error = json.loads(tool_messages[0]["content"])
+    validate("error.schema.json", schema_error)
+    assert schema_error["error"]["code"] == "BAD_REQUEST"
+    assert schema_error["error"]["capability"] == "activity_status.read"
+    assert [message["tool_call_id"] for message in tool_messages] == ["call-schema-invalid", "call-corrected"]
+    assert len(dispatched) == 1
+
+
+def test_mixed_valid_and_invalid_tool_calls_preserve_ids_order_and_arguments(tmp_path, monkeypatch):
+    requests = []
+    calls = [
+        tool_call("call-valid", "atlas_get_day_plan", '{"page_size":2}'),
+        tool_call("call-invalid", "atlas_unknown", '{"raw":"private"}'),
+    ]
+    replies = [response_with_tool_calls(*calls), final_response()]
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    grant_category(app, "DAY_PLAN")
+    response = post_chat(ASGITestClient(app), chat_body(shared_categories=["DAY_PLAN"]))
+
+    assert response.status_code == 200
+    assert response.json()["tool_call_count"] == 2
+    messages = requests[1]["messages"]
+    assistant_message = next(message for message in messages if message["role"] == "assistant")
+    tool_messages = [message for message in messages if message["role"] == "tool"]
+    assert assistant_message["tool_calls"] == calls
+    assert [message["tool_call_id"] for message in tool_messages] == ["call-valid", "call-invalid"]
+    assert json.loads(tool_messages[0]["content"])["data"]["state"] == "NO_PLAN"
+    invalid_error = json.loads(tool_messages[1]["content"])
+    validate("error.schema.json", invalid_error)
+    assert invalid_error["error"]["code"] == "BAD_REQUEST"
+    assert invalid_error["error"]["capability"] is None
+    assert "private" not in tool_messages[1]["content"]
+
+
+def test_invalid_proposal_does_not_consume_proposal_quota_or_create_proposal(tmp_path, monkeypatch):
+    requests = []
+    valid_proposal = {
+        "plan_id": PLAN_ID,
+        "base_version": 7,
+        "changes": [{"op": "reschedule", "activity_id": ACTIVITY_ID, "target_start_minute": 660}],
+        "justification": "Ajustement synthétique.",
+    }
+    replies = [
+        response_with_tool_calls(tool_call("proposal-invalid", "atlas_propose_plan_revision", "{}")),
+        response_with_tool_calls(tool_call("proposal-valid", "atlas_propose_plan_revision", json.dumps(valid_proposal))),
+        final_response("Une proposition attend ta revue."),
+    ]
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    seed_day_plan(app)
+    response = post_chat(ASGITestClient(app), chat_body(shared_categories=["DAY_PLAN"]))
+
+    assert response.status_code == 200
+    assert response.json()["tool_call_count"] == 2
+    assert len(response.json()["proposal_ids"]) == 1
+    messages = requests[2]["messages"]
+    tool_messages = [message for message in messages if message["role"] == "tool"]
+    invalid_error = json.loads(tool_messages[0]["content"])
+    validate("error.schema.json", invalid_error)
+    assert invalid_error["error"]["code"] == "BAD_REQUEST"
+    assert invalid_error["error"]["capability"] == "plan_revision.propose"
+    assert [message["tool_call_id"] for message in tool_messages] == ["proposal-invalid", "proposal-valid"]
+    with app.state.store.connect() as connection:
+        rows = connection.execute("SELECT proposal_json FROM agent_proposals_v4").fetchall()
+    assert len(rows) == 1
+    assert json.loads(rows[0]["proposal_json"])["proposal_id"] == response.json()["proposal_ids"][0]
+
+
+def test_six_invalid_tool_calls_exhaust_quota_without_inventing_a_final_reply(tmp_path, monkeypatch):
+    requests = []
+    replies = [
+        response_with_tool_calls(tool_call(f"invalid-{index}", "atlas_unknown", "{}"))
+        for index in range(1, 7)
+    ]
+    replies.append(response_with_tool_calls(tool_call("over-limit", "atlas_unknown", "{}")))
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    response = post_chat(ASGITestClient(app), chat_body())
+
+    assert response.status_code == 429
+    validate("chat-response.schema.json", response.json())
+    assert response.json()["agent_status"] == "unavailable"
+    assert response.json()["tool_call_count"] == 6
+    assert len(requests) == 7
+    prior_messages = requests[-1]["messages"]
+    assistant_calls = [call for message in prior_messages if message["role"] == "assistant" for call in message["tool_calls"]]
+    tool_messages = [message for message in prior_messages if message["role"] == "tool"]
+    assert [call["id"] for call in assistant_calls] == [f"invalid-{index}" for index in range(1, 7)]
+    assert [message["tool_call_id"] for message in tool_messages] == [f"invalid-{index}" for index in range(1, 7)]
+    assert all(json.loads(message["content"])["error"]["code"] == "BAD_REQUEST" for message in tool_messages)
 
 
 def test_chat_request_rejects_extra_fields_and_provider_invalid_response(tmp_path, monkeypatch):
@@ -279,8 +520,9 @@ def test_six_tool_and_one_proposal_quotas_are_enforced_before_dispatch(tmp_path,
     app, _adapter = make_app(tmp_path / "calls", monkeypatch, seven_tool_provider)
     too_many_calls = post_chat(ASGITestClient(app), chat_body())
     assert too_many_calls.status_code == 429
-    validate("error.schema.json", too_many_calls.json())
-    assert too_many_calls.json()["error"]["code"] == "QUOTA_EXCEEDED"
+    validate("chat-response.schema.json", too_many_calls.json())
+    assert too_many_calls.json()["agent_status"] == "unavailable"
+    assert too_many_calls.json()["tool_call_count"] == 6
     assert provider_count == 1
 
     proposal_args = json.dumps({
@@ -302,8 +544,9 @@ def test_six_tool_and_one_proposal_quotas_are_enforced_before_dispatch(tmp_path,
     app, _adapter = make_app(tmp_path / "proposals", monkeypatch, proposal_provider)
     too_many_proposals = post_chat(ASGITestClient(app), chat_body())
     assert too_many_proposals.status_code == 429
-    validate("error.schema.json", too_many_proposals.json())
-    assert too_many_proposals.json()["error"]["code"] == "QUOTA_EXCEEDED"
+    validate("chat-response.schema.json", too_many_proposals.json())
+    assert too_many_proposals.json()["agent_status"] == "unavailable"
+    assert too_many_proposals.json()["tool_call_count"] == 2
     assert provider_count == 2
 
 
@@ -436,8 +679,9 @@ def test_tool_capability_is_checked_before_dispatch(tmp_path, monkeypatch):
     grant_category(app, "DAY_PLAN")
     response = post_chat(ASGITestClient(app), chat_body(shared_categories=["DAY_PLAN"]))
     assert response.status_code == 403
-    validate("error.schema.json", response.json())
-    assert response.json()["error"]["code"] == "CAPABILITY_UNAVAILABLE"
+    validate("chat-response.schema.json", response.json())
+    assert response.json()["agent_status"] == "unavailable"
+    assert response.json()["tool_call_count"] == 1
     assert calls == 1
 
 

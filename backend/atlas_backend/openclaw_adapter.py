@@ -10,6 +10,7 @@ import re
 import stat
 import threading
 import time
+import uuid
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -44,6 +45,14 @@ CHAT_V4_TOOL_ARGUMENTS = {
     "atlas_get_usage_summary": "atlas_get_usage_summary_arguments",
     "atlas_get_goal_progress": "atlas_get_goal_progress_arguments",
     "atlas_get_training_plan": "atlas_get_training_plan_arguments",
+}
+CHAT_V4_TOOL_CAPABILITIES = {
+    "atlas_get_day_plan": "day_plan.read",
+    "atlas_get_activity_status": "activity_status.read",
+    "atlas_propose_plan_revision": "plan_revision.propose",
+    "atlas_get_usage_summary": "usage_summary.read",
+    "atlas_get_goal_progress": "goal_progress.read",
+    "atlas_get_training_plan": "training_plan.read",
 }
 CHAT_V4_TOOL_DESCRIPTIONS = {
     "atlas_get_day_plan": "Lire le plan quotidien synchronisé et consenti.",
@@ -781,7 +790,7 @@ class OpenClawAgentAdapter(AgentAdapter):
                     tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
                 )
             calls = assistant.get("tool_calls")
-            if calls is None:
+            if "tool_calls" not in assistant:
                 reply = assistant.get("content")
                 if self.clock() >= deadline:
                     raise ChatOrchestrationFailure(
@@ -801,32 +810,31 @@ class OpenClawAgentAdapter(AgentAdapter):
                     "tool_call_count": tool_call_count,
                 }
 
-            def invalid_provider(
-                failed_tool_call_count: int = tool_call_count,
-                known_completed_calls: int = completed_calls,
-                known_proposal_ids: list[str] = proposal_ids,
-            ) -> ChatOrchestrationFailure:
+            def invalid_provider() -> ChatOrchestrationFailure:
                 return ChatOrchestrationFailure(
-                    "UPSTREAM_UNAVAILABLE", tool_call_count=failed_tool_call_count,
-                    tool_state=self._chat_v4_tool_state(known_completed_calls),
-                    proposal_ids=known_proposal_ids,
+                    "UPSTREAM_UNAVAILABLE", tool_call_count=tool_call_count,
+                    tool_state=self._chat_v4_tool_state(completed_calls),
+                    proposal_ids=proposal_ids,
                 )
 
-            if (
-                choice.get("finish_reason") != "tool_calls"
-                or not isinstance(calls, list)
-                or not calls
-                or tool_call_count + len(calls) > CHAT_V4_TOOL_LIMIT
-            ):
-                if isinstance(calls, list) and tool_call_count + len(calls) > CHAT_V4_TOOL_LIMIT:
-                    raise ChatOrchestrationFailure(
-                        "QUOTA_EXCEEDED", tool_call_count=tool_call_count,
-                        tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
-                    )
+            if not isinstance(calls, list) or not calls:
+                raise invalid_provider()
+            if tool_call_count + len(calls) > CHAT_V4_TOOL_LIMIT:
+                raise ChatOrchestrationFailure(
+                    "QUOTA_EXCEEDED", tool_call_count=CHAT_V4_TOOL_LIMIT,
+                    tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
+                )
+            # Count the received batch even if a later envelope field is malformed.
+            tool_call_count += len(calls)
+            if choice.get("finish_reason") != "tool_calls":
                 raise invalid_provider()
 
-            parsed_calls: list[tuple[str, str, dict[str, Any]]] = []
+            parsed_calls: list[
+                tuple[str, str, str, dict[str, Any] | None, dict[str, Any] | None]
+            ] = []
             batch_ids: set[str] = set()
+            # Only schema-valid proposal calls reserve the per-turn proposal slot; invalid
+            # requests cannot consume that scarce quota without creating a proposal.
             batch_proposals = 0
             for raw_call in calls:
                 if not isinstance(raw_call, dict):
@@ -844,21 +852,36 @@ class OpenClawAgentAdapter(AgentAdapter):
                     raise invalid_provider()
                 name = function.get("name")
                 raw_arguments = function.get("arguments")
-                if not isinstance(name, str) or name not in CHAT_V4_TOOL_BY_NAME or not isinstance(raw_arguments, str):
+                if not isinstance(name, str) or not isinstance(raw_arguments, str):
                     raise invalid_provider()
-                try:
-                    arguments = _strict_json_loads(raw_arguments)
-                except (ValueError, TypeError, RecursionError):
-                    raise invalid_provider() from None
-                if not isinstance(arguments, dict):
-                    raise invalid_provider()
-                schema = CHAT_V4_TOOL_BY_NAME[name]["function"]["parameters"]
-                if any(Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(arguments)):
-                    raise invalid_provider()
-                if name == "atlas_propose_plan_revision":
-                    batch_proposals += 1
+
+                arguments: dict[str, Any] | None = None
+                tool_error: dict[str, Any] | None = None
+                capability = CHAT_V4_TOOL_CAPABILITIES.get(name)
+                if name not in CHAT_V4_TOOL_BY_NAME:
+                    tool_error = self._chat_v4_bad_tool_arguments(capability=None)
+                else:
+                    try:
+                        decoded_arguments = _strict_json_loads(raw_arguments)
+                    except (ValueError, TypeError, RecursionError):
+                        tool_error = self._chat_v4_bad_tool_arguments(capability=capability)
+                    else:
+                        schema = CHAT_V4_TOOL_BY_NAME[name]["function"]["parameters"]
+                        if (
+                            not isinstance(decoded_arguments, dict)
+                            or any(
+                                Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(
+                                    decoded_arguments
+                                )
+                            )
+                        ):
+                            tool_error = self._chat_v4_bad_tool_arguments(capability=capability)
+                        else:
+                            arguments = decoded_arguments
+                            if name == "atlas_propose_plan_revision":
+                                batch_proposals += 1
                 batch_ids.add(call_id)
-                parsed_calls.append((call_id, name, arguments))
+                parsed_calls.append((call_id, name, raw_arguments, arguments, tool_error))
             if proposal_count + batch_proposals > CHAT_V4_PROPOSAL_LIMIT:
                 raise ChatOrchestrationFailure(
                     "QUOTA_EXCEEDED", tool_call_count=tool_call_count,
@@ -866,8 +889,9 @@ class OpenClawAgentAdapter(AgentAdapter):
                 )
 
             try:
-                for _call_id, name, _arguments in parsed_calls:
-                    validate_tool(name)
+                for _call_id, name, _raw_arguments, _arguments, tool_error in parsed_calls:
+                    if tool_error is None:
+                        validate_tool(name)
             except ChatToolFailure as exc:
                 raise ChatOrchestrationFailure(
                     exc.code,
@@ -886,20 +910,29 @@ class OpenClawAgentAdapter(AgentAdapter):
                 {
                     "id": call_id,
                     "type": "function",
-                    "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False, separators=(",", ":"))},
+                    "function": {"name": name, "arguments": raw_arguments},
                 }
-                for call_id, name, args in parsed_calls
+                for call_id, name, raw_arguments, _arguments, _tool_error in parsed_calls
             ]
             messages.append({"role": "assistant", "content": assistant.get("content"), "tool_calls": assistant_calls})
-            for call_id, name, arguments in parsed_calls:
+            for call_id, name, _raw_arguments, arguments, tool_error in parsed_calls:
                 if self.clock() >= deadline:
                     raise ChatOrchestrationFailure(
                         "TIMEOUT", tool_call_count=tool_call_count,
                         tool_state=self._chat_v4_tool_state(completed_calls), proposal_ids=proposal_ids,
                     )
+                if tool_error is not None:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": json.dumps(
+                            tool_error, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+                        ),
+                    })
+                    continue
+                assert arguments is not None
                 try:
                     on_tool_start(name)
-                    tool_call_count += 1
                     if name == "atlas_propose_plan_revision":
                         proposal_count += 1
                     tool_result = execute_tool(name, arguments, call_id)
@@ -935,6 +968,27 @@ class OpenClawAgentAdapter(AgentAdapter):
                     "content": json.dumps(tool_result, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
                 })
             seen_call_ids.update(batch_ids)
+
+    @staticmethod
+    def _chat_v4_bad_tool_arguments(*, capability: str | None) -> dict[str, Any]:
+        """Return a generic V4 error without reflecting provider-supplied values."""
+        message = "L’outil demandé n’est pas disponible." if capability is None else (
+            "Les arguments ne respectent pas le format requis."
+        )
+        # V4 error envelopes require a UUID request_id. The chat turn's request id is not
+        # part of this adapter interface, so use an independent identifier for each tool error.
+        return {
+            "contract_version": 4,
+            "schema_version": 4,
+            "request_id": str(uuid.uuid4()),
+            "error": {
+                "code": "BAD_REQUEST",
+                "message": message,
+                "retryable": False,
+                "capability": capability,
+                "retry_after_seconds": None,
+            },
+        }
 
     @staticmethod
     def _timeout_setting() -> float:
