@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.PlanController
 import dev.atlas.coach.plan.ActivityKind
+import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.Priority
 import org.junit.Assert.assertEquals
@@ -18,7 +19,23 @@ class V7PlanSeedInstrumentedTest {
     @Test
     fun seedSyntheticApprovedPlanInAppStorage() {
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
-        val planController = PlanController(directory = File(targetContext.filesDir, "plans"))
+        val directory = File(targetContext.filesDir, "plans")
+        val firstPass = ensureTodayPlan(directory)
+        val secondPass = ensureTodayPlan(directory)
+
+        assertEquals("second pass should preserve plan id", firstPass.planId, secondPass.planId)
+        assertEquals("second pass should preserve plan version", firstPass.version, secondPass.version)
+        assertEquals("second pass should preserve activities", firstPass.activities, secondPass.activities)
+
+        Log.i(
+            LOG_TAG,
+            "ATLAS_V7_SEED plan_id=${secondPass.planId} " +
+                "version=${secondPass.version} activities=${secondPass.activities.size}",
+        )
+    }
+
+    private fun ensureTodayPlan(directory: File): DayPlan {
+        val planController = PlanController(directory = directory)
         planController.refresh()
 
         if (planController.plan == null) {
@@ -43,6 +60,7 @@ class V7PlanSeedInstrumentedTest {
 
         planController.refresh()
         val approvedPlan = planController.plan ?: error("plan missing after seeding")
+        assertEquals("plan should be for today", planController.today, approvedPlan.localDate)
         assertEquals("plan should be approved", PlanState.APPROVED, approvedPlan.state)
         assertTrue("approved plan should be at least version 2", approvedPlan.version >= 2)
         assertTrue("plan should contain an activity", approvedPlan.activities.isNotEmpty())
@@ -52,12 +70,7 @@ class V7PlanSeedInstrumentedTest {
                 approvedPlan.activities.any { it.title == SYNTHETIC_ACTIVITY_TITLE },
             )
         }
-
-        Log.i(
-            LOG_TAG,
-            "ATLAS_V7_SEED plan_id=${approvedPlan.planId} " +
-                "version=${approvedPlan.version} activities=${approvedPlan.activities.size}",
-        )
+        return approvedPlan
     }
 
     private companion object {
