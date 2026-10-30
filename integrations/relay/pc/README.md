@@ -93,11 +93,12 @@ pairing registry. Remove `ATLAS_V4_ENABLED` (or set it to anything other than
 `OPERATION_UNAVAILABLE` and make no Core call.
 
 For the systemd user service, set these two non-secret settings in the service
-environment (for example, a unit drop-in using `Environment=`). Keep the
-restricted external environment file for the existing allowlisted settings;
-the current env-file loader does not accept the new V4 keys. `check-config.mjs`
-and `check-secret.mjs` validate inherited process settings, and the latter
-prints only whether the token file has private ownership and permissions.
+environment, either in the restricted external environment file or in a unit
+drop-in using `Environment=`. The env-file allowlist accepts
+`ATLAS_V4_ENABLED` and `ATLAS_V4_ANDROID_TOKEN_FILE`. Run
+`check-config.mjs --env-file` to validate the configuration and
+`check-secret.mjs --env-file` to also require a private Android token file with
+mode `0600`; both tools hide token values and paths.
 
 ## Pairing and identity
 
