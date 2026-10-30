@@ -5,6 +5,14 @@
 **État :** plan préparé, **aucune opération sensible appliquée**.
 **Règle :** chaque section indique le composant visé, l'effet, le backup exigé, la vérification et le rollback. Une autorisation distincte du propriétaire est requise avant application.
 
+## 0. Préconditions bloquantes (état au 2026-10-30)
+
+1. **V7-03C** doit corriger et faire accepter l'alignement `request_id` enveloppe/payload V4 ; sans cela, la sync et le chat relayés sont rejetés par le connecteur PC.
+2. **Outils natifs** : `tools.effective` de l'agent `atlas` doit montrer les six outils ATLAS et aucun outil interdit. L'état isolé actuel est FAIL (0 outil ATLAS, 66 exclus) et une anomalie `exec tool.result ok` subsiste ; l'audit doit qualifier la sémantique `alsoAllow`/plugin optionnel et la réalité de l'exécution avant toute configuration live.
+3. **Token plugin** : le `tokenFile` du plugin doit correspondre au token outil du Core live ; la copie doit rester privée `0600`, hors dépôt, et la valeur ne doit jamais être affichée.
+4. **Entrée publique** : le mapping Funnel doit être confirmé par l'opérateur Tailscale (`8443→4400` ou `443→4400`) ; le port privé `8770` reste hors périmètre. A4-4 (`4001→1012`) doit être accepté explicitement ou corrigé ; il ne doit pas être masqué.
+5. **Core live** : `/health` rapporte `mode=mock` en dur ; la sélection réelle se prouve par `/internal/v4/capabilities` (sept flags) et un chat V4 `agent_status=ok`, jamais par `/health`.
+
 ## 1. OpenClaw Gateway (configuration active)
 
 ### Changements envisagés
