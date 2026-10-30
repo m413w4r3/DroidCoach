@@ -61,7 +61,7 @@ Le harnais E2E (ciblé 3/3 et JVM 863/863 sur `c83f87f`) est rattaché à la ses
 
 L’APK final UI installé est lié au code intégré `43214ad6678a1c2576783d3af6a38559de168053` : version `0.1.0`, versionCode `1`, 17 326 339 octets, SHA-256 `a315ed0473593b2c38730eadd15cd18fa5aab721cc6d46ee3941be833fa2a515`. Pixel 9 Pro XL, Android 17/API 37, `sdk_full=37.1`. `adb install -r` a réussi ; l’APK relu après installation a le hash attendu. Certificat V2 identique à l’APK précédent (`da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`). HOME `dev.atlas.coach` et permissions inchangés ; permissions calendrier, notifications et localisation restent refusées. Une sauvegarde privée app-only a été vérifiée avant installation ; aucun chemin, contenu ni empreinte n’est publié.
 
-Smoke UI après défilement, sans capture :
+Le smoke couvre **six écrans pour cinq retours UI** : Accueil, Focus, Plan, Coach et Connexion. Le retour Connexion comprend deux écrans distincts : Connexion relayée et Partage backend. Observations après défilement, sans capture :
 
 - Accueil — PASS : « Prêt à démarrer » absent ; carte et bouton Focus présents.
 - Focus — PASS : texte « Titre modifiable avant le démarrage. » absent ; champ Tâche présent.
@@ -113,7 +113,7 @@ Le Core utilise deux secrets distincts : un pour l’authentification Android et
 - Nom : `app-debug.apk`; `versionName=0.1.0`, `versionCode=1`.
 - Taille : **15 740 291 octets**.
 - SHA-256 : `08f45c3743df80b57f653ba41472514e8d006fc3068aca47be041f96a20975c9`.
-- Copie durable : espace d’artefacts QA privé hors dépôt, sous-dossier `V63-FINAL-d7a30c1/app-debug.apk`.
+- Copie durable : artefact APK privé hors dépôt, identifié par son SHA-256 `08f45c3743df80b57f653ba41472514e8d006fc3068aca47be041f96a20975c9`.
 - Permissions : dossier `0700`, fichier `0600` ; `cmp` a confirmé une copie identique.
 
 Cet APK exact a été installé pendant la qualification Pixel partielle antérieure. L’APK UI final installé au SHA `43214ad` a un hash différent, donné dans la section smoke UI ci-dessus.
