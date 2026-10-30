@@ -20,12 +20,13 @@
 
 | TASK_ID | Domaine | Session Paseo | Modèle/effort | Worktree | Statut |
 |---|---|---|---|---|---|
-| V7-00-SCOUT-OPENCLAW | Gateway, agent atlas, plugin, tools effectifs, risque exec | `dfbcbace-8ec2-4616-9926-fe1ff19d3d53` | codex/gpt-6-luna, xhigh | `v7-00-openclaw` | RUNNING |
+| V7-00-SCOUT-OPENCLAW | Gateway, agent atlas, plugin, tools effectifs, risque exec | `dfbcbace-8ec2-4616-9926-fe1ff19d3d53` | codex/gpt-6-luna, xhigh | `v7-00-openclaw` | FINISHED — plugin chargé, six outils au catalogue, `tools.effective`=0 ; risque exec historique P1 |
 | V7-00-SCOUT-CORE | routes V4 → adapter, mock vs réel, auth, chat loop | `37de4829-9f1b-45d5-8a4e-6b04ccb480bb` | codex/gpt-6-luna, xhigh | `v7-00-core` | FINISHED — rapport reçu |
-| V7-00-SCOUT-RELAY | relais, proxy, Noise, Funnel, A4-4, ports | `dcac7b01-9c4f-4107-a964-53105e390c9f` | codex/gpt-6-luna, xhigh | `v7-00-relay` | RUNNING |
+| V7-00-SCOUT-RELAY | relais, proxy, Noise, Funnel, A4-4, ports | `dcac7b01-9c4f-4107-a964-53105e390c9f` | codex/gpt-6-luna, xhigh | `v7-00-relay` | CANCELLED — bloqué sur permission systemd expirée ; preuves partielles conservées |
+| V7-00-SCOUT-RELAY-R2 | relais/proxy/Funnel/A4-4, sans systemd ni sudo | `b8162eed-eb00-4e13-9257-505879b98626` | codex/gpt-6-luna, xhigh | `v7-00-relay` | RUNNING |
 | V7-00-SCOUT-ANDROID | appairage, consentement, chat, sync, inbox, ACK | `ca750c95-bc9d-4a8c-b906-62a7f11a6c31` | codex/gpt-6-luna, xhigh | `v7-00-android` | FINISHED — rapport reçu |
-| V7-00-SCOUT-CONTRACTS | contrats V4, couverture de tests, exécution locale ciblée | `d512d169-29b3-41da-b897-65de487b1781` | codex/gpt-6-luna, xhigh | `v7-00-contracts` | RUNNING |
-| V7-00-SCOUT-GITSEC | Git, secrets, processus/ports, disque, sécurité | `834fb661-5291-463b-8461-b00ebbcb2b6c` | codex/gpt-6-luna, xhigh | `v7-00-gitsec` | RUNNING |
+| V7-00-SCOUT-CONTRACTS | contrats V4, couverture de tests, exécution locale ciblée | `d512d169-29b3-41da-b897-65de487b1781` | codex/gpt-6-luna, xhigh | `v7-00-contracts` | FINISHED — 119 tests V4 PASS_LOCAL ; parité erreurs catalogue FAIL |
+| V7-00-SCOUT-GITSEC | Git, secrets, processus/ports, disque, sécurité | `834fb661-5291-463b-8461-b00ebbcb2b6c` | codex/gpt-6-luna, xhigh | `v7-00-gitsec` | FINISHED — aucun P0 ; réconciliation worktrees demandée |
 
 **Livrable V7-00 :** carte des processus et tableau `EXISTE / CONFIGURÉ / ACTIF / TESTÉ_RÉEL / BLOQUÉ`, blocages classés par dépendance, chemin minimal vers le premier échange réel sur Pixel.
 
@@ -33,9 +34,10 @@
 
 | TASK_ID | Objectif | Dépendances | Statut | Scope d'écriture prévu | Oracle |
 |---|---|---|---|---|---|
-| V7-01B-ISOLATED-CORE-PROOF | Core isolé 18100 → Gateway réel → agent atlas → six outils, sans toucher au live | V7-00 | RUNNING — `48ac2e65-b578-4115-a19f-1139d4688a3a` ; premier chat V4 a atteint le Gateway, échec `UPSTREAM_UNAVAILABLE` avant outil, diagnostic logs en cours | worktree `v7-01b-isolated-core-proof`, scripts/preuves | tour réel `agent_status=ok`, tool call, proposition unique, `tools.effective` sans outil interdit |
-| V7-01A-COMPOSE-OPENCLAW | Plomberie Compose/entrypoint pour adapter réel et token Gateway optionnel | V7-01B | IMPLEMENTED — commit `eb95ad0a162c6b2e729a6b562989b929db1a5962` ; 10 tests PASS ; revue indépendante RUNNING | `compose.openclaw.yaml`, entrypoint, tests, docs | défaut démo mock inchangé ; override réel testé ; secret hors Git |
-| V7-02A-RELAY-V4-ENABLE | Activer V4 dans le connecteur avec bearer Android dédié et liaison d'appareil | V7-00 | IMPLEMENTED — commit `de73b7aa47777b5d8105e496f835bf746da9d30c` ; 91/91 tests unitaires ; revue indépendante RUNNING | `integrations/relay/pc/src|test|scripts`, README | V4 off par défaut ; refus si non appairé ; bearer Android, jamais token service ; tests unitaires |
+| V7-01B-ISOLATED-CORE-PROOF | Core isolé 18100 → Gateway réel → agent atlas → six outils, sans toucher au live | V7-00 | RUNNING — `48ac2e65-b578-4115-a19f-1139d4688a3a` ; payload exact + continuation prouvés en direct (200 + tool_calls) ; échec isolé attribué à l'abandon sur arguments d'outil invalides (V7-01C) | worktree `v7-01b-isolated-core-proof`, scripts/preuves | tour réel `agent_status=ok`, tool call, proposition unique, `tools.effective` sans outil interdit |
+| V7-01A-COMPOSE-OPENCLAW | Plomberie Compose/entrypoint pour adapter réel et token Gateway optionnel | V7-01B | INTEGRATED — merge `3d8d7bd` ; 17 tests PASS sur SHA fusionné ; revue P2 close | `compose.openclaw.yaml`, entrypoint, tests, docs | défaut démo mock inchangé ; override réel testé ; secret hors Git |
+| V7-02A-RELAY-V4-ENABLE | Activer V4 dans le connecteur avec bearer Android dédié et liaison d'appareil | V7-00 | INTEGRATED — merge `8841d6f` ; revue ACCEPTED ; 91/91 tests PASS sur SHA fusionné | `integrations/relay/pc/src|test|scripts`, README | V4 off par défaut ; refus si non appairé ; bearer Android, jamais token service ; tests unitaires |
+| V7-01C-BOUNDED-TOOL-ERRORS | Erreurs d'arguments/nom d'outil bornées au lieu d'abandon du tour | V7-01B | RUNNING — `2247fae3-f95e-4eb9-9eea-ac17a318d49e` | `openclaw_adapter.py`, tests chat V4 | outil inconnu/invalide → role=tool borné, aucune exécution, tour continue |
 | V7-03B-ANDROID-RELAY-V4 | Transport V4 Android via relais pour sync/inbox, sans HTTP direct | V7-02A | RUNNING — `79451179-55e3-450a-93ba-0fe25aa2bf98` | Android sync/v4 + inbox + tests | mapping chemins→opérations, bearer absent côté relais, refus fail-closed, tests JVM |
 | V7-01-OPENCLAW-REAL | Core → Gateway réel, sans fallback mock ; six outils effectifs ; exec interdit | V7-00, V7-01B | NOT_STARTED | backend adapter/config/tests | requête Core traitée par l'agent atlas réel + six appels natifs + refus exec |
 | V7-02-TRANSPORT | relais PC, proxy, Noise, entrée TLS/WSS, opérations V4 | V7-00 | NOT_STARTED | integrations/relay/**, unités/scripts | client externe autorisé → Core ; refus inconnu/révoqué |
@@ -53,7 +55,9 @@
 - **Relais** : le protocole et le mapping V4 existent déjà (`v4.coach.chat.request`, snapshots, pull, ACK). Le connecteur désactive V4 par construction : `createConnector` ne transmet ni `v4Enabled` ni `pairedDeviceToken`. Les ports 4400/4401/4402 et 18100 ne sont pas en écoute.
 - **Entrée publique** : DNS résolu, mais les connexions TLS 443/8443 se ferment avant le handshake dans l'état observé ; le port 80 redirige vers HTTPS. Aucune preuve distante valide à ce stade.
 - **Android** : appairage, consentement, chat V4, sync, inbox et ACK existent. Le toggle V4 est désactivé par défaut, aucune donnée d'appairage/consentement n'est provisionnée, et la sync/inbox utilisent un transport HTTP direct vers le Core (non joignable depuis le cellulaire), distinct du chemin relais du chat.
-- **Sécurité** : aucune valeur de secret n'a été affichée pendant les audits ; les comparaisons de tokens ont été faites par égalité booléenne.
+- **Gateway — preuves directes du parent** : un chat minimal sans outil renvoie HTTP 200 ; un outil simple et les **six définitions exactes** renvoient HTTP 200 avec `tool_calls` (`atlas_get_day_plan`) ; le tour de continuation assistant `tool_calls` + `role=tool` renvoie HTTP 200 et une réponse finale. Depuis le conteneur isolé, le payload exact de l'adaptateur avec le token PID 1 renvoie aussi 200 + `tool_calls`. Le Gateway, l'auth, le réseau host, les schémas et le format de continuation sont donc compatibles.
+- **Cause racine probable de l'échec isolé** : l'adaptateur interrompt tout le tour (`UPSTREAM_UNAVAILABLE`) lorsqu'un tool_call reconnu a des arguments JSON/schéma invalides (par ex. `atlas_get_activity_status` avec `{}`), au lieu de renvoyer un résultat d'erreur borné. Le contrat V4 exige un résultat borné et la poursuite du tour. Correctif V7-01C en cours ; la preuve isolée sera rejouée après intégration.
+- **Sécurité** : aucune valeur de secret n'a été affichée pendant les audits ; les comparaisons de tokens ont été faites par égalité booléenne. Les tests directs Gateway n'ont utilisé que des messages synthétiques.
 
 ## 4. Verdicts
 
