@@ -28,6 +28,7 @@ import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpTransport
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Proposal
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalParser
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalParseResult
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4PullPage
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Storage
@@ -35,11 +36,20 @@ import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Transport
 import dev.atlas.coach.sync.agent.inbox.v4.InMemoryInboxV4Storage
 import java.io.File
 import java.io.IOException
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.ArrayDeque
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -117,6 +127,124 @@ class InboxV4SyncTest {
         assertEquals(InboxV4DeliveryResult.Delivered, transport.ack(ack))
         assertEquals("/v4/agent/proposals/${ack.proposalId}/ack", captured.single().path)
         assertFalse(captured.single().toString().contains("synthetic-secret-token"))
+    }
+
+    @Test
+    fun consentRevocationWaitsUntilProtectedAckBodyWriteCompletes() {
+        val ack = InboxV4Fixtures.ack()
+        val bodyWriteStarted = CountDownLatch(1)
+        val releaseBodyWrite = CountDownLatch(1)
+        val revocationStarted = CountDownLatch(1)
+        val revocationCompleted = CountDownLatch(1)
+        val stateLock = Any()
+        var authorized = true
+        val connection = AtomicReference<BlockingBodyConnection>()
+        val delivery = AtomicReference<InboxV4DeliveryResult>()
+        val failure = AtomicReference<Throwable>()
+        val transport = InboxV4HttpTransport(
+            baseUrl = "https://core.example.test",
+            bearerToken = "synthetic-secret-token",
+            consentVersion = 3,
+            debuggable = false,
+            requestAllowed = { synchronized(stateLock) { authorized } },
+            requestStart = { request, writeBody ->
+                synchronized(stateLock) {
+                    if (!authorized) false else {
+                        writeBody()
+                        true
+                    }
+                }
+            },
+            connectionFactory = { url ->
+                BlockingBodyConnection(url, bodyWriteStarted, releaseBodyWrite).also(connection::set)
+            },
+        )
+
+        val sendThread = Thread {
+            try {
+                delivery.set(transport.ack(ack))
+            } catch (error: Throwable) {
+                failure.set(error)
+            }
+        }.apply { start() }
+        assertTrue(bodyWriteStarted.await(2, TimeUnit.SECONDS))
+
+        val revokeThread = Thread {
+            revocationStarted.countDown()
+            synchronized(stateLock) { authorized = false }
+            revocationCompleted.countDown()
+        }.apply { start() }
+        assertTrue(revocationStarted.await(2, TimeUnit.SECONDS))
+        try {
+            assertFalse("revocation must wait for the body write lock", revocationCompleted.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            releaseBodyWrite.countDown()
+        }
+
+        assertTrue(revocationCompleted.await(2, TimeUnit.SECONDS))
+        sendThread.join(2_000)
+        revokeThread.join(2_000)
+        assertEquals(null, failure.get())
+        assertEquals(InboxV4DeliveryResult.Delivered, delivery.get())
+        assertEquals(ack.canonicalBody(), connection.get().requestBody())
+        assertFalse(authorized)
+    }
+
+    @Test
+    fun uncertainEchoIsQuarantinedAndDoesNotBlockFollowingPullPages() {
+        val repository = InboxV4Repository(InMemoryInboxV4Storage(), { NOW })
+        val original = InboxV4Fixtures.proposal(expiresAt = NOW.plusSeconds(3_600))
+        repository.ingestRawPage(listOf(original.canonicalBody()), "cursor-1", true, 8)
+        repository.recordUncertain(original.proposalId, consentVersion = 3)
+        val serverUncertainEcho = JSONObject(original.canonicalBody())
+            .put("state", InboxV4ProposalState.UNCERTAIN.name)
+            .toString()
+
+        val uncertainPage = ingestInboxV4Page(
+            inbox = repository,
+            rawProposals = listOf(serverUncertainEcho),
+            nextCursor = "cursor-2",
+            truncated = true,
+            pageSize = 8,
+        )
+        val nextRaw = JSONObject(InboxV4Fixtures.rawProposal(
+            proposalId = "00000000-0000-4000-8000-000000000701",
+            idempotencyKey = "00000000-0000-4000-8000-000000000702",
+        ))
+            .put("created_at", NOW.minusSeconds(1).toString())
+            .put("expires_at", NOW.plusSeconds(3_600).toString())
+            .toString()
+        val nextPage = ingestInboxV4Page(repository, listOf(nextRaw), "cursor-3", true, 8)
+
+        assertEquals("cursor-2", uncertainPage.cursor)
+        assertEquals(1, repository.quarantinedPayloads().size)
+        assertEquals("cursor-3", nextPage.cursor)
+        assertEquals(1, nextPage.added)
+        assertEquals(2, repository.all().size)
+    }
+
+    @Test
+    fun ackFromRevokedConsentVersionStaysBlockedAfterRegrantWithoutReplay() {
+        val repository = InboxV4Repository(InMemoryInboxV4Storage(), { NOW })
+        val proposal = InboxV4Fixtures.proposal(expiresAt = NOW.plusSeconds(3_600))
+        repository.mergePulled(InboxV4PullPage(listOf(proposal), null, false), 8)
+        repository.recordUncertain(proposal.proposalId, consentVersion = 2)
+        val ack = repository.pendingAcks().single().ack
+        repository.markAckDelivery(ack.ackId, InboxV4AckDeliveryState.UNCERTAIN)
+        var sentCount = 0
+        val result = replayInboxV4AcksForConsentVersion(repository, object : InboxV4Transport {
+            override fun pull(cursor: String?, pageSize: Int): InboxV4PullPage = error("No pull expected")
+            override fun ack(ack: InboxV4Ack): InboxV4DeliveryResult {
+                sentCount++
+                return InboxV4DeliveryResult.Delivered
+            }
+        }, currentConsentVersion = 4)
+
+        assertEquals(1, result.blockedByConsentVersion)
+        assertFalse(result.retryableUncertainty)
+        assertEquals(0, sentCount)
+        assertEquals(ack, repository.pendingAcks().single().ack)
+        assertEquals(InboxV4AckDeliveryState.UNCERTAIN, repository.pendingAcks().single().deliveryState)
     }
 
     @Test
@@ -493,6 +621,33 @@ class InboxV4SyncTest {
     }
 
     private data class FakePage(val proposals: List<String>, val nextCursor: String?)
+
+    private class BlockingBodyConnection(
+        url: URL,
+        private val bodyWriteStarted: CountDownLatch,
+        private val releaseBodyWrite: CountDownLatch,
+    ) : HttpURLConnection(url) {
+        private val bytes = ByteArrayOutputStream()
+
+        override fun disconnect() { connected = false }
+        override fun usingProxy(): Boolean = false
+        override fun connect() { connected = true }
+        override fun getResponseCode(): Int = 200
+        override fun getInputStream(): InputStream = ByteArrayInputStream(bytes.toByteArray())
+        override fun getOutputStream(): OutputStream = object : OutputStream() {
+            override fun write(value: Int) { bytes.write(value) }
+
+            override fun write(buffer: ByteArray, offset: Int, length: Int) {
+                bodyWriteStarted.countDown()
+                if (!releaseBodyWrite.await(2, TimeUnit.SECONDS)) {
+                    throw IOException("Synthetic body write was not released")
+                }
+                bytes.write(buffer, offset, length)
+            }
+        }
+
+        fun requestBody(): String = bytes.toString(Charsets.UTF_8.name())
+    }
 
     private class ReplayTransport(private val fail: Boolean = false) : InboxV4Transport {
         override fun pull(cursor: String?, pageSize: Int): InboxV4PullPage = error("No pull expected")

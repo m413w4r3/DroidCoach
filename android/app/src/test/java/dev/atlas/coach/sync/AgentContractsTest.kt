@@ -70,7 +70,14 @@ class AgentContractsTest {
     private fun mandate() = AgentMandate(
         id = "personal-coach-v1",
         allowedActionTypes = setOf("focus_session", "suggest_break", "open_content"),
-    ).copy(focusWindow = AgentFocusWindow(start = "00:00", end = "23:59", timezone = "UTC"))
+    ).copy(
+        // The end is exclusive; include every millisecond so this fixture is independent of wall-clock minute.
+        focusWindow = AgentFocusWindow(
+            start = "00:00",
+            end = "23:59:59.999999999",
+            timezone = "UTC",
+        ),
+    )
 
     private class MemoryStorage : OutboxStorage {
         private var value: String? = null

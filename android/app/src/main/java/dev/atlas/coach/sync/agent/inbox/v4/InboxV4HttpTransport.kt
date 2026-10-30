@@ -62,6 +62,7 @@ class InboxV4HttpTransport(
     private val poster: InboxV4HttpPoster? = null,
     private val requestAllowed: (CoreV4HttpRequest) -> Boolean = { true },
     private val requestStart: ((CoreV4HttpRequest, () -> Unit) -> Boolean)? = null,
+    private val connectionFactory: ((URL) -> HttpURLConnection)? = null,
 ) : InboxV4Transport {
     private val base: String
     private val connectionLock = Any()
@@ -214,8 +215,13 @@ class InboxV4HttpTransport(
     }
 
     private fun postConfigured(request: CoreV4HttpRequest): CoreV4HttpResponse {
+        val url = try {
+            URL(base + request.path)
+        } catch (_: Exception) {
+            throw InboxV4HttpException(InboxV4HttpFailureKind.OFFLINE, retryable = true)
+        }
         val connection = try {
-            URL(base + request.path).openConnection() as HttpURLConnection
+            connectionFactory?.invoke(url) ?: (url.openConnection() as HttpURLConnection)
         } catch (_: Exception) {
             throw InboxV4HttpException(InboxV4HttpFailureKind.OFFLINE, retryable = true)
         }
@@ -241,17 +247,19 @@ class InboxV4HttpTransport(
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.doOutput = true
-            var outputStream: java.io.OutputStream? = null
-            val started = requestStart?.invoke(request) { outputStream = connection.outputStream } ?: run {
+            val bodyBytes = request.body.toByteArray(Charsets.UTF_8)
+            val writeBody = {
+                checkNotNull(connection.outputStream).use { stream -> stream.write(bodyBytes) }
+            }
+            val started = requestStart?.invoke(request, writeBody) ?: run {
                 if (requestAllowed(request) && synchronized(connectionLock) { !cancelled }) {
-                    outputStream = connection.outputStream
+                    writeBody()
                     true
                 } else {
                     false
                 }
             }
             if (!started) throw InboxV4HttpException(InboxV4HttpFailureKind.CONSENT, false, 403)
-            checkNotNull(outputStream).use { stream -> stream.write(request.body.toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             val source = if (status in 200..299) connection.inputStream else connection.errorStream
             val text = source?.use { input ->

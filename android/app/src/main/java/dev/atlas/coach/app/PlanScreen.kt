@@ -990,7 +990,7 @@ private fun PlanInboxSection(
     AtlasSection("Propositions reçues") {
         if (pendingAckCount > 0) {
             Text(
-                "$pendingAckCount ACK en attente de livraison. Ils restent conservés localement hors ligne.",
+                "$pendingAckCount ACK en attente de livraison. Ils restent conservés hors ligne. Ceux de l'ancienne version DAY_PLAN restent bloqués jusqu'à réconciliation et ne sont pas rejoués automatiquement.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("inbox_ack_pending"),
@@ -1043,7 +1043,8 @@ private fun PlanInboxSection(
                     when (proposal.confirmationMode) {
                         InboxV4ConfirmationMode.A0_USER_REVIEW -> Text("Chaque changement ci-dessous sera revu avant son application locale.")
                         InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK -> Text(
-                            "A1 exige la capability de révision, un consentement A1 versionné et l'acceptation du moteur borné. Votre confirmation reste nécessaire.",
+                            "A1 n'est pas applicable depuis cette inbox. Son activation exige le parcours A1 dédié, à fournir dans un ticket suivant; aucune révision ne sera appliquée ici.",
+                            color = MaterialTheme.colorScheme.error,
                         )
                         InboxV4ConfirmationMode.A2_USER_CONFIRMATION -> Text(
                             "Cette proposition A2 requiert votre confirmation spécifique avant toute application.",
@@ -1066,7 +1067,8 @@ private fun PlanInboxSection(
             },
             confirmButton = {
                 TextButton(
-                    enabled = capabilityEnabled && consent?.state == CoreV4ConsentState.GRANTED,
+                    enabled = capabilityEnabled && consent?.state == CoreV4ConsentState.GRANTED &&
+                        proposal.confirmationMode != InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
                     onClick = {
                         val latestConsent = runCatching {
                             AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot
@@ -1081,7 +1083,7 @@ private fun PlanInboxSection(
                     },
                 ) {
                     Text(if (proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK) {
-                        "Confirmer la révision A1"
+                        "A1 indisponible dans l'inbox"
                     } else {
                         "Confirmer et appliquer"
                     })
