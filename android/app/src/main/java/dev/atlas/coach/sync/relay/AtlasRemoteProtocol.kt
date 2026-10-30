@@ -23,6 +23,9 @@ object AtlasRemoteProtocol {
         "backend.health", "coach.status", "plan.today.read", "plan.revision.request",
         "plan.revision.result", "sport.plan.read", "sync.status", "coach.chat.request",
         "v4.coach.chat.request", "v4.proposals.pull",
+        "v4.plan.snapshot.upsert", "v4.activity-status.events.append", "v4.usage.summary.upsert",
+        "v4.goal.snapshot.upsert", "v4.training.snapshot.upsert", "v4.proposals.ack",
+        "v4.consent.state.upsert",
     )
     val ERROR_CODES = setOf(
         "INVALID_REQUEST", "UNKNOWN_OPERATION", "PAYLOAD_TOO_LARGE", "EXPIRED", "AUTH_REQUIRED",
@@ -33,9 +36,13 @@ object AtlasRemoteProtocol {
     val HELLO_CAPABILITIES = setOf(
         "plan.revision", "coach.chat", "v4.coach.chat", "v4.proposal.ack",
         "coach.status", "plan.today", "sport.plan", "sync.status",
+        "v4.day_plan.snapshot.write", "v4.activity_status.write", "v4.usage_summary.write",
+        "v4.goal_progress.write", "v4.training_plan.write", "v4.consent.state.write",
     )
-    private val V1_HELLO_CAPABILITIES = HELLO_CAPABILITIES - setOf("v4.coach.chat", "v4.proposal.ack")
-    private val V1_OPERATIONS = OPERATIONS - setOf("v4.coach.chat.request", "v4.proposals.pull")
+    const val MAX_V1_HELLO_CAPABILITIES = 8
+    const val MAX_V2_HELLO_CAPABILITIES = 14
+    private val V1_HELLO_CAPABILITIES = HELLO_CAPABILITIES.filterNot { it.startsWith("v4.") }.toSet()
+    private val V1_OPERATIONS = OPERATIONS.filterNot { it.startsWith("v4.") }.toSet()
     private val uuidPattern = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     private val tokenPattern = Regex("^[A-Za-z0-9_-]{43}$")
     private val idempotencyPattern = Regex("^[A-Za-z0-9._:-]{1,160}$")
@@ -85,7 +92,7 @@ object AtlasRemoteProtocol {
         requireString(envelope, "protocol", expectedProtocol)
         when (val kind = string(envelope, "kind")) {
             "hello" -> validateHello(envelope, expectedProtocol)
-            "hello_ok" -> validateHelloOk(envelope)
+            "hello_ok" -> validateHelloOk(envelope, expectedProtocol)
             "request" -> validateRequest(envelope, encodedSize, expectedProtocol)
             "response" -> validateResponse(envelope, encodedSize, expectedProtocol)
             "error" -> validateError(envelope)
@@ -106,8 +113,9 @@ object AtlasRemoteProtocol {
         protocol: String = PROTOCOL,
     ): JSONObject {
         require(clientVersion.isNotBlank() && clientVersion.length <= 40)
-        require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= 8)
         require(protocol in setOf(PROTOCOL, PROTOCOL_V2))
+        val maxCapabilities = if (protocol == PROTOCOL) MAX_V1_HELLO_CAPABILITIES else MAX_V2_HELLO_CAPABILITIES
+        require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= maxCapabilities)
         val allowedCapabilities = if (protocol == PROTOCOL) V1_HELLO_CAPABILITIES else HELLO_CAPABILITIES
         require(requestedCapabilities.all { it in allowedCapabilities })
         val nonce = ByteArray(16).also(java.security.SecureRandom()::nextBytes)
@@ -152,7 +160,13 @@ object AtlasRemoteProtocol {
         "plan.revision.request", "plan.revision.result" -> "plan.revision"
         "coach.chat.request" -> "coach.chat"
         "v4.coach.chat.request" -> "v4.coach.chat"
-        "v4.proposals.pull" -> "v4.proposal.ack"
+        "v4.plan.snapshot.upsert" -> "v4.day_plan.snapshot.write"
+        "v4.activity-status.events.append" -> "v4.activity_status.write"
+        "v4.usage.summary.upsert" -> "v4.usage_summary.write"
+        "v4.goal.snapshot.upsert" -> "v4.goal_progress.write"
+        "v4.training.snapshot.upsert" -> "v4.training_plan.write"
+        "v4.proposals.pull", "v4.proposals.ack" -> "v4.proposal.ack"
+        "v4.consent.state.upsert" -> "v4.consent.state.write"
         else -> null
     }
 
@@ -181,7 +195,8 @@ object AtlasRemoteProtocol {
         val version = string(value, "client_version")
         if (version.isBlank() || version.length > 40) fail("invalid client_version")
         val capabilities = array(value, "capabilities")
-        if (capabilities.length() > 8) fail("too many capabilities")
+        val maxCapabilities = if (protocol == PROTOCOL) MAX_V1_HELLO_CAPABILITIES else MAX_V2_HELLO_CAPABILITIES
+        if (capabilities.length() > maxCapabilities) fail("too many capabilities")
         val seen = mutableSetOf<String>()
         for (i in 0 until capabilities.length()) {
             val cap = stringValue(capabilities.get(i), "capability")
@@ -195,7 +210,7 @@ object AtlasRemoteProtocol {
         parseTimestamp(value, "timestamp")
     }
 
-    private fun validateHelloOk(value: JSONObject) {
+    private fun validateHelloOk(value: JSONObject, protocol: String) {
         exactKeys(value, setOf("protocol", "kind", "session_id", "server_time", "expires_in_seconds", "capabilities", "max_request_bytes", "max_response_bytes"))
         requireString(value, "kind", "hello_ok")
         requireUuid(value, "session_id")
@@ -203,7 +218,8 @@ object AtlasRemoteProtocol {
         val ttl = integer(value, "expires_in_seconds")
         if (ttl !in 60L..3600L) fail("invalid session expiry")
         val capabilities = array(value, "capabilities")
-        if (capabilities.length() > 8) fail("too many capabilities")
+        val maxCapabilities = if (protocol == PROTOCOL) MAX_V1_HELLO_CAPABILITIES else MAX_V2_HELLO_CAPABILITIES
+        if (capabilities.length() > maxCapabilities) fail("too many capabilities")
         val seen = mutableSetOf<String>()
         for (i in 0 until capabilities.length()) {
             val cap = stringValue(capabilities.get(i), "capability")

@@ -38,7 +38,12 @@ data class RelayConfig(
         require(reconnectBaseMillis > 0 && reconnectMaxMillis >= reconnectBaseMillis)
         require(maxReconnectAttempts >= 0 && maxQueuedRequests in 1..256)
         require(maxConcurrentRequests in 1..4)
-        require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= 8)
+        val maximumCapabilities = if (requestedCapabilities.any { it.startsWith("v4.") }) {
+            AtlasRemoteProtocol.MAX_V2_HELLO_CAPABILITIES
+        } else {
+            AtlasRemoteProtocol.MAX_V1_HELLO_CAPABILITIES
+        }
+        require(requestedCapabilities.isNotEmpty() && requestedCapabilities.size <= maximumCapabilities)
         require(requestedCapabilities.all { it in AtlasRemoteProtocol.HELLO_CAPABILITIES })
     }
 

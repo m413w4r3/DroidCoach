@@ -270,3 +270,11 @@
 - La recherche et l'insertion restent dans la transaction SQLite immédiate de la route, ce qui sérialise les rejeux concurrents. Les contrôles d'existence de statut sont aussi limités au même appareil.
 - Le contrat V4 et les migrations restent inchangés: `last_synced_at` existe déjà dans le reçu et `received_at` dans le stockage. Pour les éventuelles lignes historiques où `received_at` est nul, l'horodatage d'origine ne peut pas être restitué; la réponse garde le repli actuel sur l'horloge du serveur sans modifier la ligne.
 - 2026-10-30 — Correction P1 après re-revue: même pour un corps déjà accepté, l'API vérifie que les consentements courants `ACTIVITY_STATUS` et `DAY_PLAN` sont `GRANTED` avant d'émettre le reçu. Une révocation donne `CONSENT_REQUIRED`/403 sans reçu; un réoctroi permet le rejeu exact avec l'ancienne version stockée, sans exiger une projection resynchronisée.
+
+## V7 — Transport V4 Android relayé (2026-10-30)
+
+| Décision | Raison |
+|---|---|
+| Le mode `RELAY` utilise uniquement la session authentifiée déjà ouverte; `DIRECT` conserve le transport Core HTTP et `OFFLINE` n'émet aucune requête. | Le relais ne reçoit jamais le bearer Core et une panne du relais ne divulgue pas l'URL Core via un basculement. |
+| Ajouter au codec Android les opérations et capabilities V4 déjà définies par le connecteur; garder V1 inchangé et borner V2 à 14 capabilities, comme le contrat du connecteur. | La base Android acceptait avant ce ticket uniquement le chat V4 et le pull, et rejetait les nouvelles opérations avant dispatch; les tailles de payload et délais restent inchangés. |
+| Les échecs relayés ne demandent pas de retry immédiat à WorkManager; le scheduler périodique existant reste responsable de la prochaine tentative. | Évite un renvoi automatique après un résultat potentiellement incertain, sans introduire de boucle de polling. |

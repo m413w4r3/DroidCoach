@@ -27,6 +27,8 @@ import dev.atlas.coach.plan.TrainingReferenceSyncState
 import dev.atlas.coach.plan.v5.PlanV5JsonCodec
 import dev.atlas.coach.sync.AndroidSyncStorage
 import dev.atlas.coach.sync.AndroidCoreV4SyncStore
+import dev.atlas.coach.sync.relay.AndroidRelaySettingsStore
+import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.CoreV4ConsentRecord
 import dev.atlas.coach.sync.SharedPreferencesBearerTokenStore
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpException
@@ -67,18 +69,47 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
             store.recordFailure("RUNNING", "Synchronisation V4 en cours.")
             val syncConfig = AndroidSyncStorage.settings(applicationContext).read()
             val debuggable = applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-            val transport = CoreV4UrlConnectionTransport(
-                syncConfig.baseUrl,
-                debuggable,
-                requestAllowed = { request -> !isStopped && coreV4RequestStillAuthorized(store, request) },
+            val relayMode = AndroidRelaySettingsStore(applicationContext).read().mode
+            val relayModeStillSelected = { AndroidRelaySettingsStore(applicationContext).read().mode == relayMode }
+            val directTransport = if (relayMode == RelayTransportMode.DIRECT) {
+                CoreV4UrlConnectionTransport(
+                    syncConfig.baseUrl,
+                    debuggable,
+                    requestAllowed = { request ->
+                        relayModeStillSelected() && !isStopped && coreV4RequestStillAuthorized(store, request)
+                    },
+                    requestStart = { request, start ->
+                        if (relayModeStillSelected()) {
+                            startCoreV4TransportIfAuthorized(store, request, { isStopped }, start)
+                        } else {
+                            false
+                        }
+                    },
+                )
+            } else {
+                CoreV4OfflineHttpTransport
+            }
+            val relayTransport = RelayCoreV4HttpTransport(
+                requestAllowed = { request ->
+                    relayModeStillSelected() && !isStopped && coreV4RequestStillAuthorized(store, request)
+                },
                 requestStart = { request, start ->
-                    startCoreV4TransportIfAuthorized(store, request, { isStopped }, start)
+                    if (relayModeStillSelected()) {
+                        startCoreV4TransportIfAuthorized(store, request, { isStopped }, start)
+                    } else {
+                        false
+                    }
                 },
             )
+            val transport = selectCoreV4HttpTransport(relayMode, directTransport, relayTransport)
             client = CoreV4SyncClient(transport)
             activeClient = client
-            val token = SharedPreferencesBearerTokenStore(applicationContext).token()
-                ?: throw CoreV4SyncException(CoreV4FailureKind.AUTHENTICATION, false, 401)
+            val token = if (relayMode == RelayTransportMode.DIRECT) {
+                SharedPreferencesBearerTokenStore(applicationContext).token()
+                    ?: throw CoreV4SyncException(CoreV4FailureKind.AUTHENTICATION, false, 401)
+            } else {
+                ""
+            }
 
             syncConsentFirst(store, client, token)
             if (isStopped) return Result.success()
@@ -119,7 +150,8 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
                 try {
                     retryInbox = syncProposalInbox(
                         store = store,
-                        baseUrl = syncConfig.baseUrl,
+                        mode = relayMode,
+                        baseUrl = syncConfig.baseUrl.takeIf { relayMode == RelayTransportMode.DIRECT },
                         bearerToken = token,
                         debuggable = debuggable,
                         consentVersion = dayPlanConsent.version.toLong(),
@@ -185,7 +217,8 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
 
     private fun syncProposalInbox(
         store: AndroidCoreV4SyncStore,
-        baseUrl: String,
+        mode: RelayTransportMode,
+        baseUrl: String?,
         bearerToken: String,
         debuggable: Boolean,
         consentVersion: Long,
@@ -194,18 +227,50 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         val inbox = InboxV4LocalStore.repository(
             File(applicationContext.filesDir, "plans/${InboxV4LocalStore.FILE_NAME}"),
         )
+        val relayPoster = if (mode == RelayTransportMode.DIRECT) {
+            null
+        } else {
+            RelayCoreV4HttpTransport(
+                sessionProvider = if (mode == RelayTransportMode.RELAY) {
+                    RelayCoreV4SessionRegistry::current
+                } else {
+                    { null }
+                },
+                requestAllowed = { request ->
+                    !isStopped && AndroidRelaySettingsStore(applicationContext).read().mode == mode &&
+                        inboxV4RequestStillAuthorized(store, request, consentVersion) &&
+                        (request.path != InboxV4HttpTransport.PULL_ROUTE || planRevisionCapabilityEnabled(applicationContext))
+                },
+                requestStart = { request, start ->
+                    store.withExclusiveState {
+                        if (isStopped || AndroidRelaySettingsStore(applicationContext).read().mode != mode ||
+                            !inboxV4RequestStillAuthorized(store, request, consentVersion) ||
+                            (request.path == InboxV4HttpTransport.PULL_ROUTE && !planRevisionCapabilityEnabled(applicationContext))
+                        ) {
+                            false
+                        } else {
+                            start()
+                            true
+                        }
+                    }
+                },
+            )
+        }
         val transport = InboxV4HttpTransport(
-            baseUrl = baseUrl,
-            bearerToken = bearerToken,
+            baseUrl = if (mode == RelayTransportMode.DIRECT) baseUrl else null,
+            bearerToken = if (mode == RelayTransportMode.DIRECT) bearerToken else "",
             consentVersion = consentVersion,
             debuggable = debuggable,
+            poster = relayPoster,
             requestAllowed = { request ->
-                !isStopped && inboxV4RequestStillAuthorized(store, request, consentVersion) &&
+                !isStopped && AndroidRelaySettingsStore(applicationContext).read().mode == mode &&
+                    inboxV4RequestStillAuthorized(store, request, consentVersion) &&
                     (request.path != InboxV4HttpTransport.PULL_ROUTE || planRevisionCapabilityEnabled(applicationContext))
             },
             requestStart = { request, start ->
                 store.withExclusiveState {
-                    if (isStopped || !inboxV4RequestStillAuthorized(store, request, consentVersion) ||
+                    if (isStopped || AndroidRelaySettingsStore(applicationContext).read().mode != mode ||
+                        !inboxV4RequestStillAuthorized(store, request, consentVersion) ||
                         (request.path == InboxV4HttpTransport.PULL_ROUTE && !planRevisionCapabilityEnabled(applicationContext))
                     ) {
                         false
@@ -215,6 +280,7 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
                     }
                 }
             },
+            sessionAuthenticated = mode != RelayTransportMode.DIRECT,
         )
         activeInboxTransport = transport
         try {

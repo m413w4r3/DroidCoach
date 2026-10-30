@@ -118,6 +118,8 @@ data class CoreV4HttpRequest(val path: String, val bearerToken: String, val body
 }
 
 interface CoreV4HttpTransport {
+    /** Relay transports authenticate with their live session and never need a Core bearer. */
+    val requiresBearerToken: Boolean get() = true
     @Throws(IOException::class)
     fun post(request: CoreV4HttpRequest): CoreV4HttpResponse
     fun cancel() = Unit
@@ -315,13 +317,13 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
     fun cancel() = transport.cancel()
 
     private fun execute(path: String, body: String, token: String): String {
-        if (token.isBlank() || token.length > MAX_TOKEN_LENGTH) {
+        if (transport.requiresBearerToken && (token.isBlank() || token.length > MAX_TOKEN_LENGTH)) {
             throw CoreV4SyncException(CoreV4FailureKind.AUTHENTICATION, false, 401)
         }
         if (path !in ALLOWED_PATHS) throw CoreV4SyncException(CoreV4FailureKind.CONFIGURATION, false)
         if (body.toByteArray(Charsets.UTF_8).size > MAX_REQUEST_BYTES) protocolFailure()
         val response = try {
-            transport.post(CoreV4HttpRequest(path, token, body))
+            transport.post(CoreV4HttpRequest(path, if (transport.requiresBearerToken) token else "", body))
         } catch (error: CoreV4SyncException) {
             throw error
         } catch (_: IOException) {

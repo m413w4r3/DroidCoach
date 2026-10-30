@@ -73,6 +73,11 @@ class RelayBackendTransport internal constructor(
     private var started = false
 
     fun state(): RelayConnectionState = connectionState
+    /** True only after an authenticated V2 session negotiated this capability. */
+    fun hasNegotiatedCapability(capability: String): Boolean = synchronized(lock) {
+        started && connectionState == RelayConnectionState.RELAY_CONNECTED &&
+            capabilityNegotiationComplete && capability in negotiatedCapabilities
+    }
     fun addStateListener(listener: (RelayConnectionState) -> Unit) { stateListeners.add(listener) }
     fun removeStateListener(listener: (RelayConnectionState) -> Unit) { stateListeners.remove(listener) }
     fun addFailureListener(listener: (RelayFailure) -> Unit) { failureListeners.add(listener) }
