@@ -2,6 +2,10 @@ package dev.atlas.coach.app
 
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.A1ActivityClass
+import dev.atlas.coach.plan.A1ActivityPolicy
+import dev.atlas.coach.plan.A1ExternalLinkState
+import dev.atlas.coach.plan.A1PolicyRejection
 import dev.atlas.coach.plan.PlanRevisionActivityV3
 import dev.atlas.coach.plan.PlanRevisionAgentResponseV3
 import dev.atlas.coach.plan.PlanRevisionApiRequest
@@ -11,7 +15,15 @@ import dev.atlas.coach.plan.PlanRevisionProposalClient
 import dev.atlas.coach.plan.PlanRevisionProposalEnvelopeV3
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.plan.RevisionOrigin
+import dev.atlas.coach.plan.v5.PlanV5JsonCodec
 import dev.atlas.coach.sync.agent.AgentMandate
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckState
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Fixtures
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4PullPage
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository
+import dev.atlas.coach.sync.agent.inbox.v4.InMemoryInboxV4Storage
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
@@ -21,6 +33,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -217,12 +230,319 @@ class PlanControllerAgentRevisionTest {
         }
     }
 
-    private fun controller(directory: File = temporaryFolder.root) = PlanController(
+    @Test
+    fun a1CapabilityDefaultsOffAndDoesNotDependOnPlanRevisionCapability() {
+        assertFalse(AtlasController.readCapabilities(null)[AtlasController.CAP_A1_BOUNDED] == true)
+        assertTrue(
+            AtlasController.readCapabilities(mapOf(AtlasController.CAP_A1_BOUNDED to true))[AtlasController.CAP_A1_BOUNDED] == true,
+        )
+
+        val setup = a1Setup()
+        val proposalId = queueA1Proposal(setup, number = 1)
+        val versionBefore = setup.controller.plan!!.version
+        assertEquals(540, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+
+        assertTrue(applyInbox(setup, proposalId, planRevisionEnabled = false))
+
+        assertEquals(versionBefore + 1, setup.controller.plan!!.version)
+        assertEquals(660, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+    }
+
+    @Test
+    fun a1CapabilityOffAndMissingOrRevokedConsentPreventWrites() {
+        val setup = a1Setup()
+        val proposalId = queueA1Proposal(setup, number = 2)
+        val original = setup.controller.plan!!
+
+        assertFalse(applyInbox(setup, proposalId, a1Enabled = false))
+        assertEquals(original, setup.controller.plan)
+        assertEquals(InboxV4ProposalState.RECEIVED, setup.inbox.get(proposalId)?.proposal?.state)
+        assertTrue(setup.inbox.ackHistory(proposalId).isEmpty())
+
+        val noConsentSetup = a1Setup(grantConsent = false)
+        val noConsentProposal = queueA1Proposal(noConsentSetup, number = 12)
+        val noConsentOriginal = noConsentSetup.controller.plan!!
+        assertEquals(0, noConsentSetup.controller.a1Consent()?.version)
+        assertFalse(applyInbox(noConsentSetup, noConsentProposal))
+        assertEquals(noConsentOriginal, noConsentSetup.controller.plan)
+        assertEquals(InboxV4ProposalState.RECEIVED, noConsentSetup.inbox.get(noConsentProposal)?.proposal?.state)
+        assertTrue(noConsentSetup.inbox.ackHistory(noConsentProposal).isEmpty())
+
+        assertTrue(setup.controller.setA1Consent(false, inboxConsentVersion = 3L))
+        assertEquals(2, setup.controller.a1Consent()?.version)
+        assertFalse(applyInbox(setup, proposalId))
+        assertEquals(original, setup.controller.plan)
+        assertEquals(InboxV4ProposalState.VALIDATION_REJECTED, setup.inbox.get(proposalId)?.proposal?.state)
+        assertEquals(InboxV4AckState.VALIDATION_REJECTED, setup.inbox.ackHistory(proposalId).single().state)
+    }
+
+    @Test
+    fun a1RevocationTerminalizesOldProposalAcrossReactivationAndAllowsFreshProposal() {
+        val setup = a1Setup()
+        val oldProposalId = queueA1Proposal(setup, number = 14)
+        val original = setup.controller.plan!!
+        val originalConsentVersion = setup.controller.a1Consent()!!.version
+        assertEquals(1, originalConsentVersion)
+
+        assertTrue(setup.controller.setA1Consent(false, inboxConsentVersion = 3L))
+        val revokedConsentVersion = setup.controller.a1Consent()!!.version
+        assertEquals(originalConsentVersion + 1, revokedConsentVersion)
+        assertEquals(
+            InboxV4ProposalState.VALIDATION_REJECTED,
+            setup.inbox.get(oldProposalId)?.proposal?.state,
+        )
+        assertEquals(1, setup.inbox.ackHistory(oldProposalId).size)
+
+        assertTrue(setup.controller.setA1Consent(true, inboxConsentVersion = 3L))
+        assertEquals(revokedConsentVersion + 1, setup.controller.a1Consent()!!.version)
+        assertFalse(applyInbox(setup, oldProposalId))
+        assertEquals(original, setup.controller.plan)
+        assertEquals(1, setup.inbox.ackHistory(oldProposalId).size)
+
+        val freshProposalId = queueA1Proposal(setup, number = 15)
+        assertTrue(applyInbox(setup, freshProposalId))
+        assertEquals(original.version + 1, setup.controller.plan!!.version)
+        assertEquals(660, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+        assertEquals(InboxV4ProposalState.APPLIED, setup.inbox.get(freshProposalId)?.proposal?.state)
+    }
+
+    @Test
+    fun a1ReviewRequiresExplicitPerActivityUnlockAndDisplaysValidatedDiff() {
+        val setup = a1Setup(unlocked = false)
+        val proposalId = queueA1Proposal(setup, number = 3)
+
+        val lockedReview = setup.controller.inspectA1InboxProposal(proposalId)!!
+        assertEquals(A1PolicyRejection.ACTIVITY_LOCKED, lockedReview.rejection)
+        assertTrue(lockedReview.diff.isEmpty())
+
+        assertTrue(setup.controller.setA1ActivityPolicy(
+            A1ActivityPolicy(
+                activityId = setup.activityId,
+                activityClass = A1ActivityClass.READING,
+                unlocked = true,
+                externalLinkState = A1ExternalLinkState.NONE,
+            ),
+        ))
+        val unlockedReview = setup.controller.inspectA1InboxProposal(proposalId)!!
+        assertTrue(unlockedReview.valid)
+        assertEquals(1, unlockedReview.diff.size)
+        assertEquals(540, unlockedReview.diff.single().from.startMinute)
+        assertEquals(660, unlockedReview.diff.single().to.startMinute)
+        assertEquals(0, unlockedReview.quotaUsed)
+    }
+
+    @Test
+    fun confirmedA1CommitPublishesOnceAndUndoCreatesASecondVersionWithoutRefundingQuota() {
+        val setup = a1Setup()
+        val proposalId = queueA1Proposal(setup, number = 4)
+        val callbacks = mutableListOf<Pair<Int, String>>()
+
+        assertTrue(applyInbox(setup, proposalId, onA1Committed = { plan, receipt ->
+            callbacks += plan.version to receipt.proposalId
+        }))
+
+        val committed = setup.controller.plan!!
+        assertEquals(3, committed.version)
+        assertEquals(ActivityStatus.PLANNED, committed.activities.single().status)
+        assertEquals(660, committed.activities.single().scheduledLocal.startMinute)
+        assertEquals(listOf(3 to proposalId), callbacks)
+        assertNotNull(setup.controller.activeA1UndoReceipt())
+        assertEquals(InboxV4ProposalState.APPLIED, setup.inbox.get(proposalId)?.proposal?.state)
+        assertEquals(1, setup.inbox.ackHistory(proposalId).size)
+
+        assertFalse(applyInbox(setup, proposalId, onA1Committed = { _, _ -> callbacks += -1 to "duplicate" }))
+        assertEquals(3, setup.controller.plan!!.version)
+        assertEquals(listOf(3 to proposalId), callbacks)
+
+        assertTrue(setup.controller.undoA1(proposalId))
+        assertEquals(4, setup.controller.plan!!.version)
+        assertEquals(540, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+        assertFalse(setup.controller.undoA1(proposalId))
+        assertNull(setup.controller.activeA1UndoReceipt())
+
+        val stored = PlanV5JsonCodec.decodeStore(
+            File(setup.directory, "day-plan-${setup.controller.today}.json").readText(),
+        )
+        assertEquals(1, stored.a1State.quotaByLocalDate[A1_DAY.toString()])
+        assertEquals(1, stored.a1State.receipts.single().quotaUsed)
+    }
+
+    @Test
+    fun a1StaleVersionAndDailyQuotaFailClosedWithoutAnotherPlanWrite() {
+        val staleSetup = a1Setup()
+        val staleId = queueA1Proposal(staleSetup, number = 5, baseVersion = staleSetup.controller.plan!!.version - 1L)
+        val staleVersion = staleSetup.controller.plan!!.version
+        assertTrue(applyInbox(staleSetup, staleId))
+        assertEquals(staleVersion, staleSetup.controller.plan!!.version)
+        assertEquals(InboxV4ProposalState.STALE_VERSION, staleSetup.inbox.get(staleId)?.proposal?.state)
+
+        val quotaSetup = a1Setup()
+        val first = queueA1Proposal(quotaSetup, number = 6, targetStart = 600)
+        assertTrue(applyInbox(quotaSetup, first))
+        val second = queueA1Proposal(quotaSetup, number = 7, targetStart = 660)
+        assertTrue(applyInbox(quotaSetup, second))
+        val third = queueA1Proposal(quotaSetup, number = 8, targetStart = 720)
+        val review = quotaSetup.controller.inspectA1InboxProposal(third)!!
+        assertEquals(A1PolicyRejection.QUOTA_EXCEEDED, review.rejection)
+        val quotaVersion = quotaSetup.controller.plan!!.version
+        assertTrue(applyInbox(quotaSetup, third))
+        assertEquals(quotaVersion, quotaSetup.controller.plan!!.version)
+        assertEquals(InboxV4ProposalState.VALIDATION_REJECTED, quotaSetup.inbox.get(third)?.proposal?.state)
+    }
+
+    @Test
+    fun a1UndoIsRejectedAfterAnyNewerPlanVersion() {
+        val setup = a1Setup()
+        val proposalId = queueA1Proposal(setup, number = 14)
+        assertTrue(applyInbox(setup, proposalId))
+
+        assertTrue(setup.controller.moveActivity(setup.activityId, 600))
+        assertTrue(setup.controller.confirmPreview())
+        val newer = setup.controller.plan!!
+
+        assertFalse(setup.controller.undoA1(proposalId))
+        assertEquals(newer.version, setup.controller.plan!!.version)
+        assertEquals(600, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+    }
+
+    @Test
+    fun a0AndA2KeepTheirExistingPlanRevisionGateAndSpecificConfirmationPath() {
+        listOf(
+            InboxV4ConfirmationMode.A0_USER_REVIEW,
+            InboxV4ConfirmationMode.A2_USER_CONFIRMATION,
+        ).forEachIndexed { index, mode ->
+            val setup = a1Setup()
+            val proposalId = queueA1Proposal(setup, number = 9 + index, mode = mode)
+            val before = setup.controller.plan!!.version
+
+            assertTrue(applyInbox(setup, proposalId, planRevisionEnabled = true, a1Enabled = false))
+
+            assertEquals(before + 1, setup.controller.plan!!.version)
+            assertEquals(660, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+        }
+    }
+
+    @Test
+    fun refusingA1IsTerminalAndNeverWritesThePlan() {
+        val setup = a1Setup()
+        val proposalId = queueA1Proposal(setup, number = 11)
+        val original = setup.controller.plan!!
+
+        assertTrue(setup.controller.rejectInboxProposal(proposalId, consentVersion = 3L))
+
+        assertEquals(original, setup.controller.plan)
+        assertEquals(InboxV4ProposalState.REJECTED, setup.inbox.get(proposalId)?.proposal?.state)
+        assertEquals(1, setup.inbox.ackHistory(proposalId).size)
+        assertTrue(PlanV5JsonCodec.decodeStore(
+            File(setup.directory, "day-plan-${setup.controller.today}.json").readText(),
+        ).a1State.receipts.isEmpty())
+    }
+
+    @Test
+    fun a1NotificationLockScreenContentIsNeutralAndContainsNoProposalDetails() {
+        val content = A1PlanNotificationPublisher.lockScreenContent()
+
+        assertEquals("Programme mis à jour", content.title)
+        assertEquals("Une modification confirmée est enregistrée. Ouvrez ATLAS pour consulter le planning.", content.body)
+        assertEquals("Mise à jour disponible", content.publicBody)
+        assertFalse(content.title.contains("Préparer la journée"))
+        assertFalse(content.body.contains("Préparer la journée"))
+        assertFalse(content.body.contains("proposition"))
+    }
+
+    private fun controller(
+        directory: File = temporaryFolder.root,
+        now: Long = this.now,
+        date: LocalDate = day,
+        inboxRepository: InboxV4Repository? = null,
+    ) = PlanController(
         directory = directory,
         clock = dev.atlas.coach.plan.PlanClock { now },
         zoneIdProvider = { zone },
-        todayProvider = { day },
+        todayProvider = { date },
+        inboxRepository = inboxRepository,
     )
+
+    private data class A1TestSetup(
+        val controller: PlanController,
+        val inbox: InboxV4Repository,
+        val directory: File,
+        val activityId: String,
+    )
+
+    private fun a1Setup(
+        unlocked: Boolean = true,
+        grantConsent: Boolean = true,
+    ): A1TestSetup {
+        val directory = temporaryFolder.newFolder()
+        val inbox = InboxV4Repository(
+            storage = InMemoryInboxV4Storage(),
+            now = { Instant.ofEpochMilli(A1_NOW) },
+        )
+        val controller = controller(directory, A1_NOW, A1_DAY, inbox)
+        assertTrue(controller.createTodayPlan())
+        assertTrue(controller.addActivity("Préparer la journée", ActivityKind.FOCUS, 540, 50, Priority.IMPORTANT))
+        assertTrue(controller.confirmPreview())
+        val activityId = controller.plan!!.activities.single().activityId
+        if (grantConsent) assertTrue(controller.setA1Consent(true))
+        assertTrue(controller.setA1ActivityPolicy(
+            A1ActivityPolicy(
+                activityId = activityId,
+                activityClass = A1ActivityClass.READING,
+                unlocked = unlocked,
+                externalLinkState = if (unlocked) A1ExternalLinkState.NONE else A1ExternalLinkState.UNKNOWN,
+            ),
+        ))
+        return A1TestSetup(controller, inbox, directory, activityId)
+    }
+
+    private fun queueA1Proposal(
+        setup: A1TestSetup,
+        number: Int,
+        baseVersion: Long = setup.controller.plan!!.version.toLong(),
+        targetStart: Int = 660,
+        mode: InboxV4ConfirmationMode = InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK,
+    ): String {
+        val proposalId = testUuid(number)
+        val proposal = InboxV4Fixtures.proposal(
+            proposalId = proposalId,
+            idempotencyKey = testUuid(number + 100),
+            expiresAt = Instant.ofEpochMilli(A1_NOW + 15 * 60_000L),
+        ).copy(
+            createdAt = Instant.ofEpochMilli(A1_NOW),
+            expiresAt = Instant.ofEpochMilli(A1_NOW + 15 * 60_000L),
+            planId = setup.controller.plan!!.planId,
+            baseVersion = baseVersion,
+            justification = "Proposition synthétique de déplacement.",
+            changes = listOf(mapOf(
+                "op" to "reschedule",
+                "activity_id" to setup.activityId,
+                "target_start_minute" to targetStart,
+                "duration_minutes" to 50,
+            )),
+            confirmationMode = mode,
+        )
+        assertEquals(1, setup.inbox.mergePulled(InboxV4PullPage(listOf(proposal), null, false), 8).added)
+        return proposalId
+    }
+
+    private fun applyInbox(
+        setup: A1TestSetup,
+        proposalId: String,
+        planRevisionEnabled: Boolean = false,
+        a1Enabled: Boolean = true,
+        onA1Committed: (dev.atlas.coach.plan.DayPlan, dev.atlas.coach.plan.A1RevisionReceipt) -> Unit = { _, _ -> },
+    ): Boolean = setup.controller.applyInboxProposal(
+        proposalId = proposalId,
+        planRevisionCapabilityEnabled = planRevisionEnabled,
+        dayPlanConsentGranted = true,
+        dayPlanConsentVersion = 3L,
+        a1CapabilityEnabled = { a1Enabled },
+        currentDayPlanConsent = { true to 3L },
+        onA1Committed = onA1Committed,
+    )
+
+    private fun testUuid(number: Int): String = "90000000-0000-4000-8000-${number.toString().padStart(12, '0')}"
 
     private fun seedPlan(controller: PlanController): String {
         assertTrue(controller.createTodayPlan())
@@ -287,5 +607,7 @@ class PlanControllerAgentRevisionTest {
         private const val PROPOSAL_ID = "90000000-0000-4000-8000-000000000001"
         private const val REQUEST_ID = "90000000-0000-4000-8000-000000000002"
         private const val OTHER_PLAN_ID = "90000000-0000-4000-8000-000000000003"
+        private val A1_NOW: Long = Instant.parse("2026-10-29T08:10:00Z").toEpochMilli()
+        private val A1_DAY: LocalDate = LocalDate.of(2026, 10, 29)
     }
 }

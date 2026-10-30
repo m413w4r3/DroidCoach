@@ -5,9 +5,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.A1ActivityPolicy
 import dev.atlas.coach.plan.A1ApplyResult
+import dev.atlas.coach.plan.A1BoundedRevisionPolicy
+import dev.atlas.coach.plan.A1Consent
+import dev.atlas.coach.plan.A1MoveDiff
+import dev.atlas.coach.plan.A1PolicyUpdateResult
 import dev.atlas.coach.plan.A1RevisionProposal
 import dev.atlas.coach.plan.A1PolicyRejection
+import dev.atlas.coach.plan.A1RevisionReceipt
+import dev.atlas.coach.plan.A1SettingsResult
+import dev.atlas.coach.plan.A1UndoRejection
+import dev.atlas.coach.plan.A1UndoResult
+import dev.atlas.coach.plan.A1ValidationResult
 import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.DayPlanRepository
 import dev.atlas.coach.plan.FilePlanBackend
@@ -58,6 +68,19 @@ import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
 import java.time.Instant
+
+data class A1InboxReview(
+    val proposalBaseVersion: Long,
+    val currentPlanVersion: Int?,
+    val consent: A1Consent,
+    val diff: List<A1MoveDiff>,
+    val quotaLocalDate: String,
+    val quotaUsed: Int,
+    val quotaLimit: Int = A1BoundedRevisionPolicy.MAX_APPLICATIONS_PER_LOCAL_DATE,
+    val rejection: A1PolicyRejection? = null,
+) {
+    val valid: Boolean get() = rejection == null && diff.isNotEmpty()
+}
 
 /**
  * UI-facing owner of the local day plan. It never talks to the network and never
@@ -167,6 +190,214 @@ class PlanController(
         inboxPendingAckCount = inboxRepository.pendingAcks().size
     }
 
+    fun a1Consent(): A1Consent? = requireRepository().a1Consent()
+
+    fun a1ActivityPolicy(activityId: String): A1ActivityPolicy? {
+        val current = plan ?: return null
+        if (current.activities.none { it.activityId == activityId }) return null
+        val document = runCatching {
+            PlanV5JsonCodec.decodeStore(File(directory, "day-plan-${current.localDate}.json").readText(Charsets.UTF_8))
+        }.getOrNull() ?: return A1ActivityPolicy.legacyProtected(activityId)
+        return document.a1State.policyFor(activityId)
+    }
+
+    fun setA1Consent(enabled: Boolean, inboxConsentVersion: Long = 0L): Boolean = synchronized(inboxRepository) {
+        val currentConsent = requireRepository().a1Consent()
+        if (enabled && currentConsent?.enabled == false &&
+            !terminalizePendingA1InboxProposals(inboxConsentVersion)
+        ) {
+            revision++
+            return@synchronized fail("Consentement A1 non accordé : des propositions A1 en attente doivent d'abord être clôturées.")
+        }
+        when (val result = requireRepository().setA1Consent(enabled)) {
+            is A1SettingsResult.Updated -> {
+                val pendingClosed = enabled || terminalizePendingA1InboxProposals(inboxConsentVersion)
+                message = if (enabled) {
+                    "Consentement A1 accordé · version ${result.consent.version}. Chaque proposition reste à confirmer."
+                } else if (pendingClosed) {
+                    "Consentement A1 révoqué · version ${result.consent.version}. Les propositions A1 en attente sont invalidées."
+                } else {
+                    "Consentement A1 révoqué · version ${result.consent.version}. Certaines propositions restent visibles faute d'ACK terminal; A1 ne pourra pas être réactivé avant leur clôture."
+                }
+                revision++
+                true
+            }
+            is A1SettingsResult.Rejected -> fail("Le choix A1 n'a pas été enregistré (${result.reason}).")
+            is A1SettingsResult.Corrupt -> {
+                corruption = result.reason
+                fail("Le stockage local A1 est illisible; aucun choix n'a été enregistré.")
+            }
+        }
+    }
+
+    private fun terminalizePendingA1InboxProposals(consentVersion: Long): Boolean {
+        val pending = inboxRepository.all().filter { entry ->
+            entry.proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK &&
+                entry.proposal.state in REVIEWABLE_INBOX_STATES
+        }
+        if (pending.isEmpty()) return true
+        if (consentVersion < 1L) return false
+
+        var allTerminalized = true
+        pending.forEach { entry ->
+            if (!appendInboxAck(
+                    entry,
+                    consentVersion,
+                    InboxV4AckState.VALIDATION_REJECTED,
+                    InboxV4AckResultCode.VALIDATION_FAILED,
+                    null,
+                )) {
+                allTerminalized = false
+            }
+        }
+        return allTerminalized
+    }
+
+    fun setA1ActivityPolicy(policy: A1ActivityPolicy): Boolean = when (
+        val result = requireRepository().setA1ActivityPolicy(policy)
+    ) {
+        is A1PolicyUpdateResult.Updated -> {
+            message = "Classement A1 enregistré pour cette activité."
+            revision++
+            true
+        }
+        is A1PolicyUpdateResult.Rejected -> fail("Le classement A1 n'a pas été enregistré (${result.reason}).")
+        is A1PolicyUpdateResult.Corrupt -> {
+            corruption = result.reason
+            fail("Le stockage local A1 est illisible; aucun classement n'a été enregistré.")
+        }
+    }
+
+    /** Builds a fresh, policy-validated A1 diff from an inbox payload and the current V5 document. */
+    fun inspectA1InboxProposal(proposalId: String): A1InboxReview? {
+        val entry = inboxRepository.get(proposalId) ?: return null
+        val proposal = entry.proposal.takeIf {
+            it.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK
+        } ?: return null
+        val current = when (val loaded = requireRepository().load()) {
+            is PlanLoadResult.Loaded -> loaded.plan.also { plan = it }
+            else -> return null
+        }
+        val document = runCatching {
+            PlanV5JsonCodec.decodeStore(File(directory, "day-plan-${current.localDate}.json").readText(Charsets.UTF_8))
+        }.getOrNull() ?: return null
+        val state = document.a1State
+        val localDate = Instant.ofEpochMilli(clock.nowUtcMillis())
+            .atZone(ZoneId.of(current.timezone)).toLocalDate().toString()
+        val quotaUsed = state.quotaByLocalDate[localDate] ?: 0
+        if (current.state != PlanState.APPROVED || proposal.conflicts.isNotEmpty()) {
+            return A1InboxReview(
+                proposalBaseVersion = proposal.baseVersion,
+                currentPlanVersion = current.version,
+                consent = state.consent,
+                diff = emptyList(),
+                quotaLocalDate = localDate,
+                quotaUsed = quotaUsed,
+                rejection = if (proposal.conflicts.isNotEmpty()) {
+                    A1PolicyRejection.INVALID_PROPOSAL
+                } else {
+                    A1PolicyRejection.PLAN_NOT_MODIFIABLE
+                },
+            )
+        }
+        val proposedActivities = runCatching {
+            mapInboxActivities(proposal, current, PlanRevisionMapper.revisionId(proposal.proposalId), a1Only = true)
+        }.getOrNull() ?: return A1InboxReview(
+            proposalBaseVersion = proposal.baseVersion,
+            currentPlanVersion = current.version,
+            consent = state.consent,
+            diff = emptyList(),
+            quotaLocalDate = localDate,
+            quotaUsed = quotaUsed,
+            rejection = A1PolicyRejection.INVALID_PROPOSAL,
+        )
+        val a1Proposal = runCatching {
+            A1RevisionProposal(
+                proposalId = proposal.proposalId,
+                revisionId = PlanRevisionMapper.revisionId(proposal.proposalId),
+                planId = proposal.planId,
+                baseVersion = proposal.baseVersion.toInt(),
+                createdAtUtcMillis = proposal.createdAt.toEpochMilli(),
+                expiresAtUtcMillis = proposal.expiresAt.toEpochMilli(),
+                consentVersion = state.consent.version,
+                proposedActivities = proposedActivities,
+            )
+        }.getOrNull() ?: return A1InboxReview(
+            proposalBaseVersion = proposal.baseVersion,
+            currentPlanVersion = current.version,
+            consent = state.consent,
+            diff = emptyList(),
+            quotaLocalDate = localDate,
+            quotaUsed = quotaUsed,
+            rejection = A1PolicyRejection.INVALID_PROPOSAL,
+        )
+        return when (val validation = A1BoundedRevisionPolicy.validate(
+            current = current,
+            proposal = a1Proposal,
+            state = state,
+            nowUtcMillis = clock.nowUtcMillis(),
+            engine = engine,
+        )) {
+            is A1ValidationResult.Valid -> A1InboxReview(
+                proposalBaseVersion = proposal.baseVersion,
+                currentPlanVersion = current.version,
+                consent = state.consent,
+                diff = validation.revision.diff,
+                quotaLocalDate = validation.revision.quotaLocalDate,
+                quotaUsed = validation.revision.quotaUsedAfterCommit - 1,
+            )
+            is A1ValidationResult.Rejected -> A1InboxReview(
+                proposalBaseVersion = proposal.baseVersion,
+                currentPlanVersion = current.version,
+                consent = state.consent,
+                diff = emptyList(),
+                quotaLocalDate = localDate,
+                quotaUsed = quotaUsed,
+                rejection = validation.reason,
+            )
+        }
+    }
+
+    /** The undo control is exposed only while its receipt still matches the exact current plan. */
+    fun activeA1UndoReceipt(): A1RevisionReceipt? {
+        val current = plan ?: return null
+        val document = runCatching {
+            PlanV5JsonCodec.decodeStore(File(directory, "day-plan-${current.localDate}.json").readText(Charsets.UTF_8))
+        }.getOrNull() ?: return null
+        val now = clock.nowUtcMillis()
+        return document.a1State.receipts.asSequence()
+            .sortedByDescending { it.appliedAtUtcMillis }
+            .firstOrNull { receipt ->
+                receipt.undoRevisionId == null && now < receipt.undoUntilUtcMillis &&
+                    current.version == receipt.versionAfter && current.currentRevisionId == receipt.revisionId
+            }
+    }
+
+    /** User-triggered undo delegates the 15-minute and exact-version checks to the durable engine. */
+    fun undoA1(proposalId: String): Boolean = when (val result = requireRepository().undoA1(proposalId)) {
+        is A1UndoResult.Undone -> {
+            plan = result.plan
+            message = "Révision A1 annulée. Le programme est maintenant en version ${result.plan.version}; le quota reste consommé."
+            revision++
+            true
+        }
+        is A1UndoResult.Rejected -> {
+            plan = (requireRepository().load() as? PlanLoadResult.Loaded)?.plan
+            revision++
+            fail(when (result.reason) {
+                A1UndoRejection.UNDO_EXPIRED -> "Le délai de 15 minutes pour annuler cette révision est écoulé."
+                A1UndoRejection.VERSION_CHANGED, A1UndoRejection.CURRENT_PLAN_MISMATCH -> "Le programme a changé; cette révision ne peut plus être annulée."
+                A1UndoRejection.ALREADY_UNDONE -> "Cette révision a déjà été annulée."
+                A1UndoRejection.RECEIPT_NOT_FOUND -> "Le reçu A1 est introuvable."
+                A1UndoRejection.STORAGE_FAILURE -> "L'annulation n'a pas été enregistrée durablement."
+            })
+        }
+        is A1UndoResult.Corrupt -> {
+            corruption = result.reason
+            fail("Le stockage local A1 est illisible; l'annulation n'a pas été effectuée.")
+        }
+    }
+
     /** A refusal is terminal locally and its ACK is durable before transport replay. */
     fun rejectInboxProposal(proposalId: String, consentVersion: Long): Boolean {
         val entry = inboxRepository.get(proposalId) ?: return fail("Proposition inbox inconnue.")
@@ -195,57 +426,77 @@ class PlanController(
         planRevisionCapabilityEnabled: Boolean,
         dayPlanConsentGranted: Boolean,
         dayPlanConsentVersion: Long,
+        // The UI always supplies CAP_A1_BOUNDED. Keep the fallback for older local callers;
+        // it is never used by the interactive A1 route.
+        a1CapabilityEnabled: () -> Boolean = { planRevisionCapabilityEnabled },
+        currentDayPlanConsent: () -> Pair<Boolean, Long> = {
+            dayPlanConsentGranted to dayPlanConsentVersion
+        },
+        onA1Committed: (DayPlan, A1RevisionReceipt) -> Unit = { _, _ -> },
     ): Boolean {
         val entry = inboxRepository.get(proposalId) ?: return fail("Proposition inbox inconnue.")
         val proposal = entry.proposal
         if (proposal.state !in REVIEWABLE_INBOX_STATES) {
             return fail("Cette proposition n'est plus en attente de confirmation.")
         }
-        if (!planRevisionCapabilityEnabled) return fail("La capability de révision du programme est désactivée.")
-        if (!dayPlanConsentGranted || dayPlanConsentVersion < 1L) {
+        val isA1 = proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK
+        if (!isA1 && !planRevisionCapabilityEnabled) {
+            return fail("La capability de révision du programme est désactivée.")
+        }
+        val initialInboxConsent = runCatching(currentDayPlanConsent).getOrDefault(false to 0L)
+        if (!initialInboxConsent.first || initialInboxConsent.second < 1L) {
             return fail("Le consentement courant du programme ne permet pas cette révision.")
         }
         val current = when (val loaded = requireRepository().load()) {
             is PlanLoadResult.Loaded -> loaded.plan.also { plan = it }
-            PlanLoadResult.Missing -> return rejectInboxProposalAsValidation(entry, dayPlanConsentVersion)
+            PlanLoadResult.Missing -> return rejectInboxProposalAsValidation(entry, initialInboxConsent.second)
             is PlanLoadResult.Corrupt -> {
                 corruption = loaded.reason
-                return recordInboxUncertain(entry, dayPlanConsentVersion)
+                return recordInboxUncertain(entry, initialInboxConsent.second)
             }
         }
         val now = clock.nowUtcMillis()
         if (!proposal.expiresAt.isAfter(Instant.ofEpochMilli(now))) {
             return appendInboxAck(
-                entry, dayPlanConsentVersion, InboxV4AckState.EXPIRED,
+                entry, initialInboxConsent.second, InboxV4AckState.EXPIRED,
                 InboxV4AckResultCode.PROPOSAL_EXPIRED, null,
             )
         }
         if (current.planId != proposal.planId || current.state != PlanState.APPROVED) {
-            return rejectInboxProposalAsValidation(entry, dayPlanConsentVersion)
+            return rejectInboxProposalAsValidation(entry, initialInboxConsent.second)
         }
 
         val revisionId = PlanRevisionMapper.revisionId(proposal.proposalId)
         persistedInboxProof(proposal, current)?.let { proof ->
             plan = current
-            return appendAppliedInboxAck(entry, dayPlanConsentVersion, proof)
+            return appendAppliedInboxAck(entry, initialInboxConsent.second, proof)
         }
         if (current.currentRevisionId == revisionId && current.version.toLong() == proposal.baseVersion + 1L) {
             // A previous process may have committed the plan and stopped before ACK persistence.
             // If its atomic local receipt cannot be re-read, retain uncertainty and never apply again.
-            return recordInboxUncertain(entry, dayPlanConsentVersion)
+            return recordInboxUncertain(entry, initialInboxConsent.second)
         }
         if (current.version.toLong() != proposal.baseVersion) {
             return appendInboxAck(
-                entry, dayPlanConsentVersion, InboxV4AckState.STALE_VERSION,
+                entry, initialInboxConsent.second, InboxV4AckState.STALE_VERSION,
                 InboxV4AckResultCode.STALE_VERSION, null,
             )
         }
-        if (proposal.conflicts.isNotEmpty()) return rejectInboxProposalAsValidation(entry, dayPlanConsentVersion)
+        if (proposal.conflicts.isNotEmpty()) return rejectInboxProposalAsValidation(entry, initialInboxConsent.second)
 
         if (proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK) {
-            return applyA1InboxProposal(entry, current, now, dayPlanConsentVersion)
+            if (!runCatching(a1CapabilityEnabled).getOrDefault(false)) {
+                return fail("La capability A1 est désactivée. Aucun changement n'a été appliqué.")
+            }
+            return applyA1InboxProposal(
+                entry = entry,
+                current = current,
+                a1CapabilityEnabled = a1CapabilityEnabled,
+                currentDayPlanConsent = currentDayPlanConsent,
+                onA1Committed = onA1Committed,
+            )
         }
-        return applyReviewedInboxRevision(entry, current, now, dayPlanConsentVersion)
+        return applyReviewedInboxRevision(entry, current, now, initialInboxConsent.second)
     }
 
     private fun persistedInboxProof(proposal: InboxV4Proposal, current: DayPlan): InboxV4ApplicationProof? {
@@ -302,19 +553,27 @@ class PlanController(
     private fun applyA1InboxProposal(
         entry: InboxV4EntryView,
         current: DayPlan,
-        now: Long,
-        consentVersion: Long,
+        a1CapabilityEnabled: () -> Boolean,
+        currentDayPlanConsent: () -> Pair<Boolean, Long>,
+        onA1Committed: (DayPlan, A1RevisionReceipt) -> Unit,
     ): Boolean {
         val proposal = entry.proposal
+        if (!runCatching(a1CapabilityEnabled).getOrDefault(false)) {
+            return fail("La capability A1 a été désactivée avant l'application. Aucun changement n'a été appliqué.")
+        }
+        val finalInboxConsent = runCatching(currentDayPlanConsent).getOrNull()
+            ?: return fail("Le consentement de l'inbox n'a pas pu être vérifié. Aucun changement n'a été appliqué.")
+        if (!finalInboxConsent.first || finalInboxConsent.second < 1L) {
+            return fail("Le consentement de l'inbox a été retiré. Aucun changement n'a été appliqué.")
+        }
         val consent = requireRepository().a1Consent()
         if (consent == null || !consent.enabled || consent.version < 1) {
-            message = "A1 n'est pas autorisé : activez son consentement versionné avant d'appliquer."
-            return false
+            return fail("Le consentement A1 est absent ou révoqué. Aucun changement n'a été appliqué.")
         }
         val proposedActivities = try {
             mapInboxActivities(proposal, current, PlanRevisionMapper.revisionId(proposal.proposalId), a1Only = true)
         } catch (_: Exception) {
-            return rejectInboxProposalAsValidation(entry, consentVersion)
+            return rejectInboxProposalAsValidation(entry, finalInboxConsent.second)
         }
         val a1Proposal = try {
             A1RevisionProposal(
@@ -328,7 +587,46 @@ class PlanController(
                 proposedActivities = proposedActivities,
             )
         } catch (_: Exception) {
-            return rejectInboxProposalAsValidation(entry, consentVersion)
+            return rejectInboxProposalAsValidation(entry, finalInboxConsent.second)
+        }
+        // Recheck the inbox state and exact plan snapshot immediately before the durable transaction.
+        val latestEntry = inboxRepository.get(proposal.proposalId)
+            ?: return fail("La proposition a quitté l'inbox. Aucun changement n'a été appliqué.")
+        if (latestEntry.proposal.state !in REVIEWABLE_INBOX_STATES ||
+            latestEntry.proposal.copy(state = proposal.state) != proposal
+        ) return fail("La proposition a changé ou a été clôturée. Aucun changement n'a été appliqué.")
+        val latestPlan = when (val loaded = requireRepository().load()) {
+            is PlanLoadResult.Loaded -> loaded.plan
+            PlanLoadResult.Missing -> return rejectInboxProposalAsValidation(latestEntry, finalInboxConsent.second)
+            is PlanLoadResult.Corrupt -> {
+                corruption = loaded.reason
+                return recordInboxUncertain(latestEntry, finalInboxConsent.second)
+            }
+        }
+        if (latestPlan.version.toLong() != proposal.baseVersion) {
+            return appendInboxAck(
+                latestEntry, finalInboxConsent.second, InboxV4AckState.STALE_VERSION,
+                InboxV4AckResultCode.STALE_VERSION, null,
+            )
+        }
+        if (latestPlan.planId != proposal.planId || latestPlan.state != PlanState.APPROVED) {
+            return rejectInboxProposalAsValidation(latestEntry, finalInboxConsent.second)
+        }
+        if (latestPlan != current) {
+            return fail("Le programme a changé depuis la revue. Rouvrez le diff avant de confirmer.")
+        }
+        // Recheck all user-controlled gates immediately before entering the durable A1 transaction.
+        if (!runCatching(a1CapabilityEnabled).getOrDefault(false)) {
+            return fail("La capability A1 a été désactivée avant l'application. Aucun changement n'a été appliqué.")
+        }
+        val commitInboxConsent = runCatching(currentDayPlanConsent).getOrNull()
+            ?: return fail("Le consentement de l'inbox n'a pas pu être vérifié. Aucun changement n'a été appliqué.")
+        if (!commitInboxConsent.first || commitInboxConsent.second < 1L) {
+            return fail("Le consentement de l'inbox a été retiré. Aucun changement n'a été appliqué.")
+        }
+        val commitA1Consent = requireRepository().a1Consent()
+        if (commitA1Consent == null || !commitA1Consent.enabled || commitA1Consent.version != a1Proposal.consentVersion) {
+            return fail("Le consentement A1 a changé avant l'application. Aucun changement n'a été appliqué.")
         }
         return when (val result = requireRepository().applyA1(a1Proposal, userApproved = true)) {
             is A1ApplyResult.Applied -> {
@@ -341,7 +639,8 @@ class PlanController(
                     effectIds = result.receipt.effectIds,
                 )
                 revision++
-                appendAppliedInboxAck(entry, consentVersion, proof)
+                runCatching { onA1Committed(result.plan, result.receipt) }
+                appendAppliedInboxAck(entry, commitInboxConsent.second, proof)
             }
             is A1ApplyResult.AlreadyApplied -> {
                 plan = result.plan
@@ -353,27 +652,31 @@ class PlanController(
                     effectIds = result.receipt.effectIds,
                 )
                 revision++
-                appendAppliedInboxAck(entry, consentVersion, proof)
+                appendAppliedInboxAck(entry, commitInboxConsent.second, proof)
             }
             A1ApplyResult.Cancelled -> fail("La révision A1 a été annulée.")
             is A1ApplyResult.Rejected -> when (result.reason) {
                 A1PolicyRejection.STALE_VERSION -> appendInboxAck(
-                    entry, consentVersion, InboxV4AckState.STALE_VERSION,
+                    entry, commitInboxConsent.second, InboxV4AckState.STALE_VERSION,
                     InboxV4AckResultCode.STALE_VERSION, null,
                 )
                 A1PolicyRejection.PROPOSAL_EXPIRED -> appendInboxAck(
-                    entry, consentVersion, InboxV4AckState.EXPIRED,
+                    entry, commitInboxConsent.second, InboxV4AckState.EXPIRED,
                     InboxV4AckResultCode.PROPOSAL_EXPIRED, null,
                 )
-                A1PolicyRejection.STORAGE_FAILURE, A1PolicyRejection.STALE_STATE -> recordInboxUncertain(entry, consentVersion)
+                A1PolicyRejection.STORAGE_FAILURE, A1PolicyRejection.STALE_STATE ->
+                    recordInboxUncertain(entry, commitInboxConsent.second)
+                A1PolicyRejection.CONSENT_DISABLED, A1PolicyRejection.CONSENT_VERSION_MISMATCH -> fail(
+                    "Le consentement A1 a été retiré ou renouvelé. La proposition reste en attente et n'a pas été appliquée.",
+                )
                 else -> appendInboxAck(
-                    entry, consentVersion, InboxV4AckState.VALIDATION_REJECTED,
+                    entry, commitInboxConsent.second, InboxV4AckState.VALIDATION_REJECTED,
                     InboxV4AckResultCode.VALIDATION_FAILED, null,
                 )
             }
             is A1ApplyResult.Corrupt -> {
                 corruption = result.reason
-                recordInboxUncertain(entry, consentVersion)
+                recordInboxUncertain(entry, commitInboxConsent.second)
             }
         }
     }
