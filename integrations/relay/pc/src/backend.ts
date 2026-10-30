@@ -8,9 +8,9 @@ export interface BackendConfig {
   serviceToken?: string;
   timeoutMs?: number;
   chatTimeoutMs?: number;
-  /** V4 stays disabled in the production connector until Relay-to-Core identity binding is proven. */
+  /** V4 requires an explicit connector opt-in and a dedicated Android bearer. */
   v4Enabled?: boolean;
-  /** Resolves a paired Relay device to its distinct Core Android bearer; never read from payload data. */
+  /** Resolves a session-selected paired Relay device to the dedicated Core Android bearer; never read from payload data. */
   pairedDeviceToken?: (pairedDeviceId: string) => string | undefined;
   fetcher?: FetchLike;
 }

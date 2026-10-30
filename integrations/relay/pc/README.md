@@ -65,11 +65,39 @@ is the expected race with a concurrent release.
 | `ATLAS_RELAY_STATE_DIR` | Directory for the private server identity and device registry. |
 | `ATLAS_BACKEND_URL` | Loopback FastAPI base URL. Non-loopback hosts, URL paths, query strings, and credentials are rejected. |
 | `ATLAS_SERVICE_TOKEN` | Bearer token used for authenticated FastAPI routes. It is read from the environment and never persisted or logged. |
+| `ATLAS_V4_ENABLED` | Explicit V4 opt-in. Only the exact value `1` enables V4; unset or any other value keeps V4 disabled. |
+| `ATLAS_V4_ANDROID_TOKEN_FILE` | Absolute path to the dedicated Core Android bearer file. Required for V4 requests; the file must be a regular, non-symlink file owned by the connector user with mode `0600`. |
 | `ATLAS_ALLOW_LOOPBACK_WS` | Set to `1` only for explicit local loopback `ws://` development; default deny. |
 | `ATLAS_METRICS_PORT` | Loopback metrics port; defaults to `4401`. |
 | `ATLAS_TEST_RELAY_URL` | Optional loopback Relay URL used by the real-relay integration and stale-client tests. |
 
 Do not place token values in command arguments, checked-in files, or logs.
+
+### V4 Core access
+
+V4 remains unavailable unless `ATLAS_V4_ENABLED=1` is explicitly set. Put the
+Android bearer issued for Core in a separate file readable only by the connector
+user (mode `0600`), then set `ATLAS_V4_ANDROID_TOKEN_FILE` to its absolute path.
+The connector reads this file at startup. A missing file, wrong owner or mode,
+symlink, unreadable file, or invalid token contents leaves V4 unavailable and
+does not prevent V1/V2/V3 from using `ATLAS_SERVICE_TOKEN`.
+
+The Android bearer is never taken from the service token, Relay pairing token,
+or request payload. The relay session authenticates and supplies the paired
+device id used for V4 authorization; routes and Core URL remain fixed in the
+adapter. This ticket uses one private Android bearer for all authenticated,
+paired devices because Core does not yet expose a per-device Android-token
+mapping to the connector. The session still verifies each device against the
+pairing registry. Remove `ATLAS_V4_ENABLED` (or set it to anything other than
+`1`) and restart the connector to roll back: V4 requests then return
+`OPERATION_UNAVAILABLE` and make no Core call.
+
+For the systemd user service, set these two non-secret settings in the service
+environment (for example, a unit drop-in using `Environment=`). Keep the
+restricted external environment file for the existing allowlisted settings;
+the current env-file loader does not accept the new V4 keys. `check-config.mjs`
+and `check-secret.mjs` validate inherited process settings, and the latter
+prints only whether the token file has private ownership and permissions.
 
 ## Pairing and identity
 
