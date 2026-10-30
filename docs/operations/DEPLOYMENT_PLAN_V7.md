@@ -11,7 +11,8 @@
 2. **Outils natifs** : `tools.effective` de l'agent `atlas` doit montrer les six outils ATLAS et aucun outil interdit. L'état isolé actuel est FAIL (0 outil ATLAS, 66 exclus) et une anomalie `exec tool.result ok` subsiste ; l'audit doit qualifier la sémantique `alsoAllow`/plugin optionnel et la réalité de l'exécution avant toute configuration live.
 3. **Token plugin** : le `tokenFile` du plugin doit correspondre au token outil du Core live ; la copie doit rester privée `0600`, hors dépôt, et la valeur ne doit jamais être affichée.
 4. **Entrée publique** : `tailscale funnel status` confirme le 2026-10-30 `tcp://all.taildc7886.ts.net:8443 → tcp://127.0.0.1:4400` ; le port privé `8770` reste hors périmètre. Les ports 4400/4401/4402 sont absents, donc le prochain démarrage doit d'abord écouter le proxy/relais local avant de qualifier le public. A4-4 (`4001→1012`) doit être accepté explicitement ou corrigé ; il ne doit pas être masqué.
-5. **Core live** : `/health` rapporte `mode=mock` en dur ; la sélection réelle se prouve par `/internal/v4/capabilities` (sept flags) et un chat V4 `agent_status=ok`, jamais par `/health`.
+5. **Core live** : `/health` rapporte `mode=mock` en dur ; la sélection réelle se prouve par `/internal/v4/capabilities` (sept flags) et un chat V4 `agent_status=ok`, jamais par `/health`. V7-01E corrige ce point.
+6. **Code Mode / `exec`** : l'audit `19154ae` a prouvé que le modèle a exécuté une cellule Code Mode `exec` (JavaScript) avec succès dans une session synthétique. C'est une capacité d'exécution de code interdite par la mission. Avant tout chat distant : désactiver Code Mode/`exec` pour l'agent atlas (et vérifier `process`, `code_execution`, `wait`), sauvegarder la configuration, redémarrer, puis prouver sur une trajectoire réelle qu'aucun `exec`/`wait`/code n'est appelé et que les six outils client fonctionnent. Aucun passage en profil `full`.
 
 ## 1. OpenClaw Gateway (configuration active)
 

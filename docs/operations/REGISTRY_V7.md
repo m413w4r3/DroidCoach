@@ -64,7 +64,12 @@
 - **Double chemin d'outils observé** : la 1re session isolée a exécuté `atlas_get_day_plan` nativement (GET interne Core corrélé) ; le 3e tour réussi a exécuté l'outil côté adaptateur (aucun GET interne, `tool_state=completed`). Les deux chemins existent donc. Il faut choisir le chemin canonique, prouver les six outils et la proposition dessus, et garantir l'absence de double exécution avant de qualifier `GO_OPENCLAW_TOOLS`.
 - **Revues indépendantes** : V7-01C `ACCEPT` (aucun P0/P1, un P2 de preuve sur les logs) ; V7-03B `REJECT` (P1 request_id enveloppe≠payload, P2 codec d'erreur V4, preuves de tests incomplètes). V7-03C corrige ces points. Une notification de fin ne vaut pas acceptation.
 - **Intégration** : V7-01C mergé (`9331f88`) et V7-01B evidence mergé (`2cb1214`) sur la branche d'intégration ; suite backend complète `344 passed, 1 skipped` avec `ATLAS_DB_PATH` temporaire. V7-03B n'est pas intégré.
-- **Audit V7-01B en cours** : reprise en lecture seule pour qualifier l'anomalie `exec tool.result ok` malgré `excluded`, la réalité de la corrélation native à 7 ms, et la sémantique `tools.effective`/`alsoAllow` du plugin optionnel. Aucune configuration live ne sera modifiée avant ce résultat et une autorisation ciblée.
+- **Audit V7-01B terminé** (`19154ae`, rapport `V7-01B_READONLY_AMBIGUITIES_AUDIT.md`) :
+  - **`EXEC_ANOMALY: CONFIRMED — CODE_MODE`** : le modèle a réellement demandé `exec` avec `code`/`title` et la cellule JavaScript s'est terminée avec succès, dans trois sessions synthétiques. La configuration n'active pas explicitement `tools.codeMode`; l'audit relie la surface à Code Mode (façade JS, distincte du shell mais capacité d'exécution de code). **P0 sécurité : blocage live.**
+  - **`NATIVE_TOOL_PROOF: BLOCKED`** : six outils plugin et six outils client homonymes ; OpenClaw priorise le client. Le GET interne n'a pas d'identifiant corrélable et survient après `session.ended`; la preuve native `PASS` du rapport initial est requalifiée.
+  - **`TOOLS_EFFECTIVE: FAIL`** : 66 outils Core `excluded`, aucun outil ATLAS ; l'aperçu n'est pas l'inventaire exact d'un run Code Mode.
+  - **Fix proposé (test seulement)** : tester le grant `atlas_core_tools` avec `profile=minimal` et les mêmes refus, dans une config jetable ; ne pas passer en `full`. La désactivation de Code Mode/`exec` doit être traitée séparément comme précondition P0.
+- **Décision de sécurité** : aucun chat distant ni déploiement OpenClaw live avant désactivation vérifiée de Code Mode/`exec`, `process`, `code_execution` et de toute capacité équivalente, avec preuve sur trajectoire réelle et absence de régression des six outils client.
 - **Catalogue Gateway (lecture parent)** : `tools.catalog` liste bien les six outils `atlas_*` sous `plugin:atlas_core_tools`, tous `optional: true`, plus d'autres plugins. Le catalogue ne prouve donc pas la projection session ; `tools.effective` reste FAIL. La politique agent contient `profile=minimal`, `deny=[gateway,session_status,presence]`, `alsoAllow=[six outils]` ; la cause de l'absence des six dans la projection est encore à établir.
 
 ## 4. Verdicts
@@ -72,10 +77,10 @@
 | Verdict | État | Preuve / limite |
 |---|---|---|
 | GO_CORE | BLOCKED | Core healthy mais `mode=mock` et capabilities V4 toutes désactivées |
-| GO_OPENCLAW_TOOLS | BLOCKED (partiel) | Chat isolé réel PASS et outil exécuté ; mais deux chemins (natif vs adaptateur) et preuve des six outils/proposition sur le chemin canonique encore manquante |
-| GO_REMOTE_NETWORK | BLOCKED (historique) | 4400/4401/4402 absents ; TLS public non établi ; A4-4 4001→1012 |
-| GO_ANDROID_SYNC | BLOCKED | sync V4 = HTTP direct vers loopback Core ; aucun reçu runtime |
-| GO_REMOTE_CHAT | NO-GO | chat V4 Android existe mais connecteur V4 désactivé et runtime OpenClaw non prouvé |
+| GO_OPENCLAW_TOOLS | BLOCKED (P0) | Outil ATLAS exécuté via le chemin client, mais Code Mode `exec` exécuté avec succès dans les sessions synthétiques ; surface interdite non désactivée |
+| GO_REMOTE_NETWORK | BLOCKED (partiel) | Funnel `8443→4400` confirmé ; 4400/4401/4402 absents ; A4-4 4001→1012 non clos |
+| GO_ANDROID_SYNC | BLOCKED | V7-03C en cours ; transport relayé non encore accepté ; aucun reçu runtime |
+| GO_REMOTE_CHAT | NO-GO | Code Mode `exec` interdit non désactivé ; connecteur/Core/relais non déployés |
 | GO_PLAN_REVISION | NOT_RUN | aucune proposition appliquée puis ACK |
 | GO_DOCKER_OPERATIONS | GO_LIMITED (historique) | Core-only ; redémarrage hôte non testé |
 | GO_PIXEL | PASS_PARTIEL (historique) | APK UI installé ; pas d'E2E réel |
