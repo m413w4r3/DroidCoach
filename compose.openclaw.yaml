@@ -1,0 +1,14 @@
+services:
+  atlas-core:
+    environment:
+      ATLAS_AGENT_ADAPTER: openclaw
+      OPENCLAW_BASE_URL: http://127.0.0.1:18789
+      OPENCLAW_AGENT_ID: atlas
+      OPENCLAW_TIMEOUT_S: "30"
+      ATLAS_V4_CAPABILITIES_JSON: '{"day_plan.read":true,"activity_status.read":true,"plan_revision.propose":true,"usage_summary.read":true,"goal_progress.read":true,"training_plan.read":true,"coach.chat":true}'
+    secrets:
+      - openclaw_gateway_token
+
+secrets:
+  openclaw_gateway_token:
+    file: ${OPENCLAW_GATEWAY_TOKEN_FILE:?Set_OPENCLAW_GATEWAY_TOKEN_FILE_before_running_compose}
