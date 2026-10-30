@@ -17,6 +17,7 @@ import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.plan.RevisionOrigin
 import dev.atlas.coach.plan.v5.PlanV5JsonCodec
 import dev.atlas.coach.sync.agent.AgentMandate
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Fixtures
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
@@ -267,12 +268,42 @@ class PlanControllerAgentRevisionTest {
         assertEquals(InboxV4ProposalState.RECEIVED, noConsentSetup.inbox.get(noConsentProposal)?.proposal?.state)
         assertTrue(noConsentSetup.inbox.ackHistory(noConsentProposal).isEmpty())
 
-        assertTrue(setup.controller.setA1Consent(false))
+        assertTrue(setup.controller.setA1Consent(false, inboxConsentVersion = 3L))
         assertEquals(2, setup.controller.a1Consent()?.version)
         assertFalse(applyInbox(setup, proposalId))
         assertEquals(original, setup.controller.plan)
-        assertEquals(InboxV4ProposalState.RECEIVED, setup.inbox.get(proposalId)?.proposal?.state)
-        assertTrue(setup.inbox.ackHistory(proposalId).isEmpty())
+        assertEquals(InboxV4ProposalState.VALIDATION_REJECTED, setup.inbox.get(proposalId)?.proposal?.state)
+        assertEquals(InboxV4AckState.VALIDATION_REJECTED, setup.inbox.ackHistory(proposalId).single().state)
+    }
+
+    @Test
+    fun a1RevocationTerminalizesOldProposalAcrossReactivationAndAllowsFreshProposal() {
+        val setup = a1Setup()
+        val oldProposalId = queueA1Proposal(setup, number = 14)
+        val original = setup.controller.plan!!
+        val originalConsentVersion = setup.controller.a1Consent()!!.version
+        assertEquals(1, originalConsentVersion)
+
+        assertTrue(setup.controller.setA1Consent(false, inboxConsentVersion = 3L))
+        val revokedConsentVersion = setup.controller.a1Consent()!!.version
+        assertEquals(originalConsentVersion + 1, revokedConsentVersion)
+        assertEquals(
+            InboxV4ProposalState.VALIDATION_REJECTED,
+            setup.inbox.get(oldProposalId)?.proposal?.state,
+        )
+        assertEquals(1, setup.inbox.ackHistory(oldProposalId).size)
+
+        assertTrue(setup.controller.setA1Consent(true, inboxConsentVersion = 3L))
+        assertEquals(revokedConsentVersion + 1, setup.controller.a1Consent()!!.version)
+        assertFalse(applyInbox(setup, oldProposalId))
+        assertEquals(original, setup.controller.plan)
+        assertEquals(1, setup.inbox.ackHistory(oldProposalId).size)
+
+        val freshProposalId = queueA1Proposal(setup, number = 15)
+        assertTrue(applyInbox(setup, freshProposalId))
+        assertEquals(original.version + 1, setup.controller.plan!!.version)
+        assertEquals(660, setup.controller.plan!!.activities.single().scheduledLocal.startMinute)
+        assertEquals(InboxV4ProposalState.APPLIED, setup.inbox.get(freshProposalId)?.proposal?.state)
     }
 
     @Test

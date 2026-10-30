@@ -1154,6 +1154,7 @@ private fun A1BoundedSection(
     onPendingA1ActionCancelled: () -> Unit,
 ) {
     if (atlasController == null) return
+    val context = LocalContext.current.applicationContext
     val plan = controller.plan
     val consent = remember(controller, controller.revision) { runCatching(controller::a1Consent).getOrNull() }
     val capabilityEnabled = atlasController.capabilities[AtlasController.CAP_A1_BOUNDED] == true
@@ -1262,12 +1263,15 @@ private fun A1BoundedSection(
                 Text(if (consentDialogGrant) {
                     "A1 pourra déplacer, uniquement après une confirmation explicite, jusqu'à 3 activités classées et déverrouillées, de 120 minutes maximum chacune, avec 2 applications par jour local. Les activités liées, obligatoires et protégées restent intactes. Toute application crée un reçu; l'annulation est possible pendant 15 minutes si la version du programme n'a pas changé. Ce consentement local est distinct du partage DAY_PLAN et du Coach."
                 } else {
-                    "La révocation incrémente la version du consentement et bloque les nouvelles applications A1. Les confirmations A1 en attente sont fermées. Une modification déjà enregistrée reste visible; son annulation disponible peut encore être demandée dans les 15 minutes."
+                    "La révocation incrémente la version du consentement et bloque les applications A1. Les propositions A1 en attente sont invalidées par un ACK terminal. Si cet ACK ne peut pas être enregistré, elles restent visibles et A1 ne pourra pas être réactivé avant leur clôture. Une modification déjà enregistrée reste visible; son annulation disponible peut encore être demandée dans les 15 minutes."
                 })
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (controller.setA1Consent(consentDialogGrant)) onPendingA1ActionCancelled()
+                    val inboxConsentVersion = runCatching {
+                        AndroidSyncStorage.v4(context).consent(CoreV4Category.DAY_PLAN).snapshot.version.toLong()
+                    }.getOrDefault(0L)
+                    if (controller.setA1Consent(consentDialogGrant, inboxConsentVersion)) onPendingA1ActionCancelled()
                     consentDialogOpen = false
                 }) { Text(if (consentDialogGrant) "Accorder le consentement" else "Révoquer") }
             },

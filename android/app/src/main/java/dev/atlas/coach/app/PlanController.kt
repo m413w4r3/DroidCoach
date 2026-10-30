@@ -201,21 +201,56 @@ class PlanController(
         return document.a1State.policyFor(activityId)
     }
 
-    fun setA1Consent(enabled: Boolean): Boolean = when (val result = requireRepository().setA1Consent(enabled)) {
-        is A1SettingsResult.Updated -> {
-            message = if (enabled) {
-                "Consentement A1 accordé · version ${result.consent.version}. Chaque proposition reste à confirmer."
-            } else {
-                "Consentement A1 révoqué · version ${result.consent.version}. Les applications en attente sont annulées."
-            }
+    fun setA1Consent(enabled: Boolean, inboxConsentVersion: Long = 0L): Boolean = synchronized(inboxRepository) {
+        val currentConsent = requireRepository().a1Consent()
+        if (enabled && currentConsent?.enabled == false &&
+            !terminalizePendingA1InboxProposals(inboxConsentVersion)
+        ) {
             revision++
-            true
+            return@synchronized fail("Consentement A1 non accordé : des propositions A1 en attente doivent d'abord être clôturées.")
         }
-        is A1SettingsResult.Rejected -> fail("Le choix A1 n'a pas été enregistré (${result.reason}).")
-        is A1SettingsResult.Corrupt -> {
-            corruption = result.reason
-            fail("Le stockage local A1 est illisible; aucun choix n'a été enregistré.")
+        when (val result = requireRepository().setA1Consent(enabled)) {
+            is A1SettingsResult.Updated -> {
+                val pendingClosed = enabled || terminalizePendingA1InboxProposals(inboxConsentVersion)
+                message = if (enabled) {
+                    "Consentement A1 accordé · version ${result.consent.version}. Chaque proposition reste à confirmer."
+                } else if (pendingClosed) {
+                    "Consentement A1 révoqué · version ${result.consent.version}. Les propositions A1 en attente sont invalidées."
+                } else {
+                    "Consentement A1 révoqué · version ${result.consent.version}. Certaines propositions restent visibles faute d'ACK terminal; A1 ne pourra pas être réactivé avant leur clôture."
+                }
+                revision++
+                true
+            }
+            is A1SettingsResult.Rejected -> fail("Le choix A1 n'a pas été enregistré (${result.reason}).")
+            is A1SettingsResult.Corrupt -> {
+                corruption = result.reason
+                fail("Le stockage local A1 est illisible; aucun choix n'a été enregistré.")
+            }
         }
+    }
+
+    private fun terminalizePendingA1InboxProposals(consentVersion: Long): Boolean {
+        val pending = inboxRepository.all().filter { entry ->
+            entry.proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK &&
+                entry.proposal.state in REVIEWABLE_INBOX_STATES
+        }
+        if (pending.isEmpty()) return true
+        if (consentVersion < 1L) return false
+
+        var allTerminalized = true
+        pending.forEach { entry ->
+            if (!appendInboxAck(
+                    entry,
+                    consentVersion,
+                    InboxV4AckState.VALIDATION_REJECTED,
+                    InboxV4AckResultCode.VALIDATION_FAILED,
+                    null,
+                )) {
+                allTerminalized = false
+            }
+        }
+        return allTerminalized
     }
 
     fun setA1ActivityPolicy(policy: A1ActivityPolicy): Boolean = when (
