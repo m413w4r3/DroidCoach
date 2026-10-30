@@ -1,3 +1,5 @@
+name: atlas-core
+
 services:
   atlas-core:
     build:
@@ -33,3 +35,4 @@ services:
 
 volumes:
   atlas-core-data:
+    name: atlas-core-data
