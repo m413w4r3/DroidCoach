@@ -99,7 +99,7 @@ class E2eV63Test {
         val proposalId = "00000000-0000-4000-8000-000000000701"
         val operations = mutableListOf<String>()
         val payloads = mutableListOf<JSONObject>()
-        val executor = RelayChatRequestExecutor { operation, _, _, payloadFactory, beforeDispatch ->
+        val executor = RelayChatRequestExecutor { operation, _, _, payloadFactory, beforeDispatch, _ ->
             operations += operation
             assertTrue(beforeDispatch())
             payloads += payloadFactory()

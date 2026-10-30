@@ -26,7 +26,7 @@ import dev.atlas.coach.sync.relay.RelayFailure
 import dev.atlas.coach.sync.relay.RelayFailureKind
 import dev.atlas.coach.sync.relay.RelayPlanRevisionClient
 import dev.atlas.coach.sync.relay.RelaySettings
-import dev.atlas.coach.sync.agent.coach.RelayChatRequestExecutor
+import dev.atlas.coach.sync.agent.coach.RelayBackendChatRequestExecutor
 import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.v4.CoreV4ConsentState
 import dev.atlas.coach.sync.v4.RelayBackendCoreV4Session
@@ -274,15 +274,7 @@ class RelaySettingsController(
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
         val selectedV4 = v4ChatOptIn
-        val executor = RelayChatRequestExecutor { operation, timeoutMillis, idempotencyKey, payloadFactory, beforeDispatch ->
-            active.executeDeferred(
-                operation = operation,
-                timeoutMillis = timeoutMillis,
-                idempotencyKey = idempotencyKey,
-                payloadFactory = payloadFactory,
-                beforeDispatch = beforeDispatch,
-            )
-        }
+        val executor = RelayBackendChatRequestExecutor(active)
         return RelayAgentChatClient(
             executor,
             freshRequestContext,

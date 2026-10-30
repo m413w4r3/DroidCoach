@@ -88,6 +88,160 @@ class RelayBackendTransportTest {
     }
 
     @Test
+    fun v4RequestsSatisfyThePcConnectorsEnvelopeAndIdempotencyRules() {
+        val (credentials, staticPair) = testCredentials()
+        val v4Capabilities = setOf(
+            "v4.day_plan.snapshot.write",
+            "v4.proposal.ack",
+            "v4.coach.chat",
+        )
+        val sockets = FakeRelaySocketFactory(staticPair, serverCapabilities = v4Capabilities)
+        val transport = RelayBackendTransport(
+            config = RelayConfig(
+                "ws://127.0.0.1:4400",
+                "atlas-test",
+                maxReconnectAttempts = 0,
+                requestedCapabilities = v4Capabilities,
+            ),
+            credentialStore = InMemoryRelayCredentialStore(credentials),
+            socketFactory = sockets,
+        )
+        val proposalId = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        val cases = listOf(
+            Triple(
+                "v4.plan.snapshot.upsert",
+                "00000000-0000-4000-8000-000000000012",
+                JSONObject()
+                    .put("request_id", "00000000-0000-4000-8000-000000000001")
+                    .put("idempotency_key", "00000000-0000-4000-8000-000000000012"),
+            ),
+            Triple(
+                "v4.proposals.pull",
+                "00000000-0000-4000-8000-000000000002",
+                JSONObject().put("request_id", "00000000-0000-4000-8000-000000000002"),
+            ),
+            Triple(
+                "v4.coach.chat.request",
+                "00000000-0000-4000-8000-000000000003",
+                JSONObject()
+                    .put("request_id", "00000000-0000-4000-8000-000000000003")
+                    .put("idempotency_key", "00000000-0000-4000-8000-000000000003"),
+            ),
+            Triple(
+                "v4.proposals.ack",
+                "00000000-0000-4000-8000-000000000004",
+                JSONObject()
+                    .put("ack_id", "00000000-0000-4000-8000-000000000004")
+                    .put("proposal_id", proposalId),
+            ),
+        )
+
+        try {
+            transport.start()
+            cases.forEachIndexed { index, (operation, idempotencyKey, payload) ->
+                val requestId = payload.optString("request_id").ifBlank { uuid(20 + index) }
+                val result = if (operation == "v4.plan.snapshot.upsert") {
+                    transport.execute(
+                        operation = operation,
+                        payload = payload,
+                        idempotencyKey = idempotencyKey,
+                        requestId = requestId,
+                    )
+                } else {
+                    transport.executeDeferred(
+                        operation = operation,
+                        idempotencyKey = idempotencyKey,
+                        requestId = requestId,
+                        payloadFactory = { JSONObject(payload.toString()) },
+                    )
+                }
+                assertTrue("PC connector rejected $operation: $result", result is RelayCallResult.Success)
+                val envelope = sockets.requests.last()
+                assertEquals(idempotencyKey, envelope.getString("idempotency_key"))
+                assertEquals(requestId, envelope.getString("request_id"))
+                if (payload.has("request_id")) {
+                    assertEquals(payload.getString("request_id"), envelope.getString("request_id"))
+                }
+            }
+        } finally {
+            transport.close()
+        }
+    }
+
+    @Test
+    fun v2ErrorMetadataPreservesHttpAndRemoteCodesWithoutExposingUpstreamText() {
+        val (credentials, staticPair) = testCredentials()
+        val capabilities = setOf("v4.proposal.ack")
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = capabilities,
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = capabilities)
+        val requestId = uuid(81)
+        val resultRef = AtomicReference<RelayCallResult?>()
+        try {
+            transport.start()
+            val call = Thread {
+                resultRef.set(
+                    transport.executeDeferred(
+                        operation = "v4.proposals.pull",
+                        idempotencyKey = requestId,
+                        requestId = requestId,
+                        payloadFactory = { JSONObject().put("request_id", requestId) },
+                    ),
+                )
+            }.apply { isDaemon = true; start() }
+            assertTrue(sockets.requestCaptured.await(2, TimeUnit.SECONDS))
+            sockets.sockets.single().sendErrorForRequest(
+                requestId = requestId,
+                code = "BACKEND_REJECTED",
+                message = "UPSTREAM-DETAIL-".repeat(10),
+                httpStatus = 503,
+                remoteCode = "CORE_UNAVAILABLE",
+                retryable = true,
+            )
+            call.join(2_000)
+            assertFalse(call.isAlive)
+            val error = resultRef.get() as RelayCallResult.RemoteError
+            assertEquals("CORE_UNAVAILABLE", error.code)
+            assertEquals("CORE_UNAVAILABLE", error.remoteCode)
+            assertEquals(503, error.httpStatus)
+            assertTrue(error.retryable)
+            assertFalse(error.message.contains("UPSTREAM-DETAIL"))
+            assertTrue(error.message.length <= 120)
+        } finally {
+            transport.close()
+        }
+    }
+
+    @Test
+    fun malformedResponseIsRejectedAsProtocolFailure() {
+        val (credentials, staticPair) = testCredentials()
+        val capabilities = setOf("v4.proposal.ack")
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            serverCapabilities = capabilities,
+            malformedRequestResponse = true,
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = capabilities)
+        val requestId = uuid(82)
+        try {
+            transport.start()
+            val result = transport.executeDeferred(
+                operation = "v4.proposals.pull",
+                idempotencyKey = requestId,
+                requestId = requestId,
+                payloadFactory = { JSONObject().put("request_id", requestId) },
+            )
+            assertEquals(RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL), result)
+            assertEquals(RelayConnectionState.ERROR, transport.state())
+        } finally {
+            transport.close()
+        }
+    }
+
+    @Test
     fun usageConsentRevocationWaitsForTheFinalPayloadAndWebSocketWrite() {
         val (credentials, staticPair) = testCredentials()
         val sockets = FakeRelaySocketFactory(
@@ -508,4 +662,7 @@ class RelayBackendTransportTest {
         consentGate = consentGate,
         socketFactory = sockets,
     )
+
+    private fun uuid(number: Int): String =
+        "00000000-0000-4000-8000-${number.toString().padStart(12, '0')}"
 }

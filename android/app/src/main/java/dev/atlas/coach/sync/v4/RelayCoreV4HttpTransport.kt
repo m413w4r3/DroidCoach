@@ -17,6 +17,7 @@ internal interface RelayCoreV4Session {
         operation: String,
         timeoutMillis: Long,
         idempotencyKey: String,
+        requestId: String,
         payloadFactory: () -> JSONObject,
         beforeDispatch: () -> Boolean,
     ): RelayCallResult
@@ -34,12 +35,14 @@ internal class RelayBackendCoreV4Session(
         operation: String,
         timeoutMillis: Long,
         idempotencyKey: String,
+        requestId: String,
         payloadFactory: () -> JSONObject,
         beforeDispatch: () -> Boolean,
     ): RelayCallResult = transport.executeDeferred(
         operation = operation,
         timeoutMillis = timeoutMillis,
         idempotencyKey = idempotencyKey,
+        requestId = requestId,
         payloadFactory = payloadFactory,
         beforeDispatch = beforeDispatch,
     )
@@ -93,10 +96,23 @@ class RelayCoreV4HttpTransport internal constructor(
         }
         val idempotencyKey = when (route.operation) {
             "v4.proposals.ack" -> payload.optString("ack_id")
-            else -> payload.optString("idempotency_key").ifBlank { payload.optString("request_id") }
+            else -> if (payload.has("idempotency_key")) {
+                payload.optString("idempotency_key")
+            } else {
+                payload.optString("request_id")
+            }
         }
         if (!AtlasRemoteProtocol.isUuid(idempotencyKey)) {
             fail(CoreV4FailureKind.PROTOCOL, errorCode = "IDEMPOTENCY_KEY_REQUIRED")
+        }
+        val requestId = if (payload.has("request_id")) {
+            payload.optString("request_id").takeIf(AtlasRemoteProtocol::isUuid)
+                ?: fail(CoreV4FailureKind.PROTOCOL, errorCode = "REQUEST_ID_INVALID")
+        } else {
+            if (route.operation != "v4.proposals.ack") {
+                fail(CoreV4FailureKind.PROTOCOL, errorCode = "REQUEST_ID_REQUIRED")
+            }
+            AtlasRemoteProtocol.newUuid()
         }
         val relayCapability = AtlasRemoteProtocol.requiredCapability(route.operation)
             ?: fail(CoreV4FailureKind.PROTOCOL, errorCode = "CAPABILITY_UNDEFINED")
@@ -124,6 +140,7 @@ class RelayCoreV4HttpTransport internal constructor(
                 operation = route.operation,
                 timeoutMillis = REQUEST_TIMEOUT_MILLIS,
                 idempotencyKey = idempotencyKey,
+                requestId = requestId,
                 payloadFactory = { JSONObject(payload.toString()) },
                 beforeDispatch = { dispatchAllowed(safeRequest) },
             )
@@ -196,7 +213,8 @@ internal fun selectCoreV4HttpTransport(
 }
 
 private fun RelayCallResult.RemoteError.toCoreV4Exception(): Nothing {
-    val status = code.removePrefix("HTTP_").toIntOrNull()
+    val code = remoteCode ?: code
+    val status = httpStatus ?: code.removePrefix("HTTP_").toIntOrNull()
     val kind = when {
         code == "IDEMPOTENCY_CONFLICT" -> CoreV4FailureKind.IDEMPOTENCY_CONFLICT
         code in setOf("AUTH_REQUIRED", "AUTH_FAILED", "DEVICE_REVOKED") || status == 401 ->
@@ -205,12 +223,15 @@ private fun RelayCallResult.RemoteError.toCoreV4Exception(): Nothing {
             CoreV4FailureKind.CONSENT
         code in setOf("CONFLICT", "STALE_VERSION", "STALE_EVENT") || status == 409 ->
             CoreV4FailureKind.CONFLICT
+        status == 422 -> CoreV4FailureKind.REJECTED
+        status == 408 || status == 429 || status in 500..599 -> CoreV4FailureKind.UNAVAILABLE
+        status in 400..499 -> CoreV4FailureKind.REJECTED
         code in setOf("INVALID_REQUEST", "UNKNOWN_OPERATION", "PAYLOAD_TOO_LARGE", "PROTOCOL") ->
             CoreV4FailureKind.PROTOCOL
-        status == 422 || code == "BACKEND_REJECTED" -> CoreV4FailureKind.REJECTED
+        code == "BACKEND_REJECTED" -> CoreV4FailureKind.REJECTED
         else -> CoreV4FailureKind.UNAVAILABLE
     }
-    throw CoreV4SyncException(kind, retryable = false, httpStatus = status, errorCode = code)
+    throw CoreV4SyncException(kind, retryable = retryable, httpStatus = status, errorCode = code)
 }
 
 private fun RelayCallResult.Failure.toCoreV4Exception(): Nothing {

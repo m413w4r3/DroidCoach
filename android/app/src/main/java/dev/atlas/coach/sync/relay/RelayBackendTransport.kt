@@ -11,7 +11,13 @@ import java.util.concurrent.TimeUnit
 
 sealed interface RelayCallResult {
     data class Success(val result: JSONObject, val replayed: Boolean) : RelayCallResult
-    data class RemoteError(val code: String, val message: String, val retryable: Boolean) : RelayCallResult
+    data class RemoteError(
+        val code: String,
+        val message: String,
+        val retryable: Boolean,
+        val httpStatus: Int? = null,
+        val remoteCode: String? = null,
+    ) : RelayCallResult
     data class Failure(val reason: Reason) : RelayCallResult {
         enum class Reason { NOT_STARTED, OFFLINE, QUEUE_FULL, EXPIRED, TIMEOUT, PROTOCOL, POLICY_DENIED, CANCELLED }
     }
@@ -97,6 +103,7 @@ class RelayBackendTransport internal constructor(
         timeoutMillis: Long = DEFAULT_REQUEST_TIMEOUT_MILLIS,
         idempotencyKey: String = AtlasRemoteProtocol.newUuid(),
         beforeDispatch: () -> Boolean = { true },
+        requestId: String = AtlasRemoteProtocol.newUuid(),
     ): RelayCallResult {
         val payloadSnapshot = JSONObject(payload.toString())
         return executeDeferred(
@@ -105,6 +112,7 @@ class RelayBackendTransport internal constructor(
             idempotencyKey = idempotencyKey,
             payloadFactory = { JSONObject(payloadSnapshot.toString()) },
             beforeDispatch = beforeDispatch,
+            requestId = requestId,
         )
     }
 
@@ -115,6 +123,7 @@ class RelayBackendTransport internal constructor(
         idempotencyKey: String = AtlasRemoteProtocol.newUuid(),
         payloadFactory: () -> JSONObject,
         beforeDispatch: () -> Boolean = { true },
+        requestId: String = AtlasRemoteProtocol.newUuid(),
     ): RelayCallResult {
         if (!AtlasRemoteProtocol.supportsOperation(applicationProtocol, operation) || timeoutMillis <= 0) {
             return RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)
@@ -133,7 +142,7 @@ class RelayBackendTransport internal constructor(
         val ttlSeconds = ((boundedTimeout + 999) / 1000)
             .coerceIn(1, AtlasRemoteProtocol.MAX_REQUEST_TTL_SECONDS)
         val pending = Pending(
-            requestId = AtlasRemoteProtocol.newUuid(),
+            requestId = requestId,
             operation = operation,
             idempotencyKey = idempotencyKey,
             payloadFactory = payloadFactory,
@@ -329,9 +338,13 @@ class RelayBackendTransport internal constructor(
 
     private fun handleError(envelope: JSONObject) {
         val error = envelope.getJSONObject("error")
-        val code = error.getString("code")
-        val message = RelayFailure.fromRemoteCode(code).message
+        val relayCode = error.getString("code")
+        val remoteCode = error.optString("remote_code").takeIf { error.has("remote_code") }
+        val code = remoteCode ?: relayCode
+        val message = RelayFailure.fromRemoteCode(relayCode).message
         val retryable = error.getBoolean("retryable")
+        val httpStatus = error.optInt("http_status").takeIf { error.has("http_status") }
+        val remoteError = RelayCallResult.RemoteError(code, message, retryable, httpStatus, remoteCode)
         val requestId = if (envelope.isNull("request_id")) null else envelope.getString("request_id")
         val sessionId = if (envelope.isNull("session_id")) null else envelope.getString("session_id")
         if (requestId == null) {
@@ -340,18 +353,18 @@ class RelayBackendTransport internal constructor(
                     failProtocolLocked(RelayProtocolException("session error correlation mismatch"))
                     return
                 }
-                when (code) {
+                when (relayCode) {
                     "AUTH_REQUIRED", "AUTH_FAILED" -> setStateLocked(RelayConnectionState.AUTH_REQUIRED)
                     "DEVICE_REVOKED" -> setStateLocked(RelayConnectionState.REVOKED)
                     else -> setStateLocked(RelayConnectionState.ERROR)
                 }
-                reportRemoteFailure(code)
+                reportRemoteFailure(relayCode)
                 val waiting = queue.toList()
                 queue.clear()
-                waiting.forEach { completeLocked(it, RelayCallResult.RemoteError(code, message, retryable)) }
+                waiting.forEach { completeLocked(it, remoteError) }
                 val sent = inFlight.values.toList()
                 inFlight.clear()
-                sent.forEach { completeLocked(it, RelayCallResult.RemoteError(code, message, retryable)) }
+                sent.forEach { completeLocked(it, remoteError) }
                 appSessionId = null
                 appSessionExpiry = null
             }
@@ -369,10 +382,10 @@ class RelayBackendTransport internal constructor(
                 return
             }
             inFlight.remove(requestId)
-            if (code == "DEVICE_REVOKED") setStateLocked(RelayConnectionState.REVOKED)
-            if (code == "AUTH_REQUIRED" || code == "AUTH_FAILED") setStateLocked(RelayConnectionState.AUTH_REQUIRED)
-            reportRemoteFailure(code)
-            completeLocked(pending, RelayCallResult.RemoteError(code, message, retryable))
+            if (relayCode == "DEVICE_REVOKED") setStateLocked(RelayConnectionState.REVOKED)
+            if (relayCode == "AUTH_REQUIRED" || relayCode == "AUTH_FAILED") setStateLocked(RelayConnectionState.AUTH_REQUIRED)
+            reportRemoteFailure(relayCode)
+            completeLocked(pending, remoteError)
         }
         pump()
     }

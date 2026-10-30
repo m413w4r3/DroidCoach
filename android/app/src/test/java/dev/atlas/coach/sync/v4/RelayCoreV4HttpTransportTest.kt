@@ -7,9 +7,15 @@ import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpException
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpFailureKind
 import dev.atlas.coach.sync.relay.AtlasRemoteProtocol
 import dev.atlas.coach.sync.relay.RelayCallResult
+import dev.atlas.coach.sync.relay.RelayBackendTransport
 import dev.atlas.coach.sync.relay.RelayConnectionState
+import dev.atlas.coach.sync.relay.RelayConfig
 import dev.atlas.coach.sync.relay.RelayCredentials
+import dev.atlas.coach.sync.relay.InMemoryRelayCredentialStore
 import dev.atlas.coach.sync.relay.RelayTransportMode
+import dev.atlas.coach.sync.relay.FakeRelaySocketFactory
+import dev.atlas.coach.sync.relay.testCredentials
+import dev.atlas.coach.sync.agent.coach.RelayBackendChatRequestExecutor
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -101,6 +107,8 @@ class RelayCoreV4HttpTransportTest {
             transport.post(CoreV4HttpRequest(path, "android-core-bearer-marker", body.toString()))
             val call = session.calls.last()
             assertEquals(operation, call.operation)
+            assertEquals(body.getString("request_id"), call.requestId)
+            assertEquals(body.toString(), call.payload.toString())
             assertFalse(call.payload.has("bearer"))
             assertFalse(call.payload.has("bearer_token"))
             assertFalse(call.payload.toString().contains("android-core-bearer-marker"))
@@ -111,6 +119,95 @@ class RelayCoreV4HttpTransportTest {
         assertEquals(proposalId, session.calls.last().payload.getString("proposal_id"))
         assertEquals(uuid(28), session.calls.last().idempotencyKey)
         assertFalse(transport.requiresBearerToken)
+    }
+
+    @Test
+    fun v4RoutesAndChatSatisfyThePcRelayRulesAndAckReplayIsIdempotent() {
+        val (credentials, staticPair) = testCredentials()
+        val capabilities = setOf(
+            "v4.day_plan.snapshot.write",
+            "v4.proposal.ack",
+            "v4.coach.chat",
+        )
+        val sockets = FakeRelaySocketFactory(staticPair, serverCapabilities = capabilities)
+        val backend = RelayBackendTransport(
+            config = RelayConfig(
+                relayUrl = "ws://127.0.0.1:4400",
+                serverId = "atlas-test",
+                maxReconnectAttempts = 0,
+                requestedCapabilities = capabilities,
+            ),
+            credentialStore = InMemoryRelayCredentialStore(credentials),
+            socketFactory = sockets,
+        )
+        val transport = RelayCoreV4HttpTransport({ RelayBackendCoreV4Session(backend) })
+        val snapshotRequestId = uuid(101)
+        val pullRequestId = uuid(102)
+        val chatRequestId = uuid(103)
+        val ackId = uuid(104)
+        val proposalId = uuid(105)
+        val ackPayload = JSONObject().put("ack_id", ackId).put("proposal_id", proposalId)
+
+        try {
+            backend.start()
+            transport.post(
+                CoreV4HttpRequest(
+                    "/v4/sync/day-plan-snapshots",
+                    "android-core-bearer-marker",
+                    JSONObject().put("request_id", snapshotRequestId)
+                        .put("idempotency_key", uuid(111)).put("snapshot", JSONObject()).toString(),
+                ),
+            )
+            transport.post(
+                CoreV4HttpRequest(
+                    "/v4/agent/proposals/pull",
+                    "android-core-bearer-marker",
+                    JSONObject().put("request_id", pullRequestId).put("cursor", JSONObject.NULL).toString(),
+                ),
+            )
+            val chatExecutor = RelayBackendChatRequestExecutor(backend)
+            val chatResult = chatExecutor.execute(
+                operation = "v4.coach.chat.request",
+                timeoutMillis = 8_000,
+                idempotencyKey = chatRequestId,
+                payloadFactory = {
+                    JSONObject().put("request_id", chatRequestId)
+                        .put("idempotency_key", chatRequestId).put("message", "synthetic")
+                },
+                beforeDispatch = { true },
+                requestId = chatRequestId,
+            )
+            assertTrue(chatResult is RelayCallResult.Success)
+            transport.post(
+                CoreV4HttpRequest(
+                    "/v4/agent/proposals/$proposalId/ack",
+                    "android-core-bearer-marker",
+                    ackPayload.toString(),
+                ),
+            )
+
+            val requests = sockets.requests.toList()
+            assertEquals(4, requests.size)
+            assertPcRequest(requests[0], snapshotRequestId, uuid(111))
+            assertPcRequest(requests[1], pullRequestId, pullRequestId)
+            assertPcRequest(requests[2], chatRequestId, chatRequestId)
+            assertPcRequest(requests[3], null, ackId)
+            assertTrue(AtlasRemoteProtocol.isUuid(requests[3].getString("request_id")))
+            assertTrue(requests.all { !it.getJSONObject("payload").toString().contains("android-core-bearer-marker") })
+
+            val replay = backend.executeDeferred(
+                operation = "v4.proposals.ack",
+                idempotencyKey = ackId,
+                requestId = uuid(106),
+                payloadFactory = { JSONObject(ackPayload.toString()) },
+            )
+            assertTrue(replay is RelayCallResult.Success && replay.replayed)
+            assertEquals(uuid(106), sockets.requests.last().getString("request_id"))
+            assertEquals(ackId, sockets.requests.last().getString("idempotency_key"))
+        } finally {
+            transport.cancel()
+            backend.close()
+        }
     }
 
     @Test
@@ -134,6 +231,39 @@ class RelayCoreV4HttpTransportTest {
             )
         }
         assertEquals(CoreV4FailureKind.PROTOCOL, mismatchedAck.kind)
+
+        val missingRequestId = assertThrows(CoreV4SyncException::class.java) {
+            transport.post(
+                CoreV4HttpRequest(
+                    "/v4/sync/day-plan-snapshots",
+                    "",
+                    JSONObject().put("idempotency_key", uuid(6)).toString(),
+                ),
+            )
+        }
+        assertEquals("REQUEST_ID_REQUIRED", missingRequestId.errorCode)
+
+        val invalidRequestId = assertThrows(CoreV4SyncException::class.java) {
+            transport.post(
+                CoreV4HttpRequest(
+                    "/v4/sync/day-plan-snapshots",
+                    "",
+                    JSONObject().put("request_id", "not-a-uuid").put("idempotency_key", uuid(7)).toString(),
+                ),
+            )
+        }
+        assertEquals("REQUEST_ID_INVALID", invalidRequestId.errorCode)
+
+        val blankIdempotencyKey = assertThrows(CoreV4SyncException::class.java) {
+            transport.post(
+                CoreV4HttpRequest(
+                    "/v4/sync/day-plan-snapshots",
+                    "",
+                    JSONObject().put("request_id", uuid(8)).put("idempotency_key", "").toString(),
+                ),
+            )
+        }
+        assertEquals("IDEMPOTENCY_KEY_REQUIRED", blankIdempotencyKey.errorCode)
         assertTrue(session.calls.isEmpty())
     }
 
@@ -156,6 +286,19 @@ class RelayCoreV4HttpTransportTest {
         assertEquals(CoreV4FailureKind.UNAVAILABLE, unavailable.kind)
         assertEquals("CAPABILITY_UNAVAILABLE", unavailable.errorCode)
         assertTrue(noCapability.calls.isEmpty())
+
+        val unpaired = FakeSession(state = RelayConnectionState.PAIRING_REQUIRED)
+        val pairingRequired = assertThrows(CoreV4SyncException::class.java) {
+            RelayCoreV4HttpTransport({ unpaired }).post(CoreV4HttpRequest(path, "", body))
+        }
+        assertEquals(CoreV4FailureKind.AUTHENTICATION, pairingRequired.kind)
+        assertTrue(unpaired.calls.isEmpty())
+
+        val noSession = RelayCoreV4HttpTransport({ null })
+        val missingSession = assertThrows(CoreV4SyncException::class.java) {
+            noSession.post(CoreV4HttpRequest(path, "", body))
+        }
+        assertEquals(CoreV4FailureKind.OFFLINE, missingSession.kind)
     }
 
     @Test
@@ -247,6 +390,7 @@ class RelayCoreV4HttpTransportTest {
                 operation: String,
                 timeoutMillis: Long,
                 idempotencyKey: String,
+                requestId: String,
                 payloadFactory: () -> JSONObject,
                 beforeDispatch: () -> Boolean,
             ): RelayCallResult {
@@ -307,16 +451,79 @@ class RelayCoreV4HttpTransportTest {
     }
 
     @Test
+    fun v2HttpMetadataAndRemoteCodeKeepTheCoreFailureClassification() {
+        val session = FakeSession(
+            result = RelayCallResult.RemoteError(
+                code = "CORE_UNAVAILABLE",
+                message = "Relay is unavailable.",
+                retryable = true,
+                httpStatus = 503,
+                remoteCode = "CORE_UNAVAILABLE",
+            ),
+        )
+        val error = assertThrows(CoreV4SyncException::class.java) {
+            RelayCoreV4HttpTransport({ session }).post(
+                CoreV4HttpRequest(
+                    "/v4/sync/consent-state",
+                    "",
+                    JSONObject().put("request_id", uuid(90)).put("idempotency_key", uuid(91)).toString(),
+                ),
+            )
+        }
+        assertEquals(CoreV4FailureKind.UNAVAILABLE, error.kind)
+        assertEquals(503, error.httpStatus)
+        assertEquals("CORE_UNAVAILABLE", error.errorCode)
+        assertTrue(error.retryable)
+        assertEquals(1, session.calls.size)
+
+        val rejectedSession = FakeSession(
+            result = RelayCallResult.RemoteError(
+                code = "VALIDATION_ERROR",
+                message = "Relay rejected the request.",
+                retryable = false,
+                httpStatus = 422,
+                remoteCode = "VALIDATION_ERROR",
+            ),
+        )
+        val rejected = assertThrows(CoreV4SyncException::class.java) {
+            RelayCoreV4HttpTransport({ rejectedSession }).post(
+                CoreV4HttpRequest(
+                    "/v4/sync/consent-state",
+                    "",
+                    JSONObject().put("request_id", uuid(92)).put("idempotency_key", uuid(93)).toString(),
+                ),
+            )
+        }
+        assertEquals(CoreV4FailureKind.REJECTED, rejected.kind)
+        assertEquals(422, rejected.httpStatus)
+        assertEquals("VALIDATION_ERROR", rejected.errorCode)
+    }
+
+    @Test
     fun selectsDirectOnlyForDirectModeAndOfflineNeverUsesDirect() {
         val direct = CountingDirectTransport()
-        val relay = RelayCoreV4HttpTransport({ null })
+        val offlineSession = FakeSession(state = RelayConnectionState.OFFLINE)
+        val relay = RelayCoreV4HttpTransport({ offlineSession })
         assertSame(direct, selectCoreV4HttpTransport(RelayTransportMode.DIRECT, direct, relay))
-        assertSame(CoreV4OfflineHttpTransport, selectCoreV4HttpTransport(RelayTransportMode.OFFLINE, direct, relay))
+        val offline = selectCoreV4HttpTransport(RelayTransportMode.OFFLINE, direct, relay)
+        assertSame(CoreV4OfflineHttpTransport, offline)
+        assertThrows(CoreV4SyncException::class.java) {
+            offline.post(
+                CoreV4HttpRequest(
+                    "/v4/sync/consent-state",
+                    "",
+                    JSONObject().put("request_id", uuid(94)).put("idempotency_key", uuid(95)).toString(),
+                ),
+            )
+        }
+        assertTrue(offlineSession.calls.isEmpty())
+        assertEquals(0, direct.calls)
     }
 
     private data class CapturedCall(
         val operation: String,
         val idempotencyKey: String,
+        val requestId: String,
         val payload: JSONObject,
     )
 
@@ -341,13 +548,14 @@ class RelayCoreV4HttpTransportTest {
             operation: String,
             timeoutMillis: Long,
             idempotencyKey: String,
+            requestId: String,
             payloadFactory: () -> JSONObject,
             beforeDispatch: () -> Boolean,
         ): RelayCallResult {
             assertEquals(8_000L, timeoutMillis)
             if (!beforeDispatch()) return RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED)
             val payload = payloadFactory()
-            calls += CapturedCall(operation, idempotencyKey, payload)
+            calls += CapturedCall(operation, idempotencyKey, requestId, payload)
             return resultFactory?.invoke(operation, payload)?.let { RelayCallResult.Success(it, false) } ?: result
         }
     }
@@ -362,6 +570,11 @@ class RelayCoreV4HttpTransportTest {
 
     private fun uuid(number: Int): String =
         "00000000-0000-4000-8000-${number.toString().padStart(12, '0')}"
+
+    private fun assertPcRequest(envelope: JSONObject, payloadRequestId: String?, expectedIdempotencyKey: String) {
+        assertEquals(expectedIdempotencyKey, envelope.getString("idempotency_key"))
+        if (payloadRequestId != null) assertEquals(payloadRequestId, envelope.getString("request_id"))
+    }
 
     private fun RelayCallResult.RemoteError.raiseForTest(): Nothing {
         val session = FakeSession(result = this)

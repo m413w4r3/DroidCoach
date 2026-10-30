@@ -46,6 +46,8 @@ object AtlasRemoteProtocol {
     private val uuidPattern = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     private val tokenPattern = Regex("^[A-Za-z0-9_-]{43}$")
     private val idempotencyPattern = Regex("^[A-Za-z0-9._:-]{1,160}$")
+    private val httpErrorCodePattern = Regex("^HTTP_[45][0-9]{2}$")
+    private val remoteCodePattern = Regex("^[A-Za-z0-9_.-]{1,64}$")
     private val noncePattern = Regex("^[A-Za-z0-9+/]{22}==$")
 
     fun protocolForCapabilities(capabilities: Set<String>): String =
@@ -95,7 +97,7 @@ object AtlasRemoteProtocol {
             "hello_ok" -> validateHelloOk(envelope, expectedProtocol)
             "request" -> validateRequest(envelope, encodedSize, expectedProtocol)
             "response" -> validateResponse(envelope, encodedSize, expectedProtocol)
-            "error" -> validateError(envelope)
+            "error" -> validateError(envelope, expectedProtocol)
             "cancel" -> validateCancel(envelope)
             "ping", "pong" -> validatePingPong(envelope)
             else -> fail("unknown envelope kind: $kind")
@@ -259,18 +261,35 @@ object AtlasRemoteProtocol {
         if (encodedSize > MAX_RESPONSE_BYTES) fail("response too large")
     }
 
-    private fun validateError(value: JSONObject) {
-        exactKeys(value, setOf("protocol", "kind", "request_id", "session_id", "error", "completed_at"))
+    private fun validateError(value: JSONObject, protocol: String) {
+        val baseKeys = setOf("protocol", "kind", "request_id", "session_id", "error", "completed_at")
+        exactKeys(value, baseKeys)
         requireString(value, "kind", "error")
         nullableUuid(value, "request_id")
         nullableUuid(value, "session_id")
         val error = objectValue(value, "error")
-        exactKeys(error, setOf("code", "message", "retryable"))
+        val optionalV2Keys = setOf("http_status", "remote_code")
+        val allowedErrorKeys = setOf("code", "message", "retryable") +
+            if (protocol == PROTOCOL_V2) optionalV2Keys else emptySet()
+        val actualErrorKeys = error.keys().asSequence().toSet()
+        if (!actualErrorKeys.containsAll(setOf("code", "message", "retryable")) ||
+            actualErrorKeys.any { it !in allowedErrorKeys }
+        ) {
+            fail("unexpected or missing remote error field")
+        }
         val code = string(error, "code")
-        if (code !in ERROR_CODES) fail("unknown error code")
+        if (code !in ERROR_CODES && !(protocol == PROTOCOL_V2 && httpErrorCodePattern.matches(code))) {
+            fail("unknown error code")
+        }
         val message = string(error, "message")
         if (message.isBlank() || message.length > 120) fail("invalid error message")
         boolean(error, "retryable")
+        if (error.has("http_status") && integer(error, "http_status") !in 400L..599L) {
+            fail("invalid http_status")
+        }
+        if (error.has("remote_code") && !remoteCodePattern.matches(string(error, "remote_code"))) {
+            fail("invalid remote_code")
+        }
         parseTimestamp(value, "completed_at")
     }
 
