@@ -50,7 +50,7 @@ Le harnais E2E (ciblé 3/3 et JVM 863/863 sur `c83f87f`) est rattaché à la ses
 - Nom : `app-debug.apk`; `versionName=0.1.0`, `versionCode=1`.
 - Taille : **15 740 291 octets**.
 - SHA-256 : `08f45c3743df80b57f653ba41472514e8d006fc3068aca47be041f96a20975c9`.
-- Copie durable : `/home/nill/.local/share/atlas-qa-artifacts/V63-FINAL-d7a30c1/app-debug.apk`.
+- Copie durable : espace d’artefacts QA privé hors dépôt, sous-dossier `V63-FINAL-d7a30c1/app-debug.apk`.
 - Permissions : dossier `0700`, fichier `0600` ; `cmp` a confirmé une copie identique.
 
 La conservation de cet artefact ne signifie pas qu'il a été installé ou qualifié sur Pixel.
@@ -61,7 +61,7 @@ La conservation de cet artefact ne signifie pas qu'il a été installé ou quali
 - Les propositions IA ne suffisent pas à autoriser une mutation. A0 reste le défaut ; A1 dépend d'un consentement distinct, révocable et vérifié par des règles déterministes. Refus ou révocation ne doivent pas produire d'effet.
 - Les catégories protégées ou non classées restent verrouillées. Les limites locales A1 décrites par D63-36 — quotas, versions, périmètre et annulation — restent bornées ; cette preuve locale ne remplace pas une qualification runtime.
 - Le plugin OpenClaw désactivé ne donne lieu à aucune affirmation d'outil effectivement découvert ou appelé. Aucun droit shell ou contrôle Android par OpenClaw n'est revendiqué.
-- Aucune donnée personnelle, secret, token ou contenu de sauvegarde n'est reproduit dans ce rapport. Une sauvegarde privée antérieure au run Pixel est référencée uniquement par son chemin et son hash : `/home/nill/.local/share/atlas-qa-backups/V63-PIXEL-QA-NOW-20261029/atlas-app-data.tar`, SHA-256 `ead3e589c79107f43ef1519e30453e94b26e44cd8873208e407d9b0a440cad32` ; son contenu n'est pas décrit.
+- Aucune donnée personnelle, secret, token ou contenu de sauvegarde n'est reproduit dans ce rapport. Une sauvegarde privée antérieure au run Pixel existe et est référencée dans le journal QA privé ; aucun contenu, chemin personnel ni empreinte de sauvegarde n'est reproduit ici.
 
 ## Blocages runtime
 
@@ -81,7 +81,7 @@ A4-4 reste **BLOCKED**. L'image amont transforme le protocole 4001 en 1012 ; le 
 
 ### Expiration inbox et reçu durable
 
-P2 non bloquant accepté dans D63-39 : après le commit local A1 et l'écriture durable du reçu, si l'ACK APPLIED échoue puis le repli UNCERTAIN échoue aussi, l'entrée reste RECEIVED. Le worker peut ensuite la clore EXPIRED sans consulter le reçu (`CoreV4SyncWorker.kt:221`, `InboxV4Repository.kt:327`) ; `applyInboxProposal` traite EXPIRED avant la preuve durable (`PlanController.kt:517/529`).
+P2 non bloquant accepté dans D63-39 : après le commit local A1 et l'écriture durable du reçu, si l'ACK APPLIED échoue puis le repli UNCERTAIN échoue aussi, l'entrée reste RECEIVED. Le worker peut ensuite la clore EXPIRED sans consulter le reçu (`CoreV4SyncWorker.kt:221`, `InboxV4Repository.kt:327`) ; `applyInboxProposal` traite EXPIRED avant la preuve durable (`PlanController.kt:518/529`).
 
 Impact constaté : divergence possible entre le journal ACK et le plan local. Aucun rejeu d'effet n'est identifié ; le consentement est revérifié et Android reste l'autorité. Correctif futur : réconcilier le reçu avant toute expiration dans les deux chemins ; si l'état reste inconnu, laisser l'entrée en attente.
 
