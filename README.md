@@ -6,7 +6,7 @@ ATLAS cherche à transformer les objectifs choisis par son utilisateur en **acti
 
 Le coach est **ferme mais contestable** : chaque pouvoir est défini dans un mandat explicite, borné, vérifiable et révocable. L'IA propose ; ATLAS et les services autorisés exécutent uniquement des actions validées. Le contrôle des fonctions essentielles du téléphone et une pause d'urgence restent disponibles sans Internet.
 
-**État du projet (30 octobre 2026) :** **V6.2 clôturée** (`GO_WITH_LIMITATIONS`). Le code local V6.3 est intégré et les vérifications locales passent au SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` (**GO local avec limites**). La clôture runtime V6.3 reste **BLOCKED** : l'APK final n'a pas été qualifié sur Pixel, les six outils ne sont pas prouvés dans OpenClaw réel et A4-4 reste bloqué par la transformation amont 4001→1012. Etar, wger et la localisation ne sont pas livrés. Voir le [rapport final V6.3](docs/v6-3/v63-operational/RAPPORT_FINAL_V63.md). Plateforme de qualification prévue : **Android 17 / API 37, Pixel physique et AVD**. Dépôt : [DroidCoach](https://github.com/m413w4r3/DroidCoach).
+**État du projet (30 octobre 2026) :** **V6.2 clôturée** (`GO_WITH_LIMITATIONS`). Le code local V6.3 est intégré et vérifié au SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` (**GO local avec limites**). La qualification Pixel de l'APK final est **PASS_PARTIEL** (installation, smoke Aujourd'hui/Plan et E2E instrumenté 1/1) ; les parcours complets Focus, notifications, calendrier, localisation, offline, accessibilité et A1/A2 restent à faire. **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée** : les six outils ont été découverts et invoqués via le Gateway réel avec Core synthétique ; aucun Core réel compatible n'est disponible sur 18100 et la production n'est pas prouvée. A4-4 reste **BLOCKED** par la transformation amont 4001→1012. La clôture runtime complète V6.3 n'est pas prononcée. Etar, wger et la localisation ne sont pas livrés. Voir le [rapport final V6.3](docs/v6-3/v63-operational/RAPPORT_FINAL_V63.md). Plateforme de qualification prévue : **Android 17 / API 37, Pixel physique et AVD**. Dépôt : [DroidCoach](https://github.com/m413w4r3/DroidCoach).
 
 ## L'expérience recherchée
 
@@ -112,9 +112,9 @@ La CI GitHub exécute les vérifications JVM/lint/build/backend ; les validation
 
 ## Clôture V6.3 — preuves et étapes restantes
 
-Le SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` a un verdict **GO local** après suites backend, JVM Android et relais PC, lint et builds. Cela ne constitue pas une clôture runtime complète : la qualification Pixel sur l'APK final et la preuve OpenClaw réelle restent bloquées, comme A4-4. Le détail des preuves, avertissements et limites figure dans le [rapport final V6.3](docs/v6-3/v63-operational/RAPPORT_FINAL_V63.md).
+Le SHA `d7a30c1697858e0c10d8a8496997dc4c0a321bcf` conserve son verdict **GO local** après suites backend, JVM Android et relais PC, lint, builds et revue code. Pixel est **PASS_PARTIEL**. **GO_OPENCLAW_TOOLS ACCEPTED, portée limitée** après preuve via Gateway réel avec Core synthétique ; la disponibilité avec Core de production et le chemin Android ne sont pas démontrés. A4-4 reste **BLOCKED** ; la clôture runtime complète n'est pas prononcée. Le détail des preuves et limites figure dans le [rapport final V6.3](docs/v6-3/v63-operational/RAPPORT_FINAL_V63.md).
 
-Etar, wger, localisation et les autres objectifs de conception décrits plus haut restent des intégrations ciblées non livrées. La qualification runtime devra utiliser l'APK hashé, prouver séparément les outils OpenClaw et traiter le blocage du relais amont avant de déclarer la clôture V6.3.
+Etar, wger, localisation et les autres objectifs de conception décrits plus haut restent des intégrations ciblées non livrées. La qualification runtime devra utiliser l'APK hashé, compléter la preuve OpenClaw avec un Core réel compatible et le chemin Android, puis traiter le blocage du relais amont avant de déclarer la clôture V6.3.
 
 ## Licence et crédits
 
