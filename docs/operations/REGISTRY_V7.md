@@ -50,7 +50,7 @@
 | V7-06-RESILIENCE | offline, reconnexion, redémarrages, révocation, restauration | V7-04 | NOT_STARTED | tests/preuves | GATE 6/7 |
 | V7-07-DOCS | documentation finale alignée sur l'état livré | tous | NOT_STARTED | docs/operations/** | documents vérifiés contre SHA/APK |
 
-## 3bis. Constats consolidés au 2026-10-30 (V7-00 partiel)
+## 3bis. Constats consolidés au 2026-10-30 (V7-00 partiel + exécution V7)
 
 - **Core live** : conteneur healthy, mais `ATLAS_AGENT_ADAPTER=mock` et les sept capabilities V4 (`day_plan.read`, `activity_status.read`, `plan_revision.propose`, `usage_summary.read`, `goal_progress.read`, `training_plan.read`, `coach.chat`) sont `false`. `/health` répond `mode=mock`.
 - **Plugin OpenClaw** : `atlas_core_tools` est activé, capabilities `true`, `coreBaseUrl=http://127.0.0.1:18100` (aucun listener), `tokenFile` en 0600 mais **ne correspond pas** au token outil du Core live. La politique agent `atlas` contient `profile=minimal`, `deny=[gateway,session_status,presence]` et `alsoAllow` des six outils ; `tools.effective` reste à requalifier.
@@ -65,6 +65,8 @@
 - **Double chemin d'outils observé** : la 1re session isolée a exécuté `atlas_get_day_plan` nativement (GET interne Core corrélé) ; le 3e tour réussi a exécuté l'outil côté adaptateur (aucun GET interne, `tool_state=completed`). Les deux chemins existent donc. Il faut choisir le chemin canonique, prouver les six outils et la proposition dessus, et garantir l'absence de double exécution avant de qualifier `GO_OPENCLAW_TOOLS`.
 - **Revues indépendantes** : V7-01C `ACCEPT` (aucun P0/P1, un P2 de preuve sur les logs) ; V7-03B `REJECT` (P1 request_id enveloppe≠payload, P2 codec d'erreur V4, preuves de tests incomplètes). V7-03C corrige ces points. Une notification de fin ne vaut pas acceptation.
 - **Intégration** : V7-01C mergé (`9331f88`) et V7-01B evidence mergé (`2cb1214`) sur la branche d'intégration ; suite backend complète `344 passed, 1 skipped` avec `ATLAS_DB_PATH` temporaire. V7-03B n'est pas intégré.
+- **Relais public C (partiel)** : relais `atlas-v7-relay` (image r3a), proxy 4400, connecteur `relay_connected=true` ; Funnel TLS `8443→4400` ; `r3b-public-e2e.mjs` PASS pour Noise/auth/health/sync/chat V1/rejeu/conflit/payload. Un device `pixel-v7` est appairé (token privé, `server_id=atlas-pc-7c7df95437e1bd5c65ba74abdf8181c9`). V4 et Pixel non encore testés ; V7-02B corrige le chargeur `relay.env` qui rejetait les clés V4 ; le connecteur courant a été lancé avec l'environnement en processus.
+- **Pixel backup** : ticket envoyé à l'opérateur préflight pour une archive `run-as` privée, hash/vérification, et empreinte du signataire APK installé avant toute installation. La Keystore Android n'est pas incluse dans un backup app-only ; un ré-appairage peut être nécessaire.
 - **Pixel préflight** (`01eace63-b56f-4ce1-beb3-e532a46adb05`, codex/gpt-6-luna/xhigh vérifié) : Pixel 9 Pro XL `komodo`, Android 17/API 37, ABI arm64-v8a, ADB USB, package `dev.atlas.coach` 0.1.0 (code 1, debuggable, targetSdk 36). `allowBackup=false` : le backup app-only devra passer par `run-as` (debuggable), pas par `adb backup` ; sauvegarde non encore faite. Aucun APK candidat/signature vérifiée ; installation non tentée. Appareil prêt, mais D reste bloqué tant que C et l'APK V7 ne sont pas prêts.
 - **Audit V7-01B terminé** (`19154ae`, rapport `V7-01B_READONLY_AMBIGUITIES_AUDIT.md`) :
   - **`EXEC_ANOMALY: CONFIRMED — CODE_MODE`** : le modèle a réellement demandé `exec` avec `code`/`title` et la cellule JavaScript s'est terminée avec succès, dans trois sessions synthétiques. La configuration n'active pas explicitement `tools.codeMode`; l'audit relie la surface à Code Mode (façade JS, distincte du shell mais capacité d'exécution de code). **P0 sécurité : blocage live.**
@@ -80,9 +82,9 @@
 |---|---|---|
 | GO_CORE | GO_LIVE (B) | Core live `mode=openclaw`, sept capabilities V4 vraies, chat V4 réel HTTP 200 `agent_status=ok`, image `00b88ef…`, volume conservé ; `adapter.connected=false` reste un champ à expliquer, non bloquant pour le chat |
 | GO_OPENCLAW_TOOLS | PARTIAL — A+B | Code Mode/exec désactivé et vérifié ; six outils catalogués ; plugin natif atteint le Core live et reçoit le gate `CONSENT_REQUIRED` ; chemin client disponible ; preuve des six en exécution avec données consenties après D |
-| GO_REMOTE_NETWORK | BLOCKED (partiel) | Funnel `8443→4400` confirmé ; 4400/4401/4402 absents ; A4-4 4001→1012 non clos |
+| GO_REMOTE_NETWORK | GO_PUBLIC_V1 (C partiel) | Funnel `8443→4400` confirmé ; relais 4402, proxy 4400, connecteur `relay_connected=true` ; WSS public Noise/auth/V1 PASS ; V4/Pixel et A4-4 non qualifiés |
 | GO_ANDROID_SYNC | BLOCKED | V7-03C en cours ; transport relayé non encore accepté ; aucun reçu runtime |
-| GO_REMOTE_CHAT | NO-GO | Code Mode `exec` interdit non désactivé ; connecteur/Core/relais non déployés |
+| GO_REMOTE_CHAT | PARTIAL (B) | Chat V4 réel live PASS en local ; chat V4 depuis Pixel via relais non exécuté ; Code Mode corrigé |
 | GO_PLAN_REVISION | NOT_RUN | aucune proposition appliquée puis ACK |
 | GO_DOCKER_OPERATIONS | GO_LIMITED (B) | Bascule Core live avec backup SQLite, image candidate, healthcheck, rollback image conservé ; pile complète relais encore non testée |
 | GO_PIXEL | PASS_PARTIEL (historique) | APK UI installé ; pas d'E2E réel |
