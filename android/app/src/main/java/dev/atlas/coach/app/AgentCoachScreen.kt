@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -141,6 +143,7 @@ internal fun AgentCoachScreen(
         agentStatusMessage = controller.agentStatusMessage,
         lastError = controller.relaySettings.lastError,
     )
+    val conversationAvailability = controller.agentConversationAvailability
     val rawTechnicalDetail = humanConnection.technicalDetail ?: listOfNotNull(
         controller.agentStatusMessage,
         controller.agentChatStatusMessage,
@@ -259,109 +262,134 @@ internal fun AgentCoachScreen(
             modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_refresh"),
             onClick = controller::pullAgentInbox,
         ) { Text("Actualiser") }
-        if (controller.capabilities[AtlasController.CAP_COACH] != true) {
-            Text("Coach local désactivé dans les paramètres.")
-        } else {
+        if (conversationAvailability.localCoachEnabled) {
             CoachQuickActions(controller)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Conversation", style = MaterialTheme.typography.titleLarge)
-                if (controller.agentConversation.isEmpty()) {
-                    Text("Écrivez un message pour démarrer. La démo locale fonctionne sans serveur.")
-                }
-                controller.agentConversation.forEach { entry ->
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                            androidx.compose.foundation.layout.Box(
-                                Modifier.padding(top = 3.dp).sizeIn(minWidth = 2.dp, minHeight = 18.dp)
-                                    .background(if (entry.role == AgentMessageRole.ASSISTANT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Conversation", style = MaterialTheme.typography.titleLarge)
+            if (controller.agentConversation.isEmpty()) {
+                Text(
+                    if (controller.relaySettings.mode == dev.atlas.coach.sync.relay.RelayTransportMode.OFFLINE) {
+                        "Écrivez un message pour démarrer. La démo locale fonctionne sans serveur."
+                    } else {
+                        "Écrivez un message pour démarrer."
+                    },
+                )
+            }
+            controller.agentConversation.forEach { entry ->
+                val isUser = entry.role == AgentMessageRole.USER
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+                ) {
+                    Surface(
+                        modifier = Modifier.widthIn(max = 360.dp).testTag(
+                            if (isUser) "agent_message_bubble_user" else "agent_message_bubble_assistant",
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isUser) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerLow,
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                if (isUser) "Vous" else "Coach",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (isUser) MaterialTheme.colorScheme.onSecondaryContainer
+                                else MaterialTheme.colorScheme.primary,
                             )
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(if (entry.role == AgentMessageRole.USER) "Vous" else "Coach", style = MaterialTheme.typography.labelLarge)
-                                Text(readableConversationMessage(entry.text), style = MaterialTheme.typography.bodyLarge)
-                                if (entry.role == AgentMessageRole.ASSISTANT) {
-                                    Text(
-                                        readableMessageSourceLabel(entry.contextSources, latestProvenance),
-                                        modifier = Modifier.testTag("agent_message_source"),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                    )
-                                }
+                            Text(readableConversationMessage(entry.text), style = MaterialTheme.typography.bodyLarge)
+                            if (!isUser) {
+                                Text(
+                                    readableMessageSourceLabel(entry.contextSources, latestProvenance),
+                                    modifier = Modifier.testTag("agent_message_source"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
                             }
                         }
-                        AtlasRule()
                     }
                 }
-                OutlinedTextField(
-                    value = message,
-                    onValueChange = { if (it.length <= AtlasController.MAX_AGENT_MESSAGE_LENGTH) message = it },
-                    modifier = Modifier.fillMaxWidth().testTag("agent_message_input"),
-                    label = { Text("Message au coach") },
-                    supportingText = { Text("2 000 caractères maximum · Envoyer transmet le message.") },
-                    minLines = 2,
-                    maxLines = 5,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(
-                        onSend = {
-                            if (message.isNotBlank() && controller.isAgentEnabled &&
-                                controller.agentChatSendState != AgentChatSendState.SENDING &&
-                                controller.sendAgentMessage(message)
-                            ) message = ""
-                        },
-                    ),
-                )
-                Button(
-                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_send_message"),
-                    onClick = {
+            }
+            OutlinedTextField(
+                value = message,
+                onValueChange = { if (it.length <= AtlasController.MAX_AGENT_MESSAGE_LENGTH) message = it },
+                modifier = Modifier.fillMaxWidth().testTag("agent_message_input"),
+                label = { Text("Message au coach") },
+                supportingText = { Text("2 000 caractères maximum · Envoyer transmet le message.") },
+                minLines = 2,
+                maxLines = 5,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(
+                    onSend = {
                         if (message.isNotBlank() && controller.isAgentEnabled &&
                             controller.agentChatSendState != AgentChatSendState.SENDING &&
                             controller.sendAgentMessage(message)
                         ) message = ""
                     },
-                    enabled = message.isNotBlank() && controller.isAgentEnabled &&
-                        controller.agentChatSendState != AgentChatSendState.SENDING,
-                ) { Text("Envoyer") }
-                val lastUserMessageIndex = controller.agentConversation.indexOfLast { it.role == AgentMessageRole.USER }
-                val lastCoachMessageIndex = controller.agentConversation.indexOfLast { it.role == AgentMessageRole.ASSISTANT }
-                val existingSendStatus = controller.agentChatStatusMessage?.let { status ->
-                    when {
-                        status == rawTechnicalDetail -> humanConnectionDetail
-                        status.contains("requête relayée a échoué", ignoreCase = true) ->
-                            "L'envoi a échoué. Aucun nouvel essai automatique ne sera tenté."
-                        status.contains("requête directe a échoué", ignoreCase = true) ->
-                            "L'envoi par la connexion directe a échoué."
-                        status.contains("annulation HTTP directe", ignoreCase = true) ->
-                            "L'annulation de cet envoi n'est pas garantie."
-                        else -> status
-                    }
-                }
-                val sendStatus = when {
-                    controller.agentChatSendState == AgentChatSendState.SENDING -> "Envoi en cours…"
-                    existingSendStatus != null -> existingSendStatus
-                    lastCoachMessageIndex > lastUserMessageIndex && lastUserMessageIndex >= 0 -> "Réponse reçue"
-                    else -> null
-                }
-                if (sendStatus != null) {
-                    Text(
-                        sendStatus,
-                        modifier = Modifier.testTag("agent_chat_send_status").semantics { liveRegion = LiveRegionMode.Polite },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (controller.agentChatSendState == AgentChatSendState.SENDING) {
-                    val relayMode = controller.relaySettings.mode == dev.atlas.coach.sync.relay.RelayTransportMode.RELAY
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_cancel_send"),
-                        enabled = relayMode,
-                        onClick = controller::cancelAgentChat,
-                    ) {
-                        Text(if (relayMode) "Annuler l'envoi relayé" else "Annulation indisponible en mode direct")
-                    }
+                ),
+            )
+            AgentConversationAvailabilityNotice(
+                controller = controller,
+                availability = conversationAvailability,
+                draft = message,
+            )
+            Button(
+                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_send_message"),
+                onClick = {
+                    if (message.isNotBlank() && controller.isAgentEnabled &&
+                        controller.agentChatSendState != AgentChatSendState.SENDING &&
+                        controller.sendAgentMessage(message)
+                    ) message = ""
+                },
+                enabled = message.isNotBlank() && controller.isAgentEnabled &&
+                    controller.agentChatSendState != AgentChatSendState.SENDING,
+            ) { Text("Envoyer") }
+            val lastUserMessageIndex = controller.agentConversation.indexOfLast { it.role == AgentMessageRole.USER }
+            val lastCoachMessageIndex = controller.agentConversation.indexOfLast { it.role == AgentMessageRole.ASSISTANT }
+            val existingSendStatus = controller.agentChatStatusMessage?.let { status ->
+                when {
+                    status == rawTechnicalDetail -> humanConnectionDetail
+                    status.contains("requête relayée a échoué", ignoreCase = true) ->
+                        "L'envoi a échoué. Aucun nouvel essai automatique ne sera tenté."
+                    status.contains("requête directe a échoué", ignoreCase = true) ->
+                        "L'envoi par la connexion directe a échoué."
+                    status.contains("annulation HTTP directe", ignoreCase = true) ->
+                        "L'annulation de cet envoi n'est pas garantie."
+                    else -> status
                 }
             }
+            val sendStatus = when {
+                controller.agentChatSendState == AgentChatSendState.SENDING -> "Envoi en cours…"
+                existingSendStatus != null -> existingSendStatus
+                lastCoachMessageIndex > lastUserMessageIndex && lastUserMessageIndex >= 0 -> "Réponse reçue"
+                else -> null
+            }
+            if (sendStatus != null) {
+                Text(
+                    sendStatus,
+                    modifier = Modifier.testTag("agent_chat_send_status").semantics { liveRegion = LiveRegionMode.Polite },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (controller.agentChatSendState == AgentChatSendState.SENDING) {
+                val relayMode = controller.relaySettings.mode == dev.atlas.coach.sync.relay.RelayTransportMode.RELAY
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("agent_cancel_send"),
+                    enabled = relayMode,
+                    onClick = controller::cancelAgentChat,
+                ) {
+                    Text(if (relayMode) "Annuler l'envoi relayé" else "Annulation indisponible en mode direct")
+                }
+            }
+        }
 
+        if (conversationAvailability.localCoachEnabled) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Proposition prioritaire", style = MaterialTheme.typography.titleLarge)
                 val proposal = if (missingNotificationProposal) null else notificationProposal ?: pendingProposals.firstOrNull()
@@ -408,6 +436,92 @@ internal fun AgentCoachScreen(
             onDismiss = { editing = null },
             onSave = { parameters -> controller.editAgentProposal(entry.id, parameters); editing = null },
         )
+    }
+}
+
+@Composable
+private fun AgentConversationAvailabilityNotice(
+    controller: AtlasController,
+    availability: AgentConversationAvailability,
+    draft: String,
+) {
+    val accessReason = when (availability.accessIssue) {
+        AgentConversationAccessIssue.AGENT_DISABLED -> "Coach OpenClaw désactivé. Activez-le dans le mandat pour envoyer."
+        AgentConversationAccessIssue.MANDATE_REVOKED -> "Mandat révoqué. Réactivez-le dans l'écran Mandat du Coach."
+        AgentConversationAccessIssue.MANDATE_SUSPENDED -> "Mandat suspendu. Réactivez-le dans l'écran Mandat du Coach."
+        AgentConversationAccessIssue.MANDATE_EXPIRED -> "Mandat expiré. Renouvelez-le dans l'écran Mandat du Coach."
+        AgentConversationAccessIssue.SHARED_DATA_CONSENT_REQUIRED ->
+            "Consentement de partage manquant ou indisponible. Vérifiez les catégories de données partagées."
+        AgentConversationAccessIssue.ACCESS_BLOCKED -> "Accès OpenClaw bloqué après une révocation. Vérifiez le mandat."
+        AgentConversationAccessIssue.ACCESS_UPDATE_PENDING -> "Vérification du mandat et des consentements en cours."
+        AgentConversationAccessIssue.ACCESS_UNAVAILABLE -> "Autorisation OpenClaw indisponible. Vérifiez le mandat et les données partagées."
+        null -> when {
+            controller.agentChatSendState == AgentChatSendState.SENDING -> "Envoi en cours…"
+            draft.isBlank() -> "Saisissez un message pour activer Envoyer."
+            else -> "Message prêt à être envoyé."
+        }
+    }
+    val accessAction = when (availability.accessIssue) {
+        AgentConversationAccessIssue.SHARED_DATA_CONSENT_REQUIRED -> "Données partagées" to AtlasScreenId.AGENT_SHARING
+        AgentConversationAccessIssue.ACCESS_UPDATE_PENDING, null -> null
+        else -> "Ouvrir le mandat" to AtlasScreenId.AGENT_SETTINGS
+    }
+    val transportReason = when (availability.transportIssue) {
+        AgentConversationTransportIssue.DIRECT_UNAVAILABLE ->
+            "Connexion directe au PC indisponible. Une tentative peut échouer."
+        AgentConversationTransportIssue.RELAY_NOT_PAIRED -> "Relais non appairé. Aucun envoi direct ne sera tenté."
+        AgentConversationTransportIssue.RELAY_AUTH_REQUIRED -> "Le relais demande une authentification."
+        AgentConversationTransportIssue.RELAY_REVOKED -> "Accès au relais révoqué. Un nouvel appairage est requis."
+        AgentConversationTransportIssue.RELAY_OFFLINE -> "Relais hors ligne. Aucun envoi direct ni renvoi automatique ne sera tenté."
+        AgentConversationTransportIssue.RELAY_ERROR -> "Connexion au relais en erreur. Vérifiez ses réglages."
+        AgentConversationTransportIssue.RELAY_INACTIVE -> "Le mode relayé est inactif."
+        null -> null
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("agent_conversation_availability"),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!availability.localCoachEnabled) {
+                Text(
+                    "Coach local désactivé dans les paramètres.",
+                    modifier = Modifier.testTag("agent_local_coach_disabled"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(
+                    modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_local_coach_settings_action"),
+                    onClick = { controller.navigationState.navigate(AtlasScreenId.SETTINGS) },
+                ) { Text("Paramètres du Coach local") }
+            }
+            Text(
+                accessReason,
+                modifier = Modifier.testTag("agent_conversation_availability_reason")
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            accessAction?.let { (label, destination) ->
+                OutlinedButton(
+                    modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_conversation_access_action"),
+                    onClick = { controller.navigationState.navigate(destination) },
+                ) { Text(label) }
+            }
+            if (transportReason != null) {
+                Text(
+                    transportReason,
+                    modifier = Modifier.testTag("agent_conversation_transport_reason"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(
+                    modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_conversation_transport_action"),
+                    onClick = { controller.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) },
+                ) { Text("Ouvrir les réglages de connexion") }
+            }
+        }
     }
 }
 
