@@ -21,11 +21,10 @@ import dev.atlas.coach.goals.GoalRepository
 import dev.atlas.coach.habits.HabitCheckIn
 import dev.atlas.coach.habits.InMemoryHabitRepository
 import dev.atlas.coach.plan.DayPlan
-import dev.atlas.coach.plan.PlanJsonCodec
 import dev.atlas.coach.plan.PlanState
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.TrainingReferenceSyncState
-import dev.atlas.coach.plan.v4.PlanV4JsonCodec
+import dev.atlas.coach.plan.v5.PlanV5JsonCodec
 import dev.atlas.coach.sync.AndroidSyncStorage
 import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.CoreV4ConsentRecord
@@ -124,8 +123,10 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
                         bearerToken = token,
                         debuggable = debuggable,
                         consentVersion = dayPlanConsent.version.toLong(),
-                        mayPull = planRevisionCapabilityEnabled(applicationContext) &&
-                            planSnapshot?.plan?.state == PlanState.APPROVED,
+                        mayPull = mayPullCoreV4ProposalInbox(
+                            planRevisionCapabilityEnabled = planRevisionCapabilityEnabled(applicationContext),
+                            plan = planSnapshot,
+                        ),
                     ) || retryInbox
                 } catch (error: InboxV4HttpException) {
                     store.recordFailure(error.kind.name, error.message ?: "Erreur de synchronisation inbox V4.")
@@ -435,25 +436,13 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         val file = todayPlanFile(context)
         if (!file.isFile) return null
         val raw = runCatching { file.readText(Charsets.UTF_8) }.getOrNull() ?: return null
-        return runCatching {
-            when (JSONObject(raw).optInt("schema_version")) {
-                PlanV4JsonCodec.SCHEMA_VERSION -> PlanV4JsonCodec.decodeStore(raw)
-                    .let { PlanSnapshot(it.store.dayPlan, it.statusEvents) }
-                PlanJsonCodec.SCHEMA_VERSION -> PlanSnapshot(
-                    PlanJsonCodec.decodeStore(raw).dayPlan,
-                    emptyList(),
-                )
-                else -> null
-            }
-        }.getOrNull()
+        return decodeCoreV4SyncPlanSnapshot(raw)
     }
 
     private fun todayPlanFile(context: Context): File {
         val date = LocalDate.now(ZoneId.systemDefault())
         return File(File(context.filesDir, "plans"), "day-plan-" + date + ".json")
     }
-
-    private data class PlanSnapshot(val plan: DayPlan, val events: List<PlanStatusEvent>)
 
     private fun fingerprint(value: JSONObject, vararg ignored: String): String {
         val copy = JSONObject(value.toString())
@@ -473,6 +462,18 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         return source.entries.associate { it.key as String to it.value }
     }
 }
+
+internal data class PlanSnapshot(val plan: DayPlan, val events: List<PlanStatusEvent>)
+
+/** Uses the shared reader so sync accepts V3/V4 stores and the additive V5 A1 envelope. */
+internal fun decodeCoreV4SyncPlanSnapshot(raw: String): PlanSnapshot? = runCatching {
+    PlanV5JsonCodec.decodeStore(raw).let { PlanSnapshot(it.store.dayPlan, it.statusEvents) }
+}.getOrNull()
+
+internal fun mayPullCoreV4ProposalInbox(
+    planRevisionCapabilityEnabled: Boolean,
+    plan: PlanSnapshot?,
+): Boolean = planRevisionCapabilityEnabled && plan?.plan?.state == PlanState.APPROVED
 
 /** Pushes the plan under the current consent before status replay when that consent changed. */
 internal fun pushApprovedCoreV4PlanAndStatuses(

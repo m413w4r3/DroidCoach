@@ -6,19 +6,32 @@ import dev.atlas.coach.goals.GoalRecord
 import dev.atlas.coach.goals.GoalStatus
 import dev.atlas.coach.plan.ActivityKind
 import dev.atlas.coach.plan.ActivityStatus
+import dev.atlas.coach.plan.A1ActivityClass
+import dev.atlas.coach.plan.A1ActivityPolicy
+import dev.atlas.coach.plan.A1Consent
+import dev.atlas.coach.plan.A1ExternalLinkState
+import dev.atlas.coach.plan.A1PersistentState
 import dev.atlas.coach.plan.DayPlan
 import dev.atlas.coach.plan.LocalSchedule
 import dev.atlas.coach.plan.PlanActivity
+import dev.atlas.coach.plan.PlanJsonCodec
 import dev.atlas.coach.plan.PlanOrigin
 import dev.atlas.coach.plan.PlanState
+import dev.atlas.coach.plan.PlanStoreDocument
 import dev.atlas.coach.plan.PlanStatusEvent
 import dev.atlas.coach.plan.Priority
 import dev.atlas.coach.plan.StatusProvenance
 import dev.atlas.coach.plan.StatusSource
 import dev.atlas.coach.plan.TrainingPlanReference
 import dev.atlas.coach.plan.TrainingReferenceSyncState
+import dev.atlas.coach.plan.v4.PlanV4JsonCodec
+import dev.atlas.coach.plan.v4.PlanV4StoreDocument
+import dev.atlas.coach.plan.v5.PlanV5JsonCodec
+import dev.atlas.coach.plan.v5.PlanV5StoreDocument
 import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.CoreV4SyncPersistence
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpPoster
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpTransport
 import dev.atlas.coach.usage.GlobalUsageConsent
 import dev.atlas.coach.usage.UsageAppSummary
 import dev.atlas.coach.usage.UsageReliability
@@ -29,6 +42,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -113,6 +127,103 @@ class CoreV4SyncClientTest {
         assertEquals("Objectif 1", goals.getJSONArray("goals").getJSONObject(0).getString("title"))
         assertEquals(JSONObject.NULL, usage.getJSONArray("apps").getJSONObject(0).get("display_name"))
         assertEquals(7, training.getJSONArray("routines").getJSONObject(0).getInt("routine_id"))
+    }
+
+    @Test
+    fun activatedA1V5PlanRemainsEligibleForPushAndProposalInboxPull() {
+        val plan = approvedPlan()
+        val event = statusEvent()
+        val rawV5Store = PlanV5JsonCodec.encodeStore(
+            PlanV5StoreDocument(
+                store = PlanStoreDocument(plan),
+                statusEvents = listOf(event),
+                a1State = A1PersistentState(
+                    consent = A1Consent(version = 1, enabled = true, updatedAtUtcMillis = 1_798_000_000_000L),
+                    activityPolicies = mapOf(
+                        ACTIVITY_ID to A1ActivityPolicy(
+                            activityId = ACTIVITY_ID,
+                            activityClass = A1ActivityClass.READING,
+                            unlocked = true,
+                            externalLinkState = A1ExternalLinkState.NONE,
+                        ),
+                    ),
+                ),
+                usesV5Envelope = true,
+            ),
+        )
+
+        val v3Snapshot = decodeCoreV4SyncPlanSnapshot(PlanJsonCodec.encodeStore(PlanStoreDocument(plan)))
+        assertEquals(plan, v3Snapshot?.plan)
+        val v4Snapshot = decodeCoreV4SyncPlanSnapshot(
+            PlanV4JsonCodec.encodeStore(PlanV4StoreDocument(PlanStoreDocument(plan), listOf(event))),
+        )
+        assertEquals(plan, v4Snapshot?.plan)
+        assertEquals(listOf(event), v4Snapshot?.events)
+
+        val planSnapshot = decodeCoreV4SyncPlanSnapshot(rawV5Store)
+            ?: error("V5 plan with activated A1 state must remain readable by sync")
+        assertEquals(plan, planSnapshot.plan)
+        assertEquals(listOf(event), planSnapshot.events)
+        assertTrue(mayPullCoreV4ProposalInbox(planRevisionCapabilityEnabled = true, plan = planSnapshot))
+
+        val store = AndroidCoreV4SyncStore(MemoryV4Persistence())
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        store.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        val transport = FakeTransport()
+        val client = CoreV4SyncClient(transport)
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+        val planConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        val statusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+
+        assertTrue(pushApprovedCoreV4PlanAndStatuses(
+            store = store,
+            client = client,
+            token = TOKEN,
+            plan = planSnapshot.plan,
+            events = planSnapshot.events,
+            now = NOW,
+            planConsent = planConsent,
+            statusConsent = statusConsent,
+        ))
+        assertEquals(plan.version, store.latestPlanReceiptVersion(plan.planId, planConsent.version))
+        assertEquals(
+            listOf(
+                CoreV4SyncClient.CONSENT_ROUTE,
+                CoreV4SyncClient.CONSENT_ROUTE,
+                CoreV4Category.DAY_PLAN.route,
+                CoreV4Category.ACTIVITY_STATUS.route,
+            ),
+            transport.requests.map { it.path },
+        )
+        assertFalse(store.presentation().code == "MISMATCH")
+        assertFalse(store.freshness(CoreV4Category.DAY_PLAN).contains("MISMATCH"))
+
+        val pullRequests = mutableListOf<CoreV4HttpRequest>()
+        val inboxTransport = InboxV4HttpTransport(
+            baseUrl = "https://core.example.test",
+            bearerToken = TOKEN,
+            consentVersion = planConsent.version.toLong(),
+            debuggable = false,
+            poster = InboxV4HttpPoster { request ->
+                pullRequests += request
+                val requestId = JSONObject(request.body).getString("request_id")
+                CoreV4HttpResponse(200, JSONObject()
+                    .put("contract_version", 4)
+                    .put("schema_version", 4)
+                    .put("request_id", requestId)
+                    .put("capability", "proposal.ack")
+                    .put("proposals", JSONArray())
+                    .put("next_cursor", JSONObject.NULL)
+                    .toString())
+            },
+            requestAllowed = { request ->
+                request.path == InboxV4HttpTransport.PULL_ROUTE &&
+                    mayPullCoreV4ProposalInbox(planRevisionCapabilityEnabled = true, plan = planSnapshot)
+            },
+        )
+        val pulledPage = inboxTransport.pullRaw(cursor = null, pageSize = InboxV4HttpTransport.PAGE_SIZE)
+        assertTrue(pulledPage.proposals.isEmpty())
+        assertEquals(listOf(InboxV4HttpTransport.PULL_ROUTE), pullRequests.map { it.path })
     }
 
     @Test
