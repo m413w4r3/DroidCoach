@@ -58,12 +58,46 @@ import org.json.JSONObject
 private const val MAX_PULL_PAGES_PER_RUN = 4
 private const val PLAN_REVISION_CAPABILITY = "planRevision"
 
+private object CoreV4SyncSingleFlight {
+    private var running = false
+    private var followUpRequested = false
+
+    @Synchronized
+    fun beginPass(): Boolean {
+        if (running) {
+            followUpRequested = true
+            return false
+        }
+        running = true
+        return true
+    }
+
+    @Synchronized
+    fun finishPass(): Boolean {
+        running = false
+        val shouldFollowUp = followUpRequested
+        followUpRequested = false
+        return shouldFollowUp
+    }
+}
+
 /** One bounded outbound pass. It reads local sources only and never changes plans or domain events. */
 class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     @Volatile private var activeClient: CoreV4SyncClient? = null
     @Volatile private var activeInboxTransport: InboxV4HttpTransport? = null
 
     override fun doWork(): Result {
+        if (!CoreV4SyncSingleFlight.beginPass()) return Result.success()
+        try {
+            return doSyncPass()
+        } finally {
+            if (CoreV4SyncSingleFlight.finishPass()) {
+                CoreV4SyncScheduler.enqueueImmediate(applicationContext)
+            }
+        }
+    }
+
+    private fun doSyncPass(): Result {
         val workKind = when (inputData.getString(CoreV4SyncScheduler.WORK_KIND_INPUT)) {
             CoreV4Diagnostics.WorkKind.IMMEDIATE.name -> CoreV4Diagnostics.WorkKind.IMMEDIATE
             CoreV4Diagnostics.WorkKind.PERIODIC.name -> CoreV4Diagnostics.WorkKind.PERIODIC
@@ -761,13 +795,18 @@ internal fun sendCoreV4Projection(
     }
 
     if (category == CoreV4Category.ACTIVITY_STATUS) {
-        sendPendingCoreV4Status(store, client, token, pending, observedAt)
+        sendPendingCoreV4Status(store, client, token, pending, observedAt, shouldStop = shouldStop)
         return
     }
-    val freshConsent = store.consent(category).snapshot
     val stages = projectionDiagnosticStages(category)
     if (stages == null) {
-        val receipt = client.sendProjection(pending.request, pending.body, token, freshConsent, dayPlanConsent)
+        val receipt = sendCoreV4WithOneUnavailableRetry(shouldStop) {
+            val freshConsent = store.consent(category).snapshot
+            val freshDayPlanConsent = dayPlanConsent?.let {
+                store.consent(CoreV4Category.DAY_PLAN).snapshot
+            }
+            client.sendProjection(pending.request, pending.body, token, freshConsent, freshDayPlanConsent)
+        }
         store.acknowledgeProjection(pending, receipt, observedAt)
         return
     }
@@ -781,7 +820,13 @@ internal fun sendCoreV4Projection(
     )
     val dispatchStartedAtNanos = System.nanoTime()
     val receipt = try {
-        client.sendProjection(pending.request, pending.body, token, freshConsent, dayPlanConsent)
+        sendCoreV4WithOneUnavailableRetry(shouldStop) {
+            val freshConsent = store.consent(category).snapshot
+            val freshDayPlanConsent = dayPlanConsent?.let {
+                store.consent(CoreV4Category.DAY_PLAN).snapshot
+            }
+            client.sendProjection(pending.request, pending.body, token, freshConsent, freshDayPlanConsent)
+        }
     } catch (error: Exception) {
         CoreV4Diagnostics.record(
             stage = CoreV4Diagnostics.Stage.ERROR,
@@ -841,7 +886,9 @@ private fun sendPendingCoreV4Status(
     pending: dev.atlas.coach.sync.CoreV4PendingProjection,
     observedAt: String,
     mayRefreshConsentVersion: Boolean = true,
+    shouldStop: () -> Boolean = { false },
 ) {
+    if (shouldStop()) return
     val statusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
     val planConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
     val diagnosticStages = projectionDiagnosticStages(CoreV4Category.ACTIVITY_STATUS)!!
@@ -855,14 +902,18 @@ private fun sendPendingCoreV4Status(
             consentVersion = pending.request.consentVersion,
             requestId = pending.request.requestId,
         )
-        val receipt = client.sendProjection(
-            pending.request,
-            pending.body,
-            token,
-            statusConsent,
-            planConsent,
-            allowStaleStatusReplay = pending.request.consentVersion < statusConsent.version,
-        )
+        val receipt = sendCoreV4WithOneUnavailableRetry(shouldStop) {
+            val currentStatusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+            val currentPlanConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+            client.sendProjection(
+                pending.request,
+                pending.body,
+                token,
+                currentStatusConsent,
+                currentPlanConsent,
+                allowStaleStatusReplay = pending.request.consentVersion < currentStatusConsent.version,
+            )
+        }
         CoreV4Diagnostics.record(
             stage = responseStage,
             state = CoreV4Diagnostics.State.CORRELATED,
@@ -908,7 +959,15 @@ private fun sendPendingCoreV4Status(
             val replacement = store.replaceRejectedStatusProjection(
                 pending, statusConsent.version, client, Instant.now().toString(),
             )
-            sendPendingCoreV4Status(store, client, token, replacement, observedAt, mayRefreshConsentVersion = false)
+            sendPendingCoreV4Status(
+                store,
+                client,
+                token,
+                replacement,
+                observedAt,
+                mayRefreshConsentVersion = false,
+                shouldStop = shouldStop,
+            )
             return
         }
         if (isDefinitiveStatusRejection(error)) {
@@ -937,6 +996,25 @@ private fun isDefinitiveStatusRejection(error: CoreV4SyncException): Boolean = w
     else -> false
 }
 
+private inline fun <T> sendCoreV4WithOneUnavailableRetry(
+    shouldStop: () -> Boolean,
+    send: () -> T,
+): T {
+    var retried = false
+    while (true) {
+        try {
+            return send()
+        } catch (error: CoreV4SyncException) {
+            if (retried || shouldStop() || error.kind != CoreV4FailureKind.UNAVAILABLE ||
+                error.errorCode == "CAPABILITY_UNAVAILABLE" || error.errorCode == "CANCELLED"
+            ) {
+                throw error
+            }
+            retried = true
+        }
+    }
+}
+
 internal fun coreV4Fingerprint(value: JSONObject, vararg ignored: String): String {
     val copy = JSONObject(value.toString())
     ignored.forEach(copy::remove)
@@ -956,7 +1034,8 @@ internal fun syncPendingCoreV4ConsentsFirst(
         val preparationStartedAtNanos = System.nanoTime()
         val current = store.consent(record.snapshot.category)
         if (current.snapshot.version != record.snapshot.version ||
-            current.snapshot.state != record.snapshot.state
+            current.snapshot.state != record.snapshot.state ||
+            current.snapshot.syncedVersion >= record.snapshot.version
         ) {
             CoreV4Diagnostics.record(
                 stage = CoreV4Diagnostics.Stage.CONSENT_PREPARE,
@@ -1006,20 +1085,48 @@ internal fun syncPendingCoreV4ConsentsFirst(
             requestId = record.requestId,
         )
         val dispatchStartedAtNanos = System.nanoTime()
-        val receipt = try {
-            client.sendConsent(body, token)
-        } catch (error: Exception) {
-            CoreV4Diagnostics.record(
-                stage = CoreV4Diagnostics.Stage.ERROR,
-                state = CoreV4Diagnostics.State.FAILED,
-                result = CoreV4Diagnostics.Result.FAILURE,
-                category = record.snapshot.category,
-                consentVersion = record.snapshot.version,
-                durationMs = elapsedMillisSince(dispatchStartedAtNanos),
-                requestId = record.requestId,
-            )
-            throw error
+        var receipt: CoreV4ConsentReceipt? = null
+        var retried = false
+        while (receipt == null) {
+            if (shouldStop()) return
+            val currentAttempt = store.consent(record.snapshot.category).snapshot
+            if (currentAttempt.version != record.snapshot.version ||
+                currentAttempt.state != record.snapshot.state ||
+                currentAttempt.syncedVersion >= record.snapshot.version
+            ) {
+                CoreV4Diagnostics.record(
+                    stage = CoreV4Diagnostics.Stage.CONSENT_PREPARE,
+                    state = CoreV4Diagnostics.State.SKIPPED,
+                    result = CoreV4Diagnostics.Result.SUPERSEDED,
+                    category = record.snapshot.category,
+                    consentVersion = record.snapshot.version,
+                    requestId = record.requestId,
+                )
+                break
+            }
+            try {
+                receipt = client.sendConsent(body, token)
+            } catch (error: Exception) {
+                val mayRetry = error is CoreV4SyncException && !retried && !shouldStop() &&
+                    error.kind == CoreV4FailureKind.UNAVAILABLE &&
+                    error.errorCode != "CAPABILITY_UNAVAILABLE" && error.errorCode != "CANCELLED"
+                if (mayRetry) {
+                    retried = true
+                    continue
+                }
+                CoreV4Diagnostics.record(
+                    stage = CoreV4Diagnostics.Stage.ERROR,
+                    state = CoreV4Diagnostics.State.FAILED,
+                    result = CoreV4Diagnostics.Result.FAILURE,
+                    category = record.snapshot.category,
+                    consentVersion = record.snapshot.version,
+                    durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+                    requestId = record.requestId,
+                )
+                throw error
+            }
         }
+        val acknowledgedReceipt = receipt ?: continue
         CoreV4Diagnostics.record(
             stage = CoreV4Diagnostics.Stage.CONSENT_RESPONSE,
             state = CoreV4Diagnostics.State.CORRELATED,
@@ -1037,7 +1144,7 @@ internal fun syncPendingCoreV4ConsentsFirst(
             requestId = record.requestId,
         )
         val acknowledgement = try {
-            store.acknowledgeConsent(record.snapshot.category, receipt)
+            store.acknowledgeConsent(record.snapshot.category, acknowledgedReceipt)
         } catch (error: Exception) {
             CoreV4Diagnostics.record(
                 stage = CoreV4Diagnostics.Stage.ERROR,
@@ -1307,16 +1414,11 @@ object CoreV4SyncScheduler {
     fun schedule(context: Context) {
         val appContext = context.applicationContext
         val manager = WorkManager.getInstance(appContext)
+        enqueueImmediate(appContext)
+
         val connected = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
-        val immediate = OneTimeWorkRequestBuilder<CoreV4SyncWorker>()
-            .setConstraints(connected)
-            .setInputData(workDataOf(WORK_KIND_INPUT to CoreV4Diagnostics.WorkKind.IMMEDIATE.name))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .build()
-        manager.enqueueUniqueWork(IMMEDIATE_WORK, ExistingWorkPolicy.REPLACE, immediate)
-
         val hasGrantedCategory = AndroidSyncStorage.v4(appContext).consents()
             .any { it.snapshot.state == CoreV4ConsentState.GRANTED }
         if (hasGrantedCategory) {
@@ -1325,9 +1427,24 @@ object CoreV4SyncScheduler {
                 .setInputData(workDataOf(WORK_KIND_INPUT to CoreV4Diagnostics.WorkKind.PERIODIC.name))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            manager.enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.REPLACE, periodic)
+            manager.enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.UPDATE, periodic)
         } else {
             manager.cancelUniqueWork(PERIODIC_WORK)
         }
+    }
+
+    internal fun enqueueImmediate(context: Context) {
+        val appContext = context.applicationContext
+        val immediate = OneTimeWorkRequestBuilder<CoreV4SyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build(),
+            )
+            .setInputData(workDataOf(WORK_KIND_INPUT to CoreV4Diagnostics.WorkKind.IMMEDIATE.name))
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(appContext)
+            .enqueueUniqueWork(IMMEDIATE_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, immediate)
     }
 }

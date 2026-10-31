@@ -42,7 +42,7 @@ class PaseoRelayClient internal constructor(
     private val lock = Any()
     private var state = RelayConnectionState.LOCAL
     private var stopped = true
-    private var generation = 0L
+    @Volatile private var generation = 0L
     private var reconnectAttempt = 0
     private var socket: RelaySocket? = null
     private var handshake: NoiseNkInitiator? = null
@@ -152,23 +152,35 @@ class PaseoRelayClient internal constructor(
                 }
 
                 override fun onText(text: String) {
-                    if (currentGeneration == generation) receiveText(text)
+                    synchronized(lock) {
+                        if (!stopped && currentGeneration == generation) receiveText(text)
+                    }
                 }
 
                 override fun onBinary(bytes: ByteArray) {
-                    if (currentGeneration == generation) failChannel(4003, "binary relay frame rejected", RelayProtocolException("binary websocket frame rejected"))
+                    synchronized(lock) {
+                        if (!stopped && currentGeneration == generation) {
+                            failChannel(4003, "binary relay frame rejected", RelayProtocolException("binary websocket frame rejected"))
+                        }
+                    }
                 }
 
                 override fun onClosed(code: Int, reason: String) {
-                    if (currentGeneration == generation) connectionClosed(code, reason)
+                    synchronized(lock) {
+                        if (!stopped && currentGeneration == generation) connectionClosed(code, reason)
+                    }
                 }
 
                 override fun onFailure(error: Throwable) {
-                    if (currentGeneration == generation) connectionFailed(error)
+                    synchronized(lock) {
+                        if (!stopped && currentGeneration == generation) connectionFailed(error)
+                    }
                 }
             })
         } catch (error: Exception) {
-            connectionFailed(error)
+            synchronized(lock) {
+                if (!stopped && currentGeneration == generation) connectionFailed(error)
+            }
         }
     }
 

@@ -14,6 +14,7 @@ import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class RelayBackendTransportTest {
@@ -84,6 +85,125 @@ class RelayBackendTransportTest {
             assertEquals(listOf("beforeDispatch", "payload"), order)
             assertEquals("chat-send-001", sockets.requests.single().getString("idempotency_key"))
             assertEquals("synthetic", sockets.requests.single().getJSONObject("payload").getString("message"))
+        } finally { transport.close() }
+    }
+
+    @Test
+    fun duplicateInFlightRequestIdDoesNotReplaceFirstWaiter() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = setOf("coach.chat"),
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = setOf("coach.chat"))
+        val executor = Executors.newFixedThreadPool(2)
+        val requestId = uuid(71)
+        val idempotencyKey = uuid(72)
+        val bodyText = "same synthetic request"
+        val timeoutMillis = 800L
+        val releaseSecondDispatch = CountDownLatch(1)
+        val secondDispatchEntered = AtomicBoolean(false)
+        val secondProgress = CountDownLatch(1)
+        try {
+            transport.start()
+            val startedAt = System.nanoTime()
+            val first = executor.submit<RelayCallResult> {
+                transport.executeDeferred(
+                    operation = "coach.chat.request",
+                    timeoutMillis = timeoutMillis,
+                    idempotencyKey = idempotencyKey,
+                    payloadFactory = { JSONObject().put("message", bodyText) },
+                    requestId = requestId,
+                )
+            }
+            assertTrue(sockets.requestCaptured.await(1, TimeUnit.SECONDS))
+
+            val second = executor.submit<RelayCallResult> {
+                try {
+                    transport.executeDeferred(
+                        operation = "coach.chat.request",
+                        timeoutMillis = timeoutMillis,
+                        idempotencyKey = idempotencyKey,
+                        payloadFactory = { JSONObject().put("message", bodyText) },
+                        beforeDispatch = {
+                            secondDispatchEntered.set(true)
+                            secondProgress.countDown()
+                            releaseSecondDispatch.await(1, TimeUnit.SECONDS)
+                            true
+                        },
+                        requestId = requestId,
+                    )
+                } finally {
+                    secondProgress.countDown()
+                }
+            }
+            assertTrue(secondProgress.await(1, TimeUnit.SECONDS))
+            if (secondDispatchEntered.get()) {
+                releaseSecondDispatch.countDown()
+                assertTrue(sockets.secondRequestCaptured.await(1, TimeUnit.SECONDS))
+            }
+
+            sockets.sockets.single().sendResponseForRequest(requestId)
+            val firstResult = first.get(1, TimeUnit.SECONDS)
+            val secondResult = second.get(1, TimeUnit.SECONDS)
+
+            assertTrue("the first waiter must receive the response", firstResult is RelayCallResult.Success)
+            assertTrue("the duplicate caller must receive a typed failure", secondResult is RelayCallResult.Failure)
+            assertEquals(1, sockets.requests.size)
+            assertEquals(requestId, sockets.requests.single().getString("request_id"))
+            assertEquals(idempotencyKey, sockets.requests.single().getString("idempotency_key"))
+            assertEquals(bodyText, sockets.requests.single().getJSONObject("payload").getString("message"))
+            assertTrue(
+                "both callers must finish before the shared request timeout",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt) < timeoutMillis,
+            )
+        } finally {
+            releaseSecondDispatch.countDown()
+            transport.close()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun staleSessionResponseDoesNotAbortCurrentSession() {
+        val (credentials, staticPair) = testCredentials()
+        val oldSessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+        val currentSessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            serverCapabilities = setOf("plan.revision"),
+            sessionIdForConnection = { index -> if (index == 1) oldSessionId else currentSessionId },
+        )
+        val transport = transport(
+            credentials,
+            sockets,
+            requestedCapabilities = setOf("plan.revision"),
+            maxReconnectAttempts = 1,
+            reconnectBaseMillis = 1,
+        )
+        try {
+            transport.start()
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+            sockets.sockets.first().remoteClose()
+            assertTrue(sockets.secondSessionConnected.await(1, TimeUnit.SECONDS))
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+
+            // PaseoRelayClient filters callbacks from obsolete socket generations. Inject the
+            // stale application-session frame through S2 so this test reaches transport correlation.
+            sockets.sockets.last().sendUnknownResponse(uuid(73), responseSessionId = oldSessionId)
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+
+            val next = transport.execute(
+                operation = "plan.revision.request",
+                payload = JSONObject().put("request", "after stale frame"),
+                timeoutMillis = 500,
+                idempotencyKey = uuid(74),
+                requestId = uuid(75),
+            )
+            assertTrue(next is RelayCallResult.Success)
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+            assertEquals(currentSessionId, sockets.requests.single().getString("session_id"))
         } finally { transport.close() }
     }
 
@@ -650,11 +770,15 @@ class RelayBackendTransportTest {
         maxQueuedRequests: Int = 16,
         requestedCapabilities: Set<String> = setOf("plan.revision"),
         consentGate: AgentConsentGate = AgentConsentGate(),
+        maxReconnectAttempts: Int = 0,
+        reconnectBaseMillis: Long = 500,
     ) = RelayBackendTransport(
         config = RelayConfig(
             "ws://127.0.0.1:4400",
             "atlas-test",
-            maxReconnectAttempts = 0,
+            maxReconnectAttempts = maxReconnectAttempts,
+            reconnectBaseMillis = reconnectBaseMillis,
+            reconnectMaxMillis = reconnectBaseMillis,
             maxQueuedRequests = maxQueuedRequests,
             requestedCapabilities = requestedCapabilities,
         ),
