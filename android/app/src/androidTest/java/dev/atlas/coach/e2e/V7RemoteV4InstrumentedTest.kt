@@ -230,17 +230,19 @@ class V7RemoteV4InstrumentedTest {
             .filter { it.role == AgentMessageRole.ASSISTANT }
             .lastOrNull()
             ?: error("V4 assistant response is missing")
-        val toolMetadata = TOOL_METADATA_PATTERN.find(assistantResponse.text)
-            ?: error("V4 tool metadata is missing from the assistant response")
+        val metadataStart = assistantResponse.text.lastIndexOf(TOOLS_PROVENANCE_LABEL)
+        check(metadataStart >= 0) { "V4 tool metadata is missing from the assistant response" }
+        val metadataSuffix = assistantResponse.text.substring(metadataStart).trimEnd()
+        val toolMetadata = TOOL_METADATA_SUFFIX_PATTERN.matchEntire(metadataSuffix)
+            ?: error("V4 tool metadata is not the generated suffix of the assistant response")
         val toolState = toolMetadata.groupValues[1]
         val toolCallCount = toolMetadata.groupValues[2].toInt()
         assertEquals("completed", toolState)
         assertTrue("V4 tool call count must include plan read and proposal", toolCallCount >= 2)
+        assertEquals("V4 reply must identify exactly one proposal", 1, toolMetadata.groupValues[3].toInt())
         // V4 exposes only tool_state and tool_call_count here. Exact tool names are correlated
         // against the parent Core/OpenClaw evidence, never inferred from assistant text.
-        val proposalIdFromReply = checkNotNull(
-            PROPOSAL_ID_PATTERN.find(assistantResponse.text)?.groupValues?.getOrNull(1),
-        ) { "V4 reply did not include a proposal id" }
+        val proposalIdFromReply = toolMetadata.groupValues[4]
         assertFalse(
             "reply proposal id was already present before the chat",
             proposalIdFromReply in proposalIdsBefore,
@@ -282,6 +284,7 @@ class V7RemoteV4InstrumentedTest {
         val proposal = inboxEntry.proposal
         assertTrue("proposal must be new relative to the pre-chat inbox", proposal.proposalId !in proposalIdsBefore)
         assertEquals("reply and new inbox proposal IDs must match", proposalIdFromReply, proposal.proposalId)
+        assertEquals("new proposal must retain the requested idempotency key", idempotencyKey, proposal.idempotencyKey)
         assertFalse(
             "V7-05 proposal ${proposal.proposalId} is already terminal (${proposal.state}); refusing to reapply",
             proposal.state.terminal,
@@ -434,25 +437,27 @@ class V7RemoteV4InstrumentedTest {
             }
         }
 
+        // Revoke and confirm any consent granted by this test while the relay can still deliver it.
+        // If no grant occurred (for example, failure before setup) this does not schedule a sync.
+        attempt {
+            revokeTestConsentsAndConfirm(
+                context = context,
+                relaySettings = controller.relaySettings,
+                store = syncStore,
+                initial = initial,
+            )
+        }
         attempt {
             instrumentation.runOnMainSync {
                 controller.relaySettings.disconnect()
                 controller.relaySettings.setV4ChatEnabled(false)
+                controller.relaySettings.selectMode(initial.relayMode)
+                controller.relaySettings.setV4ChatEnabled(false)
+                restoreControllerState(controller, initial)
             }
         }
-        attempt { cancelCoreV4WorkAndAwaitIdle(context) }
-        attempt { restoreConsent(syncStore, initial.dayPlanConsent) }
-        attempt { restoreConsent(syncStore, initial.activityStatusConsent) }
-        attempt {
-            instrumentation.runOnMainSync {
-                restoreControllerState(controller, initial)
-                controller.relaySettings.selectMode(initial.relayMode)
-                // The V7 cleanup contract always leaves V4 chat disabled, even if it was enabled before.
-                controller.relaySettings.setV4ChatEnabled(false)
-                if (initial.v4ChatEnabled) {
-                    Log.i(LOG_TAG, "cleanup_limit=initial_v4_chat_forced_disabled")
-                }
-            }
+        if (initial.v4ChatEnabled) {
+            Log.i(LOG_TAG, "cleanup_limit=initial_v4_chat_forced_disabled")
         }
         // Some controller setters can enqueue work while restoring state, so cancel and verify again last.
         attempt { cancelCoreV4WorkAndAwaitIdle(context) }
@@ -552,29 +557,49 @@ class V7RemoteV4InstrumentedTest {
         assertEquals(initialMandate.suspended, controller.agentMandate.suspended)
     }
 
-    private fun restoreConsent(
+    private fun revokeTestConsentsAndConfirm(
+        context: Context,
+        relaySettings: dev.atlas.coach.app.RelaySettingsController,
         store: AndroidCoreV4SyncStore,
-        initial: CoreV4ConsentSnapshot,
+        initial: InitialState,
     ) {
-        val current = store.consent(initial.category).snapshot
-        when (initial.state) {
-            CoreV4ConsentState.GRANTED -> {
-                if (current.state != CoreV4ConsentState.GRANTED) store.setConsent(initial.category, true)
-            }
-            CoreV4ConsentState.REVOKED -> {
-                if (current.state != CoreV4ConsentState.REVOKED) store.setConsent(initial.category, false)
-            }
-            CoreV4ConsentState.UNKNOWN -> {
-                // Consent is monotonic: UNKNOWN cannot be restored after the test explicitly grants it.
-                // In that case cleanup revokes it, leaving UNKNOWN -> REVOKED and a newer version.
-                if (current.state == CoreV4ConsentState.GRANTED) store.setConsent(initial.category, false)
+        val initiallyGranted = setOfNotNull(
+            CoreV4Category.DAY_PLAN.takeIf { initial.dayPlanConsent.state == CoreV4ConsentState.GRANTED },
+            CoreV4Category.ACTIVITY_STATUS.takeIf { initial.activityStatusConsent.state == CoreV4ConsentState.GRANTED },
+        )
+        val consentRevocations = mutableMapOf<CoreV4Category, CoreV4ConsentSnapshot>()
+        listOf(CoreV4Category.DAY_PLAN, CoreV4Category.ACTIVITY_STATUS).forEach { category ->
+            val beforeCleanup = store.consent(category).snapshot
+            if (category in initiallyGranted) {
+                if (beforeCleanup.state != CoreV4ConsentState.GRANTED) store.setConsent(category, true)
+            } else if (beforeCleanup.state == CoreV4ConsentState.GRANTED) {
+                // UNKNOWN -> REVOKED is the only available cleanup state; consent versions are monotonic.
+                consentRevocations[category] = store.setConsent(category, false).snapshot
             }
         }
-        val restored = store.consent(initial.category).snapshot
-        val expectedState = if (initial.state == CoreV4ConsentState.UNKNOWN &&
-            current.state == CoreV4ConsentState.GRANTED
-        ) CoreV4ConsentState.REVOKED else initial.state
-        assertEquals("${initial.category} consent state must be restored", expectedState, restored.state)
+        if (consentRevocations.isEmpty()) return
+
+        check(relaySettings.state == RelayConnectionState.RELAY_CONNECTED) {
+            "V4 consent revocation not confirmed: relay is disconnected; categories=${consentRevocations.keys.joinToString(",") { it.name }}"
+        }
+        CoreV4SyncScheduler.schedule(context)
+        waitUntil(
+            description = "V4 consent revocation receipts",
+            timeoutMillis = CONSENT_REVOCATION_TIMEOUT_MILLIS,
+            diagnostic = {
+                "relay=${relaySettings.state}; " + consentRevocations.keys.joinToString("; ") { category ->
+                    val consent = store.consent(category).snapshot
+                    "${category.name}=${consent.state}:${consent.syncedVersion}/${consent.version}"
+                }
+            },
+        ) {
+            consentRevocations.all { (category, revokedSnapshot) ->
+                val consent = store.consent(category).snapshot
+                consent.state == CoreV4ConsentState.REVOKED &&
+                    consent.version == revokedSnapshot.version &&
+                    consent.syncedVersion == consent.version
+            }
+        }
     }
 
     private fun cancelCoreV4WorkAndAwaitIdle(context: Context) {
@@ -673,6 +698,7 @@ class V7RemoteV4InstrumentedTest {
         const val CHAT_TIMEOUT_MILLIS = 90_000L
         const val PROPOSAL_TIMEOUT_MILLIS = 60_000L
         const val ACK_TIMEOUT_MILLIS = 60_000L
+        const val CONSENT_REVOCATION_TIMEOUT_MILLIS = 60_000L
         const val WORK_IDLE_TIMEOUT_MILLIS = 30_000L
         const val WORK_OPERATION_TIMEOUT_MILLIS = 20_000L
         const val POLL_INTERVAL_MILLIS = 250L
@@ -681,12 +707,12 @@ class V7RemoteV4InstrumentedTest {
         const val MAX_TIMEOUT_DIAGNOSTIC_CHARS = 1_200
         const val MAX_CLEANUP_DIAGNOSTIC_CHARS = 400
         val SERVER_ID_PATTERN = Regex("^atlas-pc-[A-Za-z0-9._-]+$")
-        val TOOL_METADATA_PATTERN = Regex(
-            "État des outils\\s*:\\s*([a-z_]+)\\s*\\((\\d+) appel\\(s\\)\\)",
-            RegexOption.IGNORE_CASE,
-        )
-        val PROPOSAL_ID_PATTERN = Regex(
-            "identifiants\\s*:\\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+        const val TOOLS_PROVENANCE_LABEL = "État des outils"
+        val TOOL_METADATA_SUFFIX_PATTERN = Regex(
+            "État des outils\\s*:\\s*([a-z_]+)\\s*\\((\\d+) appel\\(s\\)\\)\\.\\s*" +
+                "Proposition\\(s\\)\\s*\\((\\d+)\\)\\s*—\\s*identifiants\\s*:\\s*" +
+                "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\.\\s*" +
+                "Contenu à synchroniser via la boîte de réception\\.",
             RegexOption.IGNORE_CASE,
         )
         val REVIEWABLE_PROPOSAL_STATES = setOf(
