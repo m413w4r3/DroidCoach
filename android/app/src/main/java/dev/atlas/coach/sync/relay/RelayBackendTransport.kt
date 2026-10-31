@@ -183,6 +183,11 @@ class RelayBackendTransport internal constructor(
                     CoreV4Diagnostics.Result.OFFLINE)
                 return RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
             }
+            if (queue.any { it.requestId == requestId } || inFlight.containsKey(requestId)) {
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR, CoreV4Diagnostics.State.FAILED,
+                    CoreV4Diagnostics.Result.PROTOCOL)
+                return RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)
+            }
             if (queue.size + inFlight.size >= maxQueue) {
                 recordDiagnostic(pending, CoreV4Diagnostics.Stage.QUEUE_FULL, CoreV4Diagnostics.State.FAILED,
                     CoreV4Diagnostics.Result.QUEUE_FULL)
@@ -356,26 +361,30 @@ class RelayBackendTransport internal constructor(
         val requestId = envelope.optString("request_id")
         val sessionId = envelope.optString("session_id")
         val operation = envelope.optString("operation")
-        val responsePending = synchronized(lock) { inFlight[requestId] }
-        responsePending?.let(::recordSocketSendAccepted)
-        CoreV4Diagnostics.record(
-            stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
-            state = CoreV4Diagnostics.State.RESPONSE,
-            result = CoreV4Diagnostics.Result.SUCCESS,
-            category = responsePending?.diagnosticCategory ?: CoreV4Diagnostics.categoryForOperation(operation),
-            consentVersion = responsePending?.diagnosticConsentVersion,
-            durationMs = responsePending?.let(::elapsedMillisSince) ?: 0L,
-            sessionGeneration = responsePending?.diagnosticSessionGeneration ?: sessionGeneration,
-            requestId = requestId,
-        )
         synchronized(lock) {
+            if (sessionId != appSessionId) {
+                if (sessionId.isNotBlank() && appSessionId != null) return
+                failProtocolLocked(RelayProtocolException("response session correlation mismatch"))
+                return
+            }
             val pending = inFlight[requestId]
+            pending?.let(::recordSocketSendAccepted)
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+                state = CoreV4Diagnostics.State.RESPONSE,
+                result = CoreV4Diagnostics.Result.SUCCESS,
+                category = pending?.diagnosticCategory ?: CoreV4Diagnostics.categoryForOperation(operation),
+                consentVersion = pending?.diagnosticConsentVersion,
+                durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
+                sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
+                requestId = requestId,
+            )
             if (pending == null) {
                 if (timedOutIds.remove(requestId) != null) return
                 failProtocolLocked(RelayProtocolException("response has no matching request"))
                 return
             }
-            if (sessionId != appSessionId || operation != pending.operation) {
+            if (operation != pending.operation) {
                 failProtocolLocked(RelayProtocolException("response correlation mismatch"))
                 return
             }
@@ -407,22 +416,10 @@ class RelayBackendTransport internal constructor(
         val remoteError = RelayCallResult.RemoteError(code, message, retryable, httpStatus, remoteCode)
         val requestId = if (envelope.isNull("request_id")) null else envelope.getString("request_id")
         val sessionId = if (envelope.isNull("session_id")) null else envelope.getString("session_id")
-        val responsePending = requestId?.let { id -> synchronized(lock) { inFlight[id] } }
-        requestId?.let {
-            CoreV4Diagnostics.record(
-                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
-                state = CoreV4Diagnostics.State.RESPONSE,
-                result = CoreV4Diagnostics.Result.REJECTED,
-                category = responsePending?.diagnosticCategory,
-                consentVersion = responsePending?.diagnosticConsentVersion,
-                durationMs = responsePending?.let(::elapsedMillisSince) ?: 0L,
-                sessionGeneration = responsePending?.diagnosticSessionGeneration ?: sessionGeneration,
-                requestId = it,
-            )
-        }
         if (requestId == null) {
             synchronized(lock) {
                 if (sessionId != null && sessionId != appSessionId) {
+                    if (sessionId.isNotBlank() && appSessionId != null) return
                     failProtocolLocked(RelayProtocolException("session error correlation mismatch"))
                     return
                 }
@@ -444,14 +441,25 @@ class RelayBackendTransport internal constructor(
             return
         }
         synchronized(lock) {
+            if (sessionId != appSessionId) {
+                if (!sessionId.isNullOrBlank() && appSessionId != null) return
+                failProtocolLocked(RelayProtocolException("error session correlation mismatch"))
+                return
+            }
             val pending = inFlight[requestId]
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+                state = CoreV4Diagnostics.State.RESPONSE,
+                result = CoreV4Diagnostics.Result.REJECTED,
+                category = pending?.diagnosticCategory,
+                consentVersion = pending?.diagnosticConsentVersion,
+                durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
+                sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
+                requestId = requestId,
+            )
             if (pending == null) {
                 if (timedOutIds.remove(requestId) != null) return
                 failProtocolLocked(RelayProtocolException("error has no matching request"))
-                return
-            }
-            if (sessionId != appSessionId) {
-                failProtocolLocked(RelayProtocolException("error correlation mismatch"))
                 return
             }
             recordDiagnostic(
