@@ -287,3 +287,15 @@
 | Le propriétaire récupère le Pixel physique. **Tous les prochains tests devront se faire via VM/AVD** ; aucune nouvelle exécution ADB/instrumentée sur le Pixel physique n'est autorisée. | Instruction explicite du propriétaire le 2026-10-31. Les preuves Pixel déjà obtenues restent des preuves physiques valides ; elles ne doivent pas être extrapolées à une nouvelle exécution. |
 | Si le Pixel physique est un jour reconnecté, synchroniser d'abord les révocations locales v3 des consentements avant toute autre action. Les tests VM doivent repartir d'un état et d'un appairage propres, sans réutiliser l'identité `pixel-v7` sans nettoyage. | État résiduel : DAY_PLAN `REVOKED` v3 avec `synced_version=2` ; ACTIVITY_STATUS `REVOKED` v3 avec `synced_version=0` ; plan `APPROVED` v2 ; inbox absente. Le Core peut encore détenir DAY_PLAN `GRANTED` v2. |
 | Un client ADB suspendu hérité de la copie du token R3B (`adb -d exec-out run-as … cat > files/pixel-v7.token`) a été terminé côté hôte. L'état du fichier token sur l'appareil n'a pas été revérifié après le handover. | Le processus tournait depuis plus d'une heure et contrevenait à l'absence d'ADB actif. Aucune commande ADB n'a été lancée ; le fork-server ADB est intact. Ne pas supposer que le fichier device est absent sans nouvelle mesure autorisée. |
+
+## V7-06A — Fiabilisation V4 (2026-10-31)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-10-31 | Branche locale `feat/atlas-v7-06a-v4-reliability` depuis `55625299c364e1c71eba5924fcfe933af1852a2f`; aucun push/PR/merge distant. | Mission V7-06A; base = `origin/main` observé. |
+| 2026-10-31 | Trois audits indépendants A1/A2/A3, `codex/gpt-6-luna`/`xhigh` vérifié; worktrees détachés `chmod -R a-w` et contrôle HEAD/`git status` après exécution. | Contrat `AGENTS.md`/`WORKFLOW.md`; Paseo/Codex n’expose pas de mode lecture seule natif. |
+| 2026-10-31 | La cause racine de V7-05 reste **UNKNOWN**. Le mécanisme de blocage est établi : un envoi sans réponse est classé `UNAVAILABLE` non retryable, la passe s’arrête, aucune reprise immédiate n’est planifiée et le rejeu connecteur après redémarrage est bloqué. | A1/A2/A3 convergent; aucune hypothèse n’est présentée comme établie. |
+| 2026-10-31 | Les deux upgrades V7-05 sont une **paire normale** contrôle client + connexion data du connecteur (le proxy les journalise par paire à chaque session). | Preuve parent `proxy.log`; écarte l’hypothèse « deux sessions » comme explication suffisante. |
+| 2026-10-31 | Aucune correction de comportement avant les tests discriminants C1–C8; instrumentation bornée d’abord, désactivée par défaut. | Prompt maître §3–§6; éviter une refonte non prouvée. |
+| 2026-10-31 | Aucun ADB sur le Pixel physique; qualification uniquement `emulator-*` avec identité/appairage/Core/relay synthétiques et isolés. | Décision propriétaire du 2026-10-31; aucun fichier privé du Pixel copié. |
+| 2026-10-31 | Audit lecture seule de l’accès résiduel effectué; aucune révocation/rotation live appliquée. | `pixel-v7` et `r3c-pixel-final` restent non révoqués, consents Core v2 GRANTED, aucune projection personnelle; action live soumise à autorisation ciblée et sauvegarde. |
