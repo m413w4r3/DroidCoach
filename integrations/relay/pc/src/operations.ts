@@ -5,7 +5,7 @@ import { readPrivateJson, writePrivateJson } from "./secure-files.js";
 import { BackendRequestError, BackendClient } from "./backend.js";
 import { ConnectorDiagnostics, type DiagnosticContext } from "./diagnostics.js";
 import { RemoteError } from "./errors.js";
-import { CACHE_TTL_MS, PROTOCOLS, type Operation, type RequestEnvelope, type ResponseEnvelope, isRecord, isV4Operation, validateOperationPayload } from "./protocol.js";
+import { CACHE_TTL_MS, PROTOCOL_V2, PROTOCOLS, type Operation, type RequestEnvelope, type ResponseEnvelope, isRecord, isV4Operation, validateOperationPayload } from "./protocol.js";
 
 const EFFECTFUL_OPERATIONS = new Set<Operation>([
   "plan.revision.request",
@@ -21,6 +21,7 @@ const EFFECTFUL_OPERATIONS = new Set<Operation>([
   "v4.consent.state.upsert",
 ]);
 const OUTCOME_UNCERTAIN_MESSAGE = "backend outcome is uncertain; retry is blocked until the 10-minute idempotency window expires";
+const CONSENT_OPERATION: Operation = "v4.consent.state.upsert";
 
 interface CacheEntry {
   deviceId: string;
@@ -31,6 +32,7 @@ interface CacheEntry {
   requestHash: string;
   outcome: "in_flight" | "uncertain" | "completed" | "completed_redacted";
   response?: ResponseEnvelope;
+  consentReceipt?: Record<string, unknown>;
   expiresAt: number;
 }
 
@@ -161,16 +163,18 @@ export class OperationExecutor {
       if (seenIdempotency.businessHash !== businessHash || seenIdempotency.operation !== request.operation) {
         throw new RemoteError("IDEMPOTENCY_CONFLICT");
       }
-      const replay = this.responseFor(seenIdempotency, request.request_id, sessionId, context);
-      this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
-      this.requestCache.set(requestKey, {
-        ...seenIdempotency,
-        requestId: request.request_id,
-        requestHash,
-        outcome: "completed",
-        response: replay,
-      });
-      return replay;
+      if (!canReexecuteConsent(seenIdempotency)) {
+        const replay = this.responseFor(seenIdempotency, request.request_id, sessionId, context);
+        this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
+        this.requestCache.set(requestKey, {
+          ...seenIdempotency,
+          requestId: request.request_id,
+          requestHash,
+          outcome: "completed",
+          response: replay,
+        });
+        return replay;
+      }
     }
 
     const pending = this.executeFresh(deviceId, sessionId, request, businessHash, requestHash, requestKey, idempotencyKey, signal, context);
@@ -266,14 +270,14 @@ export class OperationExecutor {
           if (error instanceof BackendRequestError && error.preserveResponseError) {
             throw new RemoteError(error.code);
           }
-          throw uncertainOutcomeError();
+          throw uncertainOutcomeError(request.operation);
         }
         this.idempotencyCache.delete(idempotencyKey);
         try {
           await this.persistJournal(context, "removed");
         } catch {
           await this.rememberUncertain(idempotencyKey, journalEntry, context);
-          throw uncertainOutcomeError();
+          throw uncertainOutcomeError(request.operation);
         }
       }
       throw error;
@@ -294,7 +298,7 @@ export class OperationExecutor {
     if (Buffer.byteLength(JSON.stringify(response), "utf8") > 262_144) {
       if (journalEntry) {
         await this.rememberUncertain(idempotencyKey, journalEntry, context);
-        throw uncertainOutcomeError();
+        throw uncertainOutcomeError(request.operation);
       }
       throw new RemoteError("PAYLOAD_TOO_LARGE");
     }
@@ -308,6 +312,7 @@ export class OperationExecutor {
       requestHash,
       outcome: "completed",
       response,
+      ...(request.operation === CONSENT_OPERATION && isConsentReceipt(result) ? { consentReceipt: pickConsentReceipt(result) } : {}),
       expiresAt: this.now() + CACHE_TTL_MS,
     };
     if (journalEntry) {
@@ -318,7 +323,7 @@ export class OperationExecutor {
         const uncertainEntry: CacheEntry = { ...entry, outcome: "in_flight" };
         delete uncertainEntry.response;
         await this.rememberUncertain(idempotencyKey, uncertainEntry, context);
-        throw uncertainOutcomeError();
+        throw uncertainOutcomeError(request.operation);
       }
       this.requestCache.set(requestKey, entry);
       return response;
@@ -341,7 +346,7 @@ export class OperationExecutor {
     }
     if (entry.outcome !== "completed" || !entry.response) {
       if (context) this.diagnostics.record(context, "uncertain", "uncertain", { resultCode: "RESULT_UNCERTAIN" });
-      throw uncertainOutcomeError();
+      throw uncertainOutcomeError(entry.operation);
     }
     return { ...entry.response, request_id: requestId, session_id: sessionId, replayed: true, completed_at: new Date(this.now()).toISOString() };
   }
@@ -350,6 +355,7 @@ export class OperationExecutor {
     const firstUncertain = entry.outcome !== "uncertain";
     const uncertain: CacheEntry = { ...entry, outcome: "uncertain" };
     delete uncertain.response;
+    delete uncertain.consentReceipt;
     this.idempotencyCache.set(key, uncertain);
     if (firstUncertain) this.state.uncertainOutcome?.();
     const traceContext = context ?? (this.diagnostics.enabled ? this.diagnostics.sessionContext(0) : undefined);
@@ -378,6 +384,10 @@ export class OperationExecutor {
         delete entry.response;
         mustRewrite = true;
         this.state.uncertainOutcome?.();
+      }
+      if (entry.outcome === "completed_redacted" && entry.operation === CONSENT_OPERATION && entry.consentReceipt) {
+        entry.outcome = "completed";
+        entry.response = responseFromConsentReceipt(entry);
       }
       this.idempotencyCache.set(cacheKey(entry.deviceId, entry.idempotencyKey), entry);
       if (entry.outcome === "completed" && entry.response) {
@@ -415,6 +425,9 @@ export class OperationExecutor {
             if (isV4Operation(entry.operation)) {
               if (persisted.outcome === "completed") persisted.outcome = "completed_redacted";
               delete persisted.response;
+              if (entry.operation !== CONSENT_OPERATION || persisted.outcome !== "completed_redacted") {
+                delete persisted.consentReceipt;
+              }
             }
             return persisted;
           });
@@ -461,12 +474,75 @@ function validateJournal(value: unknown): JournalDocument {
     if (entry.outcome === "completed" && (!isResponseEnvelope(entry.response) || entry.response.operation !== entry.operation)) throw new Error("invalid operation journal");
     if (entry.outcome === "completed_redacted" && (!isV4Operation(entry.operation) || entry.response !== undefined)) throw new Error("invalid operation journal");
     if (entry.outcome !== "completed" && entry.outcome !== "completed_redacted" && entry.response !== undefined) throw new Error("invalid operation journal");
+    if (Object.hasOwn(valueEntry, "consentReceipt") &&
+      (entry.outcome !== "completed_redacted" || entry.operation !== CONSENT_OPERATION || !isConsentReceipt(entry.consentReceipt))) {
+      throw new Error("invalid operation journal");
+    }
     const key = cacheKey(entry.deviceId, entry.idempotencyKey);
     if (seen.has(key)) throw new Error("invalid operation journal");
     seen.add(key);
     entries.push(entry);
   }
   return { schema_version: 1, entries };
+}
+
+function canReexecuteConsent(entry: CacheEntry): boolean {
+  return entry.operation === CONSENT_OPERATION &&
+    (entry.outcome === "uncertain" || (entry.outcome === "completed_redacted" && entry.consentReceipt === undefined));
+}
+
+const CONSENT_CATEGORIES = new Set(["DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"]);
+const CONSENT_STATES = new Set(["GRANTED", "REVOKED", "UNKNOWN"]);
+const CONSENT_RECEIPT_CODES = new Set(["ACCEPTED", "DUPLICATE"]);
+const CONSENT_RECEIPT_KEYS = [
+  "contract_version", "schema_version", "request_id", "capability", "category", "consent_version", "state",
+  "updated_at", "source", "replayed", "result_code",
+] as const;
+const CONSENT_RECEIPT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function isConsentReceipt(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length > CONSENT_RECEIPT_KEYS.length || keys.some((key) => !CONSENT_RECEIPT_KEYS.includes(key as (typeof CONSENT_RECEIPT_KEYS)[number]))) return false;
+  if (!("category" in value) || !("consent_version" in value) || !("state" in value) || !("updated_at" in value) || !("result_code" in value)) return false;
+  if (typeof value.category !== "string" || !CONSENT_CATEGORIES.has(value.category) ||
+    typeof value.consent_version !== "number" || !Number.isSafeInteger(value.consent_version) || value.consent_version < 1 ||
+    typeof value.state !== "string" || !CONSENT_STATES.has(value.state) ||
+    typeof value.updated_at !== "string" || value.updated_at.length < 20 || value.updated_at.length > 40 ||
+    !isValidConsentTimestamp(value.updated_at) ||
+    typeof value.result_code !== "string" || !CONSENT_RECEIPT_CODES.has(value.result_code)) return false;
+  if ("contract_version" in value && value.contract_version !== 4) return false;
+  if ("schema_version" in value && value.schema_version !== 4) return false;
+  if ("request_id" in value && (typeof value.request_id !== "string" || !CANONICAL_UUID.test(value.request_id))) return false;
+  if ("capability" in value && value.capability !== "consent.state.write") return false;
+  if ("source" in value && value.source !== "ANDROID_SYNC") return false;
+  if ("replayed" in value && typeof value.replayed !== "boolean") return false;
+  return Buffer.byteLength(JSON.stringify(value), "utf8") <= 2_048;
+}
+
+function isValidConsentTimestamp(value: string): boolean {
+  if (!CONSENT_RECEIPT_TIMESTAMP.test(value) || !Number.isFinite(Date.parse(value))) return false;
+  return new Date(value).toISOString().slice(0, 19) === value.slice(0, 19);
+}
+
+function pickConsentReceipt(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(CONSENT_RECEIPT_KEYS.filter((key) => key in value).map((key) => [key, value[key]]));
+}
+
+function responseFromConsentReceipt(entry: CacheEntry): ResponseEnvelope {
+  const receipt = entry.consentReceipt!;
+  return {
+    protocol: PROTOCOL_V2,
+    kind: "response",
+    request_id: entry.requestId,
+    session_id: "",
+    operation: CONSENT_OPERATION,
+    status: "OK",
+    result: receipt,
+    completed_at: receipt.updated_at as string,
+    replayed: false,
+  };
 }
 
 function isResponseEnvelope(value: unknown): value is ResponseEnvelope {
@@ -477,8 +553,11 @@ function isResponseEnvelope(value: unknown): value is ResponseEnvelope {
     typeof value.completed_at === "string" && typeof value.replayed === "boolean";
 }
 
-function uncertainOutcomeError(): RemoteError {
-  return new RemoteError("BACKEND_UNAVAILABLE", false, OUTCOME_UNCERTAIN_MESSAGE);
+function uncertainOutcomeError(operation?: Operation): RemoteError {
+  const message = operation === CONSENT_OPERATION
+    ? "backend outcome is uncertain; retrying consent with the same idempotency key is safe"
+    : OUTCOME_UNCERTAIN_MESSAGE;
+  return new RemoteError("BACKEND_UNAVAILABLE", false, message);
 }
 
 function cacheKey(deviceId: string, key: string): string {

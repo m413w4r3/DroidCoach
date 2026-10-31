@@ -285,4 +285,44 @@ describe("device authentication and session controls", () => {
       await context.dispose();
     }
   });
+
+  it("replacementSessionDoesNotReceiveOldResponse", async () => {
+    let notifyBackendStarted!: () => void;
+    const backendStarted = new Promise<void>((resolve) => { notifyBackendStarted = resolve; });
+    let releaseBackend!: (response: Response) => void;
+    const heldResponse = new Promise<Response>((resolve) => { releaseBackend = resolve; });
+    const context = await makeContext({
+      fetcher: async () => {
+        notifyBackendStarted();
+        return await heldResponse;
+      },
+    });
+    let replacementPeer: { close(): void } | undefined;
+    try {
+      const device = await paired(context, ["sync.status"]);
+      const oldChannel = new FakeSecureChannel();
+      const oldPeer = context.manager.create(oldChannel);
+      await oldPeer.receive(JSON.stringify(hello(device.deviceId, device.token, { capabilities: ["sync.status"] })));
+      const oldSessionId = String(oldChannel.lastMessage().session_id);
+      const pendingOldRequest = oldPeer.receive(JSON.stringify(request(oldSessionId, "backend.health")));
+      await backendStarted;
+
+      const replacementChannel = new FakeSecureChannel();
+      replacementPeer = context.manager.create(replacementChannel);
+      await replacementPeer.receive(JSON.stringify(hello(device.deviceId, device.token, { capabilities: ["sync.status"] })));
+      expect(oldChannel.closeEvents[0]).toMatchObject({ code: 4001, reason: "session replaced" });
+      expect(replacementChannel.lastMessage()).toMatchObject({ kind: "hello_ok" });
+
+      releaseBackend(new Response(JSON.stringify({ status: "ok" }), { status: 200 }));
+      await pendingOldRequest;
+
+      expect(oldChannel.sent.filter((message) => (message as Record<string, unknown>).kind === "response")).toHaveLength(0);
+      expect(replacementChannel.sent).toHaveLength(1);
+      expect(replacementChannel.sent.some((message) => (message as Record<string, unknown>).kind === "response")).toBe(false);
+    } finally {
+      releaseBackend(new Response(JSON.stringify({ status: "ok" }), { status: 200 }));
+      replacementPeer?.close();
+      await context.dispose();
+    }
+  });
 });

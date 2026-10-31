@@ -554,11 +554,21 @@ def test_consent_state_sync_is_android_only_typed_and_idempotent(tmp_path, monke
     assert replay.status_code == 200, replay.text
     assert replay.json()["replayed"] is True
     assert replay.json()["result_code"] == "DUPLICATE"
+    with client.app.state.store.connect() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) AS count FROM consent_state_events_v4 WHERE category='DAY_PLAN'"
+        ).fetchone()
+    assert int(row["count"]) == 1
 
     conflict_body = {**body, "state": "REVOKED"}
     conflict = client.post("/v4/sync/consent-state", headers=android_headers(), json=conflict_body)
     assert conflict.status_code == 409
     validate_error(conflict, "IDEMPOTENCY_CONFLICT")
+    with client.app.state.store.connect() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) AS count FROM consent_state_events_v4 WHERE category='DAY_PLAN'"
+        ).fetchone()
+    assert int(row["count"]) == 1
 
     tool_auth = client.post("/v4/sync/consent-state", headers=android_headers(TOOL_TOKEN), json=body)
     assert tool_auth.status_code == 401
@@ -574,6 +584,52 @@ def test_consent_state_sync_is_android_only_typed_and_idempotent(tmp_path, monke
     wrong_method = client.get("/v4/sync/consent-state", headers=android_headers())
     assert wrong_method.status_code == 405
     validate_error(wrong_method, "BAD_REQUEST")
+    client.close()
+
+
+@pytest.mark.parametrize("arrival_order", [(2, 3), (3, 2)])
+def test_consent_versions_are_monotonic_in_either_arrival_order(tmp_path, monkeypatch, arrival_order):
+    client = make_client(tmp_path, monkeypatch)
+    updates = {
+        2: consent_envelope(
+            "DAY_PLAN", "GRANTED", 2, key="00000000-0000-4000-8000-000000000751"
+        ),
+        3: consent_envelope(
+            "DAY_PLAN", "REVOKED", 3, key="00000000-0000-4000-8000-000000000752"
+        ),
+    }
+
+    for version in arrival_order:
+        response = client.post(
+            "/v4/sync/consent-state", headers=android_headers(), json=updates[version]
+        )
+        if version == 2 and arrival_order[0] == 3:
+            assert response.status_code == 409
+            validate_error(response, "STALE_VERSION")
+        else:
+            assert response.status_code == 200, response.text
+            assert response.json()["consent_version"] == version
+
+    with client.app.state.store.connect() as connection:
+        state = connection.execute(
+            "SELECT consent_version,state FROM consent_states_v4 WHERE category='DAY_PLAN'"
+        ).fetchone()
+    assert state is not None
+    assert int(state["consent_version"]) == 3
+    assert state["state"] == "REVOKED"
+
+    old_key_replay = client.post(
+        "/v4/sync/consent-state", headers=android_headers(), json=updates[2]
+    )
+    assert old_key_replay.status_code == 409
+    validate_error(old_key_replay, "STALE_VERSION")
+    with client.app.state.store.connect() as connection:
+        state = connection.execute(
+            "SELECT consent_version,state FROM consent_states_v4 WHERE category='DAY_PLAN'"
+        ).fetchone()
+    assert state is not None
+    assert int(state["consent_version"]) == 3
+    assert state["state"] == "REVOKED"
     client.close()
 
 
