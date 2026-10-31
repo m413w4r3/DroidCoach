@@ -33,8 +33,8 @@ identité, appairage, consentements, plan et serveur de test synthétiques neufs
 | V7-06A-DIAG | Consolidation des trois audits, matrice et rapport | A1/A2/A3 | FINISHED — cause racine UNKNOWN, mécanisme de blocage établi | — | — | `evidence/V7-06A_DIAGNOSTIC_REPORT.md` |
 | V7-06A-TRACE-ANDROID | Instrumentation bornée worker/Relay, ACK typé, diagnostics | DIAG | FINISHED — commit `34763f9`, intégré `0fe8155`, 887 tests + lint PASS | `f1e2f879-a304-40ac-8221-b9bc7cecd69b` | `/tmp/atlas-v7-06a-trace-android` | Trace synthétique jusqu’à l’ACK ; `evidence/V7-06A_TRACE_ANDROID.md` |
 | V7-06A-TRACE-PC | Instrumentation bornée connecteur (POST/journal/WS/session) | DIAG | FINISHED — commit `c24b1bf`, intégré `1bffa9e`, 100/100 tests | `2b14b7bc-cebc-4ead-94dd-55bd74f7ea8c` | `/tmp/atlas-v7-06a-trace-pc` | Dernière étape et durées séparées ; `evidence/V7-06A_TRACE_PC.md` |
-| V7-06A-TEST-ANDROID | Tests JVM C1/C3/C4/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | READY | — | — | C1/C3/C8 rouges pour la raison attendue ; C4/C6/C7 verts ; suite complète exécutée |
-| V7-06A-TEST-PC | Tests connecteur/Core C5/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | READY | — | — | C5 rouges ; C7 verts ; suites Node/pytest exécutées |
+| V7-06A-TEST-ANDROID | Tests JVM C1/C3/C4/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | RUNNING | `d1ff1caa-eb64-4e25-8a6f-b0cadc12c281` | `/tmp/atlas-v7-06a-test-android` | C1/C3/C8 rouges pour la raison attendue ; C4/C6/C7 verts |
+| V7-06A-TEST-PC | Tests connecteur/Core C5/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | RUNNING | `7a1b8c69-a2cd-4159-9a57-e4d2dc7d64e1` | `/tmp/atlas-v7-06a-test-pc` | C5 rouges ; C7 verts ; suites Node/pytest exécutées |
 | V7-06A-FIX | Correctif minimal justifié | TEST | BLOCKED | — | — | Aucune régression JVM/backend/Node ; défaut reproduit corrigé |
 | V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | FIX | BLOCKED | — | — | VM-1 PASS avant toute VM-2 ; preuves SHA/APK/hash |
 | V7-06A-REVIEW | Revue indépendante finale (sécurité, idempotence, révocation) | VM | BLOCKED | — | — | Aucun P0/P1 ouvert dans le périmètre accepté |

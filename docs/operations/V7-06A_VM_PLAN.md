@@ -35,9 +35,13 @@ Le connecteur joint `ws://127.0.0.1:4412` et `http://127.0.0.1:8110` ; l'émulat
 1. `git rev-parse HEAD` = SHA intégré annoncé ; arbre propre ; APK construit depuis ce SHA.
 2. KVM présent (`/dev/kvm`), 67 Gio libres, image système API 37.2 installée.
 3. Ports 4411/4412/8110/5580 libres ; conteneur live `atlas-v7-relay` non touché.
-4. Créer l'AVD neuf `atlas_v7_06a_api37` (profil Nexus 5, partition data 4 Gio mini) ;
-   vérifier `ro.build.version.sdk=37`, `ro.build.version.sdk_full=37.2`,
-   `ro.boot.qemu.avd_name=atlas_v7_06a_api37` via `adb -s emulator-5580`.
+4. AVD neuf `atlas_v7_06a_api37` **créé et boot vérifié le 2026-10-31** (profil Nexus 5,
+   partition data 6 442 450 944 octets, x86_64) : `sys.boot_completed=1`,
+   `ro.build.version.sdk=37`, `ro.build.version.sdk_full=37.2`,
+   `ro.boot.qemu.avd_name=atlas_v7_06a_api37`, série `emulator-5580`, puis arrêt propre.
+   Preuve : `evidence/V7-06A_AVD_BOOT.md`.
+   - Mémoire hôte tendue (~4 Gio disponibles au pré-vol) : vérifier avant la recette ;
+     si insuffisant, `BLOCKED_ENVIRONMENT` plutôt qu'un arrêt de service live non autorisé.
 5. Générer le jeton Core synthétique (0600, hors dépôt) ; ne jamais l'afficher.
 6. Démarrer le Core isolé et vérifier `/health` + capabilities V4 (sept flags true).
 7. Démarrer le relais isolé et vérifier `/health`.
