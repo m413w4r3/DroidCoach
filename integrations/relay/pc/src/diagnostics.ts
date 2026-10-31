@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { Operation } from "./protocol.js";
 
 export const DIAGNOSTIC_BUFFER_LIMIT = 512;
+const DIAGNOSTIC_STDERR_LINE_MAX_BYTES = 1_024;
 
 export type DiagnosticOperation = Operation | "session";
 
@@ -204,6 +205,10 @@ export class ConnectorDiagnostics {
       });
       this.events.push(event);
       if (this.events.length > DIAGNOSTIC_BUFFER_LIMIT) this.events.shift();
+      const line = `${JSON.stringify(event)}\n`;
+      if (Buffer.byteLength(line, "utf8") <= DIAGNOSTIC_STDERR_LINE_MAX_BYTES) {
+        process.stderr.write(line, () => undefined);
+      }
     } catch {
       // Diagnostic failures must not change connector behavior.
     }
