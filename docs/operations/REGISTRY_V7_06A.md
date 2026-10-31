@@ -35,8 +35,8 @@ identité, appairage, consentements, plan et serveur de test synthétiques neufs
 | V7-06A-TRACE-PC | Instrumentation bornée connecteur (POST/journal/WS/session) | DIAG | FINISHED — commit `c24b1bf`, intégré `1bffa9e`, 100/100 tests | `2b14b7bc-cebc-4ead-94dd-55bd74f7ea8c` | `/tmp/atlas-v7-06a-trace-pc` | Dernière étape et durées séparées ; `evidence/V7-06A_TRACE_PC.md` |
 | V7-06A-TEST-ANDROID | Tests JVM C1/C3/C4/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | FINISHED — commit `6d749c7` ; 895 tests, 4 rouges confirmés | `d1ff1caa-eb64-4e25-8a6f-b0cadc12c281` | `/tmp/atlas-v7-06a-test-android` | `evidence/V7-06A_TEST_RED.md` |
 | V7-06A-TEST-PC | Tests connecteur/Core C5/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | FINISHED — commit `6973b5e` ; 2 rouges confirmés, backend ciblé 13 PASS | `7a1b8c69-a2cd-4159-9a57-e4d2dc7d64e1` | `/tmp/atlas-v7-06a-test-pc` | `evidence/V7-06A_TEST_RED.md` |
-| V7-06A-FIX-ANDROID | Reprise incertaine, collision `request_id`, session obsolète, single-flight | TEST-ANDROID | RUNNING | `9f329781-ae13-49bf-a785-a53db1b965cb` | `/tmp/atlas-v7-06a-fix-android` | 4 rouges verts ; 895 tests + lint PASS |
-| V7-06A-FIX-PC | Reçu consentement après restart, rejeu uncertain ciblé | TEST-PC | RUNNING | `df555254-e385-4cde-a714-a011fc8c6286` | `/tmp/atlas-v7-06a-fix-pc` | C5a/C5b verts ; chat toujours bloqué ; Node PASS |
+| V7-06A-FIX-ANDROID | Reprise incertaine, collision `request_id`, session obsolète, single-flight | TEST-ANDROID | FINISHED — commit `2004500`, intégré `39746bd` ; 895 tests + lint PASS | `9f329781-ae13-49bf-a785-a53db1b965cb` | `/tmp/atlas-v7-06a-fix-android` | `evidence/V7-06A_FIX.md` |
+| V7-06A-FIX-PC | Reçu consentement après restart, rejeu uncertain ciblé | TEST-PC | FINISHED — commit `51e3e00`, intégré `39746bd` ; Node 106, backend 348 | `df555254-e385-4cde-a714-a011fc8c6286` | `/tmp/atlas-v7-06a-fix-pc` | `evidence/V7-06A_FIX.md` |
 | V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | FIX | BLOCKED | — | — | VM-1 PASS avant toute VM-2 ; preuves SHA/APK/hash |
 | V7-06A-REVIEW | Revue indépendante finale (sécurité, idempotence, révocation) | VM | BLOCKED | — | — | Aucun P0/P1 ouvert dans le périmètre accepté |
 
@@ -74,6 +74,21 @@ Audit lecture seule réalisé sans ADB ni modification live ; preuve
 - Aucun correctif de comportement dans ces tranches ; aucun test discriminant rouge
   n’est encore intégré.
 
+## 3quinquies. Phase D intégrée — correctif minimal
+
+- **SHA intégré `39746bd258c125736ff50e54e571c723d10a1ecf`** : tests rouges + correctifs
+  Android (`2004500`) et connecteur (`51e3e00`) fusionnés.
+- Android : reprise bornée `UNAVAILABLE` (une tentative, même corps/clé), refus de
+  collision `request_id`, frames d’ancienne session ignorées, génération sous verrou,
+  relecture `syncedVersion`, single-flight + `APPEND_OR_REPLACE`/`UPDATE`.
+- Connecteur : reçu consentement borné conservé dans `completed_redacted`, rejoué
+  après redémarrage sans second POST ; ré-exécution limitée au consentement incertain ;
+  autres V4 toujours bloqués/rédigés ; trace stderr bornée si activée.
+- Résultats sur le SHA intégré : Android **895/895 + lint PASS**, Node **106/106**,
+  backend **348 passed / 1 skipped**, `git diff --check` PASS.
+- Preuve : `evidence/V7-06A_FIX.md`.
+- Qualification VM/AVD et revue indépendante finale restent à exécuter.
+
 ## 4. Verdicts visés (distincts)
 
 `GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`, `GO_V4_RECONCILIATION`, `GO_VM_V4_E2E`,
@@ -91,6 +106,10 @@ requise n’existe pas. Un succès VM n’est jamais converti en preuve Pixel.
 | 2026-10-31 | `0f3c41b5-ebb5-4dfb-9903-465ebe781fc3` | A3 Core/Connector RO | codex / gpt-6-luna / xhigh | FINISHED — cause UNKNOWN |
 | 2026-10-31 | `f1e2f879-a304-40ac-8221-b9bc7cecd69b` | TRACE Android | codex / gpt-6-luna / xhigh | FINISHED — `34763f9`, 887 tests, lint PASS |
 | 2026-10-31 | `2b14b7bc-cebc-4ead-94dd-55bd74f7ea8c` | TRACE PC | codex / gpt-6-luna / xhigh | FINISHED — `c24b1bf`, 100 tests PASS |
+| 2026-10-31 | `d1ff1caa-eb64-4e25-8a6f-b0cadc12c281` | TEST Android | codex / gpt-6-luna / xhigh | FINISHED — `6d749c7`, 4 rouges |
+| 2026-10-31 | `7a1b8c69-a2cd-4159-9a57-e4d2dc7d64e1` | TEST PC | codex / gpt-6-luna / xhigh | FINISHED — `6973b5e`, 2 rouges |
+| 2026-10-31 | `9f329781-ae13-49bf-a785-a53db1b965cb` | FIX Android | codex / gpt-6-luna / xhigh | FINISHED — `2004500`, 895 tests + lint |
+| 2026-10-31 | `df555254-e385-4cde-a714-a011fc8c6286` | FIX PC | codex / gpt-6-luna / xhigh | FINISHED — `51e3e00`, Node 106 |
 
 ## 6. Décisions d’orchestration
 
