@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { readPrivateJson, writePrivateJson } from "./secure-files.js";
 import { BackendRequestError, BackendClient } from "./backend.js";
+import { ConnectorDiagnostics, type DiagnosticContext } from "./diagnostics.js";
 import { RemoteError } from "./errors.js";
 import { CACHE_TTL_MS, PROTOCOLS, type Operation, type RequestEnvelope, type ResponseEnvelope, isRecord, isV4Operation, validateOperationPayload } from "./protocol.js";
 
@@ -68,6 +69,7 @@ export class OperationExecutor {
     private readonly state: OperationState,
     private readonly now: () => number = Date.now,
     private readonly journalPath?: string,
+    readonly diagnostics: ConnectorDiagnostics = new ConnectorDiagnostics(),
   ) {}
 
   async initialize(): Promise<void> {
@@ -81,13 +83,36 @@ export class OperationExecutor {
     sessionId: string,
     request: RequestEnvelope,
     signal?: AbortSignal,
+    diagnosticContext?: DiagnosticContext,
   ): Promise<ResponseEnvelope> {
-    await this.initialize();
-    validateOperationPayload(request.operation, request.payload, {
-      protocol: request.protocol,
-      requestId: request.request_id,
-      idempotencyKey: request.idempotency_key,
-    });
+    let context = diagnosticContext;
+    try {
+      await this.initialize();
+      validateOperationPayload(request.operation, request.payload, {
+        protocol: request.protocol,
+        requestId: request.request_id,
+        idempotencyKey: request.idempotency_key,
+      });
+      context ??= this.diagnostics.enabled
+        ? this.diagnostics.operationContext(0, request.request_id, request.operation)
+        : undefined;
+      this.diagnostics.beginOperation(context);
+      const response = await this.executeValidated(deviceId, sessionId, request, signal, context);
+      this.diagnostics.ready(context, "ready", "OK");
+      return response;
+    } catch (error) {
+      if (context) this.diagnostics.ready(context, "failure", (error as { code?: unknown } | null)?.code);
+      throw error;
+    }
+  }
+
+  private async executeValidated(
+    deviceId: string,
+    sessionId: string,
+    request: RequestEnvelope,
+    signal: AbortSignal | undefined,
+    context: DiagnosticContext | undefined,
+  ): Promise<ResponseEnvelope> {
     this.cleanup();
     const requestKey = cacheKey(deviceId, request.request_id);
     const idempotencyKey = cacheKey(deviceId, request.idempotency_key);
@@ -98,7 +123,9 @@ export class OperationExecutor {
     if (pendingRequest) {
       if (pendingRequest.requestHash !== requestHash) throw new RemoteError("IDEMPOTENCY_CONFLICT");
       const completed = await pendingRequest.promise;
-      return this.replay(completed, request.request_id, sessionId);
+      const replayed = this.replay(completed, request.request_id, sessionId, context);
+      this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
+      return replayed;
     }
     const pendingIdempotency = this.pendingIdempotency.get(idempotencyKey);
     if (pendingIdempotency) {
@@ -106,7 +133,8 @@ export class OperationExecutor {
         throw new RemoteError("IDEMPOTENCY_CONFLICT");
       }
       const completed = await pendingIdempotency.promise;
-      const replay = this.replay(completed, request.request_id, sessionId);
+      const replay = this.replay(completed, request.request_id, sessionId, context);
+      this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
       this.requestCache.set(requestKey, {
         deviceId,
         requestId: request.request_id,
@@ -124,14 +152,17 @@ export class OperationExecutor {
     const seenRequest = this.requestCache.get(requestKey);
     if (seenRequest) {
       if (seenRequest.requestHash !== requestHash) throw new RemoteError("IDEMPOTENCY_CONFLICT");
-      return this.responseFor(seenRequest, request.request_id, sessionId);
+      const response = this.responseFor(seenRequest, request.request_id, sessionId, context);
+      this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
+      return response;
     }
     const seenIdempotency = this.idempotencyCache.get(idempotencyKey);
     if (seenIdempotency) {
       if (seenIdempotency.businessHash !== businessHash || seenIdempotency.operation !== request.operation) {
         throw new RemoteError("IDEMPOTENCY_CONFLICT");
       }
-      const replay = this.responseFor(seenIdempotency, request.request_id, sessionId);
+      const replay = this.responseFor(seenIdempotency, request.request_id, sessionId, context);
+      this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
       this.requestCache.set(requestKey, {
         ...seenIdempotency,
         requestId: request.request_id,
@@ -142,7 +173,7 @@ export class OperationExecutor {
       return replay;
     }
 
-    const pending = this.executeFresh(deviceId, sessionId, request, businessHash, requestHash, requestKey, idempotencyKey, signal);
+    const pending = this.executeFresh(deviceId, sessionId, request, businessHash, requestHash, requestKey, idempotencyKey, signal, context);
     const pendingEntry = { requestHash, promise: pending };
     this.pendingRequests.set(requestKey, pendingEntry);
     this.pendingIdempotency.set(idempotencyKey, { businessHash, operation: request.operation, promise: pending });
@@ -168,6 +199,7 @@ export class OperationExecutor {
     requestKey: string,
     idempotencyKey: string,
     signal?: AbortSignal,
+    context?: DiagnosticContext,
   ): Promise<ResponseEnvelope> {
     const effectful = EFFECTFUL_OPERATIONS.has(request.operation);
     let journalEntry: CacheEntry | undefined;
@@ -184,7 +216,7 @@ export class OperationExecutor {
       };
       this.idempotencyCache.set(idempotencyKey, journalEntry);
       try {
-        await this.persistJournal();
+        await this.persistJournal(context, "in_flight");
       } catch {
         this.idempotencyCache.delete(idempotencyKey);
         throw new RemoteError("INTERNAL");
@@ -210,7 +242,13 @@ export class OperationExecutor {
           completed_at: target.response.completed_at,
         };
       } else {
-        result = await this.backend.execute(request.operation, request.payload, signal, deviceId);
+        result = this.diagnostics.enabled
+          ? await this.diagnostics.measureBackend(
+            context ?? this.diagnostics.operationContext(0, request.request_id, request.operation),
+            isV4Operation(request.operation),
+            () => this.backend.execute(request.operation, request.payload, signal, deviceId),
+          )
+          : await this.backend.execute(request.operation, request.payload, signal, deviceId);
       }
     } catch (error) {
       if (journalEntry) {
@@ -218,7 +256,7 @@ export class OperationExecutor {
           ? error.outcomeMayHaveOccurred
           : !(error instanceof RemoteError);
         if (mayHaveOccurred) {
-          await this.rememberUncertain(idempotencyKey, journalEntry);
+          await this.rememberUncertain(idempotencyKey, journalEntry, context);
           if (signal?.aborted || (error instanceof BackendRequestError && error.code === "CANCELLED")) {
             throw new RemoteError("CANCELLED");
           }
@@ -232,9 +270,9 @@ export class OperationExecutor {
         }
         this.idempotencyCache.delete(idempotencyKey);
         try {
-          await this.persistJournal();
+          await this.persistJournal(context, "removed");
         } catch {
-          await this.rememberUncertain(idempotencyKey, journalEntry);
+          await this.rememberUncertain(idempotencyKey, journalEntry, context);
           throw uncertainOutcomeError();
         }
       }
@@ -255,7 +293,7 @@ export class OperationExecutor {
     };
     if (Buffer.byteLength(JSON.stringify(response), "utf8") > 262_144) {
       if (journalEntry) {
-        await this.rememberUncertain(idempotencyKey, journalEntry);
+        await this.rememberUncertain(idempotencyKey, journalEntry, context);
         throw uncertainOutcomeError();
       }
       throw new RemoteError("PAYLOAD_TOO_LARGE");
@@ -275,11 +313,11 @@ export class OperationExecutor {
     if (journalEntry) {
       this.idempotencyCache.set(idempotencyKey, entry);
       try {
-        await this.persistJournal();
+        await this.persistJournal(context, "completed");
       } catch {
         const uncertainEntry: CacheEntry = { ...entry, outcome: "in_flight" };
         delete uncertainEntry.response;
-        await this.rememberUncertain(idempotencyKey, uncertainEntry);
+        await this.rememberUncertain(idempotencyKey, uncertainEntry, context);
         throw uncertainOutcomeError();
       }
       this.requestCache.set(requestKey, entry);
@@ -291,27 +329,33 @@ export class OperationExecutor {
     return response;
   }
 
-  private replay(entry: CacheEntry | ResponseEnvelope, requestId: string, sessionId: string): ResponseEnvelope {
-    if ("outcome" in entry) return this.responseFor(entry, requestId, sessionId);
+  private replay(entry: CacheEntry | ResponseEnvelope, requestId: string, sessionId: string, context?: DiagnosticContext): ResponseEnvelope {
+    if ("outcome" in entry) return this.responseFor(entry, requestId, sessionId, context);
     return { ...entry, request_id: requestId, session_id: sessionId, replayed: true, completed_at: new Date(this.now()).toISOString() };
   }
 
-  private responseFor(entry: CacheEntry, requestId: string, sessionId: string): ResponseEnvelope {
+  private responseFor(entry: CacheEntry, requestId: string, sessionId: string, context?: DiagnosticContext): ResponseEnvelope {
     if (entry.outcome === "completed_redacted") {
+      if (context) this.diagnostics.record(context, "replay", "blocked", { resultCode: "BACKEND_UNAVAILABLE" });
       throw new RemoteError("BACKEND_UNAVAILABLE", false, "completed result was redacted; retry is blocked");
     }
-    if (entry.outcome !== "completed" || !entry.response) throw uncertainOutcomeError();
+    if (entry.outcome !== "completed" || !entry.response) {
+      if (context) this.diagnostics.record(context, "uncertain", "uncertain", { resultCode: "RESULT_UNCERTAIN" });
+      throw uncertainOutcomeError();
+    }
     return { ...entry.response, request_id: requestId, session_id: sessionId, replayed: true, completed_at: new Date(this.now()).toISOString() };
   }
 
-  private async rememberUncertain(key: string, entry: CacheEntry): Promise<void> {
+  private async rememberUncertain(key: string, entry: CacheEntry, context?: DiagnosticContext): Promise<void> {
     const firstUncertain = entry.outcome !== "uncertain";
     const uncertain: CacheEntry = { ...entry, outcome: "uncertain" };
     delete uncertain.response;
     this.idempotencyCache.set(key, uncertain);
     if (firstUncertain) this.state.uncertainOutcome?.();
+    const traceContext = context ?? (this.diagnostics.enabled ? this.diagnostics.sessionContext(0) : undefined);
+    this.diagnostics.record(traceContext, "uncertain", "uncertain", { resultCode: "RESULT_UNCERTAIN" });
     try {
-      await this.persistJournal();
+      await this.persistJournal(context, "uncertain");
     } catch {
       // A durable in_flight entry is already fail-closed on restart.
     }
@@ -340,30 +384,53 @@ export class OperationExecutor {
         this.requestCache.set(cacheKey(entry.deviceId, entry.requestId), entry);
       }
     }
-    if (mustRewrite) await this.persistJournal();
+    if (mustRewrite) await this.persistJournal(undefined, "maintenance");
   }
 
-  private persistJournal(): Promise<void> {
-    if (!this.journalPath) return Promise.resolve();
+  private persistJournal(
+    context?: DiagnosticContext,
+    outcome: "in_flight" | "completed" | "uncertain" | "removed" | "maintenance" = "maintenance",
+  ): Promise<void> {
+    const tracing = this.diagnostics.enabled;
+    const traceContext = context ?? (tracing ? this.diagnostics.sessionContext(0) : undefined);
+    const startedAt = tracing ? performance.now() : 0;
+    const finish = (resultCode: "PERSISTED" | "PERSIST_FAILED" | "NO_JOURNAL") => {
+      if (!tracing) return;
+      this.diagnostics.record(traceContext, "journal_persist_end", outcome, {
+        resultCode,
+        durationMs: performance.now() - startedAt,
+      });
+    };
+    if (tracing) this.diagnostics.record(traceContext, "journal_persist_start", outcome);
+    if (!this.journalPath) {
+      finish("NO_JOURNAL");
+      return Promise.resolve();
+    }
     const write = this.journalWrite.catch(() => undefined).then(async () => {
-      const entries = [...this.idempotencyCache.values()]
-        .filter((entry) => EFFECTFUL_OPERATIONS.has(entry.operation) && entry.expiresAt > this.now())
-        .map((entry) => {
-          const persisted = { ...entry };
-          if (isV4Operation(entry.operation)) {
-            if (persisted.outcome === "completed") persisted.outcome = "completed_redacted";
-            delete persisted.response;
-          }
-          return persisted;
-        });
-      const document: JournalDocument = { schema_version: 1, entries };
-      await writePrivateJson(this.journalPath!, document);
-      const directory = await open(dirname(this.journalPath!), "r");
       try {
-        await directory.sync();
-      } finally {
-        await directory.close();
+        const entries = [...this.idempotencyCache.values()]
+          .filter((entry) => EFFECTFUL_OPERATIONS.has(entry.operation) && entry.expiresAt > this.now())
+          .map((entry) => {
+            const persisted = { ...entry };
+            if (isV4Operation(entry.operation)) {
+              if (persisted.outcome === "completed") persisted.outcome = "completed_redacted";
+              delete persisted.response;
+            }
+            return persisted;
+          });
+        const document: JournalDocument = { schema_version: 1, entries };
+        await writePrivateJson(this.journalPath!, document);
+        const directory = await open(dirname(this.journalPath!), "r");
+        try {
+          await directory.sync();
+        } finally {
+          await directory.close();
+        }
+      } catch (error) {
+        finish("PERSIST_FAILED");
+        throw error;
       }
+      finish("PERSISTED");
     });
     this.journalWrite = write;
     return write;
