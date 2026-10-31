@@ -63,6 +63,19 @@ function consentRequest(
   );
 }
 
+function renewConsentTransportEnvelope(
+  consent: ReturnType<typeof consentRequest>,
+  overrides: Partial<ReturnType<typeof consentRequest>> = {},
+) {
+  return {
+    ...consent,
+    session_id: "00000000-0000-4000-8000-000000000714",
+    created_at: new Date(Date.parse(consent.created_at) + 1_000).toISOString(),
+    expires_at: new Date(Date.parse(consent.expires_at) + 1_000).toISOString(),
+    ...overrides,
+  };
+}
+
 function v4Payloads(): Array<{ operation: Operation; payload: Record<string, unknown>; path: string }> {
   const syncBase = (capability: string, requestId: string) => ({
     contract_version: 4,
@@ -916,6 +929,96 @@ describe("closed operations and backend adapter", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("replaysV4ConsentWhenRelayRenewsTransportEnvelope", async () => {
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        if (backendCalls > 1) throw new Error("synthetic backend returned only one receipt");
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const executor = new OperationExecutor(backend, STATE);
+    const consent = consentRequest();
+    const renewed = renewConsentTransportEnvelope(consent);
+
+    expect(JSON.stringify(renewed.payload)).toBe(JSON.stringify(consent.payload));
+    expect(renewed).toMatchObject({
+      request_id: consent.request_id,
+      idempotency_key: consent.idempotency_key,
+    });
+    expect(renewed.session_id).not.toBe(consent.session_id);
+
+    const initial = await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+    const replay = await executor.execute(CONSENT_DEVICE_ID, renewed.session_id, renewed);
+
+    expect(initial).toMatchObject({ replayed: false, result: CONSENT_RECEIPT });
+    expect(replay).toMatchObject({
+      replayed: true,
+      request_id: consent.request_id,
+      result: CONSENT_RECEIPT,
+    });
+    expect(backendCalls).toBe(1);
+  });
+
+  it("replaysRestartedV4ConsentWhenRelayRenewsTransportEnvelope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atlas-v4-consent-renewed-restart-test-"));
+    const journalPath = join(dir, "operations.json");
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        if (backendCalls > 1) throw new Error("synthetic backend returned only one receipt");
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const firstExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+    const consent = consentRequest();
+    const renewed = renewConsentTransportEnvelope(consent);
+
+    try {
+      await firstExecutor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      const restartedExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+      const replay = await restartedExecutor.execute(CONSENT_DEVICE_ID, renewed.session_id, renewed);
+
+      expect(replay).toMatchObject({
+        replayed: true,
+        request_id: consent.request_id,
+        result: CONSENT_RECEIPT,
+      });
+      expect(backendCalls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejectsV4ConsentReplayWhenBusinessPayloadChanges", async () => {
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        if (backendCalls > 1) throw new Error("synthetic backend returned only one receipt");
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const executor = new OperationExecutor(backend, STATE);
+    const consent = consentRequest();
+
+    await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+
+    const changedPayload = renewConsentTransportEnvelope(consentRequest(CONSENT_REQUEST_ID, { state: "REVOKED" }));
+    await expect(executor.execute(CONSENT_DEVICE_ID, changedPayload.session_id, changedPayload))
+      .rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+
+    const changedEnvelopeKey = renewConsentTransportEnvelope(consent, {
+      idempotency_key: "00000000-0000-4000-8000-000000000715",
+    });
+    expect(JSON.stringify(changedEnvelopeKey.payload)).toBe(JSON.stringify(consent.payload));
+    await expect(executor.execute(CONSENT_DEVICE_ID, changedEnvelopeKey.session_id, changedEnvelopeKey))
+      .rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(backendCalls).toBe(1);
   });
 
   it("uncertainConsentCanBeSafelyReexecutedAfterRestart", async () => {

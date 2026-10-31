@@ -43,6 +43,9 @@ interface JournalDocument {
 
 interface PendingRequest {
   requestHash: string;
+  operation: Operation;
+  idempotencyKey: string;
+  businessHash: string;
   promise: Promise<ResponseEnvelope>;
 }
 
@@ -123,7 +126,7 @@ export class OperationExecutor {
 
     const pendingRequest = this.pendingRequests.get(requestKey);
     if (pendingRequest) {
-      if (pendingRequest.requestHash !== requestHash) throw new RemoteError("IDEMPOTENCY_CONFLICT");
+      if (!matchesRequestIdentity(pendingRequest, request, businessHash, requestHash)) throw new RemoteError("IDEMPOTENCY_CONFLICT");
       const completed = await pendingRequest.promise;
       const replayed = this.replay(completed, request.request_id, sessionId, context);
       this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
@@ -153,7 +156,7 @@ export class OperationExecutor {
 
     const seenRequest = this.requestCache.get(requestKey);
     if (seenRequest) {
-      if (seenRequest.requestHash !== requestHash) throw new RemoteError("IDEMPOTENCY_CONFLICT");
+      if (!matchesRequestIdentity(seenRequest, request, businessHash, requestHash)) throw new RemoteError("IDEMPOTENCY_CONFLICT");
       const response = this.responseFor(seenRequest, request.request_id, sessionId, context);
       this.diagnostics.record(context, "replay", "replayed", { resultCode: "REPLAYED" });
       return response;
@@ -178,7 +181,13 @@ export class OperationExecutor {
     }
 
     const pending = this.executeFresh(deviceId, sessionId, request, businessHash, requestHash, requestKey, idempotencyKey, signal, context);
-    const pendingEntry = { requestHash, promise: pending };
+    const pendingEntry = {
+      requestHash,
+      operation: request.operation,
+      idempotencyKey: request.idempotency_key,
+      businessHash,
+      promise: pending,
+    };
     this.pendingRequests.set(requestKey, pendingEntry);
     this.pendingIdempotency.set(idempotencyKey, { businessHash, operation: request.operation, promise: pending });
     try {
@@ -489,6 +498,18 @@ function validateJournal(value: unknown): JournalDocument {
 function canReexecuteConsent(entry: CacheEntry): boolean {
   return entry.operation === CONSENT_OPERATION &&
     (entry.outcome === "uncertain" || (entry.outcome === "completed_redacted" && entry.consentReceipt === undefined));
+}
+
+function matchesRequestIdentity(
+  previous: Pick<CacheEntry, "operation" | "idempotencyKey" | "businessHash" | "requestHash">,
+  request: RequestEnvelope,
+  businessHash: string,
+  requestHash: string,
+): boolean {
+  if (!isV4Operation(request.operation)) return previous.requestHash === requestHash;
+  return previous.operation === request.operation &&
+    previous.idempotencyKey === request.idempotency_key &&
+    previous.businessHash === businessHash;
 }
 
 const CONSENT_CATEGORIES = new Set(["DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN"]);
