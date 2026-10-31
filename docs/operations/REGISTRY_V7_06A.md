@@ -37,8 +37,8 @@ identité, appairage, consentements, plan et serveur de test synthétiques neufs
 | V7-06A-TEST-PC | Tests connecteur/Core C5/C6/C7/C8, rouges sur le SHA instrumenté | TRACE `0fe8155` | FINISHED — commit `6973b5e` ; 2 rouges confirmés, backend ciblé 13 PASS | `7a1b8c69-a2cd-4159-9a57-e4d2dc7d64e1` | `/tmp/atlas-v7-06a-test-pc` | `evidence/V7-06A_TEST_RED.md` |
 | V7-06A-FIX-ANDROID | Reprise incertaine, collision `request_id`, session obsolète, single-flight | TEST-ANDROID | FINISHED — commit `2004500`, intégré `39746bd` ; 895 tests + lint PASS | `9f329781-ae13-49bf-a785-a53db1b965cb` | `/tmp/atlas-v7-06a-fix-android` | `evidence/V7-06A_FIX.md` |
 | V7-06A-FIX-PC | Reçu consentement après restart, rejeu uncertain ciblé | TEST-PC | FINISHED — commit `51e3e00`, intégré `39746bd` ; Node 106, backend 348 | `df555254-e385-4cde-a714-a011fc8c6286` | `/tmp/atlas-v7-06a-fix-pc` | `evidence/V7-06A_FIX.md` |
-| V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | FIX | BLOCKED | — | — | VM-1 PASS avant toute VM-2 ; preuves SHA/APK/hash |
-| V7-06A-REVIEW | Revue indépendante finale (sécurité, idempotence, révocation) | VM | BLOCKED | — | — | Aucun P0/P1 ouvert dans le périmètre accepté |
+| V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | FIX `b04a5ff` | RUNNING | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | `/tmp/atlas-v7-06a-vm` | VM-1 PASS avant toute VM-2 ; preuves SHA/APK/hash |
+| V7-06A-REVIEW | Revue indépendante (sécurité, idempotence, révocation) | FIX `b04a5ff` | RUNNING (pré-VM) | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | `/tmp/atlas-v7-06a-review` | Aucun P0/P1 ouvert ; relecture finale après VM |
 
 ## 3. Preuves historiques conservées
 
