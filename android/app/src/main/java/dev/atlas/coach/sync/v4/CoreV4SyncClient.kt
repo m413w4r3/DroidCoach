@@ -229,7 +229,7 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
         ) protocolFailure()
         requireUtc(receipt.optString("updated_at"), "updated_at")
         val category = CoreV4Category.entries.first { it.wireValue == receipt.getString("category") }
-        return CoreV4ConsentReceipt(
+        val parsedReceipt = CoreV4ConsentReceipt(
             category = category,
             version = receipt.getInt("consent_version"),
             state = CoreV4ConsentState.valueOf(receipt.getString("state")),
@@ -237,6 +237,15 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
             updatedAt = receipt.getString("updated_at"),
             replayed = receipt.getBoolean("replayed"),
         )
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.CORRELATED,
+            state = CoreV4Diagnostics.State.CORRELATED,
+            result = CoreV4Diagnostics.Result.CORRELATED,
+            category = category,
+            consentVersion = parsedReceipt.version,
+            requestId = request.getString("request_id"),
+        )
+        return parsedReceipt
     }
 
     fun sendProjection(
@@ -285,8 +294,17 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
             if (resultCode !in setOf("ACCEPTED", "DUPLICATE")) protocolFailure()
             val syncedAt = item.optString("last_synced_at")
             requireUtc(syncedAt, "last_synced_at")
-            return CoreV4Receipt(request.category, request.data.getInt("sequence"), resultCode, syncedAt,
+            val parsedReceipt = CoreV4Receipt(request.category, request.data.getInt("sequence"), resultCode, syncedAt,
                 replayed = resultCode == "DUPLICATE")
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.CORRELATED,
+                state = CoreV4Diagnostics.State.CORRELATED,
+                result = CoreV4Diagnostics.Result.CORRELATED,
+                category = request.category,
+                consentVersion = request.consentVersion,
+                requestId = request.requestId,
+            )
+            return parsedReceipt
         }
 
         exactKeys(receipt, setOf(
@@ -310,8 +328,17 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
         ) protocolFailure()
         val syncedAt = receipt.optString("last_synced_at")
         requireUtc(syncedAt, "last_synced_at")
-        return CoreV4Receipt(request.category, expectedVersion, resultCode, syncedAt,
+        val parsedReceipt = CoreV4Receipt(request.category, expectedVersion, resultCode, syncedAt,
             receipt.getString("snapshot_hash"), receipt.getBoolean("replayed"))
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.CORRELATED,
+            state = CoreV4Diagnostics.State.CORRELATED,
+            result = CoreV4Diagnostics.Result.CORRELATED,
+            category = request.category,
+            consentVersion = request.consentVersion,
+            requestId = request.requestId,
+        )
+        return parsedReceipt
     }
 
     fun cancel() = transport.cancel()
@@ -322,6 +349,7 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
         }
         if (path !in ALLOWED_PATHS) throw CoreV4SyncException(CoreV4FailureKind.CONFIGURATION, false)
         if (body.toByteArray(Charsets.UTF_8).size > MAX_REQUEST_BYTES) protocolFailure()
+        val requestStartedAtNanos = System.nanoTime()
         val response = try {
             transport.post(CoreV4HttpRequest(path, if (transport.requiresBearerToken) token else "", body))
         } catch (error: CoreV4SyncException) {
@@ -331,6 +359,21 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
         } catch (_: Exception) {
             protocolFailure()
         }
+        val requestEnvelope = runCatching { JSONObject(body) }.getOrNull()
+        val category = if (path == CONSENT_ROUTE) {
+            CoreV4Category.entries.firstOrNull { it.wireValue == requestEnvelope?.optString("category") }
+        } else {
+            CoreV4Category.entries.firstOrNull { it.route == path }
+        }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+            state = CoreV4Diagnostics.State.RESPONSE,
+            result = if (response.statusCode in 200..299) CoreV4Diagnostics.Result.SUCCESS else CoreV4Diagnostics.Result.REJECTED,
+            category = category,
+            consentVersion = requestEnvelope?.optInt("consent_version")?.takeIf { it > 0 },
+            durationMs = elapsedMillisSince(requestStartedAtNanos),
+            requestId = requestEnvelope?.optString("request_id"),
+        )
         if (response.body.toByteArray(Charsets.UTF_8).size > MAX_RESPONSE_BYTES) protocolFailure()
         if (response.statusCode !in 200..299) {
             val code = runCatching {
@@ -350,6 +393,9 @@ class CoreV4SyncClient(private val transport: CoreV4HttpTransport) {
         }
         return response.body
     }
+
+    private fun elapsedMillisSince(startedAtNanos: Long): Long =
+        ((System.nanoTime() - startedAtNanos) / 1_000_000L).coerceAtLeast(0L)
 
     companion object {
         const val CONTRACT_VERSION = 4

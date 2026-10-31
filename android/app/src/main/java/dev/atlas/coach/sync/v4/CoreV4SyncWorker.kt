@@ -10,6 +10,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import dev.atlas.coach.data.AndroidStateBackend
@@ -30,6 +31,7 @@ import dev.atlas.coach.sync.AndroidCoreV4SyncStore
 import dev.atlas.coach.sync.relay.AndroidRelaySettingsStore
 import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.CoreV4ConsentRecord
+import dev.atlas.coach.sync.CoreV4ConsentAckResult
 import dev.atlas.coach.sync.SharedPreferencesBearerTokenStore
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpException
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpTransport
@@ -62,7 +64,24 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
     @Volatile private var activeInboxTransport: InboxV4HttpTransport? = null
 
     override fun doWork(): Result {
-        val store = AndroidSyncStorage.v4(applicationContext)
+        val workKind = when (inputData.getString(CoreV4SyncScheduler.WORK_KIND_INPUT)) {
+            CoreV4Diagnostics.WorkKind.IMMEDIATE.name -> CoreV4Diagnostics.WorkKind.IMMEDIATE
+            CoreV4Diagnostics.WorkKind.PERIODIC.name -> CoreV4Diagnostics.WorkKind.PERIODIC
+            else -> CoreV4Diagnostics.WorkKind.UNKNOWN
+        }
+        val diagnosticContext = CoreV4Diagnostics.beginExecution(workKind, runAttemptCount)
+        var diagnosticResult = CoreV4Diagnostics.Result.SUCCESS
+        val store = try {
+            AndroidSyncStorage.v4(applicationContext)
+        } catch (error: Exception) {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = CoreV4Diagnostics.Result.FAILURE,
+            )
+            CoreV4Diagnostics.endExecution(diagnosticContext, CoreV4Diagnostics.Result.FAILURE)
+            throw error
+        }
         var client: CoreV4SyncClient? = null
         var retryInbox = false
         try {
@@ -112,7 +131,10 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
             }
 
             syncConsentFirst(store, client, token)
-            if (isStopped) return Result.success()
+            if (isStopped) {
+                diagnosticResult = CoreV4Diagnostics.Result.CANCELLED
+                return Result.success()
+            }
             val consent = store.consents().associateBy { it.snapshot.category }
             if (consent.values.any {
                     it.snapshot.state != CoreV4ConsentState.UNKNOWN &&
@@ -142,7 +164,10 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
                     events = planSnapshot.events,
                     now = now,
                 )
-                if (isStopped) return Result.success()
+                if (isStopped) {
+                    diagnosticResult = CoreV4Diagnostics.Result.CANCELLED
+                    return Result.success()
+                }
             }
 
             val dayPlanConsent = consent.getValue(CoreV4Category.DAY_PLAN).snapshot
@@ -167,20 +192,29 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
                     store.recordFailure("INBOX_LOCAL_ERROR", "L'inbox V4 locale est temporairement indisponible.")
                     retryInbox = true
                 }
-                if (isStopped) return Result.success()
+                if (isStopped) {
+                    diagnosticResult = CoreV4Diagnostics.Result.CANCELLED
+                    return Result.success()
+                }
             }
 
             val usageConsent = consent.getValue(CoreV4Category.USAGE_SUMMARY).snapshot
             if (usageConsent.state == CoreV4ConsentState.GRANTED) {
                 pushUsage(store, client, token, usageConsent, now)
             }
-            if (isStopped) return Result.success()
+            if (isStopped) {
+                diagnosticResult = CoreV4Diagnostics.Result.CANCELLED
+                return Result.success()
+            }
 
             val goalsConsent = consent.getValue(CoreV4Category.GOAL_PROGRESS).snapshot
             if (goalsConsent.state == CoreV4ConsentState.GRANTED) {
                 pushGoals(store, client, token, goalsConsent, now)
             }
-            if (isStopped) return Result.success()
+            if (isStopped) {
+                diagnosticResult = CoreV4Diagnostics.Result.CANCELLED
+                return Result.success()
+            }
 
             val trainingConsent = consent.getValue(CoreV4Category.TRAINING_PLAN).snapshot
             if (trainingConsent.state == CoreV4ConsentState.GRANTED) {
@@ -189,19 +223,39 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
             if (store.presentation().code == "RUNNING") {
                 store.recordFailure("NO_PENDING_SOURCE", "Aucune nouvelle projection locale n'est disponible.")
             }
+            if (retryInbox) diagnosticResult = CoreV4Diagnostics.Result.RETRY
             return if (retryInbox) Result.retry() else Result.success()
         } catch (error: InboxV4HttpException) {
+            diagnosticResult = if (error.retryable) CoreV4Diagnostics.Result.RETRY else CoreV4Diagnostics.Result.FAILURE
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = diagnosticResult,
+            )
             store.recordFailure(error.kind.name, error.message ?: "Erreur de synchronisation inbox V4.")
             return if (error.retryable) Result.retry() else Result.failure()
         } catch (error: CoreV4SyncException) {
+            diagnosticResult = if (error.retryable) CoreV4Diagnostics.Result.RETRY else CoreV4Diagnostics.Result.FAILURE
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = diagnosticResult,
+            )
             store.recordFailure(error.kind.name, error.message ?: "Erreur de synchronisation V4.")
             return if (error.retryable) Result.retry() else Result.failure()
         } catch (_: Exception) {
+            diagnosticResult = CoreV4Diagnostics.Result.FAILURE
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = CoreV4Diagnostics.Result.FAILURE,
+            )
             store.recordFailure("LOCAL_ERROR", "La projection locale V4 est temporairement indisponible.")
             return Result.failure()
         } finally {
             activeClient = null
             client?.cancel()
+            CoreV4Diagnostics.endExecution(diagnosticContext, diagnosticResult)
         }
     }
 
@@ -631,29 +685,153 @@ internal fun sendCoreV4Projection(
     dayPlanConsent: CoreV4ConsentSnapshot? = null,
     shouldStop: () -> Boolean = { false },
 ) {
-    if (shouldStop()) return
+    val diagnostic = projectionDiagnosticStages(category)
+    val prepareStartedAtNanos = System.nanoTime()
+    diagnostic?.let { (prepare, _, _, _, _) ->
+        CoreV4Diagnostics.record(
+            stage = prepare,
+            state = CoreV4Diagnostics.State.PREPARING,
+            category = category,
+            consentVersion = consent.version,
+        )
+    }
+    fun recordSkipped() {
+        diagnostic?.let { (prepare, _, _, _, _) ->
+            CoreV4Diagnostics.record(
+                stage = prepare,
+                state = CoreV4Diagnostics.State.SKIPPED,
+                category = category,
+                consentVersion = consent.version,
+                durationMs = elapsedMillisSince(prepareStartedAtNanos),
+            )
+        }
+    }
+    if (shouldStop()) {
+        recordSkipped()
+        return
+    }
     val current = store.consent(category).snapshot
     if (current.state != CoreV4ConsentState.GRANTED || current.version != consent.version ||
         current.syncedVersion != current.version
-    ) return
+    ) {
+        recordSkipped()
+        return
+    }
     if (dayPlanConsent != null) {
         val currentPlan = store.consent(CoreV4Category.DAY_PLAN).snapshot
         if (currentPlan.state != CoreV4ConsentState.GRANTED ||
             currentPlan.version != dayPlanConsent.version || currentPlan.syncedVersion != currentPlan.version
-        ) return
+        ) {
+            recordSkipped()
+            return
+        }
     }
-    val pending = store.prepareProjection(
-        sourceKey, sourceVersion, sourceFingerprint, category, consent.version, data, client, Instant.now().toString(),
-    ) ?: return
-    if (shouldStop()) return
+    val pending = try {
+        store.prepareProjection(
+            sourceKey, sourceVersion, sourceFingerprint, category, consent.version, data, client, Instant.now().toString(),
+        )
+    } catch (error: Exception) {
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.ERROR,
+            state = CoreV4Diagnostics.State.FAILED,
+            result = CoreV4Diagnostics.Result.FAILURE,
+            category = category,
+            consentVersion = consent.version,
+        )
+        throw error
+    }
+    if (pending == null) {
+        recordSkipped()
+        return
+    }
+    diagnostic?.let { (prepare, _, _, _, _) ->
+        CoreV4Diagnostics.record(
+            stage = prepare,
+            state = CoreV4Diagnostics.State.PREPARED,
+            result = CoreV4Diagnostics.Result.SUCCESS,
+            category = category,
+            consentVersion = pending.request.consentVersion,
+            durationMs = elapsedMillisSince(prepareStartedAtNanos),
+            requestId = pending.request.requestId,
+        )
+    }
+    if (shouldStop()) {
+        recordSkipped()
+        return
+    }
 
     if (category == CoreV4Category.ACTIVITY_STATUS) {
         sendPendingCoreV4Status(store, client, token, pending, observedAt)
         return
     }
     val freshConsent = store.consent(category).snapshot
-    val receipt = client.sendProjection(pending.request, pending.body, token, freshConsent, dayPlanConsent)
-    store.acknowledgeProjection(pending, receipt, observedAt)
+    val stages = projectionDiagnosticStages(category)
+    if (stages == null) {
+        val receipt = client.sendProjection(pending.request, pending.body, token, freshConsent, dayPlanConsent)
+        store.acknowledgeProjection(pending, receipt, observedAt)
+        return
+    }
+    val (_, dispatchStage, responseStage, ackAttemptStage, ackResultStage) = stages
+    CoreV4Diagnostics.record(
+        stage = dispatchStage,
+        state = CoreV4Diagnostics.State.DISPATCHED,
+        category = category,
+        consentVersion = pending.request.consentVersion,
+        requestId = pending.request.requestId,
+    )
+    val dispatchStartedAtNanos = System.nanoTime()
+    val receipt = try {
+        client.sendProjection(pending.request, pending.body, token, freshConsent, dayPlanConsent)
+    } catch (error: Exception) {
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.ERROR,
+            state = CoreV4Diagnostics.State.FAILED,
+            result = CoreV4Diagnostics.Result.FAILURE,
+            category = category,
+            consentVersion = pending.request.consentVersion,
+            durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+            requestId = pending.request.requestId,
+        )
+        throw error
+    }
+    CoreV4Diagnostics.record(
+        stage = responseStage,
+        state = CoreV4Diagnostics.State.CORRELATED,
+        result = CoreV4Diagnostics.Result.SUCCESS,
+        category = category,
+        consentVersion = pending.request.consentVersion,
+        durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+        requestId = pending.request.requestId,
+    )
+    CoreV4Diagnostics.record(
+        stage = ackAttemptStage,
+        state = CoreV4Diagnostics.State.PREPARING,
+        category = category,
+        consentVersion = pending.request.consentVersion,
+        requestId = pending.request.requestId,
+    )
+    try {
+        store.acknowledgeProjection(pending, receipt, observedAt)
+    } catch (error: Exception) {
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.ERROR,
+            state = CoreV4Diagnostics.State.FAILED,
+            result = CoreV4Diagnostics.Result.FAILURE,
+            category = category,
+            consentVersion = pending.request.consentVersion,
+            requestId = pending.request.requestId,
+        )
+        throw error
+    }
+    CoreV4Diagnostics.record(
+        stage = ackResultStage,
+        state = CoreV4Diagnostics.State.ACKNOWLEDGED,
+        result = CoreV4Diagnostics.Result.APPLIED,
+        ackResult = CoreV4Diagnostics.AckResult.APPLIED,
+        category = category,
+        consentVersion = pending.request.consentVersion,
+        requestId = pending.request.requestId,
+    )
 }
 
 private fun sendPendingCoreV4Status(
@@ -666,7 +844,17 @@ private fun sendPendingCoreV4Status(
 ) {
     val statusConsent = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
     val planConsent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+    val diagnosticStages = projectionDiagnosticStages(CoreV4Category.ACTIVITY_STATUS)!!
+    val (_, dispatchStage, responseStage, ackAttemptStage, ackResultStage) = diagnosticStages
+    val dispatchStartedAtNanos = System.nanoTime()
     try {
+        CoreV4Diagnostics.record(
+            stage = dispatchStage,
+            state = CoreV4Diagnostics.State.DISPATCHED,
+            category = pending.request.category,
+            consentVersion = pending.request.consentVersion,
+            requestId = pending.request.requestId,
+        )
         val receipt = client.sendProjection(
             pending.request,
             pending.body,
@@ -675,8 +863,42 @@ private fun sendPendingCoreV4Status(
             planConsent,
             allowStaleStatusReplay = pending.request.consentVersion < statusConsent.version,
         )
+        CoreV4Diagnostics.record(
+            stage = responseStage,
+            state = CoreV4Diagnostics.State.CORRELATED,
+            result = CoreV4Diagnostics.Result.SUCCESS,
+            category = pending.request.category,
+            consentVersion = pending.request.consentVersion,
+            durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+            requestId = pending.request.requestId,
+        )
+        CoreV4Diagnostics.record(
+            stage = ackAttemptStage,
+            state = CoreV4Diagnostics.State.PREPARING,
+            category = pending.request.category,
+            consentVersion = pending.request.consentVersion,
+            requestId = pending.request.requestId,
+        )
         store.acknowledgeProjection(pending, receipt, observedAt)
+        CoreV4Diagnostics.record(
+            stage = ackResultStage,
+            state = CoreV4Diagnostics.State.ACKNOWLEDGED,
+            result = CoreV4Diagnostics.Result.APPLIED,
+            ackResult = CoreV4Diagnostics.AckResult.APPLIED,
+            category = pending.request.category,
+            consentVersion = pending.request.consentVersion,
+            requestId = pending.request.requestId,
+        )
     } catch (error: CoreV4SyncException) {
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.ERROR,
+            state = CoreV4Diagnostics.State.FAILED,
+            result = CoreV4Diagnostics.Result.FAILURE,
+            category = pending.request.category,
+            consentVersion = pending.request.consentVersion,
+            durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+            requestId = pending.request.requestId,
+        )
         if (mayRefreshConsentVersion &&
             error.httpStatus == 409 && error.errorCode == "STALE_VERSION" &&
             statusConsent.state == CoreV4ConsentState.GRANTED &&
@@ -731,15 +953,151 @@ internal fun syncPendingCoreV4ConsentsFirst(
 ) {
     for (record in store.pendingConsentRecords()) {
         if (shouldStop()) return
+        val preparationStartedAtNanos = System.nanoTime()
         val current = store.consent(record.snapshot.category)
         if (current.snapshot.version != record.snapshot.version ||
             current.snapshot.state != record.snapshot.state
-        ) continue
-        val body = store.prepareConsentBody(record, client)
-        val receipt = client.sendConsent(body, token)
-        store.acknowledgeConsent(record.snapshot.category, receipt)
+        ) {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.CONSENT_PREPARE,
+                state = CoreV4Diagnostics.State.SKIPPED,
+                result = CoreV4Diagnostics.Result.SUPERSEDED,
+                category = record.snapshot.category,
+                consentVersion = record.snapshot.version,
+                requestId = record.requestId,
+            )
+            continue
+        }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.CONSENT_PREPARE,
+            state = CoreV4Diagnostics.State.PREPARING,
+            category = record.snapshot.category,
+            consentVersion = record.snapshot.version,
+            requestId = record.requestId,
+        )
+        val body = try {
+            store.prepareConsentBody(record, client)
+        } catch (error: Exception) {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = CoreV4Diagnostics.Result.FAILURE,
+                category = record.snapshot.category,
+                consentVersion = record.snapshot.version,
+                durationMs = elapsedMillisSince(preparationStartedAtNanos),
+                requestId = record.requestId,
+            )
+            throw error
+        }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.CONSENT_PREPARE,
+            state = CoreV4Diagnostics.State.PREPARED,
+            result = CoreV4Diagnostics.Result.SUCCESS,
+            category = record.snapshot.category,
+            consentVersion = record.snapshot.version,
+            durationMs = elapsedMillisSince(preparationStartedAtNanos),
+            requestId = record.requestId,
+        )
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.CONSENT_DISPATCH,
+            state = CoreV4Diagnostics.State.DISPATCHED,
+            category = record.snapshot.category,
+            consentVersion = record.snapshot.version,
+            requestId = record.requestId,
+        )
+        val dispatchStartedAtNanos = System.nanoTime()
+        val receipt = try {
+            client.sendConsent(body, token)
+        } catch (error: Exception) {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = CoreV4Diagnostics.Result.FAILURE,
+                category = record.snapshot.category,
+                consentVersion = record.snapshot.version,
+                durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+                requestId = record.requestId,
+            )
+            throw error
+        }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.CONSENT_RESPONSE,
+            state = CoreV4Diagnostics.State.CORRELATED,
+            result = CoreV4Diagnostics.Result.SUCCESS,
+            category = record.snapshot.category,
+            consentVersion = record.snapshot.version,
+            durationMs = elapsedMillisSince(dispatchStartedAtNanos),
+            requestId = record.requestId,
+        )
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.ACK_ATTEMPT,
+            state = CoreV4Diagnostics.State.PREPARING,
+            category = record.snapshot.category,
+            consentVersion = record.snapshot.version,
+            requestId = record.requestId,
+        )
+        val acknowledgement = try {
+            store.acknowledgeConsent(record.snapshot.category, receipt)
+        } catch (error: Exception) {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.ERROR,
+                state = CoreV4Diagnostics.State.FAILED,
+                result = CoreV4Diagnostics.Result.FAILURE,
+                category = record.snapshot.category,
+                consentVersion = record.snapshot.version,
+                requestId = record.requestId,
+            )
+            throw error
+        }
+        val (result, ackResult) = when (acknowledgement) {
+            CoreV4ConsentAckResult.APPLIED -> CoreV4Diagnostics.Result.APPLIED to CoreV4Diagnostics.AckResult.APPLIED
+            CoreV4ConsentAckResult.SUPERSEDED -> CoreV4Diagnostics.Result.SUPERSEDED to CoreV4Diagnostics.AckResult.SUPERSEDED
+            CoreV4ConsentAckResult.MISSING -> CoreV4Diagnostics.Result.MISSING to CoreV4Diagnostics.AckResult.MISSING
+        }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.ACK_RESULT,
+            state = if (acknowledgement == CoreV4ConsentAckResult.APPLIED) {
+                CoreV4Diagnostics.State.ACKNOWLEDGED
+            } else {
+                CoreV4Diagnostics.State.SKIPPED
+            },
+            result = result,
+            ackResult = ackResult,
+            category = record.snapshot.category,
+            consentVersion = record.snapshot.version,
+            requestId = record.requestId,
+        )
     }
 }
+
+private data class ProjectionDiagnosticStages(
+    val prepare: CoreV4Diagnostics.Stage,
+    val dispatch: CoreV4Diagnostics.Stage,
+    val response: CoreV4Diagnostics.Stage,
+    val ackAttempt: CoreV4Diagnostics.Stage,
+    val ackResult: CoreV4Diagnostics.Stage,
+)
+
+private fun projectionDiagnosticStages(category: CoreV4Category): ProjectionDiagnosticStages? = when (category) {
+    CoreV4Category.DAY_PLAN -> ProjectionDiagnosticStages(
+        CoreV4Diagnostics.Stage.PLAN_PREPARE,
+        CoreV4Diagnostics.Stage.PLAN_DISPATCH,
+        CoreV4Diagnostics.Stage.PLAN_RESPONSE,
+        CoreV4Diagnostics.Stage.PLAN_ACK_ATTEMPT,
+        CoreV4Diagnostics.Stage.PLAN_ACK_RESULT,
+    )
+    CoreV4Category.ACTIVITY_STATUS -> ProjectionDiagnosticStages(
+        CoreV4Diagnostics.Stage.STATUS_PREPARE,
+        CoreV4Diagnostics.Stage.STATUS_DISPATCH,
+        CoreV4Diagnostics.Stage.STATUS_RESPONSE,
+        CoreV4Diagnostics.Stage.STATUS_ACK_ATTEMPT,
+        CoreV4Diagnostics.Stage.STATUS_ACK_RESULT,
+    )
+    else -> null
+}
+
+private fun elapsedMillisSince(startedAtNanos: Long): Long =
+    ((System.nanoTime() - startedAtNanos) / 1_000_000L).coerceAtLeast(0L)
 
 internal fun coreV4RequestStillAuthorized(
     store: AndroidCoreV4SyncStore,
@@ -944,6 +1302,7 @@ internal fun flushSupersededStatusRequestsBeforePlan(
 object CoreV4SyncScheduler {
     const val IMMEDIATE_WORK = "atlas_core_v4_push_now"
     const val PERIODIC_WORK = "atlas_core_v4_push_periodic"
+    const val WORK_KIND_INPUT = "atlas_core_v4_work_kind"
 
     fun schedule(context: Context) {
         val appContext = context.applicationContext
@@ -953,6 +1312,7 @@ object CoreV4SyncScheduler {
             .build()
         val immediate = OneTimeWorkRequestBuilder<CoreV4SyncWorker>()
             .setConstraints(connected)
+            .setInputData(workDataOf(WORK_KIND_INPUT to CoreV4Diagnostics.WorkKind.IMMEDIATE.name))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         manager.enqueueUniqueWork(IMMEDIATE_WORK, ExistingWorkPolicy.REPLACE, immediate)
@@ -962,6 +1322,7 @@ object CoreV4SyncScheduler {
         if (hasGrantedCategory) {
             val periodic = PeriodicWorkRequestBuilder<CoreV4SyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(connected)
+                .setInputData(workDataOf(WORK_KIND_INPUT to CoreV4Diagnostics.WorkKind.PERIODIC.name))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             manager.enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.REPLACE, periodic)
