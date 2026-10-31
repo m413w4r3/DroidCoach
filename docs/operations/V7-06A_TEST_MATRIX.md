@@ -37,8 +37,11 @@ attendu (le test peut être ajouté avec le correctif si l'API n'existe pas enco
 | C5a | `consentReceiptSurvivesRestartAndReplays` | POST réussi, journal écrit, nouvel exécuteur sur le même journal, même requête | reçu rejoué `replayed=true`, compteur backend inchangé | ROUGE |
 | C5b | `uncertainConsentCanBeSafelyReexecutedAfterRestart` | entrée `in_flight` au redémarrage → `uncertain`, client renvoie le même corps/clé | ré-exécution autorisée pour consentement seulement, même clé, un seul effet Core | ROUGE |
 | C5c | `otherV4OperationsRemainRedactedAfterRestart` | chat V4 complété puis redémarrage | `BACKEND_UNAVAILABLE`, pas de rejeu | VERT |
+| C5d | `replaysV4ConsentWhenRelayRenewsTransportEnvelope` | même corps/clé/`request_id`, nouvelle session et horodatages Relay | reçu rejoué, un seul POST, aucun conflit | ROUGE → VERT (R2) |
+| C5e | `replaysRestartedV4ConsentWhenRelayRenewsTransportEnvelope` | idem après redémarrage sur le journal | reçu reconstruit rejoué, un seul POST total | ROUGE → VERT (R2) |
 | C7c | `connectorReplayUsesSameKeyAndBody` | rejeu en mémoire | `replayed=true`, aucun second POST backend | VERT |
 | C7d | `connectorRejectsSameKeyDifferentPayload` | conflit | `IDEMPOTENCY_CONFLICT` | VERT |
+| C7h | `rejectsV4ConsentReplayWhenBusinessPayloadChanges` | payload modifié ou clé d'enveloppe divergente | `IDEMPOTENCY_CONFLICT` / `INVALID_REQUEST`, backend non rappelé | VERT (R2) |
 | C8d | `replacementSessionDoesNotReceiveOldResponse` | remplacement de peer pendant une opération | aucune réponse de l'ancien canal sur le nouveau | VERT |
 
 ## 3. Tests backend Python (pytest, base temporaire)
@@ -62,6 +65,13 @@ attendu (le test peut être ajouté avec le correctif si l'API n'existe pas enco
 | VM1-6 | révocation | `REVOKED` local et Core, versions cohérentes |
 | VM1-7 | réponse perdue injectée (si harnais) | reprise sûre, même clé, aucun succès fictif |
 | VM1-8 | redémarrage connecteur isolé | reçu consentement récupéré sans second effet |
+
+**Limite VM-1** : le harnais AVD ne dispose pas d'injection déterministe de perte de
+réponse WS ni d'un redémarrage du connecteur au milieu d'un consentement. Les
+scénarios VM1-7 et VM1-8 ne sont donc **pas revendiqués sur VM** ; ils sont couverts
+par les tests Node C5d/C5e sur journal et enveloppe renouvelée, et par les tests JVM
+C1a/C1b. VM-1 couvre l'intégration réelle consentements/DayPlan/reçu, la coupure
+réseau, l'absence d'ACK fictif et la réconciliation de révocation.
 
 ## 5. Règles d'exécution
 
