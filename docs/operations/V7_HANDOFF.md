@@ -19,7 +19,8 @@ Aucun push, PR ou merge distant effectué.
 - **V7-04** (seed plan synthétique) : revu ACCEPT, mergé ; exécution Pixel **PASS**
   `OK (1 test)`, plan `b0902f1b-8404-4ed7-a614-96aeb93a6bb1` version 2, 1 activité.
 - **V7-05** (scénario V4 réel Pixel) : revu ACCEPT au commit `6de83c8`, mergé dans
-  l’intégration (`e52a07d`). **Le test n’a pas encore été exécuté sur Pixel.**
+  l’intégration (`e52a07d`). **Exécuté une seule fois le 2026-10-31 sur `fdaef7b` :
+  FAIL** à la première synchronisation V4 (voir « Mise à jour post-handoff » ci-dessous).
 
 ### État live (à ne pas perturber sans autorisation)
 
@@ -42,7 +43,40 @@ Aucun push, PR ou merge distant effectué.
   installé sur le Pixel ; il contient `V7PlanSeedInstrumentedTest` et
   `V7RemoteV4InstrumentedTest`.
 
+## Mise à jour post-handoff — V7-05 exécuté (2026-10-31)
+
+Le test V7-05 a été exécuté **une seule fois** sur le Pixel avec `-e test_action apply`,
+sur `fdaef7b`. Résultat : **FAIL**. Processus `0`, mais runner `FAILURES!!!`,
+`numtests=1`, échec à 61,6 s pendant l’attente du reçu V4 initial :
+
+```text
+v4_code=UNAVAILABLE; day_freshness=Aucun reçu; day_consent=GRANTED:2/2;
+status_consent=GRANTED:0/2; plan_receipt=null; plan_version=2
+```
+
+Aucun chat, proposition, application `v2→v3` ou ACK ; plan resté v2 ; tag
+`ATLAS_V7_V4_E2E` vide. Core a reçu exactement deux `POST /v4/sync/consent-state` 200
+et le connecteur a journalisé les deux consentements `completed_redacted` : une
+capability manquante et un rejet Core sont écartés par les faits ; le défaut se situe
+sur le retour/ACK Android (hypothèse dominante, **cause racine non établie**).
+**Ne pas relancer** : budget de corrections épuisé ; le diagnostic indépendant
+read-only a été effectué et conclut `cause racine UNKNOWN`. Toute correction reste
+à autoriser. Preuve :
+`docs/operations/evidence/V7-05_PIXEL_V4_E2E_FAIL.md`.
+
+État résiduel relevé read-only (API 37) : DAY_PLAN `REVOKED` v3 avec
+`synced_version=2` ; ACTIVITY_STATUS `REVOKED` v3 avec `synced_version=0` ; plan
+toujours `APPROVED` v2 (1 activité) ; inbox V4 absente ; code de présentation
+`UNAVAILABLE` ; aucun processus d’instrumentation. Le cleanup a donc révoqué
+localement mais **les révocations ne sont pas synchronisées** : le Core peut encore
+détenir DAY_PLAN `GRANTED` v2. Toute prochaine exécution autorisée doit d’abord
+synchroniser ces révocations ; aucune synchronisation n’a été tentée après le run.
+
 ## Travail immédiat à reprendre
+
+> **Superseded** : cette section décrit la préparation d’avant exécution. Le test a
+> déjà été lancé une fois le 2026-10-31 et a échoué ; **ne pas le relancer**. La
+> commande est conservée pour historique.
 
 Le test V7-05 doit être lancé **une seule fois** avec l’action explicite :
 
@@ -88,7 +122,8 @@ Après exécution :
 ## Limites honnêtes
 
 - R3B est un chat **V2** relayé ; V7-05 est le premier test V4 réel.
-- Le test V7-05 a été compilé et relu, mais **pas exécuté** avant ce handoff.
+- Le test V7-05 a été compilé et relu ; il n’était **pas exécuté** avant ce handoff.
+  Il l’a été ensuite, une seule fois, et a échoué (voir « Mise à jour post-handoff »).
 - Les noms d’outils exacts ne sont pas exposés par le contrat V4 ; ils doivent être
   corrélés côté Core/OpenClaw.
 - A4-4 (4001→1012) reste non qualifié ; pas de revendication.

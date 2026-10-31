@@ -3,6 +3,7 @@
 **Mission :** rendre le coach OpenClaw réellement utilisable à distance depuis le Pixel.
 **Base SHA :** `b759bdafbf0c67eda1a14ae2cf2f3fac75239e4c` (local = `origin/main` vérifié le 2026-10-30).
 **Branche d'intégration locale :** `feat/atlas-v7-remote-operational` (aucun push sans autorisation distincte).
+**HEAD d'exécution V7-05 :** `fdaef7b38601b8143a023615de559b9954cf7d53` (2026-10-31).
 **Environnement cible de clôture :** Pixel physique Android 17 / API 37, réseau cellulaire, sans Wi-Fi.
 **Modèle des sous-agents :** `codex:gpt-6-luna`, effort effectif `xhigh` — vérifié dans les métadonnées Paseo de chaque session. Aucune substitution.
 **Règle :** une notification de fin n'est pas une acceptation. Chaque résultat est examiné, revu, puis intégré localement par le parent.
@@ -50,6 +51,15 @@
 | V7-06-RESILIENCE | offline, reconnexion, redémarrages, révocation, restauration | V7-04 | NOT_STARTED | tests/preuves | GATE 6/7 |
 | V7-07-DOCS | documentation finale alignée sur l'état livré | tous | NOT_STARTED | docs/operations/** | documents vérifiés contre SHA/APK |
 
+## 3ter. V7-05 — scénario V4 réel sur Pixel (run unique)
+
+| TASK_ID | Objectif | Dépendances | Statut | Scope d'écriture prévu | Oracle |
+|---|---|---|---|---|---|
+| V7-05-REMOTE-V4-E2E | Chat V4 réel depuis le Pixel, proposition A0 nouvelle, application locale `v2→v3` (+10 min), ACK durable, révocation/synchronisation des consentements et arrêt des workers | V7-03D, V7-04, relais C | **FAIL** — run unique 2026-10-31 sur `fdaef7b` ; processus `0` mais runner `FAILURES!!!`, `numtests=1`, échec à 61,6 s | Aucun code ; preuve `docs/operations/evidence/V7-05_PIXEL_V4_E2E_FAIL.md` | Runner OK + plan v3 + déplacement +10 min + ACK non pending + consentements révoqués synchronisés + workers inactifs ; échoué à la première synchronisation V4 |
+
+Le ticket **V7-05-COMPOSE** du tableau ci-dessus est un ticket Docker distinct ; le « V7-05 »
+du handoff désigne le scénario V4 réel de cette section.
+
 ## 3bis. Constats consolidés au 2026-10-30 (V7-00 partiel + exécution V7)
 
 - **Core live** : conteneur healthy, mais `ATLAS_AGENT_ADAPTER=mock` et les sept capabilities V4 (`day_plan.read`, `activity_status.read`, `plan_revision.propose`, `usage_summary.read`, `goal_progress.read`, `training_plan.read`, `coach.chat`) sont `false`. `/health` répond `mode=mock`.
@@ -76,19 +86,34 @@
 - **Décision de sécurité** : aucun chat distant ni déploiement OpenClaw live avant désactivation vérifiée de Code Mode/`exec`, `process`, `code_execution` et de toute capacité équivalente, avec preuve sur trajectoire réelle et absence de régression des six outils client.
 - **Catalogue Gateway (lecture parent)** : `tools.catalog` liste bien les six outils `atlas_*` sous `plugin:atlas_core_tools`, tous `optional: true`, plus d'autres plugins. Le catalogue ne prouve donc pas la projection session ; `tools.effective` reste FAIL. La politique agent contient `profile=minimal`, `deny=[gateway,session_status,presence]`, `alsoAllow=[six outils]` ; la cause de l'absence des six dans la projection est encore à établir.
 
+- **V7-05 (run Pixel, 2026-10-31)** : **FAIL** à la première synchronisation V4, sur
+  `fdaef7b`, une seule exécution (`numtests=1`, runner `FAILURES!!!`, échec à 61,6 s).
+  Core a reçu exactement deux `POST /v4/sync/consent-state` → 200 ; le journal connecteur
+  contient deux opérations `v4.consent.state.upsert` distinctes `completed_redacted`.
+  Android a acquitté DAY_PLAN (2/2) mais pas ACTIVITY_STATUS (0/2), code `UNAVAILABLE`,
+  aucun reçu plan. Aucun chat, proposition, application `v2→v3` ni ACK ; plan resté v2.
+  Le test n'a pas été relancé ; budget de corrections épuisé ; diagnostic indépendant
+  read-only `81c27313-820a-470a-90f7-68ea8e9af00e` effectué (profil Codex
+  `gpt-6-luna`/`xhigh` vérifié par le parent ; conclusion `cause racine UNKNOWN`).
+  État résiduel relevé : consentements locaux `REVOKED` v3 mais **non synchronisés**
+  (`synced_version` 2 pour DAY_PLAN, 0 pour ACTIVITY_STATUS), plan toujours `APPROVED`
+  v2, inbox absente, aucun processus d'instrumentation. La prochaine exécution
+  autorisée doit d'abord synchroniser ces révocations. Preuve :
+  `docs/operations/evidence/V7-05_PIXEL_V4_E2E_FAIL.md`. **Aucun GO.**
+
 ## 4. Verdicts
 
 | Verdict | État | Preuve / limite |
 |---|---|---|
 | GO_CORE | GO_LIVE (B) | Core live `mode=openclaw`, sept capabilities V4 vraies, chat V4 réel HTTP 200 `agent_status=ok`, image `00b88ef…`, volume conservé ; `/v2/agent/status` passe à `connected=true` après le premier succès |
 | GO_OPENCLAW_TOOLS | PARTIAL — A+B | Code Mode/exec désactivé et vérifié ; six outils catalogués ; plugin natif atteint le Core live et reçoit le gate `CONSENT_REQUIRED` ; chemin client disponible ; preuve des six en exécution avec données consenties après D |
-| GO_REMOTE_NETWORK | GO_PUBLIC_V1 (C partiel) | Funnel `8443→4400` confirmé ; relais 4402, proxy 4400, connecteur `relay_connected=true` ; WSS public Noise/auth/V1 PASS ; V4/Pixel et A4-4 non qualifiés |
-| GO_ANDROID_SYNC | BLOCKED | V7-03C en cours ; transport relayé non encore accepté ; aucun reçu runtime |
-| GO_REMOTE_CHAT | PARTIAL (B) | Chat V4 réel live PASS en local ; chat V4 depuis Pixel via relais non exécuté ; Code Mode corrigé |
-| GO_PLAN_REVISION | NOT_RUN | aucune proposition appliquée puis ACK |
+| GO_REMOTE_NETWORK | GO_PUBLIC_V1 (C partiel) | Funnel `8443→4400` confirmé ; relais 4402, proxy 4400, connecteur `relay_connected=true` ; WSS public Noise/auth/V1 PASS ; V4/Pixel non qualifiés ; session relais déconnectée au cleanup V7-05 ; A4-4 non qualifié |
+| GO_ANDROID_SYNC | BLOCKED | V7-03C intégré et suite JVM PASS, mais aucun reçu runtime acceptable : V7-05 (2026-10-31, `fdaef7b`) **FAIL** — DAY_PLAN 2/2, ACTIVITY_STATUS 0/2, `v4_code=UNAVAILABLE`, aucun reçu plan. Core/connecteur ont complété les deux consentements ; défaut de retour/ACK non isolé. |
+| GO_REMOTE_CHAT | PARTIAL (B) | Chat V4 réel live PASS en local ; chat V4 depuis Pixel via relais non exécuté : V7-05 s'est arrêté avant le chat. Code Mode corrigé. |
+| GO_PLAN_REVISION | NOT_RUN | Aucune proposition appliquée puis ACK ; V7-05 s'est arrêté à la synchronisation V4 initiale. |
 | GO_DOCKER_OPERATIONS | GO_LIMITED (B) | Bascule Core live avec backup SQLite, image candidate, healthcheck, rollback image conservé ; pile complète relais encore non testée |
-| GO_PIXEL | PASS_PARTIEL (historique) | APK UI installé ; pas d'E2E réel |
-| GO_PRODUCT_REMOTE | NOT_RUN | interdit sans chat réel + fil rouge sur Pixel |
+| GO_PIXEL | PASS_PARTIEL (historique) | APK UI installé, R3B V2 PASS ; V7-05 (V4 réel) **FAIL** au sync initial, pas d'E2E réel. |
+| GO_PRODUCT_REMOTE | NOT_RUN | Interdit sans chat réel + fil rouge Pixel ; V7-05 FAIL avant le chat, aucun GO. |
 
 ## 5. Règles de preuve
 
