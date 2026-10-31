@@ -54,6 +54,18 @@ Tests rouges devenus verts : `lostConsentResponseIsRetriedWithSameBodyAndKey`,
 Non-régressions vertes : annulation/rejeu, révocation v3, idempotence, chat V4 toujours
 bloqué après redémarrage, remplacement de session.
 
+## Addendum — correctif R2 après revue indépendante (2026-11-01)
+
+La revue pré-VM a identifié un P1 : le rejeu V4 par `request_id` comparait le hash
+complet de l’enveloppe, donc une reprise Android avec mêmes corps/clé/`request_id`
+mais nouveaux `created_at`/`expires_at`/`session_id` recevait
+`IDEMPOTENCY_CONFLICT` au lieu du reçu déjà obtenu. Correctif borné
+`V7-06A-FIX-PC-R2` : commit `e0d9062`, intégré `be31d09` ; identité métier stable
+pour V4, comportement plein-enveloppe conservé pour les non-V4. Résultat :
+**109/109 tests Node**, `tsc` et `git diff --check` PASS. Détail :
+`evidence/V7-06A_FIX_PC_R2.md`. Les P2 de la revue restent documentés hors
+périmètre.
+
 ## Limites
 
 - Aucune qualification Pixel/ADB dans cette tranche ; la VM reste à exécuter.
