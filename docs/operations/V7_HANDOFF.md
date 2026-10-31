@@ -71,6 +71,14 @@ toujours `APPROVED` v2 (1 activité) ; inbox V4 absente ; code de présentation
 localement mais **les révocations ne sont pas synchronisées** : le Core peut encore
 détenir DAY_PLAN `GRANTED` v2. Toute prochaine exécution autorisée doit d’abord
 synchroniser ces révocations ; aucune synchronisation n’a été tentée après le run.
+Si le Pixel physique est un jour reconnecté, synchroniser ces révocations avant toute
+autre action ; les tests VM doivent repartir d’un état/appairage propres.
+
+**Décision propriétaire (2026-10-31) :** le Pixel physique est rendu ; **tous les
+prochains tests devront se faire via VM/AVD**. Aucune nouvelle exécution
+ADB/instrumentée sur le Pixel physique n’est autorisée. Un client ADB suspendu hérité
+de la copie du token R3B a été terminé côté hôte ; l’état du fichier token sur
+l’appareil n’a pas été revérifié.
 
 ## Travail immédiat à reprendre
 

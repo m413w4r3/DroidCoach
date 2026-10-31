@@ -5,6 +5,7 @@
 **Branche d'intégration locale :** `feat/atlas-v7-remote-operational` (aucun push sans autorisation distincte).
 **HEAD d'exécution V7-05 :** `fdaef7b38601b8143a023615de559b9954cf7d53` (2026-10-31).
 **Environnement cible de clôture :** Pixel physique Android 17 / API 37, réseau cellulaire, sans Wi-Fi.
+**Décision propriétaire 2026-10-31 :** le Pixel physique est rendu ; les prochains tests se feront via VM/AVD (voir `docs/DECISIONS_AUTOMATIQUES.md`).
 **Modèle des sous-agents :** `codex:gpt-6-luna`, effort effectif `xhigh` — vérifié dans les métadonnées Paseo de chaque session. Aucune substitution.
 **Règle :** une notification de fin n'est pas une acceptation. Chaque résultat est examiné, revu, puis intégré localement par le parent.
 
