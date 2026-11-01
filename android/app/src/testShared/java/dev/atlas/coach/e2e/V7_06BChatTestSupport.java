@@ -14,7 +14,7 @@ public final class V7_06BChatTestSupport {
     private static final Pattern TOOL_METADATA_SUFFIX_PATTERN = Pattern.compile(
             "État des outils\\s*:\\s*([a-z_]+)\\s*\\((\\d+) appel\\(s\\)\\)\\.\\s*"
                     + "Proposition\\(s\\)\\s*\\((\\d+)\\)\\s*—\\s*identifiants\\s*:\\s*"
-                    + "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:,\\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*)\\.\\s*"
+                    + "([^.]*)\\.\\s*"
                     + "Contenu à synchroniser via la boîte de réception\\.",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern ZERO_PROPOSAL_METADATA_PATTERN = Pattern.compile(
@@ -48,28 +48,54 @@ public final class V7_06BChatTestSupport {
             throw new IllegalStateException("V4 tool metadata is missing from the assistant response");
         }
         String suffix = text.substring(metadataIndex).stripTrailing();
-        if (ZERO_PROPOSAL_METADATA_PATTERN.matcher(suffix).matches()) {
-            throw new IllegalStateException("PROPOSAL_MISSING");
-        }
-        Matcher match = TOOL_METADATA_SUFFIX_PATTERN.matcher(suffix);
-        if (!match.matches()) {
-            throw new IllegalStateException("V4 tool metadata is not the generated suffix of the assistant response");
+        String toolState;
+        int toolCallCount;
+        int proposalCount;
+        String proposalIdsText;
+
+        Matcher zeroMatch = ZERO_PROPOSAL_METADATA_PATTERN.matcher(suffix);
+        if (zeroMatch.matches()) {
+            toolState = zeroMatch.group(1);
+            toolCallCount = Integer.parseInt(zeroMatch.group(2));
+            proposalCount = 0;
+            proposalIdsText = "";
+        } else {
+            Matcher match = TOOL_METADATA_SUFFIX_PATTERN.matcher(suffix);
+            if (!match.matches()) {
+                throw new IllegalStateException("V4 tool metadata is not the generated suffix of the assistant response");
+            }
+            toolState = match.group(1);
+            toolCallCount = Integer.parseInt(match.group(2));
+            proposalCount = Integer.parseInt(match.group(3));
+            proposalIdsText = match.group(4);
         }
 
-        int proposalCount = Integer.parseInt(match.group(3));
+        if (!"completed".equalsIgnoreCase(toolState)) {
+            throw new IllegalStateException("TOOL_STATE_NOT_COMPLETED");
+        }
+
         List<String> proposalIds = new ArrayList<>();
-        if (proposalCount > 0) {
-            for (String id : match.group(4).split(",")) {
+        if (!proposalIdsText.trim().isEmpty()) {
+            for (String id : proposalIdsText.split(",", -1)) {
                 proposalIds.add(id.trim());
             }
         }
         if (proposalCount != proposalIds.size()) {
-            throw new AssertionError("metadata proposal count must match the returned ID list");
+            throw new IllegalStateException("PROPOSAL_COUNT_MISMATCH");
         }
-        if (!proposalIds.stream().allMatch(V7_06BChatTestSupport::isCanonicalUuid)) {
-            throw new AssertionError("proposal IDs must be canonical UUIDs");
+        if (proposalCount == 0) {
+            throw new IllegalStateException("PROPOSAL_MISSING");
         }
-        return new ToolMetadata(match.group(1), Integer.parseInt(match.group(2)), proposalIds);
+        for (int index = 0; index < proposalIds.size(); index++) {
+            String proposalId = proposalIds.get(index);
+            if (!isCanonicalUuid(proposalId)) {
+                throw new IllegalStateException("PROPOSAL_ID_INVALID");
+            }
+            if (proposalIds.subList(0, index).contains(proposalId)) {
+                throw new IllegalStateException("PROPOSAL_ID_DUPLICATE");
+            }
+        }
+        return new ToolMetadata(toolState.toLowerCase(Locale.ROOT), toolCallCount, proposalIds);
     }
 
     private static boolean isCanonicalUuid(String value) {
