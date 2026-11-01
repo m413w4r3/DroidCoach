@@ -129,13 +129,21 @@ sont explicitement non prouvées par le code.
 | Test mauvais token + révoqué → `AUTH_FAILED`, jamais `DEVICE_REVOKED` | **PASS** — test dédié |
 | Test token correct + révoqué → `DEVICE_REVOKED` | **PASS** — V1 et V2 |
 | Tests Node complets | **PASS** — parent a rejoué `npm run test:unit` : 18 fichiers, **114/114** |
-| Tests JVM politique d'état / type d'échec | **PASS (rapporté)** — **902/902**, à rejouer sur le SHA intégré |
-| Test JVM enveloppe V1 sur transport V2 rejetée (pas de downgrade) | **PASS (rapporté)** — `RevocationEnvelopeProtocolTest` ; à rejouer sur le SHA intégré |
-| Compilation `assembleQaAndroidTest` (sonde renforcée) | **PASS (rapporté)** avec `-PqaTestBuildType=qa` ; à rejouer sur le SHA intégré |
+| Tests JVM politique d'état / type d'échec | **PASS** — inclus dans la suite intégrée **909/909** |
+| Test JVM enveloppe V1 sur transport V2 rejetée (pas de downgrade) | **PASS** — `RevocationEnvelopeProtocolTest` dans la suite intégrée |
+| Compilation `assembleQaAndroidTest` (sonde renforcée) | **PASS** — build QA final `cf82cd0`, sonde compilée |
 | Sonde instrumentée stricte sur Pixel/AVD | **NOT_RUN** — pas d'autorisation |
 
-Les résultats « rapportés » sont ceux de l'agent ; le parent les rejoue sur le SHA
-intégré final avant de prononcer un verdict.
+## 6. Intégration et verdict
+
+- Connecteur : `686d437` (rouge), `b822192` (fix), intégrés `c6de88f`, `d3619d4`.
+- Android : `207bea2` (fix), intégré `c1bb1d1`.
+- Node : **114/114 PASS** ; JVM intégrée : **909/909 PASS** ; QA AndroidTest
+  compilé.
+- **`GO_REVOKED_DEVICE_SERVER` = GO** : le refus serveur reste effectif et testé.
+- **`GO_A4_4_CLIENT` = NO GO — NOT_RUN`** : la sonde stricte renforcée n'a pas
+  été exécutée sur appareil. Les tests déterministes prouvent la correction du
+  protocole et de l'état, pas le PASS instrumenté exigé.
 
 ## 6. Limites
 

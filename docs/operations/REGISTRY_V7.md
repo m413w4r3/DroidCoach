@@ -9,6 +9,36 @@
 **Modèle des sous-agents :** `codex:gpt-6-luna`, effort effectif `xhigh` — vérifié dans les métadonnées Paseo de chaque session. Aucune substitution.
 **Règle :** une notification de fin n'est pas une acceptation. Chaque résultat est examiné, revu, puis intégré localement par le parent.
 
+## 0bis. Campagne V7-06D — fiabilité remote et révocation A4-4 (2026-11-01)
+
+Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
+`V7-06D_FINAL_REPORT.md`. Diagnostic : `V7-06D_DIAGNOSTIC.md`.
+
+- Base `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`, branche locale
+  `feat/atlas-v7-06d-remote-hardening`, aucun push/PR/merge distant.
+- Audits A1/A2/A3 lecture seule (`codex/gpt-6-luna`, `xhigh`) : deadlock G↔C
+  atteignable et reproduit ; trame pré-auth `DEVICE_REVOKED` en V1 pour un client
+  V2 + ordre token/révocation ; provenance APK documentaire.
+- Correctifs intégrés : chat `813432b` (pumps callback hors moniteur client,
+  attente de gate bornée, `abort` hors verrou T, `TIMEOUT_NOT_SENT`, traces
+  bornées) ; A4-4 `d3619d4`/`c1bb1d1` (protocole d'erreur, token avant
+  révocation, `REVOKED` collant, sonde renforcée) ; provenance
+  `173dd01`/`8d0aa1c`/`7b0ae5a` (manifeste de build embarqué, gate
+  installé↔construit, proof enrichi).
+- Suites sur le SHA intégré `cf82cd0` : Android JVM **909/909**, lint/build PASS,
+  Node **114/114**, proxy **19/19**, harnais **25/25**, backend
+  **397 passed/1 skipped**, `git diff --check` PASS.
+- Build final QA : APK app `1e31a643…`, test `05dd465b…`, manifeste
+  `8d678af5…`, source `cf82cd0…`, `worktree_clean=true`, variante `qa`,
+  `compile_sdk=37.2`.
+- **Aucune qualification physique** : sonde A4-4 et série de démarrages froids
+  `NOT_RUN`, faute d'autorisation ciblée. `GO_CHAT_RELIABILITY_QA` et
+  `GO_A4_4_CLIENT` ne sont pas accordés ; `GO_CHAT_CONCURRENCY`,
+  `GO_REVOKED_DEVICE_SERVER` et `GO_APK_PROVENANCE` (avec limitation) le sont.
+- Aucun ADB, AVD, Pixel, Docker de campagne ou service live modifié ; identités
+  live résiduelles inchangées (`pixel-v7`, `r3c-pixel-final`, consentements Core
+  `GRANTED v2`), révocation/rotation soumises à autorisation séparée.
+
 ## 0. Campagne V7-06A — fiabilisation V4 (2026-11-01)
 
 Registre détaillé : `REGISTRY_V7_06A.md`. Rapport final : `V7-06A_FINAL_REPORT.md`.

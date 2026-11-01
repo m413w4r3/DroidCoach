@@ -98,7 +98,9 @@ Invariants :
 | Test rouge G↔C sur BASE | **PASS (rouge reproduit)** — commit `f6e8659`, exécuté par le parent sur un worktree détaché : `RelayGateCycleTest.callbackWaitingForConsentGateCannotBlockTheNextSocketWrite` échoue en 2,25 s ; le thread `relay-gate-holder` tient le `ReentrantLock` de `AgentConsentGate` et `relay-cycle-reader` est `WAITING` sur ce verrou dans `RelayBackendTransport.pump()` |
 | Test vert après correctif | **PASS (ciblé)** — le même `RelayGateCycleTest` passe sur le code corrigé |
 | Tests ciblés de non-régression | **PASS** — `RelayConcurrencyGateTest` 3/3, `RelayBackendTransportTest` 24/24, `CoreV4DiagnosticsTest` 4/4, `RelayCoreV4HttpTransportTest` 12/12 (résultats locaux de la branche X) |
-| Suite JVM complète | **PASS (branche X)** — 118 fichiers, **903/903**, 0 échec/erreur/ignoré ; à rejouer sur le SHA intégré |
+| Suite JVM complète sur SHA intégré (`cf82cd0`) | **PASS** — 119 fichiers, **909/909**, 0 échec/erreur/ignoré |
+| Lint hors ligne sur SHA intégré | **PASS** |
+| Build `assembleDebug` | **PASS** |
 | Lint | **EN ATTENTE** |
 | Test timeout avant envoi (`TIMEOUT_NOT_SENT`, aucun octet) | **PASS (ciblé)** — `timeoutWaitingForConsentGateReturnsNotSentWithinTheRequestDeadline` |
 | Test timeout après acceptation (une seule requête, incertain) | **PASS (ciblé)** — `expiresTimedOutRequestAndSendsOnlyBestEffortCancel` |
@@ -118,3 +120,15 @@ Invariants :
   elles sont documentées comme risques résiduels.
 - Aucun test sur téléphone n'a été exécuté ; `GO_CHAT_RELIABILITY_QA` reste
   `NOT_RUN`.
+
+## 7. Intégration et verdict
+
+- Rouge : `f6e8659` (agent), intégré `f0a2099`.
+- Correctif : `df8f8ae` (agent), intégré `813432b`.
+- Suite JVM intégrée : **909/909 PASS** ; lint **PASS** ; build debug **PASS**.
+- **Verdict `GO_CHAT_CONCURRENCY` = GO** : deadlock atteignable reproduit puis
+  supprimé, tests discriminants verts, identités et barrières de consentement
+  préservées.
+- **`GO_CHAT_RELIABILITY_QA` = NOT_RUN** : aucune autorisation physique, aucune
+  série de démarrages froids. Le GO de concurrence n'est pas une preuve de
+  fiabilité sur téléphone.

@@ -5,6 +5,43 @@ Branche locale : `feat/atlas-v7-remote-operational`
 Base mission : `b759bdafbf0c67eda1a14ae2cf2f3fac75239e4c`  
 Aucun push, PR ou merge distant effectué.
 
+## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
+
+**Statut global : deux P1 diagnostiqués et corrigés avec tests discriminants ;
+P2 de provenance APK↔SHA fermé par un mécanisme vérifié ; aucune qualification
+physique (`NOT_RUN`) ; `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`,
+`GO_APK_PROVENANCE` (avec limitation) ; `GO_CHAT_RELIABILITY_QA` et
+`GO_A4_4_CLIENT` non accordés ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` = NO GO.**
+
+- Branche locale `feat/atlas-v7-06d-remote-hardening`, base
+  `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`, aucun push/PR/merge distant.
+- Trois audits lecture seule `codex/gpt-6-luna`/`xhigh` : deadlock G↔C du chat
+  (cycle complet, timeout inopérant) ; trame pré-auth `DEVICE_REVOKED` émise en
+  V1 pour un client V2 + ordre token/révocation ; provenance APK documentaire.
+- Correctif chat `df8f8ae` (intégré `813432b`) : pumps de callback hors du
+  moniteur client, attente de consent gate bornée, `abort` hors du verrou
+  transport, `TIMEOUT_NOT_SENT` distinct, traces bornées ; rouge `f6e8659`
+  reproduit sur BASE, JVM intégrée **909/909**.
+- Correctif A4-4 `b822192`/`207bea2` (intégrés `d3619d4`/`c1bb1d1`) : protocole
+  d'erreur respecté, token vérifié avant révocation, état `REVOKED` collant après
+  le close relay 1012, sonde instrumentée renforcée (état + type d'échec).
+- Provenance `04960c6`/`4c8b691`/`49ef354` (intégrés `173dd01`/`8d0aa1c`/
+  `7b0ae5a`) : manifeste de build embarqué dans les deux APK, gate
+  installé↔construit, proof enrichi ; build final `cf82cd0`, APK
+  `1e31a643…`/`05dd465b…`, manifeste `8d678af5…`, `worktree_clean=true`.
+- Suites : Node **114/114**, proxy **19/19**, harnais **25/25**, backend
+  **397 passed/1 skipped**, lint/build PASS, `git diff --check` PASS.
+- Aucun ADB/AVD/Pixel/Docker de campagne ; contrôles live strictement en lecture
+  seule. Identités résiduelles inchangées : `pixel-v7` et `r3c-pixel-final` non
+  révoqués, consentements Core `GRANTED v2` ; aucune révocation/rotation
+  exécutée.
+- Prochaines actions : autorisation physique ciblée (sonde A4-4 + série de
+  démarrages froids), revue indépendante sur le SHA final, puis décisions live
+  séparées (révocation des deux devices, rotation éventuelle du bearer Core).
+- Preuves : `V7-06D_FINAL_REPORT.md`, `V7-06D_DIAGNOSTIC.md`,
+  `REGISTRY_V7_06D.md`, `evidence/V7-06D_CHAT_CONCURRENCY.md`,
+  `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`.
+
 ## V7-06C — Coach Android QA puis transport public (2026-11-01)
 
 **Statut global : APPLY/REJECT/ACK Android QA GO ; harnais, chat, boucle QA et WSS

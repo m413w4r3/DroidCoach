@@ -134,9 +134,27 @@ APK installés ne peuvent plus être vérifiés, porte
 | Variante / SDK | `qa` / `compile_sdk=37.2`, `min_sdk=26`, `target_sdk=36` |
 | Scénario | `v7-06c-android-apply` (build de validation) |
 
-Le build final de la campagne est reconstruit sur le SHA intégré et documenté dans
-`V7-06D_FINAL_REPORT.md` ; les hashes ci-dessus ne sont pas réutilisés comme
+Le build final de la campagne a été reconstruit sur le SHA intégré et documenté
+dans `V7-06D_FINAL_REPORT.md` ; les hashes ci-dessus ne sont pas réutilisés comme
 preuve d'un autre SHA.
+
+### Build final intégré (`cf82cd0`, worktree propre)
+
+| Élément | Valeur |
+|---|---|
+| APK app QA | `1e31a6437065a0b6788e1c2d66238ab00f34f850e54e5195b5b5b34cf5ace7b8` |
+| APK AndroidTest QA | `05dd465be19f969d46573ac6f8c8604860cdf6aa17b536ad094e73acef8d25fd` |
+| Manifeste canonique | `8d678af5b2dca8197b580a962a52078901e884bc24e5dcae7ad2f443cc815bb7` |
+| Source / arbre | `cf82cd02a8e00f75d1cd7d476a84691a276f3011` / `1d7c1a6069abc2878aa11805f29b347863cbd047` |
+| Propreté / variante | `worktree_clean=true` / `qa` |
+| SDK | `compile_sdk=37.2`, `min_sdk=26`, `target_sdk=36` |
+| Version | code `1`, nom `0.1.0-qa` |
+| Scénario | `v7-06d-final` |
+| Manifestes app/test | identiques octet pour octet |
+
+Le HEAD documentaire final peut différer de `cf82cd0` uniquement par des
+changements `docs/` ; le SHA compilé et le manifeste embarqué restent
+`cf82cd0…`. Aucun APK installé n'a été vérifié sur appareil dans V7-06D.
 
 ## 6. Limites
 
@@ -147,3 +165,11 @@ preuve d'un autre SHA.
   `INCONCLUSIVE` pour le lien APK↔source et ne sont pas reclassées.
 - Aucun APK n'est publié ; seuls des hashes et des champs non sensibles sont
   conservés.
+
+## 7. Verdict
+
+**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS** : la chaîne
+source→manifeste→APK est vérifiée sur le build intégré `cf82cd0` et le gate
+installé↔construit est couvert par des tests négatifs ; aucun APK installé n'a
+été vérifié sur appareil dans V7-06D. Les preuves V7-06C historiques restent
+`INCONCLUSIVE` pour ce lien et ne sont pas reclassées.

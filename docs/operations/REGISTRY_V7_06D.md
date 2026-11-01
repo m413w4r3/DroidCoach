@@ -74,7 +74,7 @@ séparée (réappairage/reconfiguration possibles).
 | V7-06D-A2-REVOCATION-A4-4 | Matrice des refus et perte du code/état côté client | PREFLIGHT | **ACCEPTED (lecture seule)** — cause exacte : trame pré-auth `DEVICE_REVOKED` émise en V1 pour un client V2 → parse strict Android → `ERROR` + `abort(4003)` + `close_code=null` ; le relais transforme le close serveur en 1012 ; `revoked_at` vérifié avant le token (divulgation) | `3b0bbe77-4d1b-44db-8da1-16f06f61f854` | `/tmp/atlas-v7-06d-a2-revocation-ro` | matrice, point de perte, ordre token, tests discriminants |
 | V7-06D-A3-RELIABILITY-PROVENANCE | Durabilité/corrélation/harnais + traçabilité APK↔SHA | PREFLIGHT | **ACCEPTED (lecture seule)** — aucun P0 ; P1 identité de requête non persistée, P1 attente de gate non bornée avant le timeout, P2 provenance documentaire, P2 403 direct, P2 gate d'instrumentation permissif, P2 timeouts ADB ; design manifeste fourni | `5f2eb93c-cc6c-4e9d-9f36-5db1fc31e3dc` | `/tmp/atlas-v7-06d-a3-proof-ro` | rapport structuré, file:line, champs absents, tests négatifs proposés |
 
-| V7-06D-X-CHAT-CONCURRENCY | Test rouge G↔C, correction verrous/attente bornée, distinction timeout avant/après envoi, traces bornées | A1 | **RUNNING** | `ac0cad8c-1364-498e-b6c9-a0eceb302a71` | `/tmp/atlas-v7-06d-fix-chat` (`fix/v7-06d-chat-concurrency`) | test rouge échoue sur BASE puis vert ; JVM complet ; aucun envoi après refus/timeout pré-envoi |
+| V7-06D-X-CHAT-CONCURRENCY | Test rouge G↔C, correction verrous/attente bornée, distinction timeout avant/après envoi, traces bornées | A1 | **ACCEPTED (code)** — rouge `f6e8659` vérifié sur BASE (échec 2,247 s, reader WAITING sur G dans `pump`), fix `df8f8ae` intégré `f0a2099`/`813432b` ; JVM intégrée **909/909**, lint PASS, build debug PASS ; aucun run appareil | `ac0cad8c-1364-498e-b6c9-a0eceb302a71` | `/tmp/atlas-v7-06d-fix-chat` (`fix/v7-06d-chat-concurrency`) | test rouge échoue sur BASE puis vert ; JVM complet ; aucun envoi après refus/timeout pré-envoi |
 | V7-06D-Y-A4-4-REVOCATION | Protocole DEVICE_REVOKED pré-auth, ordre token/révocation, état REVOKED collant, sonde stricte renforcée | A2 | **ACCEPTED (code)** — commits `686d437` (rouge), `b822192` (connecteur), `207bea2` (Android) ; test rouge revérifié par le parent (V1 reçu au lieu de V2), Node **114/114 PASS** revérifié, JVM **902/902** rapporté, probe compilée avec `-PqaTestBuildType=qa` | `e3d364f5-0545-4692-a02d-46a538d8b0ca` | `/tmp/atlas-v7-06d-fix-a4-4` (`fix/v7-06d-a4-4-revocation`) | test rouge V1→V2, Node complet, JVM policy, probe compilée |
 | V7-06D-Z-APK-PROVENANCE | Manifeste de build embarqué + vérification APK installés + champs proof + tests négatifs | A3 | **ACCEPTED (code)** — commits `04960c6` (tests), `4c8b691` (implémentation), `49ef354` (suffixe Android) ; intégrés `173dd01`, `8d0aa1c`, `7b0ae5a` ; harnais **25/25 PASS** (parent), builds QA PASS, manifests identiques dans les deux APK (`worktree_clean=true`, `variant=qa`, `compile_sdk=37.2`, `source_sha=49ef354`), gate installé↔construit testé ; aucun run appareil | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | `/tmp/atlas-v7-06d-feat-provenance` (`feat/v7-06d-apk-provenance`) | manifeste extrait des deux APK, gate installé→build, tests dirty/mismatch/absent, build QA PASS |
 
@@ -88,7 +88,32 @@ séparée (réappairage/reconfiguration possibles).
 | 2026-11-01 | `5f2eb93c-cc6c-4e9d-9f36-5db1fc31e3dc` | V7-06D-A3 audit fiabilité/provenance | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | **ACCEPTED** — identité de requête non persistée, attente de gate non bornée, provenance documentaire ; design et tests négatifs |
 | 2026-11-01 | `e3d364f5-0545-4692-a02d-46a538d8b0ca` | V7-06D-Y correction A4-4 | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — rouge connecteur vérifié, Node 114/114 revérifié, JVM 902/902 rapporté, sonde compilée ; intégré `c6de88f`/`d3619d4`/`c1bb1d1` |
 | 2026-11-01 | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | V7-06D-Z provenance APK | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — harnais 25/25 revérifié, builds QA PASS, manifests APK app/test identiques, `worktree_clean=true` ; intégré `173dd01`/`8d0aa1c`/`7b0ae5a` |
-| 2026-11-01 | `ac0cad8c-1364-498e-b6c9-a0eceb302a71` | V7-06D-X concurrence chat | codex / `gpt-6-luna` / `xhigh` | **RUNNING** — test rouge vérifié sur BASE, tests ciblés verts, JVM complet 903/903 rapporté, lint en cours |
+| 2026-11-01 | `ac0cad8c-1364-498e-b6c9-a0eceb302a71` | V7-06D-X concurrence chat | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — rouge vérifié sur BASE, fix `df8f8ae` intégré `813432b`, JVM intégrée **909/909**, lint PASS, aucun run appareil |
+
+## 4bis. Résultats finaux d'intégration
+
+SHA de code et de build de provenance : `cf82cd02a8e00f75d1cd7d476a84691a276f3011`
+(worktree propre). Le HEAD documentaire final ne change que `docs/`.
+
+| Suite | Résultat |
+|---|---|
+| Android JVM `:app:testDebugUnitTest --offline --rerun-tasks` | **909/909 PASS**, 119 fichiers, 0 échec/erreur/ignoré |
+| Android lint `:app:lintDebug --offline` | **PASS** |
+| Builds `assembleDebug`, `assembleQa`, `assembleQaAndroidTest` | **PASS** |
+| Node connecteur | **114/114 PASS**, 18 fichiers |
+| Proxy relay | **19/19 PASS** |
+| Harnais V7-06C/V7-06D | **25/25 PASS** |
+| Backend `pytest -q` | **397 passed / 1 skipped**, 39 subtests |
+| `py_compile`, `git diff --check` | **PASS** |
+| APK final app / test | `1e31a643…` / `05dd465b…` ; manifeste `8d678af5…`, source `cf82cd0…`, propre, `qa`, `compile_sdk=37.2` |
+| Sonde A4-4 sur appareil | **NOT_RUN** |
+| Série de démarrages froids | **NOT_RUN** |
+
+**Statut global :** deux P1 corrigés avec preuves déterministes ; P2 provenance
+fermé par un mécanisme vérifié ; **aucune qualification physique**. Verdicts :
+`GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`, `GO_APK_PROVENANCE`
+(GO_WITH_LIMITATIONS) ; `GO_CHAT_RELIABILITY_QA` et `GO_A4_4_CLIENT`
+**NOT_RUN** ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` **NO GO**.
 
 ## 5. Règles de preuve
 
