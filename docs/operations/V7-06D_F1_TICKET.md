@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `V7-06D-PHYS-F1 / F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS NOT_RUN` |
+| TASK_ID / statut | `V7-06D-PHYS-F1 / F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW PENDING` |
 | Objectif | Supprimer l'échec F1 observé sur la série physique, rendre l'oracle de test exact, puis prouver la correction par tests déterministes et une nouvelle série de 5+ démarrages froids. |
 | Dépendances | V7-06D intégré localement sur `main` ; A4-4 **PASS** ; provenance QA **GO** ; preuve `evidence/V7-06D_PHYSICAL_QA.md`. |
 | BASE_SHA | `06424fdff48fb63eebe22ec7a7dd43282dbf428b` (main locale après merge fast-forward ; `origin/main` reste `9ad90c7…`). |
@@ -110,5 +110,8 @@ Aucune correction ne doit inventer une proposition, rejouer un outil de manière
 3. `F1-REVIEW` (lecture seule) : **GO_WITH_LIMITATIONS** — session
    `b143ca97-7418-4e21-b83f-3271c3d63304`, aucun P0/P1 code ; P1
    `EVIDENCE_GAP` physique, P2 de couverture du parseur.
-4. `F1-PHYS` : **NOT_RUN** — nouvelle autorisation physique ciblée requise.
-   Aucun ADB lancé. `GO_CHAT_RELIABILITY_QA` reste **NO GO**.
+4. `F1-PHYS` : **PASS** — autorisation ciblée « F1 + A4-4 » ; 5/5 démarrages
+   froids PASS, zéro échec F1, sonde A4-4 PASS, gate de provenance installé
+   vérifié ; preuve `evidence/V7-06D_F1_PHYSICAL_QA.md`.
+5. Revue indépendante de la preuve physique : **PENDING** ; elle seule peut
+   confirmer `GO_CHAT_RELIABILITY_QA`.

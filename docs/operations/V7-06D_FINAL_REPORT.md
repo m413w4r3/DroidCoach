@@ -540,8 +540,19 @@ Vérifications déterministes sur le SHA final : Android JVM **912/912**, backen
 **GO_WITH_LIMITATIONS**, aucun P0/P1 code ; P1 `EVIDENCE_GAP` physique, P2 de
 couverture du parseur et d'ordre `oneOf[0]`.
 
-**Aucune série physique F1 n'a été exécutée (`NOT_RUN`).** Les verdicts du
-§13.4 restent donc inchangés, en particulier `GO_CHAT_RELIABILITY_QA` **NO GO**.
-Une nouvelle autorisation physique ciblée, 5+ démarrages froids avec gate de
-provenance et une relecture de la preuve sont requis avant toute mise à jour.
-Rapport détaillé : `V7-06D_F1_FIX_REPORT.md`.
+**Revalidation physique `V7-06D-F1-PHYS` (2026-11-01) :** autorisation ciblée
+« F1 + A4-4 », paquet QA uniquement. **5/5 démarrages froids PASS**, zéro échec
+F1, proposition/ACK `APPLIED`, `tool_state=completed`, exactement une
+proposition ; **sonde A4-4 PASS** (`REVOKED`/`REVOKED`, `close_code=null`,
+aucune nouvelle session). Gate de provenance installé↔construit vérifié sur les
+cinq APK : `source_sha=9149c47` (delta docs-only depuis le SHA revu `0749037`),
+`worktree_clean=true`, `runtime_sdk=37`, hashes installés = construits.
+Nettoyage final : aucun paquet QA, reverse ni stack restant, HOME/produit
+inchangés, aucun service live. La boucle de nettoyage automatique par tentative
+était incomplète ; les paquets restants ont été supprimés manuellement.
+
+Verdicts du §13.4 mis à jour dans ce périmètre : `GO_CHAT_RELIABILITY_QA`
+**GO sous réserve de la revue indépendante de la preuve physique** ; les autres
+verdicts sont inchangés, produit/public toujours **NO GO**. Preuve :
+`evidence/V7-06D_F1_PHYSICAL_QA.md`. Rapport détaillé :
+`V7-06D_F1_FIX_REPORT.md`.

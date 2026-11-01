@@ -58,12 +58,16 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   skipped**, Node **114/114**, proxy **19/19**, harnais **27/27**, lint/build/
   AndroidTest PASS ; aucun code produit modifié. Revue indépendante
   `b143ca97…` : **GO_WITH_LIMITATIONS**, aucun P0/P1 code, P1 `EVIDENCE_GAP`
-  physique, P2 couverture du parseur. **Série physique F1 `NOT_RUN`** : aucun
-  ADB lancé ; 5+ démarrages froids restent requis.
+  physique, P2 couverture du parseur. **Campagne physique F1** : **5/5
+  démarrages froids PASS**, zéro échec F1, sonde A4-4 **PASS**
+  (`REVOKED`/`REVOKED`, aucune nouvelle session), provenance installée vérifiée
+  sur les cinq APK (`source_sha=9149c47`, delta docs-only depuis `0749037`).
+  Preuve `evidence/V7-06D_F1_PHYSICAL_QA.md` ; revue indépendante de la preuve
+  **PENDING**.
 - Verdicts après phase physique : `GO_CHAT_CONCURRENCY` **GO**,
   `GO_REVOKED_DEVICE_SERVER` **GO**, `GO_A4_4_CLIENT` **GO**,
-  `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **NO GO**
-  (F1 corrigé code, physique `NOT_RUN`), `GO_REMOTE_V4_PUBLIC`
+  `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **GO sous
+  réserve de la revue de preuve**, `GO_REMOTE_V4_PUBLIC`
   **GO_WITH_LIMITATIONS hérité**, `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE`
   **NO GO**.
 - Phase physique : Pixel 9 Pro XL API 37.1 et ADB utilisés avec autorisation

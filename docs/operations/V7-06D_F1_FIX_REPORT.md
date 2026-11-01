@@ -2,7 +2,7 @@
 
 **Date :** 2026-11-01
 **Ticket :** `V7-06D-PHYS-F1` (`docs/operations/V7-06D_F1_TICKET.md`)
-**Statut :** **F1-FIX IMPLEMENTED (code) — revue `GO_WITH_LIMITATIONS` — physique `NOT_RUN`**
+**Statut :** **F1-FIX IMPLEMENTED (code) — revue `GO_WITH_LIMITATIONS` — physique F1 `PASS` (5/5) + A4-4 `PASS` — preuve physique en revue indépendante**
 **Branche :** `fix/v7-06d-f1-fix`, aucun push/PR/merge distant.
 **BASE :** `25fbab5` (docs) / code `06424fd` (`main` locale).
 **Rouge :** `725f9e3089f85a609427e7e256158e0b46ff7e73`.
@@ -82,18 +82,21 @@ par le parent sur le SHA final avec `--offline --rerun-tasks`.
 | `python3 -m py_compile backend/tests/test_chat_orchestration_v4.py` | **PASS** |
 | `git diff --check` | **PASS** ; worktree propre, aucun symlink suivi |
 
-Aucun ADB, Pixel/AVD, Docker, réseau externe ou service live n'a été utilisé.
-Aucun test physique n'a été exécuté pour ce correctif.
+Aucun ADB, Pixel/AVD ou service live n'a été utilisé pour cette phase
+déterministe. Les tests physiques ont ensuite été exécutés dans la campagne
+séparée `V7-06D-F1-PHYS` (voir §5bis et
+`evidence/V7-06D_F1_PHYSICAL_QA.md`).
 
 ## 5. Revue indépendante
 
 La revue lecture seule du SHA `0749037` rend **`GO_WITH_LIMITATIONS`** :
 
 - **P0 : aucun.**
-- **P1 : `EVIDENCE_GAP` de qualification physique.** La preuve physique
-  existante reste `3 PASS / 2 FAIL` au SHA antérieur ; le ticket exige au moins
-  cinq démarrages froids, zéro échec F1 et la vérification des APK installés
-  avant tout GO. Cette revue ne remplace pas cette preuve.
+- **P1 : `EVIDENCE_GAP` de qualification physique — couvert par la campagne
+  `V7-06D-F1-PHYS`.** Cinq démarrages froids PASS, zéro échec F1, sonde A4-4
+  PASS et gate de provenance installé↔construit vérifié sur les cinq tentatives.
+  La revue indépendante de cette preuve physique est la dernière étape ; elle
+  ne rouvre pas le code.
 - **P2 : couverture du parseur.** Les tests couvrent zéro et une proposition en
   état `completed`, mais pas un statut non terminé ni des compteurs incohérents ;
   la branche zéro signale `PROPOSAL_MISSING` avant que l'appelant puisse
@@ -108,31 +111,53 @@ La revue n'a modifié aucun fichier suivi. Les compteurs backend/Node/proxy/
 harnais, qu'elle n'a pas relancés, ont été revérifiés indépendamment par le
 parent sur le SHA final (§4).
 
+## 5bis. Revalidation physique `V7-06D-F1-PHYS`
+
+Autorisation ciblée « F1 + sonde A4-4 » : paquet QA uniquement, stacks isolées,
+identités synthétiques, aucun test produit, aucun service live. Cinq démarrages
+froids ont été exécutés sur Pixel 9 Pro XL API 37.1, chacun avec une stack
+neuve, un paquet QA neuf et un build propre.
+
+- **5/5 PASS**, zéro échec F1 ; chaque proof est `PASS`, proposition et ACK
+  `APPLIED`, `tool_state=completed`, `tool_call_count=2`, exactement une
+  proposition, `forbidden_tool_count=0`, tool calls corrélés.
+- **A4-4 PASS** : `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle
+  session authentifiée, erreurs `0→1`.
+- **Provenance** : `source_sha=9149c47` (delta docs-only depuis `0749037`),
+  `worktree_clean=true`, `runtime_sdk=37`, `compile_sdk=37.2`, hashes installés
+  = hashes construits, `installed_apk_verified=true`,
+  `verification_result=VERIFIED`, certificat `da301466…`.
+- **Nettoyage** : le nettoyage automatique par tentative a laissé des paquets QA
+  à cause d'une consommation de `stdin` dans la boucle ; le parent les a
+  désinstallés manuellement. État final vérifié : aucun paquet QA, `adb reverse`
+  vide, aucune stack, HOME et produit inchangés, aucun service live modifié.
+- Preuve publique : `evidence/V7-06D_F1_PHYSICAL_QA.md` ; preuves privées
+  `0600` sous `/home/nill/.local/state/atlas-v7-06d-f1-phys/`.
+
 ## 6. Verdicts
 
 | Verdict | État |
 |---|---|
 | `F1-FIX` (code) | **ACCEPTED AVEC LIMITATIONS** — `GO_WITH_LIMITATIONS` de la revue ; aucun P0/P1 code |
-| Série physique F1 | **NOT_RUN** — autorisation ciblée requise ; aucun ADB lancé |
-| `GO_CHAT_RELIABILITY_QA` | **NO GO** — inchangé ; la preuve physique 5+ reste absente |
+| Série physique F1 | **PASS** — 5/5, zéro échec F1 |
+| Sonde A4-4 | **PASS** — `REVOKED`/`REVOKED`, aucune nouvelle session |
+| `GO_CHAT_RELIABILITY_QA` | **GO sous réserve de la revue indépendante de la preuve physique** ; sinon inchangé |
 | `GO_CHAT_CONCURRENCY` | **GO** — inchangé, non remis en cause par F1 |
 | `GO_REVOKED_DEVICE_SERVER` | **GO** — inchangé |
-| `GO_A4_4_CLIENT` | **GO** — inchangé |
-| `GO_APK_PROVENANCE` | **GO** — inchangé (APK QA physique antérieur) |
+| `GO_A4_4_CLIENT` | **GO** — confirmé sur appareil |
+| `GO_APK_PROVENANCE` | **GO** — confirmé par le gate installé des cinq APK QA |
 | `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS hérité** |
 | `GO_PIXEL_PRODUCT` / `GO_PRODUCT_REMOTE` | **NO GO** — aucun test produit |
 
 ## 7. Restant à faire
 
-1. Obtenir une **nouvelle autorisation physique ciblée** ; aucun ADB ne doit
-   être lancé sans elle.
-2. Reconstruire les APK QA depuis le SHA final, vérifier le gate de provenance
-   installé↔construit, puis exécuter **au moins 5 démarrages froids** avec zéro
-   échec F1.
-3. Faire relire la preuve physique produite ; alors seulement envisager
-   `GO_CHAT_RELIABILITY_QA`.
-4. Les P2 de couverture du parseur et d'ordre `oneOf` restent documentés ; ils
+1. Faire relire indépendamment la preuve physique
+   `evidence/V7-06D_F1_PHYSICAL_QA.md` et les preuves privées ; alors seulement
+   confirmer `GO_CHAT_RELIABILITY_QA`.
+2. Les P2 de couverture du parseur et d'ordre `oneOf` restent documentés ; ils
    ne bloquent pas la physique mais ne doivent pas être présentés comme fermés.
+3. Aucune nouvelle série physique n'est nécessaire sauf si la revue de preuve
+   relève un défaut.
 
 Aucun push, PR, merge distant ou modification live. `origin/main` reste
 `9ad90c7` ; `main` locale reste `06424fd` ; le correctif F1 n'est pas intégré.

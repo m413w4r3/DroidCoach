@@ -10,8 +10,9 @@ Aucun push, PR ou merge distant effectué.
 **Statut global : deux P1 diagnostiqués et corrigés avec tests discriminants ;
 P2 de provenance APK↔SHA fermé par un mécanisme vérifié ; phase physique
 complémentaire exécutée sur Pixel : A4-4 **PASS**, provenance installée **GO**,
-fiabilité chat **3/5 → NO GO**, F1 corrigé côté harnais mais **non revalidé
-physiquement (`NOT_RUN`)** ; `GO_CHAT_CONCURRENCY`,
+fiabilité chat **3/5 → NO GO**, F1 corrigé côté harnais et **revalidé
+physiquement 5/5 + A4-4 PASS**, revue de preuve en cours ;
+`GO_CHAT_CONCURRENCY`,
 `GO_REVOKED_DEVICE_SERVER`, `GO_A4_4_CLIENT`, `GO_APK_PROVENANCE` ;
 `GO_CHAT_RELIABILITY_QA` non accordé ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` =
 NO GO.**
@@ -59,14 +60,23 @@ NO GO.**
   **19/19**, harnais **27/27**, lint/build/AndroidTest PASS. Revue indépendante
   `b143ca97…` : **GO_WITH_LIMITATIONS**, aucun P0/P1 code ; P1 `EVIDENCE_GAP`
   physique, P2 couverture du parseur. Aucun code produit modifié.
+- Revalidation physique F1 (autorisation ciblée « F1 + A4-4 », 2026-11-01) :
+  **5/5 démarrages froids PASS**, zéro échec F1, chaque proposition/ACK
+  `APPLIED`, `tool_state=completed`, exactement une proposition ; **sonde A4-4
+  PASS** (`REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session) ;
+  provenance installée vérifiée (`source_sha=9149c47`, delta docs-only depuis
+  `0749037`, hashes installés = construits, `runtime_sdk=37`). Nettoyage final
+  propre après correction manuelle d'une boucle de nettoyage automate
+  incomplète ; aucun paquet QA, reverse ni stack restant. Preuve :
+  `evidence/V7-06D_F1_PHYSICAL_QA.md`.
 - Contrôles live strictement en lecture seule. Identités résiduelles inchangées :
   `pixel-v7` et `r3c-pixel-final` non révoqués, consentements Core `GRANTED v2` ;
   aucune révocation/rotation exécutée.
-- Prochaines actions : obtenir une **nouvelle autorisation physique ciblée**,
-  puis rejouer 5+ démarrages froids sur le SHA F1 avec gate de provenance
-  installé↔construit et zéro échec F1 ; faire relire la preuve. Décisions live
-  séparées (révocation des deux devices, rotation éventuelle du bearer Core).
-  Aucun ADB ne doit être lancé avant cette autorisation.
+- Prochaines actions : faire relire indépendamment la preuve physique F1
+  (`evidence/V7-06D_F1_PHYSICAL_QA.md`) ; alors seulement confirmer
+  `GO_CHAT_RELIABILITY_QA`. Décisions live séparées (révocation des deux
+  devices, rotation éventuelle du bearer Core). Aucune nouvelle série physique
+  n'est nécessaire sauf défaut relevé par cette revue.
 - Preuves : `V7-06D_FINAL_REPORT.md`, `V7-06D_DIAGNOSTIC.md`,
   `REGISTRY_V7_06D.md`, `evidence/V7-06D_CHAT_CONCURRENCY.md`,
   `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`,
