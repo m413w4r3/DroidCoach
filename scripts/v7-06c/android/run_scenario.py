@@ -758,7 +758,7 @@ def _write_evidence(evidence_dir: Path, proof: dict) -> tuple[Path, Path]:
         f"ACK: {proof['ack_state']} applied_plan_version={proof['applied_plan_version']}\n"
         f"Tool trace: {proof['tool_trace']['trace_record_count']} records; correlated={proof['tool_trace']['tool_call_ids_correlated']}\n"
         f"ACK replay: {proof['ack_replay']}; event_count={proof['ack_event_count']}; body_hash_match={proof['ack_body_hash_match']}\n"
-        f"Pull oracle: {proof['pull_count_after_runner']} pending proposals\n"
+        f"Pending proposals after runner: {proof['pending_proposal_count']}\n"
         f"Logcat: sha256={proof['runner']['logcat_sha256']}; attestation={proof['runner']['ack_replay_line']}\n"
         f"Network: {proof['network']} endpoint={proof['network_endpoint']['host']}:{proof['network_endpoint']['port']}\n"
         f"Consent events: {proof['consent_event_count']}; runner package={proof['runner']['package']}\n"
@@ -811,7 +811,6 @@ def _build_proof(action: str, device: dict, pairing: dict, runner: dict, marker:
         "consent_states": core["consent_states"],
         "consent_event_count": core["consent_event_count"],
         "pending_proposal_count": core["pending_proposal_count"],
-        "pull_count_after_runner": core["pending_proposal_count"],
         "snapshot_count": core["snapshot_count"],
         "connector_journal": journal,
         "tool_trace": trace,
