@@ -1,5 +1,6 @@
 package dev.atlas.coach.e2e
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,30 +10,48 @@ import org.junit.Test
 class V7_06DProposalOracleTest {
     @Test
     fun zeroProposalMetadataIsReportedAsProposalMissing() {
-        val failure = try {
-            V7_06BChatTestSupport.parseToolMetadata(
-                "État des outils : completed (2 appel(s)). Aucune proposition (0).",
-            )
-            throw AssertionError("zero proposals must fail the oracle")
-        } catch (failure: IllegalStateException) {
-            failure
-        }
-
-        assertEquals("PROPOSAL_MISSING", failure.message)
+        assertParserError(
+            "PROPOSAL_MISSING",
+            zeroProposalMetadata("completed"),
+        )
     }
 
     @Test
     fun oneProposalMetadataParsesAndRemainsEligibleForPassAssertions() {
         val proposalId = "00000000-0000-4000-8000-000000000201"
-        val metadata = V7_06BChatTestSupport.parseToolMetadata(
-            "État des outils : completed (2 appel(s)). Proposition(s) (1) — identifiants : " +
-                "$proposalId. Contenu à synchroniser via la boîte de réception.",
-        )
+        val metadata = V7_06BChatTestSupport.parseToolMetadata(proposalMetadata("completed", 1, proposalId))
 
         assertEquals("completed", metadata.toolState)
         assertEquals(2, metadata.toolCallCount)
         assertEquals(listOf(proposalId), metadata.proposalIds)
         assertEquals(1, metadata.proposalIds.size)
+    }
+
+    @Test
+    fun nonCompletedToolStateIsRejectedWithAnExplicitCode() {
+        val proposalId = "00000000-0000-4000-8000-000000000201"
+
+        assertParserError(
+            "TOOL_STATE_NOT_COMPLETED",
+            proposalMetadata("failed", 1, proposalId),
+        )
+    }
+
+    @Test
+    fun statusAndProposalErrorsRemainDistinguishableByPriority() {
+        assertParserError("TOOL_STATE_NOT_COMPLETED", zeroProposalMetadata("failed"))
+        assertParserError("TOOL_STATE_NOT_COMPLETED", proposalMetadata("failed", 2, ""))
+        assertParserError("PROPOSAL_MISSING", zeroProposalMetadata("completed"))
+    }
+
+    @Test
+    fun inconsistentProposalCountsAndDuplicateIdsAreRejectedWithExplicitCodes() {
+        val firstId = "00000000-0000-4000-8000-000000000201"
+        val secondId = "00000000-0000-4000-8000-000000000202"
+
+        assertParserError("PROPOSAL_COUNT_MISMATCH", proposalMetadata("completed", 2, firstId))
+        assertParserError("PROPOSAL_COUNT_MISMATCH", proposalMetadata("completed", 1, "$firstId, $secondId"))
+        assertParserError("PROPOSAL_ID_DUPLICATE", proposalMetadata("completed", 2, "$firstId, $firstId"))
     }
 
     @Test
@@ -50,11 +69,18 @@ class V7_06DProposalOracleTest {
         assertTrue(properties.has("changes"))
         assertTrue(properties.has("justification"))
         assertTrue(required.containsAll(listOf("plan_id", "base_version", "changes", "justification")))
-        val rescheduleSchema = properties.getJSONObject("changes")
+        val changeVariants = properties.getJSONObject("changes")
             .getJSONObject("items")
             .getJSONArray("oneOf")
-            .getJSONObject(0)
-            .getJSONObject("properties")
+        val rescheduleVariant = schemaVariantByConst(changeVariants, "op", "reschedule")
+        val reversedVariants = JSONArray()
+        for (index in changeVariants.length() - 1 downTo 0) {
+            reversedVariants.put(changeVariants.getJSONObject(index))
+        }
+        val rescheduleVariantAfterReordering = schemaVariantByConst(reversedVariants, "op", "reschedule")
+        assertEquals(rescheduleVariant.toString(), rescheduleVariantAfterReordering.toString())
+
+        val rescheduleSchema = rescheduleVariant.getJSONObject("properties")
         assertTrue(rescheduleSchema.has("op"))
         assertTrue(rescheduleSchema.has("activity_id"))
         assertTrue(rescheduleSchema.has("target_start_minute"))
@@ -75,5 +101,34 @@ class V7_06DProposalOracleTest {
         assertTrue(prompt.contains("\"duration_minutes\": 45"))
         assertTrue(prompt.contains("justification:"))
         assertFalse(prompt.contains("idempotency_key"))
+    }
+
+    private fun assertParserError(expectedCode: String, response: String) {
+        val failure = try {
+            V7_06BChatTestSupport.parseToolMetadata(response)
+            throw AssertionError("expected parser error $expectedCode")
+        } catch (failure: IllegalStateException) {
+            failure
+        }
+        assertEquals(expectedCode, failure.message)
+    }
+
+    private fun zeroProposalMetadata(toolState: String): String =
+        "État des outils : $toolState (2 appel(s)). Aucune proposition (0)."
+
+    private fun proposalMetadata(toolState: String, proposalCount: Int, proposalIds: String): String =
+        "État des outils : $toolState (2 appel(s)). Proposition(s) ($proposalCount) — identifiants : " +
+            "$proposalIds. Contenu à synchroniser via la boîte de réception."
+
+    private fun schemaVariantByConst(variants: JSONArray, propertyName: String, expected: String): JSONObject {
+        val matchingVariants = (0 until variants.length())
+            .map { variants.getJSONObject(it) }
+            .filter { variant ->
+                variant.optJSONObject("properties")
+                    ?.optJSONObject(propertyName)
+                    ?.optString("const") == expected
+            }
+        assertEquals("schema must have exactly one $propertyName=$expected branch", 1, matchingVariants.size)
+        return matchingVariants.single()
     }
 }
