@@ -691,6 +691,11 @@ class V4ToolService:
         capability: str,
     ) -> str:
         event = self.projections.latest_activity_status_event(device_ref, plan_id, activity_id)
+        if self.projections.has_activity_status_sequence_gap(device_ref):
+            raise V4ToolError(
+                "STALE_DATA", "le flux de statuts d'activité contient une lacune", capability=capability
+            )
+
         if event is None:
             return activity.get("status", "PLANNED")
 
@@ -698,10 +703,6 @@ class V4ToolService:
         if consent.state != "GRANTED" or consent.version is None:
             raise V4ToolError(
                 "STALE_DATA", "le consentement du statut d'activité est absent ou révoqué", capability=capability
-            )
-        if self.projections.has_activity_status_sequence_gap(device_ref):
-            raise V4ToolError(
-                "STALE_DATA", "le flux de statuts d'activité contient une lacune", capability=capability
             )
         if event["consent_version"] != consent.version:
             raise V4ToolError(

@@ -212,3 +212,23 @@ def test_missing_activity_status_event_uses_snapshot_status_fallback(tmp_path) -
 
     assert error.value.code == "VALIDATION_FAILED"
     assert proposal_count(projections) == 0
+
+
+def test_missing_activity_status_event_with_sequence_gap_rejects_plan_revision(tmp_path) -> None:
+    projections, service, now = make_service(tmp_path)
+    observed_at = stamp(now)
+    projections.save_day_plan_snapshot(
+        DEVICE_REF, approved_plan(observed_at), consent_version=3, received_at=observed_at
+    )
+    gap_event = status_event("IN_PROGRESS", observed_at)
+    gap_event.update({"event_id": "00000000-0000-4000-8000-000000000608", "sequence": 2})
+    with pytest.raises(SequenceGap):
+        projections.save_activity_status_event(
+            DEVICE_REF, gap_event, consent_version=3, received_at=observed_at
+        )
+
+    with pytest.raises(V4ToolError) as error:
+        service.atlas_propose_plan_revision(DEVICE_REF, proposal_args("reschedule"))
+
+    assert error.value.code == "STALE_DATA"
+    assert proposal_count(projections) == 0
