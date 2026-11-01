@@ -47,8 +47,9 @@ android {
         animationsDisabled = true
     }
 
-    // The physical QA test APK must target the isolated QA applicationId.
-    testBuildType = "qa"
+    // The physical QA test APK targets the isolated QA applicationId when
+    // requested; the default stays debug so the standard test tasks are unchanged.
+    testBuildType = (project.findProperty("qaTestBuildType") as String?) ?: "debug"
 
     sourceSets {
         getByName("qa") {
