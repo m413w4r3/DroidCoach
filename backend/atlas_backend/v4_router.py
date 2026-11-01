@@ -804,6 +804,7 @@ def create_v4_router(
                 "STALE_VERSION": 409,
                 "CONFLICT": 409,
                 "IDEMPOTENCY_CONFLICT": 409,
+                "VALIDATION_FAILED": 422,
                 "PERIOD_TOO_LARGE": 422,
                 "CURSOR_INVALID": 400,
                 "DATA_UNAVAILABLE": 503,
