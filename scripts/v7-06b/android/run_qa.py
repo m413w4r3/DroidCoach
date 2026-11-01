@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Sequence
@@ -46,6 +47,23 @@ def execute(command: Sequence[str], *, cwd: Path | None = None, env: dict[str, s
     result = subprocess.run(command, cwd=cwd, env=env, text=True, check=False)
     if result.returncode != 0:
         raise QaError(f"{Path(command[0]).name} failed with status {result.returncode}")
+
+
+def install_apk(serial: str, apk: Path) -> None:
+    last_status = None
+    for attempt in range(4):
+        result = subprocess.run(
+            ["adb", "-s", serial, "install", str(apk)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0 and "Success" in result.stdout:
+            return
+        last_status = result.returncode
+        if attempt < 3:
+            time.sleep(1.0 + attempt)
+    raise QaError(f"adb install failed with status {last_status} after bounded retries")
 
 
 def validate_suffix(value: str) -> str:
@@ -200,15 +218,33 @@ def require_not_installed(serial: str, package: str) -> None:
 
 
 def push_private_pairing(serial: str, package: str, pairing_path: Path) -> None:
-    inner = f"umask 077; cat > files/{PAIRING_NAME} && chmod 600 files/{PAIRING_NAME}"
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        ready = subprocess.run(
+            ["adb", "-s", serial, "shell", f"run-as {shlex.quote(package)} true"],
+            capture_output=True,
+            check=False,
+        )
+        if ready.returncode == 0:
+            break
+        time.sleep(0.5)
+    else:
+        raise QaError("QA app storage did not become available within the bounded wait")
+    inner = f"umask 077; mkdir -p files && cat > files/{PAIRING_NAME} && chmod 600 files/{PAIRING_NAME}"
     shell_command = f"run-as {shlex.quote(package)} sh -c {shlex.quote(inner)}"
-    result = subprocess.run(
-        ["adb", "-s", serial, "shell", "-T", shell_command],
-        input=pairing_path.read_bytes(),
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    result = None
+    for attempt in range(4):
+        result = subprocess.run(
+            ["adb", "-s", serial, "shell", "-T", shell_command],
+            input=pairing_path.read_bytes(),
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            break
+        if attempt < 3:
+            time.sleep(1.0)
+    if result is None or result.returncode != 0:
         subprocess.run(
             ["adb", "-s", serial, "shell", f"run-as {shlex.quote(package)} rm -f files/{PAIRING_NAME}"],
             check=False,
@@ -324,8 +360,8 @@ def run(args: argparse.Namespace) -> int:
     require_not_installed(args.serial, f"{app_id}.test")
 
     print(f"install_target={args.serial} package={app_id} action={args.action}")
-    execute(["adb", "-s", args.serial, "install", str(app_apk)])
-    execute(["adb", "-s", args.serial, "install", str(test_apk)])
+    install_apk(args.serial, app_apk)
+    install_apk(args.serial, test_apk)
 
     shell_package = f"{app_id}.test/{TEST_RUNNER}"
     if not QA_PACKAGE_PATTERN.fullmatch(app_id) or app_id == PRODUCT_PACKAGE:
