@@ -605,6 +605,8 @@ class ApkProvenanceTests(unittest.TestCase):
         run_scenario.require_pass_provenance(provenance)
         with self.assertRaisesRegex(run_qa.QaError, "PROOF_PROVENANCE_FIELD_MISSING"):
             run_qa.verify_complete_proof_provenance({**provenance, "unexpected_field": "rejected"})
+        with self.assertRaisesRegex(run_scenario.ScenarioFailure, "APK_PROVENANCE_FIELD_UNKNOWN"):
+            run_scenario.require_pass_provenance({**provenance, "unexpected_field": "rejected"})
 
         with tempfile.TemporaryDirectory() as temporary:
             app_apk = Path(temporary) / "app.apk"
@@ -647,6 +649,48 @@ class ApkProvenanceTests(unittest.TestCase):
                     run_qa.verify_complete_proof_provenance(invalid)
                 with self.assertRaises(run_scenario.ScenarioFailure):
                     run_scenario.require_pass_provenance(invalid)
+
+    def test_real_installed_artifact_verifier_result_passes_proof_gate(self) -> None:
+        manifest = self.valid_manifest()
+        app_id = manifest["application_id"]
+        test_id = manifest["test_application_id"]
+        built_hashes = {"app": "1" * 64, "android_test": "2" * 64}
+        cert_sha256 = "3" * 64
+
+        with tempfile.TemporaryDirectory() as temporary:
+            app_apk = Path(temporary) / "app.apk"
+            test_apk = Path(temporary) / "test.apk"
+            app_apk.write_bytes(b"synthetic-app-apk")
+            test_apk.write_bytes(b"synthetic-test-apk")
+            with patch(
+                "run_qa._package_dump",
+                side_effect=[f"Package [{app_id}]\n", f"Package [{test_id}]\n"],
+            ), patch("run_qa._package_version", return_value=(1, "0.1.0-qa")), \
+                    patch("run_qa.installed_apk_sha256", side_effect=(built_hashes["app"], built_hashes["android_test"])), \
+                    patch("run_qa._package_signing_certificate", return_value=cert_sha256):
+                verification = run_qa.verify_installed_artifacts(
+                    "synthetic-device-serial", app_id, test_id, app_apk, test_apk,
+                    manifest, built_hashes, cert_sha256,
+                )
+
+        self.assertIs(verification["installed_apk_verified"], True)
+        self.assertEqual(verification["verification_result"], "VERIFIED")
+        self.assertEqual(verification["installed_apk_sha256"], built_hashes)
+        provenance = {
+            **manifest,
+            "runtime_sdk": 37,
+            "app_apk_sha256": built_hashes["app"],
+            "android_test_apk_sha256": built_hashes["android_test"],
+            "signing_cert_sha256": cert_sha256,
+            "build_provenance_sha256": "4" * 64,
+            "android_manifest_sha256": "5" * 64,
+            "android_test_manifest_sha256": "6" * 64,
+            "network": "local_emulator_bridge",
+            "endpoint": {"scheme": "ws", "host": "10.0.2.2", "port": 4413},
+            **verification,
+        }
+        run_qa.verify_complete_proof_provenance(provenance)
+        run_scenario.require_pass_provenance(provenance)
 
     def test_failed_install_verification_never_calls_instrumentation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -699,6 +743,7 @@ class ApkProvenanceTests(unittest.TestCase):
         self.assertFalse(provenance["installed_apk_verified"])
         self.assertIsNone(provenance["app_apk_sha256"])
         self.assertIsNone(provenance["android_test_apk_sha256"])
+        self.assertIsNone(provenance["installed_apk_sha256"])
         with self.assertRaises(run_scenario.ScenarioFailure):
             run_scenario.require_pass_provenance(provenance)
         core = {
