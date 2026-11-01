@@ -92,6 +92,19 @@ python3 scripts/v7-06c/android/run_scenario.py \
 
 Cette tranche ne modifie ni Funnel, ni DNS, ni Tailscale et n’exécute pas la recette distante. Le parent exécutera cette recette après autorisation ciblée. La recette publique V7-06C n’utilise aucun `adb reverse`.
 
+### Réutiliser un port local déjà exposé par Funnel
+
+Si une règle Funnel existante dirige déjà `tcp://all.taildc7886.ts.net:8443` vers `127.0.0.1:4400`, démarrer la stack avec ce port loopback épinglé et l’URL publique correspondante:
+
+```sh
+python3 scripts/v7-06c/backend/stack.py start --scenario android-apply \
+  --relay-port 4400 --android-relay-url wss://all.taildc7886.ts.net:8443
+```
+
+Le Relay isolé publie alors exactement `127.0.0.1:4400:4000/tcp`; `stack.json`, l’URL du connecteur et le health check utilisent le port 4400. Si ce port est occupé, le démarrage retourne `BLOCKED_RELAY_PORT` avant de créer la stack. Sans `--relay-port`, le choix actuel reste inchangé: préférence 4413 puis incréments libres. Cette commande ne modifie ni Funnel, ni Tailscale, ni DNS, et n’utilise pas `sudo`. Le harnais n’autorise pas à lui seul une exposition publique: celle-ci exige l’autorisation du propriétaire du service et du réseau.
+
+Pour annuler, arrêter la stack avec `stack.py stop --private-root "$PRIVATE_ROOT"`. Cela arrête uniquement le Relay isolé et libère le port 4400; la configuration Funnel préexistante reste inchangée.
+
 ## Sécurité et limites
 
 Les stacks vivent directement sous `/tmp/atlas-v7-06c-private`, avec répertoire `0700`, marqueur propriétaire et lifecycle `0600`. Les identités, appairages et jetons Core/connecteur sont synthétiques et leurs fichiers sont `0600`. La configuration, l’état, le HOME et le workspace OpenClaw pointent dans la stack. Le Gateway utilise `deepseek/deepseek-chat`, le profil d’outils `minimal` et la liste de refus explicite; aucun plugin `atlas_core_tools` n’est activé. Le proxy conserve des métadonnées de requête et d’outils, jamais les messages, arguments ou réponses du modèle.

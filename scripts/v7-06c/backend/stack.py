@@ -263,10 +263,26 @@ def port_is_free(port: int) -> bool:
         sock.close()
 
 
-def choose_ports() -> dict[str, int]:
+def validate_relay_port(port: int | None) -> int | None:
+    if port is None:
+        return None
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise StackError("BLOCKED_RELAY_PORT")
+    return port
+
+
+def choose_ports(relay_port: int | None = None) -> dict[str, int]:
+    relay_port = validate_relay_port(relay_port)
     used: set[int] = set()
     ports: dict[str, int] = {}
+    if relay_port is not None:
+        if not port_is_free(relay_port):
+            raise StackError("BLOCKED_RELAY_PORT")
+        ports["relay"] = relay_port
+        used.add(relay_port)
     for service, preferred in PREFERRED_PORTS.items():
+        if service == "relay" and relay_port is not None:
+            continue
         candidates = [preferred, *range(preferred + 1, preferred + 100)]
         chosen = next((port for port in candidates if port not in used and port_is_free(port)), None)
         if chosen is None:
@@ -364,11 +380,12 @@ def terminate_record(record: dict[str, Any], marker: str) -> str:
 
 class Stack:
     def __init__(self, root: Path, scenario: str, *, android_relay_host: str = "10.0.2.2",
-                 android_relay_url: str | None = None):
+                 android_relay_url: str | None = None, relay_port: int | None = None):
         self.root = root
         self.scenario = scenario
         self.android_relay_host = validate_android_relay_host(android_relay_host)
         self.android_relay_url = validate_android_relay_url(android_relay_url) if android_relay_url is not None else None
+        self.relay_port = validate_relay_port(relay_port)
         self.marker = secrets.token_hex(24)
         self.processes: dict[str, subprocess.Popen] = {}
         self.stderr_paths: dict[str, Path] = {}
@@ -386,11 +403,11 @@ class Stack:
         self.catalog_candidates: int | None = None
 
     def start(self) -> dict[str, Any]:
+        ports = choose_ports(self.relay_port)
         preflight()
         previous_umask = os.umask(0o077)
         try:
             self._create_root()
-            ports = choose_ports()
             self._record_lifecycle()
             self._write_runtime_files(ports)
             self._start_relay_container(ports["relay"])
@@ -964,9 +981,10 @@ def load_and_verify_root(
 
 
 def start_command(scenario: str, root_arg: str | None, relay_host: str,
-                  android_relay_url: str | None = None) -> dict[str, Any]:
+                  android_relay_url: str | None = None, relay_port: int | None = None) -> dict[str, Any]:
     if scenario not in SCENARIOS:
         raise StackError("invalid scenario")
+    relay_port = validate_relay_port(relay_port)
     root = Path(os.path.abspath(root_arg)) if root_arg else PRIVATE_BASE / f"{scenario}-{os.getpid()}-{secrets.token_hex(3)}"
     validate_private_root(root, missing_ok=True)
     relay_host = validate_android_relay_host(relay_host)
@@ -979,6 +997,9 @@ def start_command(scenario: str, root_arg: str | None, relay_host: str,
         stack_path = root / STACK_NAME
         if stack_path.exists():
             existing = json.loads(stack_path.read_text(encoding="utf-8"))
+            existing_relay_port = existing.get("ports", {}).get("relay")
+            if relay_port is not None and existing_relay_port != relay_port:
+                raise StackError("RELAY_PORT_MISMATCH")
             expected_url = android_relay_url or f"ws://{relay_host}:{existing.get('ports', {}).get('relay')}"
             expected_transport = "public_wss" if expected_url.startswith("wss://") else "loopback_ws"
             if existing.get("relay_url_android") != expected_url or existing.get("relay_transport") != expected_transport:
@@ -996,7 +1017,8 @@ def start_command(scenario: str, root_arg: str | None, relay_host: str,
             if live:
                 return {"status": "already_running", "stack": str(stack_path), "private_root": str(root), "ports": existing.get("ports")}
         raise StackError("existing private root is not a ready live stack; stop it before reuse")
-    stack = Stack(root, scenario, android_relay_host=relay_host, android_relay_url=android_relay_url)
+    stack = Stack(root, scenario, android_relay_host=relay_host,
+                  android_relay_url=android_relay_url, relay_port=relay_port)
     data = stack.start()
     result: dict[str, Any] = {"status": "started", "scenario": scenario,
                               "stack_file": str(root / STACK_NAME), "private_root": str(root),
@@ -1039,12 +1061,13 @@ def main() -> int:
     start.add_argument("--private-root")
     start.add_argument("--android-relay-host", default="10.0.2.2")
     start.add_argument("--android-relay-url")
+    start.add_argument("--relay-port", type=int)
     stop = commands.add_parser("stop")
     stop.add_argument("--private-root", required=True)
     args = parser.parse_args()
     try:
         result = start_command(args.scenario, args.private_root, args.android_relay_host,
-                               args.android_relay_url) if args.command == "start" else stop_command(args.private_root)
+                               args.android_relay_url, args.relay_port) if args.command == "start" else stop_command(args.private_root)
         print(json.dumps(result, sort_keys=True))
         return 0
     except StackError as exc:

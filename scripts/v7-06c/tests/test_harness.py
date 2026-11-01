@@ -24,8 +24,12 @@ for _path in (str(BACKEND_ROOT), str(BACKEND_SCRIPTS), str(ANDROID_SCRIPTS)):
 from atlas_backend.store import SQLiteStore  # noqa: E402
 import run_scenario  # noqa: E402
 import run_backend_e2e  # noqa: E402
+import stack as stack_module  # noqa: E402
 from stack import (  # noqa: E402
+    PINNED_RELAY_IMAGE,
+    Stack,
     StackError,
+    choose_ports,
     load_and_verify_root,
     terminate_record,
     validate_android_relay_url,
@@ -185,6 +189,83 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaises(StackError):
                 terminate_record(record, "owner")
         kill_group.assert_not_called()
+
+
+class StackPortTests(unittest.TestCase):
+    def test_pinned_relay_port_validation_and_occupied_port_block_before_preflight(self) -> None:
+        for value in (0, -1, 65536):
+            with self.subTest(port=value), self.assertRaisesRegex(StackError, "BLOCKED_RELAY_PORT"):
+                choose_ports(value)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "stack"
+            stack = Stack(root, "android-apply", relay_port=4400)
+            with patch("stack.port_is_free", return_value=False), \
+                    patch("stack.preflight") as preflight, \
+                    patch.object(stack, "_create_root") as create_root:
+                with self.assertRaisesRegex(StackError, "BLOCKED_RELAY_PORT"):
+                    stack.start()
+            preflight.assert_not_called()
+            create_root.assert_not_called()
+            self.assertFalse(root.exists())
+
+    def test_pinned_relay_port_is_selected_and_propagated_to_connector(self) -> None:
+        with patch("stack.port_is_free", return_value=True):
+            default_ports = choose_ports()
+        self.assertEqual(default_ports["relay"], 4413)
+
+        with patch("stack.port_is_free", return_value=True):
+            ports = choose_ports(4400)
+        self.assertEqual(ports["relay"], 4400)
+        self.assertEqual(len(set(ports.values())), len(ports))
+
+        stack = Stack(Path("/unused"), "android-apply", relay_port=4400)
+        stack._base_env = lambda: {}  # type: ignore[method-assign]
+        stack.connector_state_dir = Path("/unused/connector")
+        stack.server_id = "synthetic-server"
+        stack.tool_token = "synthetic-tool-token"
+        stack.core_token_file = Path("/unused/core-token")
+        env = stack._connector_env(ports["relay"], ports["metrics"], ports["core"])
+        self.assertEqual(env["ATLAS_RELAY_URL"], "ws://127.0.0.1:4400")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            stack.root = Path(temporary)
+            stack.relay_container = "synthetic-relay"
+            calls: list[list[str]] = []
+
+            def fake_run_capture(arguments: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                calls.append(arguments)
+                if arguments[:3] == ["docker", "image", "inspect"]:
+                    return subprocess.CompletedProcess(arguments, 0, PINNED_RELAY_IMAGE + "\n", "")
+                if arguments[1] == "run":
+                    return subprocess.CompletedProcess(arguments, 0, "synthetic-container-id\n", "")
+                return subprocess.CompletedProcess(
+                    arguments, 0, f"{PINNED_RELAY_IMAGE}|{stack.marker}\n", "",
+                )
+
+            with patch("stack.run_capture", side_effect=fake_run_capture), \
+                    patch("stack.wait_http") as wait_http:
+                stack._start_relay_container(ports["relay"])
+            publish = calls[1][calls[1].index("--publish") + 1]
+            self.assertEqual(publish, "127.0.0.1:4400:4000/tcp")
+            wait_http.assert_called_once_with("http://127.0.0.1:4400/health", timeout=40)
+
+    def test_existing_root_rejects_different_pinned_relay_port(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "stack"
+            root.mkdir()
+            (root / "stack.json").write_text(json.dumps({
+                "ports": {"relay": 4400},
+                "relay_url_android": "ws://10.0.2.2:4400",
+                "relay_transport": "loopback_ws",
+            }), encoding="utf-8")
+            lifecycle = {"scenario": "android-apply", "marker": "synthetic"}
+            with patch("stack.validate_private_root", return_value=root), \
+                    patch("stack.load_and_verify_root", return_value=lifecycle):
+                with self.assertRaisesRegex(StackError, "RELAY_PORT_MISMATCH"):
+                    stack_module.start_command(
+                        "android-apply", str(root), "10.0.2.2", None, 4413,
+                    )
 
 
 class RedactionAndCliTests(unittest.TestCase):
