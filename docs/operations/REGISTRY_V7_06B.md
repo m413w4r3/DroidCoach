@@ -103,8 +103,9 @@ fermés.
 | V7-06B-AUDIT-A3-ANDROID-RELAY | Audit lecture seule harnais Android/Relay et gaps V7-06B | BASE_SHA | **ACCEPTED** — 9 gaps identifiés (isolation, UI, second pull, oracle Core, preuve des tools) ; worktree intact. KVM vu par le parent (`/dev/kvm`), absent dans le sandbox Codex : à re-vérifier par l’opérateur AVD. | `19b692af-5843-4e62-bea9-9566deab8d1b` | `/tmp/atlas-v7-06b-a3-android` | A3_STATUS=STATIC_AUDIT_COMPLETE; HARNESS_GAPS=FAIL (9); AVD_STRATEGY=BLOCKED dans le sandbox, tentative unique après pré-vol parent |
 | V7-06B-E2E-BACKEND | Stack isolée Core/Gateway/Relay/connecteur + recette backend réelle | AUDIT A1/A2 + FIX TERMINAL | **ACCEPTED (runtime)** — positif **PASS** (DeepSeek réel, 2 tool calls, 1 proposition A0, ACK APPLIED, plan v3, replay sans appel modèle) et négatif **PASS** (STALE/UNKNOWN, stale version, terminal, injection, consentement révoqué, 0 proposition/ACK) | `762fb3e9-6440-4be4-96c1-81676d7a64cb` | `/tmp/atlas-v7-06b-backend` | Invocation réelle, deux tool calls, une proposition A0, `base_version=2`, `NONE_AT_CORE`, aucun dépôt double ; négatif terminal après correctif |
 | V7-06B-FIX-TERMINAL-ACTIVITY | Garde backend : statut terminal effectif (dernier événement) pour reschedule/edit_activity | E2E-BACKEND BLOCKED | **ACCEPTED** — commits `dd7b2de` + `4a8adae` (test contractuel réaligné), 8 rouges→verts, **357 passed / 1 skipped** backend complet, `git diff --check` PASS ; intégrés `fba6462`/`191ccd0` | `45fd538e-fdd3-4746-8004-ce32b604c93d` | `/tmp/atlas-v7-06b-terminal-guard` | Test rouge→vert, `VALIDATION_FAILED`, aucune proposition ; suite backend complète PASS |
+| V7-06B-FIX-STATUS-GUARD | Garde statuts fail-closed : consentement, version, plan, séquence, fraîcheur | REVUE P1 | **ACCEPTED (code + tests)** — commit `9aecda8` intégré `25bfed8` ; 12 cas rouge→vert `STALE_DATA`, 10 contrôles existants, **22/22 ciblés**, backend **370 passed / 1 skipped** | `072814b2-af8b-4578-9dd4-6289b4845c4d` | `/tmp/atlas-v7-06b-status-guard` | Incertitude → `STALE_DATA` sans proposition ; terminal valide → `VALIDATION_FAILED` ; fallback snapshot conservé |
 | V7-06B-ANDROID-QA | Harnais QA séparé, fil rouge 18 étapes + reject | AUDIT A3 + E2E-BACKEND | **BLOCKED (environnement AVD)** — builds QA/JVM/DEX PASS, harnais durci `b67de16`/`29f9502` ; aucun runtime instrumenté : AVD API 37.2 16 Ko instable (UWB HAL puis surfaceflinger, redémarrages zygote). Aucun Pixel physique utilisé. | `dd5c99d1-4f14-4a6a-bdcd-b362fa3d7633` | `/tmp/atlas-v7-06b-android` | Test instrumenté PASS, oracle Core APPLIED/plan v3, rejet sans changement — **NON EXÉCUTÉ** |
-| V7-06B-REVIEW | Revue indépendante lecture seule du SHA intégré | E2E + ANDROID-QA | READY | — | à créer | Aucun P0/P1 ouvert, preuves cohérentes |
+| V7-06B-REVIEW | Revue indépendante lecture seule du SHA intégré | E2E + ANDROID-QA | **REJECTED (initial)** — P1 garde statuts (corrigé `25bfed8`), P2 preuve ACK (fermé par replay réel), P2 SHA (clarifié) ; **re-review à exécuter** sur le HEAD corrigé | `3999e794-40d5-4379-8742-4134b34688b7` | `/tmp/atlas-v7-06b-review-rw` | P0/P1 ouverts : P1 corrigé, re-review requise |
 
 ## 3bis. Défaut bloquant découvert et correctif séparé
 
@@ -169,7 +170,7 @@ live, aucune session OpenClaw personnelle, aucun Pixel produit n’est utilisé.
 
 | Scénario | Résultat | Oracles constatés |
 |---|---|---|
-| Positif | **PASS** | 3 requêtes proxy, modèle `openclaw/<agent>` → `deepseek/deepseek-chat` ; 6 outils client ; `atlas_get_day_plan` puis `atlas_propose_plan_revision` ; `tool_call_id` corrélés ; `finish_reason=stop` ; `tool_call_count=2` ; 1 proposition `base_version=2`, `A0_USER_REVIEW`, `NONE_AT_CORE`, diff +10 min ; plan v2 (600) inchangé avant ACK ; 1 ACK `APPLIED`, `applied_plan_version=3` ; plan v3 (610) `FRESH` ; pull 1→0 ; replay Core et Relay identiques sans nouvel appel modèle ; 1 ligne de cache chat ; consentements révoqués v2 ; plugin natif absent, surface native vide |
+| Positif | **PASS** | 3 requêtes proxy, modèle `openclaw/<agent>` → `deepseek/deepseek-chat` ; 6 outils client ; `atlas_get_day_plan` puis `atlas_propose_plan_revision` ; `tool_call_id` corrélés ; `finish_reason=stop` ; `tool_call_count=2` ; 1 proposition `base_version=2`, `A0_USER_REVIEW`, `NONE_AT_CORE`, diff +10 min ; plan v2 (600) inchangé avant ACK ; 1 ACK `APPLIED`, `applied_plan_version=3` ; replay du même ACK : réponse identique, `replayed=true`, **1 seul** événement ACK ; plan v3 (610) `FRESH` ; pull 1→0 ; replay Core et Relay identiques sans nouvel appel modèle ; 1 ligne de cache chat ; consentements révoqués v2 ; plugin natif absent, surface native vide |
 | Négatif | **PASS** | version de plan stale → `STALE_VERSION` ; projection STALE → proposition `STALE_DATA` ; projection UNKNOWN → lecture `UNKNOWN`/`NO_PLAN` et proposition `STALE_DATA` ; activité terminale → `VALIDATION_FAILED` sans proposition ; injection atteint le modèle réel mais ne crée aucun fichier sentinelle et n’exécute aucun outil interdit ; consentement révoqué → `CONSENT_REQUIRED` sans appel modèle ; **0 proposition, 0 ACK** persistés |
 
 **Corrections de harnais (aucun changement produit supplémentaire après T3) :**
@@ -243,7 +244,9 @@ selon `android17-device-qa`.
 
 | Suite | Résultat |
 |---|---|
-| Backend `pytest -q` | **357 passed / 1 skipped** (26,74 s) |
+| Backend `pytest -q` | **370 passed / 1 skipped** (36,66 s), après correctif `25bfed8` |
+| Garde statuts ciblée (T3b) | **22/22 PASS** (12 cas d’incertitude `STALE_DATA` + 10 contrôles) |
+| Replay ACK réel (même enveloppe) | **PASS** — réponse identique, `replayed=true`, 1 seul événement ACK, aucun nouvel effet |
 | Connecteur Node `npm run test:unit` | **109/109 PASS** (17 fichiers) |
 | Plugin OpenClaw `npm test` | **59/59 PASS** |
 | Android JVM `:app:testDebugUnitTest --offline --rerun-tasks` | **896/896 PASS**, 0 échec/erreur/ignoré (117 fichiers) ; BUILD SUCCESSFUL 2 min 24 s |

@@ -65,6 +65,7 @@ dans les noms retournés.
 | Diff | `target_start_minute=610` (+10 min) |
 | Plan avant ACK | v2, `start_minute=600`, `FRESH` |
 | ACK durable | 1 événement `APPLIED`, `applied_plan_version=3` |
+| Replay ACK | même enveloppe rejouée : réponse identique, `replayed=true`, **1 seul** événement ACK, aucun nouvel effet |
 | Plan après ACK | v3, `start_minute=610`, `FRESH` |
 | Pull après ACK | 0 proposition |
 | Replay Core | même réponse, aucun nouvel appel modèle (`traceCountBefore=traceCountAfter=3`) |

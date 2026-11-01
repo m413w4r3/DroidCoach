@@ -88,6 +88,7 @@ Gateway personnel n’a été copiée ou modifiée.
 | Proposition | 1, `base_version=2`, `A0_USER_REVIEW`, `NONE_AT_CORE`, `+10 min` |
 | Plan avant ACK | v2, `start_minute=600`, `FRESH` |
 | ACK | 1 événement durable `APPLIED`, `applied_plan_version=3` |
+| Replay ACK (même enveloppe) | réponse identique, `replayed=true`, **1 seul** événement ACK, aucune proposition/plan supplémentaire |
 | Plan après ACK | v3, `start_minute=610`, `FRESH` |
 | Pull après ACK | 0 proposition |
 | Replay Core | même réponse, aucun nouvel appel modèle (`traceCountBefore=traceCountAfter=3`) |
@@ -144,7 +145,21 @@ proposition `reschedule`/`edit_activity` sur une activité `DONE`/`MISSED`/
 `CANCELLED`/`POSTPONED` pouvait être déposée. Le correctif calcule le statut
 effectif depuis le dernier événement et refuse avec `VALIDATION_FAILED` sans
 persister. Test rouge→vert, 8 cas ; test contractuel réaligné (`4a8adae`) ;
-backend complet **357 passed / 1 skipped**.
+backend complet **357 passed / 1 skipped** à ce stade.
+
+**`25bfed8` — garde statuts fail-closed (P1 revue indépendante).** Le garde
+précédent utilisait le dernier événement de statut sans vérifier le consentement
+`ACTIVITY_STATUS`, sa version, la version du plan, une lacune de séquence ni la
+fraîcheur. Un événement ancien ou incohérent pouvait laisser passer une
+proposition malgré un plan frais. Le correctif exige, pour tout événement
+utilisé par `reschedule`/`edit_activity` : consentement `ACTIVITY_STATUS`
+`GRANTED` à la version courante, absence de lacune de séquence, `plan_version`
+égale à la version de base, et `observed_at` frais (fenêtre
+`plan_revision.propose`, pas de futur > 2 min). Toute incertitude → `STALE_DATA`
+sans proposition ; un événement valide terminal reste `VALIDATION_FAILED` ; sans
+événement, le statut du snapshot reste le fallback. **22 tests ciblés PASS**
+(12 nouveaux cas rouge→vert, 10 existants), backend complet **370 passed /
+1 skipped** (36,66 s).
 
 ### Corrections de harnais (aucun produit)
 
@@ -166,7 +181,8 @@ recommandation : aligner le mapping dans un ticket borné séparé.
 
 | Suite | Résultat |
 |---|---|
-| Backend `pytest -q` | **357 passed / 1 skipped** (26,74 s) |
+| Backend `pytest -q` | **370 passed / 1 skipped** (36,66 s) |
+| Garde statuts ciblée (T3b) | **22/22 PASS** (12 cas d’incertitude en `STALE_DATA` + 10 contrôles existants) |
 | Connecteur Node `npm run test:unit` | **109/109 PASS** (17 fichiers) |
 | Plugin OpenClaw `npm test` | **59/59 PASS** |
 | Android JVM `:app:testDebugUnitTest --offline --rerun-tasks` | **896/896 PASS**, 0 échec, 0 erreur, 0 ignoré (117 fichiers) ; BUILD SUCCESSFUL |
@@ -209,6 +225,29 @@ produit.
    ciblé, sauvegarde et opérateur unique ; exécuter APPLY puis REJECT du harnais.
 2. Vérifier indépendamment les états Core (proposition, ACK, plan v3/v2,
    absence de double application, révocation) sur les deux scénarios.
-3. Exécuter une revue indépendante lecture seule du SHA intégré.
+3. Rejouer la revue indépendante après le correctif P1 `25bfed8` ; le premier
+   verdict était `REJECTED` (voir §13).
 4. Traiter le P2 400/422 si le contrat l’exige.
 5. Dérouler `V7-06C_REMOTE_RECIPE.md` pour tout verdict public/produit.
+
+## 13. Revue indépendante
+
+- **Agent :** Paseo `3999e794-40d5-4379-8742-4134b34688b7`,
+  `codex/gpt-6-luna`, effort `xhigh`, snapshot détaché `23748a2`.
+- **Premier verdict : `REJECTED`.**
+  - **P1 — garde statuts :** le dernier événement de statut était utilisé sans
+    valider le consentement `ACTIVITY_STATUS`, sa version, la version du plan,
+    les lacunes de séquence ni la fraîcheur. **Corrigé par `25bfed8`** (T3b,
+    agent `072814b2-af8b-4578-9dd4-6289b4845c4d`) ; 22 tests ciblés PASS,
+    backend 370/1.
+  - **P2 — preuve ACK :** le rejeu documenté portait sur le chat, pas sur l’ACK.
+    **Fermé** : un second ACK avec la même enveloppe retourne une réponse
+    identique avec `replayed=true` et ne crée **qu’un seul** événement ACK.
+  - **P2 — SHA ambigu :** le rapport nommait `fcb5329` alors que le HEAD revu
+    était `23748a2`. **Clarifié** : SHA de campagne `fcb5329`, snapshot de revue
+    `23748a2`, HEAD de branche après correctif `25bfed8`.
+- **Runtime Android :** honnêtement `BLOCKED / NOT_RUN`, ce qui interdit de
+  valider la boucle Android sans contredire les verdicts OpenClaw limités à
+  DeepSeek ni les `NO GO` remote/produit.
+- **Re-review :** à exécuter sur le HEAD après correctif et preuves ACK ; le
+  premier verdict `REJECTED` reste la référence tant qu’elle n’a pas eu lieu.
