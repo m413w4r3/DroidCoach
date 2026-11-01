@@ -207,6 +207,120 @@ class RelayBackendTransportTest {
         } finally { transport.close() }
     }
 
+    @Test(timeout = 7_000)
+    fun staleGenerationResponseCannotCompleteCurrentInflightRequest() {
+        val (credentials, staticPair) = testCredentials()
+        val oldSessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+        val currentSessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+            sessionIdForConnection = { index -> if (index == 1) oldSessionId else currentSessionId },
+        )
+        val transport = transport(
+            credentials,
+            sockets,
+            requestedCapabilities = setOf("plan.revision", "coach.chat"),
+            maxReconnectAttempts = 1,
+            reconnectBaseMillis = 1,
+        )
+        val executor = Executors.newSingleThreadExecutor()
+        val requestId = uuid(76)
+        try {
+            transport.start()
+            val oldSocket = sockets.sockets.single()
+            oldSocket.remoteClose()
+            assertTrue("replacement session did not connect", sockets.secondSessionConnected.await(2, TimeUnit.SECONDS))
+
+            val current = executor.submit<RelayCallResult> {
+                transport.executeDeferred(
+                    operation = "coach.chat.request",
+                    timeoutMillis = 3_000,
+                    idempotencyKey = requestId,
+                    requestId = requestId,
+                    payloadFactory = { JSONObject().put("message", "current synthetic message") },
+                )
+            }
+            assertTrue("current request was not captured", sockets.requestCaptured.await(2, TimeUnit.SECONDS))
+
+            // A callback from S1 must be rejected by the client's connection generation guard.
+            oldSocket.sendUnknownResponse(requestId, responseSessionId = oldSessionId)
+            assertFalse("stale S1 response completed a request owned by S2", current.isDone)
+            assertEquals(RelayConnectionState.RELAY_CONNECTED, transport.state())
+
+            sockets.sockets.last().sendResponseForRequest(requestId, responseSessionId = currentSessionId)
+            assertTrue(current.get(2, TimeUnit.SECONDS) is RelayCallResult.Success)
+            assertEquals("the current request identity must be preserved", requestId,
+                sockets.requests.single().getString("request_id"))
+            assertEquals("a stale callback must not cause a retry", 1, sockets.requests.size)
+        } finally {
+            transport.close()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test(timeout = 7_000)
+    fun queuedNotSentRequestKeepsItsIdentityAcrossReconnect() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val gate = AgentConsentGate()
+        val transport = transport(
+            credentials,
+            sockets,
+            requestedCapabilities = setOf("plan.revision", "coach.chat"),
+            consentGate = gate,
+            maxReconnectAttempts = 1,
+            reconnectBaseMillis = 1,
+        )
+        val requestId = uuid(79)
+        val workerReachedGate = CountDownLatch(1)
+        val result = AtomicReference<RelayCallResult?>()
+        val workerDone = CountDownLatch(1)
+        gate.beforeLockAttemptForTest = {
+            if (Thread.currentThread().name == "relay-unsent-request") workerReachedGate.countDown()
+        }
+        try {
+            transport.start()
+            val firstSocket = sockets.sockets.single()
+            gate.withLock {
+                Thread({
+                    try {
+                        result.set(transport.executeDeferred(
+                            operation = "coach.chat.request",
+                            timeoutMillis = 4_000,
+                            idempotencyKey = requestId,
+                            requestId = requestId,
+                            payloadFactory = { JSONObject().put("message", "queued synthetic message") },
+                        ))
+                    } finally {
+                        workerDone.countDown()
+                    }
+                }, "relay-unsent-request").apply { isDaemon = true; start() }
+
+                assertTrue("request did not queue before its first gate wait", workerReachedGate.await(1, TimeUnit.SECONDS))
+                assertTrue("request was unexpectedly sent before reconnect", sockets.requests.isEmpty())
+                firstSocket.remoteClose()
+                assertTrue("replacement session did not connect", sockets.secondSessionConnected.await(2, TimeUnit.SECONDS))
+                assertTrue("request must still be queued while G is held", sockets.requests.isEmpty())
+            }
+
+            assertTrue("queued request did not dispatch after reconnect", sockets.requestCaptured.await(2, TimeUnit.SECONDS))
+            assertTrue("queued request did not finish", workerDone.await(2, TimeUnit.SECONDS))
+            assertTrue(result.get() is RelayCallResult.Success)
+            assertEquals("the unsent request identity must survive reconnect", requestId,
+                sockets.requests.single().getString("request_id"))
+            assertEquals("the idempotency key must not be regenerated", requestId,
+                sockets.requests.single().getString("idempotency_key"))
+            assertEquals("one queued request has one socket write", 1, sockets.requests.size)
+        } finally {
+            transport.close()
+        }
+    }
+
     @Test
     fun v4RequestsSatisfyThePcConnectorsEnvelopeAndIdempotencyRules() {
         val (credentials, staticPair) = testCredentials()
@@ -415,6 +529,109 @@ class RelayBackendTransportTest {
             assertEquals(1, sockets.requests.size)
         } finally {
             releasePayload.countDown()
+            transport.close()
+        }
+    }
+
+    @Test(timeout = 5_000)
+    fun timeoutWaitingForConsentGateReturnsNotSentWithinTheRequestDeadline() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val gate = AgentConsentGate()
+        val transport = transport(
+            credentials,
+            sockets,
+            requestedCapabilities = setOf("plan.revision", "coach.chat"),
+            consentGate = gate,
+        )
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            transport.start()
+            val startedAt = System.nanoTime()
+            val result = gate.withLock {
+                executor.submit<RelayCallResult> {
+                    transport.executeDeferred(
+                        operation = "coach.chat.request",
+                        timeoutMillis = 250,
+                        idempotencyKey = uuid(77),
+                        requestId = uuid(77),
+                        payloadFactory = { JSONObject().put("message", "must not be sent") },
+                    )
+                }.get(1, TimeUnit.SECONDS)
+            }
+            assertEquals(
+                RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT,
+                (result as RelayCallResult.Failure).reason,
+            )
+            assertTrue(
+                "pre-dispatch gate wait must respect the request deadline",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt) < 900,
+            )
+            assertTrue("a request denied before the gate opened must never be written", sockets.requests.isEmpty())
+        } finally {
+            transport.close()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test(timeout = 7_000)
+    fun closeDuringBeforeDispatchNeverWritesTheRequest() {
+        val (credentials, staticPair) = testCredentials()
+        val sockets = FakeRelaySocketFactory(
+            staticPair,
+            dropRequestResponses = true,
+            serverCapabilities = setOf("coach.chat", "plan.revision"),
+        )
+        val transport = transport(credentials, sockets, requestedCapabilities = setOf("plan.revision", "coach.chat"))
+        val beforeDispatchEntered = CountDownLatch(1)
+        val releaseBeforeDispatch = CountDownLatch(1)
+        val requestResult = AtomicReference<RelayCallResult?>()
+        val requestDone = CountDownLatch(1)
+        val closeStarted = CountDownLatch(1)
+        val closeDone = CountDownLatch(1)
+        try {
+            transport.start()
+            Thread({
+                try {
+                    requestResult.set(transport.executeDeferred(
+                        operation = "coach.chat.request",
+                        timeoutMillis = 3_000,
+                        idempotencyKey = uuid(78),
+                        requestId = uuid(78),
+                        beforeDispatch = {
+                            beforeDispatchEntered.countDown()
+                            check(releaseBeforeDispatch.await(3, TimeUnit.SECONDS)) { "test release timed out" }
+                            true
+                        },
+                        payloadFactory = { JSONObject().put("message", "must not be sent") },
+                    ))
+                } finally {
+                    requestDone.countDown()
+                }
+            }, "relay-close-before-dispatch").apply { isDaemon = true; start() }
+            assertTrue("request did not enter beforeDispatch", beforeDispatchEntered.await(2, TimeUnit.SECONDS))
+
+            val closer = Thread({
+                closeStarted.countDown()
+                transport.close()
+                closeDone.countDown()
+            }, "relay-close-during-dispatch").apply { isDaemon = true; start() }
+            assertTrue("close thread did not start", closeStarted.await(1, TimeUnit.SECONDS))
+            val closeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+            while (System.nanoTime() < closeDeadline && closer.state != Thread.State.BLOCKED) Thread.yield()
+            assertEquals("close must observe the in-progress transport critical section", Thread.State.BLOCKED, closer.state)
+
+            releaseBeforeDispatch.countDown()
+            assertTrue("request did not finish after close was requested", requestDone.await(2, TimeUnit.SECONDS))
+            assertTrue("close did not finish after beforeDispatch exited", closeDone.await(2, TimeUnit.SECONDS))
+            assertEquals(RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE), requestResult.get())
+            assertTrue("a request closed before socket write must never be sent", sockets.requests.isEmpty())
+        } finally {
+            releaseBeforeDispatch.countDown()
             transport.close()
         }
     }

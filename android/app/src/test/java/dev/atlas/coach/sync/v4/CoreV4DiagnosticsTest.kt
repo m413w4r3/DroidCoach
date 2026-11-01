@@ -105,12 +105,20 @@ class CoreV4DiagnosticsTest {
             assertInOrder(
                 successStages,
                 CoreV4Diagnostics.Stage.QUEUED,
+                CoreV4Diagnostics.Stage.BEFORE_DISPATCH,
+                CoreV4Diagnostics.Stage.PAYLOAD_READY,
                 CoreV4Diagnostics.Stage.DISPATCHED,
                 CoreV4Diagnostics.Stage.SOCKET_SEND_ACCEPTED,
                 CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
                 CoreV4Diagnostics.Stage.CORRELATED,
             )
-            assertFalse(CoreV4Diagnostics.snapshot().toString().contains("synthetic payload"))
+            val successLogLines = CoreV4Diagnostics.snapshot().map(CoreV4Diagnostics::formatLogLine)
+            val renderedLines = successLogLines.joinToString("\n")
+            assertFalse(renderedLines.contains("synthetic payload"))
+            assertFalse(renderedLines.contains(credentials.deviceToken))
+            assertFalse(renderedLines.contains(successRequestId))
+            assertFalse(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")
+                .containsMatchIn(renderedLines))
             assertTrue(CoreV4Diagnostics.snapshot().filter {
                 it.correlationTag == CoreV4Diagnostics.correlationTag(successRequestId)
             }.all { it.sessionGeneration > 0L })
@@ -143,7 +151,9 @@ class CoreV4DiagnosticsTest {
             }
             assertTrue(timeoutEvents.any { it.stage == CoreV4Diagnostics.Stage.QUEUED })
             assertTrue(timeoutEvents.any { it.stage == CoreV4Diagnostics.Stage.SOCKET_SEND_ACCEPTED })
-            assertTrue(timeoutEvents.any { it.stage == CoreV4Diagnostics.Stage.TIMEOUT })
+            assertTrue(timeoutEvents.any {
+                it.stage == CoreV4Diagnostics.Stage.TIMEOUT && it.state == CoreV4Diagnostics.State.UNKNOWN
+            })
         } finally {
             timeoutTransport.close()
         }

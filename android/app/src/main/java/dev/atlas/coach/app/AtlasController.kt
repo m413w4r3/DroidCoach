@@ -160,6 +160,7 @@ import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.coach.AgentConversationMessage
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
 import dev.atlas.coach.sync.agent.coach.AgentStatus
+import dev.atlas.coach.sync.v4.CoreV4Diagnostics
 import dev.atlas.coach.plan.ActivityStatus
 import dev.atlas.coach.plan.PlanActivity
 import dev.atlas.coach.plan.PlanRevisionEngine
@@ -2225,6 +2226,12 @@ class AtlasController @JvmOverloads constructor(
             touch()
             return false
         }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.USER_PERSISTED,
+            state = CoreV4Diagnostics.State.PREPARED,
+            result = CoreV4Diagnostics.Result.ACCEPTED,
+            requestId = idempotencyKey,
+        )
 
         if (mode == RelayTransportMode.OFFLINE) {
             val mandate = agentMandateStore.current()
@@ -2263,6 +2270,12 @@ class AtlasController @JvmOverloads constructor(
         val job = syncWorker.submit {
             runCatching { requireNotNull(client).chat(conversationId, message, mandate, initialContext, idempotencyKey) }
                 .onSuccess { response -> mainHandler.post {
+                    CoreV4Diagnostics.record(
+                        stage = CoreV4Diagnostics.Stage.UI_RESULT,
+                        state = CoreV4Diagnostics.State.COMPLETE,
+                        result = CoreV4Diagnostics.Result.SUCCESS,
+                        requestId = idempotencyKey,
+                    )
                     if (chatGeneration != agentChatGeneration.get() || requestGeneration != agentRequestGeneration.get() || !isAgentEnabled) return@post
                     activeAgentChatJob = null
                     agentChatSendState = AgentChatSendState.IDLE
@@ -2289,11 +2302,23 @@ class AtlasController @JvmOverloads constructor(
                     touch()
                 } }
                 .onFailure { error -> mainHandler.post {
+                    val chatError = error as? AgentChatException
+                    CoreV4Diagnostics.record(
+                        stage = CoreV4Diagnostics.Stage.UI_RESULT,
+                        state = if (chatError?.kind == AgentChatFailureKind.RESULT_UNCERTAIN) {
+                            CoreV4Diagnostics.State.UNKNOWN
+                        } else CoreV4Diagnostics.State.FAILED,
+                        result = when (chatError?.kind) {
+                            AgentChatFailureKind.RESULT_UNCERTAIN -> CoreV4Diagnostics.Result.TIMEOUT
+                            AgentChatFailureKind.TIMEOUT_NOT_SENT -> CoreV4Diagnostics.Result.TIMEOUT
+                            else -> CoreV4Diagnostics.Result.FAILURE
+                        },
+                        requestId = idempotencyKey,
+                    )
                     if (chatGeneration != agentChatGeneration.get() || requestGeneration != agentRequestGeneration.get() || !isAgentEnabled ||
                         (error as? AgentApiException)?.statusCode == 403
                     ) return@post
                     activeAgentChatJob = null
-                    val chatError = error as? AgentChatException
                     agentChatSendState = when (chatError?.kind) {
                         AgentChatFailureKind.OFFLINE -> AgentChatSendState.OFFLINE
                         AgentChatFailureKind.RESULT_UNCERTAIN -> AgentChatSendState.RESULT_UNCERTAIN
@@ -2316,6 +2341,12 @@ class AtlasController @JvmOverloads constructor(
                     touch()
                 } }
         }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.WORK_SUBMITTED,
+            state = CoreV4Diagnostics.State.QUEUED,
+            result = CoreV4Diagnostics.Result.ACCEPTED,
+            requestId = idempotencyKey,
+        )
         activeAgentChatJob = job
         return true
     }

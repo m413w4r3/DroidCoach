@@ -17,6 +17,11 @@ internal object CoreV4Diagnostics {
         PASS_START,
         PASS_END,
         ERROR,
+        USER_PERSISTED,
+        WORK_SUBMITTED,
+        BEFORE_DISPATCH,
+        PAYLOAD_READY,
+        UI_RESULT,
         CONSENT_PREPARE,
         CONSENT_DISPATCH,
         CONSENT_RESPONSE,
@@ -209,8 +214,11 @@ internal object CoreV4Diagnostics {
             events.addLast(item)
             item
         }
-        runCatching { Log.i(LOG_TAG, event.toLogLine()) }
+        runCatching { Log.i(LOG_TAG, formatLogLine(event)) }
     }
+
+    /** Returns the exact redacted line used by Android logging, for privacy assertions in JVM tests. */
+    internal fun formatLogLine(event: Event): String = event.toLogLine()
 
     /** Only canonical request IDs are accepted; the raw value is never retained or logged. */
     fun correlationTag(requestId: String): String? {

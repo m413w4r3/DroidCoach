@@ -250,6 +250,30 @@ class RelayAgentChatClientTest {
     }
 
     @Test
+    fun timeoutBeforeSendIsDistinctAndStatesThatTheServerHadNoEffect() {
+        val now = 1_800_000_000_000L
+        val mandate = AgentMandate.default()
+        val context = context(mandate, now, emptyMap())
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { _, _, _, _, beforeDispatch, _ ->
+                assertTrue(beforeDispatch())
+                RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT)
+            },
+            freshRequestContext = { requestContext(mandate, context, now) },
+            onContextWritten = { true },
+        )
+
+        val error = runCatching { client.chat(null, "synthetic", mandate, context, "stable-not-sent-key") }
+            .exceptionOrNull()
+
+        assertTrue(error is AgentChatException)
+        assertEquals(AgentChatFailureKind.TIMEOUT_NOT_SENT, (error as AgentChatException).kind)
+        assertTrue(error.message.orEmpty().contains("avant l'envoi"))
+        assertTrue(error.message.orEmpty().contains("aucun effet"))
+        assertTrue(error.message.orEmpty().contains("réessayer"))
+    }
+
+    @Test
     fun relayCancellationRemainsExplicitAfterSinglePreDispatchAudit() {
         val now = 1_800_000_000_000L
         val mandate = AgentMandate.default()

@@ -302,6 +302,27 @@ class RelayCoreV4HttpTransportTest {
     }
 
     @Test
+    fun timeoutBeforeSocketSendMapsToDefiniteUnavailable() {
+        val session = FakeSession(
+            result = RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT),
+        )
+        val error = assertThrows(CoreV4SyncException::class.java) {
+            RelayCoreV4HttpTransport({ session }).post(
+                CoreV4HttpRequest(
+                    "/v4/sync/day-plan-snapshots",
+                    "",
+                    JSONObject().put("request_id", uuid(91)).put("idempotency_key", uuid(92)).toString(),
+                ),
+            )
+        }
+
+        assertEquals(CoreV4FailureKind.UNAVAILABLE, error.kind)
+        assertFalse("not-sent timeout is definite and is not marked retryable automatically", error.retryable)
+        assertEquals("TIMEOUT_NOT_SENT", error.errorCode)
+        assertEquals(1, session.calls.size)
+    }
+
+    @Test
     fun relaySuccessBodiesAreParsedByTheSyncClientAndInbox() {
         val session = FakeSession { operation, payload ->
             when (operation) {

@@ -224,6 +224,7 @@ object AgentChatV4RequestBody {
 enum class AgentChatFailureKind {
     OPERATION_UNAVAILABLE,
     OFFLINE,
+    TIMEOUT_NOT_SENT,
     RESULT_UNCERTAIN,
     CANCELLED,
     POLICY_DENIED,
@@ -422,6 +423,8 @@ class RelayAgentChatClient(
             }
             is RelayCallResult.Failure -> {
                 val (kind, message) = when (result.reason) {
+                    RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT -> AgentChatFailureKind.TIMEOUT_NOT_SENT to
+                        "Le délai a expiré avant l'envoi. Le serveur n'a reçu aucun effet; vous pouvez réessayer."
                     RelayCallResult.Failure.Reason.TIMEOUT -> AgentChatFailureKind.RESULT_UNCERTAIN to
                         "Le résultat du message relayé est incertain. ATLAS ne le renverra pas automatiquement."
                     RelayCallResult.Failure.Reason.CANCELLED -> AgentChatFailureKind.CANCELLED to "Envoi relayé annulé."

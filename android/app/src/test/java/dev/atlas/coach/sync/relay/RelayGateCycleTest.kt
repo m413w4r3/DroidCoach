@@ -39,7 +39,9 @@ class RelayGateCycleTest {
         val secondDispatchDone = CountDownLatch(1)
         val workerFailures = AtomicReference<Throwable?>()
         gate.beforeLockAttemptForTest = {
-            if (Thread.currentThread().name == "relay-cycle-reader") readerWaitingForGate.countDown()
+            if (Thread.currentThread().name !in setOf("relay-gate-holder", "relay-first-request")) {
+                readerWaitingForGate.countDown()
+            }
         }
 
         transport.start()

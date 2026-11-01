@@ -21,7 +21,9 @@ sealed interface RelayCallResult {
         val remoteCode: String? = null,
     ) : RelayCallResult
     data class Failure(val reason: Reason) : RelayCallResult {
-        enum class Reason { NOT_STARTED, OFFLINE, QUEUE_FULL, EXPIRED, TIMEOUT, PROTOCOL, POLICY_DENIED, CANCELLED }
+        enum class Reason {
+            NOT_STARTED, OFFLINE, QUEUE_FULL, EXPIRED, TIMEOUT_NOT_SENT, TIMEOUT, PROTOCOL, POLICY_DENIED, CANCELLED,
+        }
     }
 }
 
@@ -65,7 +67,9 @@ class RelayBackendTransport internal constructor(
     private val stateNotifier = java.util.concurrent.Executors.newSingleThreadExecutor {
         Thread(it, "atlas-relay-state").apply { isDaemon = true }
     }
+    @Volatile private var callbackPumpExecutor = newCallbackPumpExecutor()
     @Volatile private var connectionState = RelayConnectionState.LOCAL
+    @Volatile private var closing = false
     @Volatile var sessionGeneration: Long = 0L
         private set
     @Volatile var lastCloseCode: Int? = null
@@ -95,7 +99,9 @@ class RelayBackendTransport internal constructor(
 
     fun start() {
         synchronized(lock) {
+            if (callbackPumpExecutor.isShutdown) callbackPumpExecutor = newCallbackPumpExecutor()
             started = true
+            closing = false
         }
         client.start()
         scheduleHeartbeat()
@@ -197,7 +203,7 @@ class RelayBackendTransport internal constructor(
             recordDiagnostic(pending, CoreV4Diagnostics.Stage.QUEUED, CoreV4Diagnostics.State.QUEUED,
                 CoreV4Diagnostics.Result.ACCEPTED)
         }
-        pump()
+        pump(pending.deadlineNanos)
         val remaining = (pending.deadlineNanos - System.nanoTime()).coerceAtLeast(0)
         val completed = try { pending.done.await(remaining, TimeUnit.NANOSECONDS) } catch (_: InterruptedException) {
             finishCancelledRequest(pending)
@@ -206,46 +212,63 @@ class RelayBackendTransport internal constructor(
         }
         if (!completed) {
             var sendCancel = false
-            synchronized(lock) {
+            val timeoutResult = synchronized(lock) {
                 if (pending.result != null) return pending.result!!
-                if (pending.sent) {
+                val sent = pending.sent
+                if (sent) {
                     inFlight.remove(pending.requestId)
                     rememberTimedOutLocked(pending.requestId)
                     sendCancel = true
                 } else {
                     queue.remove(pending)
+                    inFlight.remove(pending.requestId)
                 }
-                pending.result = RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT)
+                RelayCallResult.Failure(
+                    if (sent) RelayCallResult.Failure.Reason.TIMEOUT
+                    else RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT,
+                ).also { pending.result = it }
             }
             pending.done.countDown()
-            recordDiagnostic(pending, CoreV4Diagnostics.Stage.TIMEOUT, CoreV4Diagnostics.State.FAILED,
+            recordDiagnostic(pending, CoreV4Diagnostics.Stage.TIMEOUT,
+                if (pending.sent) CoreV4Diagnostics.State.UNKNOWN else CoreV4Diagnostics.State.FAILED,
                 CoreV4Diagnostics.Result.TIMEOUT)
             if (sendCancel) sendCancel(pending.requestId)
-            pump()
-            return RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT)
+            scheduleCallbackPump()
+            return timeoutResult
         }
         return pending.result ?: RelayCallResult.Failure(RelayCallResult.Failure.Reason.CANCELLED)
     }
 
     override fun close() {
+        closing = true
         val failures: List<Pending>
         val closedGeneration: Long
+        var wasStarted = false
         synchronized(lock) {
-            if (!started) return
-            started = false
-            closedGeneration = sessionGeneration
-            appSessionId = null
-            appSessionExpiry = null
-            negotiatedCapabilities = emptySet()
-            capabilityNegotiationComplete = false
-            heartbeatTask?.cancel(false)
-            heartbeatTask = null
-            heartbeatNonce = null
-            setStateLocked(RelayConnectionState.LOCAL)
-            failures = (queue.toList() + inFlight.values).distinct()
-            queue.clear()
-            inFlight.clear()
-            failures.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)) }
+            if (!started) {
+                failures = emptyList()
+                closedGeneration = sessionGeneration
+            } else {
+                wasStarted = true
+                started = false
+                closedGeneration = sessionGeneration
+                appSessionId = null
+                appSessionExpiry = null
+                negotiatedCapabilities = emptySet()
+                capabilityNegotiationComplete = false
+                heartbeatTask?.cancel(false)
+                heartbeatTask = null
+                heartbeatNonce = null
+                setStateLocked(RelayConnectionState.LOCAL)
+                failures = (queue.toList() + inFlight.values).distinct()
+                queue.clear()
+                inFlight.clear()
+                failures.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)) }
+            }
+        }
+        if (!wasStarted) {
+            callbackPumpExecutor.shutdownNow()
+            return
         }
         CoreV4Diagnostics.record(
             stage = CoreV4Diagnostics.Stage.SESSION_CLOSED,
@@ -258,6 +281,7 @@ class RelayBackendTransport internal constructor(
                 CoreV4Diagnostics.Result.OFFLINE)
         }
         client.stop()
+        callbackPumpExecutor.shutdownNow()
     }
 
     private fun onSecureChannelReady() {
@@ -354,55 +378,60 @@ class RelayBackendTransport internal constructor(
             )
         }
         if (reportMissingCoachChat) reportFailure(RelayFailure.of(RelayFailureKind.CAPABILITY_UNAVAILABLE))
-        pump()
+        scheduleCallbackPump()
     }
 
     private fun handleResponse(envelope: JSONObject) {
         val requestId = envelope.optString("request_id")
         val sessionId = envelope.optString("session_id")
         val operation = envelope.optString("operation")
-        synchronized(lock) {
-            if (sessionId != appSessionId) {
-                if (sessionId.isNotBlank() && appSessionId != null) return
-                failProtocolLocked(RelayProtocolException("response session correlation mismatch"))
-                return
+        var abortClient = false
+        try {
+            synchronized(lock) {
+                if (sessionId != appSessionId) {
+                    if (sessionId.isNotBlank() && appSessionId != null) return
+                    abortClient = failProtocolLocked(RelayProtocolException("response session correlation mismatch"))
+                    return
+                }
+                val pending = inFlight[requestId]?.takeIf { it.sent }
+                pending?.let(::recordSocketSendAccepted)
+                CoreV4Diagnostics.record(
+                    stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+                    state = CoreV4Diagnostics.State.RESPONSE,
+                    result = CoreV4Diagnostics.Result.SUCCESS,
+                    category = pending?.diagnosticCategory ?: CoreV4Diagnostics.categoryForOperation(operation),
+                    consentVersion = pending?.diagnosticConsentVersion,
+                    durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
+                    sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
+                    requestId = requestId,
+                )
+                if (pending == null) {
+                    if (timedOutIds.remove(requestId) != null) return
+                    abortClient = failProtocolLocked(RelayProtocolException("response has no matching request"))
+                    return
+                }
+                if (operation != pending.operation) {
+                    abortClient = failProtocolLocked(RelayProtocolException("response correlation mismatch"))
+                    return
+                }
+                recordDiagnostic(
+                    pending,
+                    CoreV4Diagnostics.Stage.CORRELATED,
+                    CoreV4Diagnostics.State.CORRELATED,
+                    CoreV4Diagnostics.Result.CORRELATED,
+                )
+                inFlight.remove(requestId)
+                val responseBytes = envelope.toString().toByteArray(Charsets.UTF_8)
+                if (responseBytes.size > negotiatedResponseLimit) {
+                    completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
+                } else {
+                    completeLocked(pending, RelayCallResult.Success(envelope.getJSONObject("result"), envelope.getBoolean("replayed")))
+                }
             }
-            val pending = inFlight[requestId]
-            pending?.let(::recordSocketSendAccepted)
-            CoreV4Diagnostics.record(
-                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
-                state = CoreV4Diagnostics.State.RESPONSE,
-                result = CoreV4Diagnostics.Result.SUCCESS,
-                category = pending?.diagnosticCategory ?: CoreV4Diagnostics.categoryForOperation(operation),
-                consentVersion = pending?.diagnosticConsentVersion,
-                durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
-                sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
-                requestId = requestId,
-            )
-            if (pending == null) {
-                if (timedOutIds.remove(requestId) != null) return
-                failProtocolLocked(RelayProtocolException("response has no matching request"))
-                return
-            }
-            if (operation != pending.operation) {
-                failProtocolLocked(RelayProtocolException("response correlation mismatch"))
-                return
-            }
-            recordDiagnostic(
-                pending,
-                CoreV4Diagnostics.Stage.CORRELATED,
-                CoreV4Diagnostics.State.CORRELATED,
-                CoreV4Diagnostics.Result.CORRELATED,
-            )
-            inFlight.remove(requestId)
-            val responseBytes = envelope.toString().toByteArray(Charsets.UTF_8)
-            if (responseBytes.size > negotiatedResponseLimit) {
-                completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
-            } else {
-                completeLocked(pending, RelayCallResult.Success(envelope.getJSONObject("result"), envelope.getBoolean("replayed")))
-            }
+        } finally {
+            if (abortClient) client.abort(4003, "application protocol failure")
         }
-        pump()
+        scheduleCallbackPump()
     }
 
     private fun handleError(envelope: JSONObject) {
@@ -417,64 +446,74 @@ class RelayBackendTransport internal constructor(
         val requestId = if (envelope.isNull("request_id")) null else envelope.getString("request_id")
         val sessionId = if (envelope.isNull("session_id")) null else envelope.getString("session_id")
         if (requestId == null) {
-            synchronized(lock) {
-                if (sessionId != null && sessionId != appSessionId) {
-                    if (sessionId.isNotBlank() && appSessionId != null) return
-                    failProtocolLocked(RelayProtocolException("session error correlation mismatch"))
-                    return
+            var abortClient = false
+            try {
+                synchronized(lock) {
+                    if (sessionId != null && sessionId != appSessionId) {
+                        if (sessionId.isNotBlank() && appSessionId != null) return
+                        abortClient = failProtocolLocked(RelayProtocolException("session error correlation mismatch"))
+                        return
+                    }
+                    when (relayCode) {
+                        "AUTH_REQUIRED", "AUTH_FAILED" -> setStateLocked(RelayConnectionState.AUTH_REQUIRED)
+                        "DEVICE_REVOKED" -> setStateLocked(RelayConnectionState.REVOKED)
+                        else -> setStateLocked(RelayConnectionState.ERROR)
+                    }
+                    reportRemoteFailure(relayCode)
+                    val waiting = queue.toList()
+                    queue.clear()
+                    waiting.forEach { completeLocked(it, remoteError) }
+                    val sent = inFlight.values.toList()
+                    inFlight.clear()
+                    sent.forEach { completeLocked(it, remoteError) }
+                    appSessionId = null
+                    appSessionExpiry = null
                 }
-                when (relayCode) {
-                    "AUTH_REQUIRED", "AUTH_FAILED" -> setStateLocked(RelayConnectionState.AUTH_REQUIRED)
-                    "DEVICE_REVOKED" -> setStateLocked(RelayConnectionState.REVOKED)
-                    else -> setStateLocked(RelayConnectionState.ERROR)
-                }
-                reportRemoteFailure(relayCode)
-                val waiting = queue.toList()
-                queue.clear()
-                waiting.forEach { completeLocked(it, remoteError) }
-                val sent = inFlight.values.toList()
-                inFlight.clear()
-                sent.forEach { completeLocked(it, remoteError) }
-                appSessionId = null
-                appSessionExpiry = null
+            } finally {
+                if (abortClient) client.abort(4003, "application protocol failure")
             }
             return
         }
-        synchronized(lock) {
-            if (sessionId != appSessionId) {
-                if (!sessionId.isNullOrBlank() && appSessionId != null) return
-                failProtocolLocked(RelayProtocolException("error session correlation mismatch"))
-                return
+        var abortClient = false
+        try {
+            synchronized(lock) {
+                if (sessionId != appSessionId) {
+                    if (!sessionId.isNullOrBlank() && appSessionId != null) return
+                    abortClient = failProtocolLocked(RelayProtocolException("error session correlation mismatch"))
+                    return
+                }
+                val pending = inFlight[requestId]?.takeIf { it.sent }
+                CoreV4Diagnostics.record(
+                    stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+                    state = CoreV4Diagnostics.State.RESPONSE,
+                    result = CoreV4Diagnostics.Result.REJECTED,
+                    category = pending?.diagnosticCategory,
+                    consentVersion = pending?.diagnosticConsentVersion,
+                    durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
+                    sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
+                    requestId = requestId,
+                )
+                if (pending == null) {
+                    if (timedOutIds.remove(requestId) != null) return
+                    abortClient = failProtocolLocked(RelayProtocolException("error has no matching request"))
+                    return
+                }
+                recordDiagnostic(
+                    pending,
+                    CoreV4Diagnostics.Stage.CORRELATED,
+                    CoreV4Diagnostics.State.CORRELATED,
+                    CoreV4Diagnostics.Result.REJECTED,
+                )
+                inFlight.remove(requestId)
+                if (relayCode == "DEVICE_REVOKED") setStateLocked(RelayConnectionState.REVOKED)
+                if (relayCode == "AUTH_REQUIRED" || relayCode == "AUTH_FAILED") setStateLocked(RelayConnectionState.AUTH_REQUIRED)
+                reportRemoteFailure(relayCode)
+                completeLocked(pending, remoteError)
             }
-            val pending = inFlight[requestId]
-            CoreV4Diagnostics.record(
-                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
-                state = CoreV4Diagnostics.State.RESPONSE,
-                result = CoreV4Diagnostics.Result.REJECTED,
-                category = pending?.diagnosticCategory,
-                consentVersion = pending?.diagnosticConsentVersion,
-                durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
-                sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
-                requestId = requestId,
-            )
-            if (pending == null) {
-                if (timedOutIds.remove(requestId) != null) return
-                failProtocolLocked(RelayProtocolException("error has no matching request"))
-                return
-            }
-            recordDiagnostic(
-                pending,
-                CoreV4Diagnostics.Stage.CORRELATED,
-                CoreV4Diagnostics.State.CORRELATED,
-                CoreV4Diagnostics.Result.REJECTED,
-            )
-            inFlight.remove(requestId)
-            if (relayCode == "DEVICE_REVOKED") setStateLocked(RelayConnectionState.REVOKED)
-            if (relayCode == "AUTH_REQUIRED" || relayCode == "AUTH_FAILED") setStateLocked(RelayConnectionState.AUTH_REQUIRED)
-            reportRemoteFailure(relayCode)
-            completeLocked(pending, remoteError)
+        } finally {
+            if (abortClient) client.abort(4003, "application protocol failure")
         }
-        pump()
+        scheduleCallbackPump()
     }
 
     private fun handlePing(envelope: JSONObject) {
@@ -547,16 +586,48 @@ class RelayBackendTransport internal constructor(
         }
     }
 
-    private fun pump() {
+    private fun pump(deadlineNanos: Long? = null): Boolean {
         // Hold the same gate as consent/revocation mutations from the pre-dispatch check through
         // the WebSocket write. A withdrawal cannot interleave between the check and the frame.
-        consentGate.withLock { pumpUnderConsentGate() }
+        if (deadlineNanos == null) {
+            consentGate.withLock { pumpUnderConsentGate() }
+            return true
+        } else {
+            val remainingNanos = (deadlineNanos - System.nanoTime()).coerceAtLeast(0L)
+            // Floor the conversion so gate acquisition itself can never exceed the request deadline.
+            return consentGate.tryWithLock(TimeUnit.NANOSECONDS.toMillis(remainingNanos)) {
+                pumpUnderConsentGate()
+                true
+            } ?: false
+        }
+    }
+
+    private fun scheduleCallbackPump() {
+        if (closing) return
+        val executor = callbackPumpExecutor
+        runCatching {
+            executor.execute {
+                // Callback threads never wait for G. Bound executor occupancy as well so close can
+                // interrupt and retire this worker if a consent mutation stalls while holding G.
+                val acquired = pump(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CALLBACK_GATE_WAIT_MILLIS))
+                if (!acquired && !closing) {
+                    runCatching {
+                        scheduler.schedule({ scheduleCallbackPump() }, CALLBACK_GATE_RETRY_MILLIS, TimeUnit.MILLISECONDS)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun newCallbackPumpExecutor() = java.util.concurrent.Executors.newSingleThreadExecutor {
+        Thread(it, "atlas-relay-callback-pump").apply { isDaemon = true }
     }
 
     private fun pumpUnderConsentGate() {
         val outgoing = mutableListOf<Pair<Pending, ByteArray>>()
         var refreshSession = false
         synchronized(lock) {
+            if (closing || !started) return
             val sessionId = appSessionId ?: return
             if (connectionState != RelayConnectionState.RELAY_CONNECTED) return
             if (appSessionExpiry?.isAfter(Instant.now()) != true) {
@@ -566,11 +637,25 @@ class RelayBackendTransport internal constructor(
                 refreshSession = true
             } else while (queue.isNotEmpty() && inFlight.size < maxConcurrent) {
                 val pending = queue.removeFirst()
+                if (hasRequestDeadlineExpired(pending)) {
+                    completeBeforeSendTimeoutLocked(pending)
+                    continue
+                }
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.BEFORE_DISPATCH,
+                    CoreV4Diagnostics.State.PREPARING, CoreV4Diagnostics.Result.NONE)
                 val stillAllowed = try { pending.beforeDispatch() } catch (_: Exception) { false }
                 if (!stillAllowed) {
                     recordDiagnostic(pending, CoreV4Diagnostics.Stage.CANCELLED,
                         CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.REJECTED)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED))
+                    continue
+                }
+                if (closing || !started) {
+                    completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
+                    continue
+                }
+                if (hasRequestDeadlineExpired(pending)) {
+                    completeBeforeSendTimeoutLocked(pending)
                     continue
                 }
                 if (!pending.expiresAt.isAfter(Instant.now())) {
@@ -583,6 +668,16 @@ class RelayBackendTransport internal constructor(
                     recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR,
                         CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.PROTOCOL)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
+                    continue
+                }
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.PAYLOAD_READY,
+                    CoreV4Diagnostics.State.PREPARED, CoreV4Diagnostics.Result.SUCCESS)
+                if (closing || !started) {
+                    completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
+                    continue
+                }
+                if (hasRequestDeadlineExpired(pending)) {
+                    completeBeforeSendTimeoutLocked(pending)
                     continue
                 }
                 pending.diagnosticCategory = CoreV4Diagnostics.categoryForOperation(pending.operation, payload)
@@ -617,7 +712,6 @@ class RelayBackendTransport internal constructor(
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
                     continue
                 }
-                pending.sent = true
                 inFlight[pending.requestId] = pending
                 recordDiagnostic(pending, CoreV4Diagnostics.Stage.DISPATCHED,
                     CoreV4Diagnostics.State.DISPATCHED, CoreV4Diagnostics.Result.ACCEPTED)
@@ -629,6 +723,24 @@ class RelayBackendTransport internal constructor(
             return
         }
         outgoing.forEach { (pending, bytes) ->
+            val shouldWrite = synchronized(lock) {
+                if (pending.result != null || inFlight[pending.requestId] !== pending || closing || !started) {
+                    if (inFlight.remove(pending.requestId) != null && pending.result == null) {
+                        completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
+                    }
+                    false
+                } else if (hasRequestDeadlineExpired(pending)) {
+                    inFlight.remove(pending.requestId)
+                    completeBeforeSendTimeoutLocked(pending)
+                    false
+                } else {
+                    // This is the send-start linearization point. Timeouts before it are definite
+                    // no-send outcomes; timeouts after it are conservatively uncertain.
+                    pending.sent = true
+                    true
+                }
+            }
+            if (!shouldWrite) return@forEach
             if (client.sendTextFrame(bytes)) {
                 recordSocketSendAccepted(pending)
             } else {
@@ -647,6 +759,15 @@ class RelayBackendTransport internal constructor(
         }
     }
 
+    private fun hasRequestDeadlineExpired(pending: Pending): Boolean =
+        System.nanoTime() >= pending.deadlineNanos
+
+    private fun completeBeforeSendTimeoutLocked(pending: Pending) {
+        recordDiagnostic(pending, CoreV4Diagnostics.Stage.TIMEOUT,
+            CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.TIMEOUT)
+        completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT))
+    }
+
     private fun sendCancel(targetRequestId: String) {
         val cancel = JSONObject()
             .put("protocol", applicationProtocol)
@@ -657,7 +778,8 @@ class RelayBackendTransport internal constructor(
     }
 
     private fun failProtocol(error: Throwable) {
-        synchronized(lock) { failProtocolLocked(error) }
+        val shouldAbort = synchronized(lock) { failProtocolLocked(error) }
+        if (shouldAbort) client.abort(4003, "application protocol failure")
     }
 
     private fun finishCancelledRequest(pending: Pending) {
@@ -670,6 +792,7 @@ class RelayBackendTransport internal constructor(
                 sendCancel = true
             } else {
                 queue.remove(pending)
+                inFlight.remove(pending.requestId)
             }
             pending.result = RelayCallResult.Failure(RelayCallResult.Failure.Reason.CANCELLED)
         }
@@ -677,7 +800,7 @@ class RelayBackendTransport internal constructor(
         recordDiagnostic(pending, CoreV4Diagnostics.Stage.CANCELLED,
             CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.CANCELLED)
         if (sendCancel) sendCancel(pending.requestId)
-        pump()
+        scheduleCallbackPump()
     }
 
     private fun recordClientProtocolFailure() {
@@ -691,12 +814,12 @@ class RelayBackendTransport internal constructor(
         }
     }
 
-    private fun failProtocolLocked(@Suppress("UNUSED_PARAMETER") error: Throwable) {
+    private fun failProtocolLocked(@Suppress("UNUSED_PARAMETER") error: Throwable): Boolean {
         setStateLocked(RelayConnectionState.ERROR)
         appSessionId = null
         inFlight.values.toList().forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)) }
         inFlight.clear()
-        client.abort(4003, "application protocol failure")
+        return true
     }
 
     private fun onClientState(state: RelayConnectionState) {
@@ -713,9 +836,13 @@ class RelayBackendTransport internal constructor(
                     appSessionId = null
                     appSessionExpiry = null
                     heartbeatNonce = null
-                    val sent = inFlight.values.toList()
+                    val active = inFlight.values.toList()
                     inFlight.clear()
-                    sent.forEach {
+                    active.filterNot { it.sent }.asReversed().forEach { pending ->
+                        if (pending.result == null && started && !closing) queue.addFirst(pending)
+                        else completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
+                    }
+                    active.filter { it.sent }.forEach {
                         recordDiagnostic(it, CoreV4Diagnostics.Stage.OFFLINE,
                             CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.OFFLINE)
                         completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
@@ -723,7 +850,7 @@ class RelayBackendTransport internal constructor(
                 }
             }
         }
-        pump()
+        scheduleCallbackPump()
     }
 
     private fun onSocketClosed(code: Int, @Suppress("UNUSED_PARAMETER") reason: String) {
@@ -880,6 +1007,8 @@ class RelayBackendTransport internal constructor(
         const val DEFAULT_REQUEST_TIMEOUT_MILLIS = 30_000L
         private const val CLIENT_VERSION = "0.1.0-r3b"
         private const val MAX_TIMED_OUT_IDS = 256
+        private const val CALLBACK_GATE_WAIT_MILLIS = 250L
+        private const val CALLBACK_GATE_RETRY_MILLIS = 50L
         private val NEXT_SESSION_GENERATION = AtomicLong()
     }
 }

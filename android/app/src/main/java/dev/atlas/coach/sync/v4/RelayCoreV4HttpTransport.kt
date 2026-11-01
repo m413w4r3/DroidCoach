@@ -288,6 +288,7 @@ private fun RelayCallResult.Failure.toCoreV4Exception(): Nothing {
         RelayCallResult.Failure.Reason.OFFLINE,
         RelayCallResult.Failure.Reason.CANCELLED,
         -> CoreV4FailureKind.OFFLINE
+        RelayCallResult.Failure.Reason.TIMEOUT_NOT_SENT -> CoreV4FailureKind.UNAVAILABLE
         RelayCallResult.Failure.Reason.QUEUE_FULL,
         RelayCallResult.Failure.Reason.EXPIRED,
         RelayCallResult.Failure.Reason.TIMEOUT,

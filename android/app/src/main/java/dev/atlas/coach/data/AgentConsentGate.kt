@@ -1,6 +1,7 @@
 package dev.atlas.coach.data
 
 import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.TimeUnit
 
 /**
  * Serializes consent and mandate mutations with the relay's final payload write.
@@ -20,6 +21,24 @@ class AgentConsentGate {
     fun <T> withLock(block: () -> T): T {
         beforeLockAttemptForTest?.invoke()
         lock.lock()
+        try {
+            return block()
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /** Attempts the same reentrant consent barrier without outliving a caller's deadline. */
+    fun <T> tryWithLock(timeoutMillis: Long, block: () -> T): T? {
+        require(timeoutMillis >= 0L) { "timeoutMillis must not be negative" }
+        beforeLockAttemptForTest?.invoke()
+        val acquired = try {
+            lock.tryLock(timeoutMillis, TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+        if (!acquired) return null
         try {
             return block()
         } finally {
