@@ -1,6 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { SecureChannel } from "@getpaseo/relay/e2ee";
 import { BackendRequestError } from "./backend.js";
+import type { DiagnosticContext } from "./diagnostics.js";
 import { RemoteError, asRemoteError } from "./errors.js";
 import type { DeviceRecord, DeviceRegistry } from "./device-registry.js";
 import type { ConnectorMetrics } from "./metrics.js";
@@ -91,7 +92,13 @@ export class SessionManager {
     this.nonces.set(nonceKey, now + CACHE_TTL_MS);
 
     const prior = this.active.get(hello.device_id);
-    if (prior && prior !== peer) prior.close(4001, "session replaced");
+    if (prior && prior !== peer) {
+      const context = this.operations.diagnostics.enabled
+        ? this.operations.diagnostics.sessionContext(peer.sessionOrdinal)
+        : undefined;
+      this.operations.diagnostics.record(context, "session_changed", "changed", { resultCode: "SESSION_REPLACED" });
+      prior.close(4001, "session replaced");
+    }
     const authenticated: AuthenticatedDevice = {
       record,
       sessionId: randomUUID(),
@@ -101,6 +108,10 @@ export class SessionManager {
     };
     this.active.set(hello.device_id, peer);
     this.metrics.sessionOpened();
+    const context = this.operations.diagnostics.enabled
+      ? this.operations.diagnostics.sessionContext(peer.sessionOrdinal)
+      : undefined;
+    this.operations.diagnostics.record(context, "session_active", "active");
     return authenticated;
   }
 
@@ -154,6 +165,7 @@ export class SessionManager {
 }
 
 export class PeerSession {
+  readonly sessionOrdinal: number;
   private auth: AuthenticatedDevice | null = null;
   private closed = false;
   private finished = false;
@@ -172,6 +184,7 @@ export class PeerSession {
     private readonly state: SessionState,
     private readonly now: () => number = Date.now,
   ) {
+    this.sessionOrdinal = operations.diagnostics.nextSessionOrdinal();
     this.openedAt = now();
     this.heartbeat = setInterval(() => void this.checkLiveness(), 20_000);
     this.heartbeat.unref?.();
@@ -294,14 +307,30 @@ export class PeerSession {
     if (this.inFlight.has(request.request_id)) throw new RemoteError("IDEMPOTENCY_CONFLICT");
     const controller = new AbortController();
     this.inFlight.set(request.request_id, controller);
+    const traceContext = this.operations.diagnostics.enabled
+      ? this.operations.diagnostics.operationContext(this.sessionOrdinal, request.request_id, request.operation)
+      : undefined;
+    this.operations.diagnostics.beginOperation(traceContext);
     const startedAt = this.now();
     this.metrics.request();
+    let responseSendRejected = false;
     try {
-      const response = await this.operations.execute(auth.record.device_id, auth.sessionId, request, controller.signal);
-      if (!this.closed) await this.send(response);
+      const response = await this.operations.execute(auth.record.device_id, auth.sessionId, request, controller.signal, traceContext);
+      if (!this.closed) {
+        try {
+          await this.send(response, traceContext);
+        } catch (error) {
+          responseSendRejected = true;
+          throw error;
+        }
+      }
     } catch (error) {
       this.metrics.error();
-      if (!this.closed) await this.sendError(asRemoteError(error), request.request_id);
+      if (!this.closed) {
+        // Keep the fallback error write out of the operation-response trace so its
+        // accepted send cannot obscure a rejected response acknowledgement.
+        await this.sendError(asRemoteError(error), request.request_id, undefined, responseSendRejected ? undefined : traceContext);
+      }
     } finally {
       this.metrics.latency(Math.max(0, this.now() - startedAt));
       this.inFlight.delete(request.request_id);
@@ -338,15 +367,26 @@ export class PeerSession {
     }
   }
 
-  private async send(value: unknown): Promise<void> {
+  private async send(value: unknown, traceContext?: DiagnosticContext): Promise<void> {
     const serialized = JSON.stringify(value);
     if (Buffer.byteLength(serialized, "utf8") > MAX_RESPONSE_BYTES || Buffer.byteLength(serialized, "utf8") > MAX_REQUEST_BYTES * 8) {
       throw new RemoteError("PAYLOAD_TOO_LARGE");
     }
-    await this.channel.send(serialized);
+    if (!traceContext) {
+      await this.channel.send(serialized);
+      return;
+    }
+    this.operations.diagnostics.record(traceContext, "ws_send_attempt", "started");
+    try {
+      await this.channel.send(serialized);
+    } catch (error) {
+      this.operations.diagnostics.record(traceContext, "ws_send_result", "rejected", { resultCode: "SEND_FAILED" });
+      throw error;
+    }
+    this.operations.diagnostics.record(traceContext, "ws_send_result", "accepted");
   }
 
-  private async sendError(error: RemoteError, requestId: string | null, protocol?: Protocol): Promise<void> {
+  private async sendError(error: RemoteError, requestId: string | null, protocol?: Protocol, traceContext?: DiagnosticContext): Promise<void> {
     if (this.closed) return;
     const upstreamStatus = this.auth?.protocol === PROTOCOL_V2 && error instanceof BackendRequestError ? error.upstreamStatus : undefined;
     const remoteCode = this.auth?.protocol === PROTOCOL_V2 && error instanceof BackendRequestError ? error.remoteCode : undefined;
@@ -364,7 +404,19 @@ export class PeerSession {
       completed_at: new Date(this.now()).toISOString(),
     };
     try {
-      await this.channel.send(JSON.stringify(envelope));
+      const serialized = JSON.stringify(envelope);
+      if (!traceContext) {
+        await this.channel.send(serialized);
+        return;
+      }
+      this.operations.diagnostics.record(traceContext, "ws_send_attempt", "started");
+      try {
+        await this.channel.send(serialized);
+      } catch (error) {
+        this.operations.diagnostics.record(traceContext, "ws_send_result", "rejected", { resultCode: "SEND_FAILED" });
+        throw error;
+      }
+      this.operations.diagnostics.record(traceContext, "ws_send_result", "accepted");
     } catch {
       this.close(4001, "channel closed");
     }

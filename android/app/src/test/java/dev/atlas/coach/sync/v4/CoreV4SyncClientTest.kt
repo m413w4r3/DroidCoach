@@ -74,6 +74,83 @@ class CoreV4SyncClientTest {
     }
 
     @Test
+    fun lostConsentResponseIsRetriedWithSameBodyAndKey() {
+        val store = AndroidCoreV4SyncStore(MemoryV4Persistence())
+        val dayPlanGranted = store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        val statusGranted = store.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        assertEquals(2, dayPlanGranted.snapshot.version)
+        assertEquals(2, statusGranted.snapshot.version)
+
+        val transport = LostConsentResponseTransport(CoreV4Category.ACTIVITY_STATUS)
+        val client = CoreV4SyncClient(transport)
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+
+        val statusAttempts = transport.requests.filter { request ->
+            request.path == CoreV4SyncClient.CONSENT_ROUTE &&
+                JSONObject(request.body).optString("category") == CoreV4Category.ACTIVITY_STATUS.wireValue
+        }
+        assertEquals(2, statusAttempts.size)
+        assertEquals(statusAttempts[0].body, statusAttempts[1].body)
+        assertEquals(
+            JSONObject(statusAttempts[0].body).getString("idempotency_key"),
+            JSONObject(statusAttempts[1].body).getString("idempotency_key"),
+        )
+        assertEquals(1, transport.effectCount(CoreV4Category.ACTIVITY_STATUS))
+
+        val dayPlanAttempts = transport.requests.filter { request ->
+            request.path == CoreV4SyncClient.CONSENT_ROUTE &&
+                JSONObject(request.body).optString("category") == CoreV4Category.DAY_PLAN.wireValue
+        }
+        assertEquals(1, dayPlanAttempts.size)
+        assertEquals(dayPlanGranted.snapshot.version,
+            store.consent(CoreV4Category.DAY_PLAN).snapshot.syncedVersion)
+        val statusAfterSync = store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        assertEquals(statusGranted.snapshot.version, statusAfterSync.syncedVersion)
+    }
+
+    @Test
+    fun lostPlanResponseIsRetriedWithSameBodyAndKey() {
+        val store = AndroidCoreV4SyncStore(MemoryV4Persistence())
+        store.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        val transport = LostPlanResponseTransport()
+        val client = CoreV4SyncClient(transport)
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+
+        val consent = store.consent(CoreV4Category.DAY_PLAN).snapshot
+        assertEquals(consent.version, consent.syncedVersion)
+        val plan = approvedPlan()
+        val data = CoreV4SyncClient.planData(plan, emptyList(), observedAt = NOW)
+        val sourceKey = "plan:${plan.planId}:consent:${consent.version}"
+        val fingerprint = coreV4Fingerprint(data, "observed_at")
+        sendCoreV4Projection(
+            store = store,
+            client = client,
+            token = TOKEN,
+            category = CoreV4Category.DAY_PLAN,
+            sourceKey = sourceKey,
+            sourceVersion = plan.version,
+            sourceFingerprint = fingerprint,
+            data = data,
+            observedAt = NOW,
+            consent = consent,
+        )
+
+        val planAttempts = transport.requests.filter { it.path == CoreV4Category.DAY_PLAN.route }
+        assertEquals(2, planAttempts.size)
+        assertEquals(planAttempts[0].body, planAttempts[1].body)
+        assertEquals(
+            JSONObject(planAttempts[0].body).getString("idempotency_key"),
+            JSONObject(planAttempts[1].body).getString("idempotency_key"),
+        )
+        assertEquals(1, transport.effectCount)
+        val receipt = store.receipt(sourceKey) ?: error("expected stored plan receipt")
+        assertEquals(CoreV4Category.DAY_PLAN, receipt.category)
+        assertEquals(plan.version, receipt.version)
+        assertEquals(fingerprint, receipt.sourceFingerprint)
+        assertTrue(store.pendingProjections(CoreV4Category.DAY_PLAN).isEmpty())
+    }
+
+    @Test
     fun allFiveProjectionSchemasAreValidatedAndSentToTheirFixedRoutes() {
         val transport = FakeTransport()
         val client = CoreV4SyncClient(transport)
@@ -671,6 +748,60 @@ class CoreV4SyncClientTest {
     }
 
     @Test
+    fun cancelledInFlightConsentKeepsPendingAndReplaysExactBody() {
+        val store = AndroidCoreV4SyncStore(MemoryV4Persistence())
+        val granted = store.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        val transport = CancelledConsentResponseTransport()
+        val client = CoreV4SyncClient(transport)
+
+        val cancellation = assertThrows(CoreV4SyncException::class.java) {
+            syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+        }
+        assertEquals(CoreV4FailureKind.PROTOCOL, cancellation.kind)
+        assertEquals(0, store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot.syncedVersion)
+        assertEquals(granted.snapshot.version,
+            store.pendingConsentRecords().single().snapshot.version)
+        val firstBody = transport.requests.single().body
+
+        syncPendingCoreV4ConsentsFirst(store, client, TOKEN)
+
+        assertEquals(2, transport.requests.size)
+        assertEquals(firstBody, transport.requests[1].body)
+        assertEquals(
+            JSONObject(firstBody).getString("idempotency_key"),
+            JSONObject(transport.requests[1].body).getString("idempotency_key"),
+        )
+        assertEquals(1, transport.effectCount)
+        assertEquals(granted.snapshot.version,
+            store.consent(CoreV4Category.ACTIVITY_STATUS).snapshot.syncedVersion)
+        assertTrue(store.pendingConsentRecords().isEmpty())
+    }
+
+    @Test
+    fun revokedV3WinsOverLateGrantedV2Receipt() {
+        val shared = SharedV4MemoryState()
+        val settingsStore = AndroidCoreV4SyncStore(MemoryV4Persistence(shared))
+        val workerStore = AndroidCoreV4SyncStore(MemoryV4Persistence(shared))
+        settingsStore.setConsent(CoreV4Category.DAY_PLAN, granted = true)
+        val grantedV2 = settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = true)
+        assertEquals(2, grantedV2.snapshot.version)
+
+        val transport = LateGrantedConsentReceiptTransport(settingsStore)
+        syncPendingCoreV4ConsentsFirst(workerStore, CoreV4SyncClient(transport), TOKEN)
+
+        val current = workerStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
+        assertEquals(3, current.version)
+        assertEquals(CoreV4ConsentState.REVOKED, current.state)
+        assertEquals(0, current.syncedVersion)
+        assertEquals(3, workerStore.pendingConsentRecords()
+            .single { it.snapshot.category == CoreV4Category.ACTIVITY_STATUS }.snapshot.version)
+        assertEquals(1, transport.requests.count { request ->
+            request.path == CoreV4SyncClient.CONSENT_ROUTE &&
+                JSONObject(request.body).optString("category") == CoreV4Category.ACTIVITY_STATUS.wireValue
+        })
+    }
+
+    @Test
     fun dayPlanRegrantPushesCurrentPlanBeforePendingStatus() {
         val sharedState = SharedV4MemoryState()
         val settingsStore = AndroidCoreV4SyncStore(MemoryV4Persistence(sharedState))
@@ -905,6 +1036,63 @@ class CoreV4SyncClientTest {
     }
 
     @Test
+    fun sameConsentKeySameBodyIsIdempotent() {
+        val transport = IdempotentConsentEndpointTransport()
+        val client = CoreV4SyncClient(transport)
+        val body = client.consentBody(
+            CoreV4Category.DAY_PLAN,
+            version = 2,
+            state = CoreV4ConsentState.GRANTED,
+            requestId = UUID_A,
+            idempotencyKey = UUID_B,
+            sentAt = NOW,
+        )
+
+        val first = client.sendConsent(body, TOKEN)
+        val replay = client.sendConsent(body, TOKEN)
+
+        assertEquals("ACCEPTED", first.resultCode)
+        assertFalse(first.replayed)
+        assertEquals("DUPLICATE", replay.resultCode)
+        assertTrue(replay.replayed)
+        assertEquals(2, transport.requests.size)
+        assertEquals(transport.requests[0].body, transport.requests[1].body)
+        assertEquals(1, transport.effectCount)
+    }
+
+    @Test
+    fun sameConsentKeyDifferentBodyConflicts() {
+        val transport = IdempotentConsentEndpointTransport()
+        val client = CoreV4SyncClient(transport)
+        val grantedBody = client.consentBody(
+            CoreV4Category.DAY_PLAN,
+            version = 2,
+            state = CoreV4ConsentState.GRANTED,
+            requestId = UUID_A,
+            idempotencyKey = UUID_B,
+            sentAt = NOW,
+        )
+        val revokedBody = client.consentBody(
+            CoreV4Category.DAY_PLAN,
+            version = 3,
+            state = CoreV4ConsentState.REVOKED,
+            requestId = UUID_A,
+            idempotencyKey = UUID_B,
+            sentAt = NOW,
+        )
+        client.sendConsent(grantedBody, TOKEN)
+
+        val conflict = assertThrows(CoreV4SyncException::class.java) {
+            client.sendConsent(revokedBody, TOKEN)
+        }
+
+        assertEquals(CoreV4FailureKind.CONFLICT, conflict.kind)
+        assertEquals("IDEMPOTENCY_CONFLICT", conflict.errorCode)
+        assertEquals(2, transport.requests.size)
+        assertEquals(1, transport.effectCount)
+    }
+
+    @Test
     fun offlineIsTypedRetryableAndKeepsCredentialsOutOfErrors() {
         val transport = FakeTransport().apply { offline = true }
         val client = CoreV4SyncClient(transport)
@@ -1016,6 +1204,136 @@ class CoreV4SyncClientTest {
 
     private fun granted(category: CoreV4Category) =
         CoreV4ConsentSnapshot(category, 1, CoreV4ConsentState.GRANTED, syncedVersion = 1)
+
+    private class LostConsentResponseTransport(
+        private val lostCategory: CoreV4Category,
+    ) : CoreV4HttpTransport {
+        val requests = mutableListOf<CoreV4HttpRequest>()
+        private val effects = linkedMapOf<String, Pair<CoreV4Category, String>>()
+        private var responseLost = false
+
+        override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+            requests += request
+            check(request.path == CoreV4SyncClient.CONSENT_ROUTE)
+            val envelope = JSONObject(request.body)
+            val category = CoreV4Category.entries.single { it.wireValue == envelope.getString("category") }
+            val key = envelope.getString("idempotency_key")
+            val existing = effects.putIfAbsent(key, category to request.body)
+            check(existing == null || existing == (category to request.body)) {
+                "a consent idempotency key must keep its first body"
+            }
+            if (category == lostCategory && !responseLost) {
+                responseLost = true
+                throw CoreV4SyncException(
+                    CoreV4FailureKind.UNAVAILABLE,
+                    retryable = false,
+                    errorCode = "TIMEOUT",
+                )
+            }
+            return consentHttpResponse(request)
+        }
+
+        fun effectCount(category: CoreV4Category): Int = effects.values.count { it.first == category }
+    }
+
+    private class LostPlanResponseTransport : CoreV4HttpTransport {
+        val requests = mutableListOf<CoreV4HttpRequest>()
+        private val effects = linkedMapOf<String, String>()
+        private var responseLost = false
+
+        override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+            requests += request
+            if (request.path == CoreV4SyncClient.CONSENT_ROUTE) return consentHttpResponse(request)
+            check(request.path == CoreV4Category.DAY_PLAN.route)
+            val key = JSONObject(request.body).getString("idempotency_key")
+            val existing = effects.putIfAbsent(key, request.body)
+            check(existing == null || existing == request.body) {
+                "a plan idempotency key must keep its first body"
+            }
+            if (!responseLost) {
+                responseLost = true
+                throw CoreV4SyncException(
+                    CoreV4FailureKind.UNAVAILABLE,
+                    retryable = false,
+                    errorCode = "TIMEOUT",
+                )
+            }
+            return projectionHttpResponse(request)
+        }
+
+        val effectCount: Int get() = effects.size
+    }
+
+    private class CancelledConsentResponseTransport : CoreV4HttpTransport {
+        val requests = mutableListOf<CoreV4HttpRequest>()
+        private val effects = linkedMapOf<String, String>()
+        private var cancellationThrown = false
+
+        override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+            requests += request
+            check(request.path == CoreV4SyncClient.CONSENT_ROUTE)
+            val key = JSONObject(request.body).getString("idempotency_key")
+            val existing = effects.putIfAbsent(key, request.body)
+            check(existing == null || existing == request.body)
+            if (!cancellationThrown) {
+                cancellationThrown = true
+                throw java.util.concurrent.CancellationException("synthetic response lost after acceptance")
+            }
+            return consentHttpResponse(request, resultCode = "DUPLICATE", replayed = true)
+        }
+
+        val effectCount: Int get() = effects.size
+    }
+
+    private class LateGrantedConsentReceiptTransport(
+        private val settingsStore: AndroidCoreV4SyncStore,
+    ) : CoreV4HttpTransport {
+        private val delegate = FakeTransport()
+        val requests = mutableListOf<CoreV4HttpRequest>()
+        private var revokedDuringGrantedReceipt = false
+
+        override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+            requests += request
+            if (!revokedDuringGrantedReceipt && request.path == CoreV4SyncClient.CONSENT_ROUTE) {
+                val envelope = JSONObject(request.body)
+                if (envelope.optString("category") == CoreV4Category.ACTIVITY_STATUS.wireValue &&
+                    envelope.optString("state") == CoreV4ConsentState.GRANTED.name &&
+                    envelope.optInt("consent_version") == 2
+                ) {
+                    revokedDuringGrantedReceipt = true
+                    settingsStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = false)
+                }
+            }
+            return delegate.post(request)
+        }
+    }
+
+    private class IdempotentConsentEndpointTransport : CoreV4HttpTransport {
+        val requests = mutableListOf<CoreV4HttpRequest>()
+        private val firstBodyByKey = linkedMapOf<String, String>()
+        private var effects = 0
+
+        override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
+            requests += request
+            check(request.path == CoreV4SyncClient.CONSENT_ROUTE)
+            val key = JSONObject(request.body).getString("idempotency_key")
+            val previous = firstBodyByKey[key]
+            if (previous != null && previous != request.body) {
+                return CoreV4HttpResponse(409, """{"error":{"code":"IDEMPOTENCY_CONFLICT"}}""")
+            }
+            if (previous == null) {
+                firstBodyByKey[key] = request.body
+                effects += 1
+            }
+            return consentHttpResponse(
+                request,
+                resultCode = if (previous == null) "ACCEPTED" else "DUPLICATE",
+                replayed = previous != null,
+            )
+        }
+
+        val effectCount: Int get() = effects
+    }
 
     private class FakeTransport : CoreV4HttpTransport {
         val requests = mutableListOf<CoreV4HttpRequest>()
@@ -1222,4 +1540,42 @@ class CoreV4SyncClientTest {
             shared.state.set(value)
         }
     }
+}
+
+private fun consentHttpResponse(
+    request: CoreV4HttpRequest,
+    resultCode: String = "ACCEPTED",
+    replayed: Boolean = false,
+): CoreV4HttpResponse {
+    val envelope = JSONObject(request.body)
+    return CoreV4HttpResponse(200, JSONObject()
+        .put("contract_version", 4)
+        .put("schema_version", 4)
+        .put("request_id", envelope.getString("request_id"))
+        .put("capability", CoreV4SyncClient.CONSENT_CAPABILITY)
+        .put("category", envelope.getString("category"))
+        .put("consent_version", envelope.getInt("consent_version"))
+        .put("state", envelope.getString("state"))
+        .put("updated_at", "2026-10-29T12:00:00Z")
+        .put("source", "ANDROID_SYNC")
+        .put("replayed", replayed)
+        .put("result_code", resultCode)
+        .toString())
+}
+
+private fun projectionHttpResponse(request: CoreV4HttpRequest): CoreV4HttpResponse {
+    val envelope = JSONObject(request.body)
+    val planData = envelope.getJSONObject("data")
+    return CoreV4HttpResponse(200, JSONObject()
+        .put("contract_version", 4)
+        .put("schema_version", 4)
+        .put("request_id", envelope.getString("request_id"))
+        .put("capability", CoreV4Category.DAY_PLAN.capability)
+        .put("accepted", true)
+        .put("replayed", false)
+        .put("stored_version", planData.getInt("version"))
+        .put("snapshot_hash", "sha256:" + "a".repeat(64))
+        .put("last_synced_at", "2026-10-29T12:00:00Z")
+        .put("result_code", "ACCEPTED")
+        .toString())
 }

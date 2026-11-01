@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { BackendClient } from "./backend.js";
 import { DeviceRegistry } from "./device-registry.js";
+import { ConnectorDiagnostics } from "./diagnostics.js";
 import { loadOrCreateIdentity } from "./identity.js";
 import { ConnectorMetrics } from "./metrics.js";
 import { OperationExecutor } from "./operations.js";
@@ -58,10 +59,18 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   const identityPath = join(config.stateDir, "identity.json");
   const { identity, keyPair } = await loadOrCreateIdentity(identityPath);
   const metrics = new ConnectorMetrics();
+  const diagnostics = new ConnectorDiagnostics();
   const backend = new BackendClient({
     baseUrl: config.backendUrl,
     ...(config.serviceToken ? { serviceToken: config.serviceToken } : {}),
     v4Enabled: config.v4Enabled === true,
+    ...(diagnostics.enabled ? {
+      fetcher: async (input, init) => {
+        const response = await fetch(input, init);
+        diagnostics.observeHttpStatus(response.status);
+        return response;
+      },
+    } : {}),
     ...(v4AndroidToken ? {
       // The shared Android bearer is only selected after an authenticated relay session
       // supplies its paired device id; payload data never chooses credentials.
@@ -73,7 +82,7 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
     relayConnected: () => relay.connected,
     backendConfigured: () => Boolean(config.backendUrl && config.serviceToken),
     uncertainOutcome: () => metrics.uncertainOutcome(),
-  }, Date.now, join(config.stateDir, "operations.json"));
+  }, Date.now, join(config.stateDir, "operations.json"), diagnostics);
   await operationExecutor.initialize();
   const sessions = new SessionManager(registry, operationExecutor, metrics, {
     relayConnected: () => relay.connected,

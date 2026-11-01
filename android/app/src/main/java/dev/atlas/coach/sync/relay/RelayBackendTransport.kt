@@ -1,6 +1,7 @@
 package dev.atlas.coach.sync.relay
 
 import dev.atlas.coach.data.AgentConsentGate
+import dev.atlas.coach.sync.v4.CoreV4Diagnostics
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -8,6 +9,7 @@ import java.util.LinkedHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 sealed interface RelayCallResult {
     data class Success(val result: JSONObject, val replayed: Boolean) : RelayCallResult
@@ -64,6 +66,8 @@ class RelayBackendTransport internal constructor(
         Thread(it, "atlas-relay-state").apply { isDaemon = true }
     }
     @Volatile private var connectionState = RelayConnectionState.LOCAL
+    @Volatile var sessionGeneration: Long = 0L
+        private set
     @Volatile var lastCloseCode: Int? = null
         private set
     private var appSessionId: String? = null
@@ -150,9 +154,16 @@ class RelayBackendTransport internal constructor(
             expiresAt = now.plusSeconds(ttlSeconds),
             deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(boundedTimeout),
             beforeDispatch = beforeDispatch,
+            diagnosticContext = CoreV4Diagnostics.currentExecutionContext(),
+            diagnosticCategory = CoreV4Diagnostics.categoryForOperation(operation),
+            diagnosticSessionGeneration = sessionGeneration,
         )
         synchronized(lock) {
-            if (!started) return RelayCallResult.Failure(RelayCallResult.Failure.Reason.NOT_STARTED)
+            if (!started) {
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.OFFLINE, CoreV4Diagnostics.State.FAILED,
+                    CoreV4Diagnostics.Result.OFFLINE)
+                return RelayCallResult.Failure(RelayCallResult.Failure.Reason.NOT_STARTED)
+            }
             if (connectionState == RelayConnectionState.AUTH_REQUIRED) {
                 return RelayCallResult.RemoteError(
                     "AUTH_REQUIRED",
@@ -168,12 +179,23 @@ class RelayBackendTransport internal constructor(
                 )
             }
             if (connectionState == RelayConnectionState.PAIRING_REQUIRED) {
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.OFFLINE, CoreV4Diagnostics.State.FAILED,
+                    CoreV4Diagnostics.Result.OFFLINE)
                 return RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
             }
+            if (queue.any { it.requestId == requestId } || inFlight.containsKey(requestId)) {
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR, CoreV4Diagnostics.State.FAILED,
+                    CoreV4Diagnostics.Result.PROTOCOL)
+                return RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL)
+            }
             if (queue.size + inFlight.size >= maxQueue) {
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.QUEUE_FULL, CoreV4Diagnostics.State.FAILED,
+                    CoreV4Diagnostics.Result.QUEUE_FULL)
                 return RelayCallResult.Failure(RelayCallResult.Failure.Reason.QUEUE_FULL)
             }
             queue.addLast(pending)
+            recordDiagnostic(pending, CoreV4Diagnostics.Stage.QUEUED, CoreV4Diagnostics.State.QUEUED,
+                CoreV4Diagnostics.Result.ACCEPTED)
         }
         pump()
         val remaining = (pending.deadlineNanos - System.nanoTime()).coerceAtLeast(0)
@@ -196,6 +218,8 @@ class RelayBackendTransport internal constructor(
                 pending.result = RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT)
             }
             pending.done.countDown()
+            recordDiagnostic(pending, CoreV4Diagnostics.Stage.TIMEOUT, CoreV4Diagnostics.State.FAILED,
+                CoreV4Diagnostics.Result.TIMEOUT)
             if (sendCancel) sendCancel(pending.requestId)
             pump()
             return RelayCallResult.Failure(RelayCallResult.Failure.Reason.TIMEOUT)
@@ -205,9 +229,11 @@ class RelayBackendTransport internal constructor(
 
     override fun close() {
         val failures: List<Pending>
+        val closedGeneration: Long
         synchronized(lock) {
             if (!started) return
             started = false
+            closedGeneration = sessionGeneration
             appSessionId = null
             appSessionExpiry = null
             negotiatedCapabilities = emptySet()
@@ -220,6 +246,16 @@ class RelayBackendTransport internal constructor(
             queue.clear()
             inFlight.clear()
             failures.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)) }
+        }
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.SESSION_CLOSED,
+            state = CoreV4Diagnostics.State.CLOSED,
+            result = CoreV4Diagnostics.Result.LOCAL_CLOSE,
+            sessionGeneration = closedGeneration,
+        )
+        failures.forEach {
+            recordDiagnostic(it, CoreV4Diagnostics.Stage.OFFLINE, CoreV4Diagnostics.State.FAILED,
+                CoreV4Diagnostics.Result.OFFLINE)
         }
         client.stop()
     }
@@ -269,6 +305,7 @@ class RelayBackendTransport internal constructor(
             .mapNotNull { caps.optString(it).takeIf(String::isNotEmpty) }
             .toSet()
         var reportMissingCoachChat = false
+        var replacedSessionGeneration: Long? = null
         val accepted = synchronized(lock) {
             if (appSessionId != null || !started) {
                 false
@@ -276,6 +313,8 @@ class RelayBackendTransport internal constructor(
                 negotiatedCapabilities = serverCapabilities.intersect(config.requestedCapabilities)
                 capabilityNegotiationComplete = true
                 appSessionId = session
+                if (sessionGeneration > 0L) replacedSessionGeneration = sessionGeneration
+                sessionGeneration = NEXT_SESSION_GENERATION.incrementAndGet()
                 appSessionExpiry = Instant.now().plusSeconds(envelope.optLong("expires_in_seconds"))
                 heartbeatNonce = null
                 heartbeatSentAtNanos = 0L
@@ -306,6 +345,14 @@ class RelayBackendTransport internal constructor(
             failProtocol(RelayProtocolException("unexpected hello_ok"))
             return
         }
+        replacedSessionGeneration?.let {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.SESSION_REPLACED,
+                state = CoreV4Diagnostics.State.STARTED,
+                result = CoreV4Diagnostics.Result.SESSION_REPLACED,
+                sessionGeneration = sessionGeneration,
+            )
+        }
         if (reportMissingCoachChat) reportFailure(RelayFailure.of(RelayFailureKind.CAPABILITY_UNAVAILABLE))
         pump()
     }
@@ -315,16 +362,38 @@ class RelayBackendTransport internal constructor(
         val sessionId = envelope.optString("session_id")
         val operation = envelope.optString("operation")
         synchronized(lock) {
+            if (sessionId != appSessionId) {
+                if (sessionId.isNotBlank() && appSessionId != null) return
+                failProtocolLocked(RelayProtocolException("response session correlation mismatch"))
+                return
+            }
             val pending = inFlight[requestId]
+            pending?.let(::recordSocketSendAccepted)
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+                state = CoreV4Diagnostics.State.RESPONSE,
+                result = CoreV4Diagnostics.Result.SUCCESS,
+                category = pending?.diagnosticCategory ?: CoreV4Diagnostics.categoryForOperation(operation),
+                consentVersion = pending?.diagnosticConsentVersion,
+                durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
+                sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
+                requestId = requestId,
+            )
             if (pending == null) {
                 if (timedOutIds.remove(requestId) != null) return
                 failProtocolLocked(RelayProtocolException("response has no matching request"))
                 return
             }
-            if (sessionId != appSessionId || operation != pending.operation) {
+            if (operation != pending.operation) {
                 failProtocolLocked(RelayProtocolException("response correlation mismatch"))
                 return
             }
+            recordDiagnostic(
+                pending,
+                CoreV4Diagnostics.Stage.CORRELATED,
+                CoreV4Diagnostics.State.CORRELATED,
+                CoreV4Diagnostics.Result.CORRELATED,
+            )
             inFlight.remove(requestId)
             val responseBytes = envelope.toString().toByteArray(Charsets.UTF_8)
             if (responseBytes.size > negotiatedResponseLimit) {
@@ -350,6 +419,7 @@ class RelayBackendTransport internal constructor(
         if (requestId == null) {
             synchronized(lock) {
                 if (sessionId != null && sessionId != appSessionId) {
+                    if (sessionId.isNotBlank() && appSessionId != null) return
                     failProtocolLocked(RelayProtocolException("session error correlation mismatch"))
                     return
                 }
@@ -371,16 +441,33 @@ class RelayBackendTransport internal constructor(
             return
         }
         synchronized(lock) {
+            if (sessionId != appSessionId) {
+                if (!sessionId.isNullOrBlank() && appSessionId != null) return
+                failProtocolLocked(RelayProtocolException("error session correlation mismatch"))
+                return
+            }
             val pending = inFlight[requestId]
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.RESPONSE_RECEIVED,
+                state = CoreV4Diagnostics.State.RESPONSE,
+                result = CoreV4Diagnostics.Result.REJECTED,
+                category = pending?.diagnosticCategory,
+                consentVersion = pending?.diagnosticConsentVersion,
+                durationMs = pending?.let(::elapsedMillisSince) ?: 0L,
+                sessionGeneration = pending?.diagnosticSessionGeneration ?: sessionGeneration,
+                requestId = requestId,
+            )
             if (pending == null) {
                 if (timedOutIds.remove(requestId) != null) return
                 failProtocolLocked(RelayProtocolException("error has no matching request"))
                 return
             }
-            if (sessionId != appSessionId) {
-                failProtocolLocked(RelayProtocolException("error correlation mismatch"))
-                return
-            }
+            recordDiagnostic(
+                pending,
+                CoreV4Diagnostics.Stage.CORRELATED,
+                CoreV4Diagnostics.State.CORRELATED,
+                CoreV4Diagnostics.Result.REJECTED,
+            )
             inFlight.remove(requestId)
             if (relayCode == "DEVICE_REVOKED") setStateLocked(RelayConnectionState.REVOKED)
             if (relayCode == "AUTH_REQUIRED" || relayCode == "AUTH_FAILED") setStateLocked(RelayConnectionState.AUTH_REQUIRED)
@@ -481,17 +568,26 @@ class RelayBackendTransport internal constructor(
                 val pending = queue.removeFirst()
                 val stillAllowed = try { pending.beforeDispatch() } catch (_: Exception) { false }
                 if (!stillAllowed) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.CANCELLED,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.REJECTED)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.POLICY_DENIED))
                     continue
                 }
                 if (!pending.expiresAt.isAfter(Instant.now())) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.EXPIRED,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.EXPIRED)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.EXPIRED))
                     continue
                 }
                 val payload = try { pending.payloadFactory() } catch (_: Exception) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.PROTOCOL)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
                     continue
                 }
+                pending.diagnosticCategory = CoreV4Diagnostics.categoryForOperation(pending.operation, payload)
+                pending.diagnosticConsentVersion = payload.optInt("consent_version").takeIf { it > 0 }
+                pending.diagnosticSessionGeneration = sessionGeneration
                 val request = try {
                     AtlasRemoteProtocol.request(
                         requestId = pending.requestId,
@@ -504,19 +600,27 @@ class RelayBackendTransport internal constructor(
                         protocol = applicationProtocol,
                     )
                 } catch (_: Exception) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.PROTOCOL)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
                     continue
                 }
                 val bytes = try { AtlasRemoteProtocol.encode(request) } catch (_: Exception) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.PROTOCOL)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
                     continue
                 }
                 if (bytes.size > negotiatedRequestLimit) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.ERROR,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.PROTOCOL)
                     completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.PROTOCOL))
                     continue
                 }
                 pending.sent = true
                 inFlight[pending.requestId] = pending
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.DISPATCHED,
+                    CoreV4Diagnostics.State.DISPATCHED, CoreV4Diagnostics.Result.ACCEPTED)
                 outgoing.add(pending to bytes)
             }
         }
@@ -525,12 +629,20 @@ class RelayBackendTransport internal constructor(
             return
         }
         outgoing.forEach { (pending, bytes) ->
-            if (!client.sendTextFrame(bytes)) {
+            if (client.sendTextFrame(bytes)) {
+                recordSocketSendAccepted(pending)
+            } else {
+                if (!pending.socketSendAcceptedLogged) {
+                    recordDiagnostic(pending, CoreV4Diagnostics.Stage.SOCKET_SEND_REJECTED,
+                        CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.REJECTED)
+                }
                 synchronized(lock) {
                     if (inFlight.remove(pending.requestId) != null) {
                         completeLocked(pending, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
                     }
                 }
+                recordDiagnostic(pending, CoreV4Diagnostics.Stage.OFFLINE,
+                    CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.OFFLINE)
             }
         }
     }
@@ -562,6 +674,8 @@ class RelayBackendTransport internal constructor(
             pending.result = RelayCallResult.Failure(RelayCallResult.Failure.Reason.CANCELLED)
         }
         pending.done.countDown()
+        recordDiagnostic(pending, CoreV4Diagnostics.Stage.CANCELLED,
+            CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.CANCELLED)
         if (sendCancel) sendCancel(pending.requestId)
         pump()
     }
@@ -601,7 +715,11 @@ class RelayBackendTransport internal constructor(
                     heartbeatNonce = null
                     val sent = inFlight.values.toList()
                     inFlight.clear()
-                    sent.forEach { completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)) }
+                    sent.forEach {
+                        recordDiagnostic(it, CoreV4Diagnostics.Stage.OFFLINE,
+                            CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.OFFLINE)
+                        completeLocked(it, RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE))
+                    }
                 }
             }
         }
@@ -610,6 +728,19 @@ class RelayBackendTransport internal constructor(
 
     private fun onSocketClosed(code: Int, @Suppress("UNUSED_PARAMETER") reason: String) {
         lastCloseCode = code
+        CoreV4Diagnostics.record(
+            stage = CoreV4Diagnostics.Stage.SESSION_CLOSED,
+            state = CoreV4Diagnostics.State.CLOSED,
+            result = when (code) {
+                1000 -> CoreV4Diagnostics.Result.CLOSE_1000
+                1001 -> CoreV4Diagnostics.Result.CLOSE_1001
+                1006 -> CoreV4Diagnostics.Result.CLOSE_1006
+                4001 -> CoreV4Diagnostics.Result.CLOSE_4001
+                4003 -> CoreV4Diagnostics.Result.CLOSE_4003
+                else -> CoreV4Diagnostics.Result.CLOSE_OTHER
+            },
+            sessionGeneration = sessionGeneration,
+        )
         val alreadyRevoked = synchronized(lock) { connectionState == RelayConnectionState.REVOKED }
         if (code == 4001 && !alreadyRevoked) reportRemoteFailure("AUTH_REQUIRED")
         synchronized(lock) {
@@ -633,11 +764,48 @@ class RelayBackendTransport internal constructor(
                     else -> RelayCallResult.Failure(RelayCallResult.Failure.Reason.OFFLINE)
                 }
                 completeLocked(it, failure)
+                recordDiagnostic(it, CoreV4Diagnostics.Stage.OFFLINE,
+                    CoreV4Diagnostics.State.FAILED, CoreV4Diagnostics.Result.OFFLINE)
             }
         }
     }
 
     private fun setState(value: RelayConnectionState) = synchronized(lock) { setStateLocked(value) }
+
+    private fun recordDiagnostic(
+        pending: Pending,
+        stage: CoreV4Diagnostics.Stage,
+        state: CoreV4Diagnostics.State,
+        result: CoreV4Diagnostics.Result,
+    ) {
+        CoreV4Diagnostics.record(
+            stage = stage,
+            state = state,
+            result = result,
+            category = pending.diagnosticCategory,
+            consentVersion = pending.diagnosticConsentVersion,
+            durationMs = elapsedMillisSince(pending),
+            sessionGeneration = pending.diagnosticSessionGeneration,
+            requestId = pending.requestId,
+            context = pending.diagnosticContext,
+        )
+    }
+
+    private fun elapsedMillisSince(pending: Pending): Long =
+        ((System.nanoTime() - pending.diagnosticStartedNanos) / 1_000_000L).coerceAtLeast(0L)
+
+    private fun recordSocketSendAccepted(pending: Pending) {
+        val shouldRecord = synchronized(pending) {
+            if (pending.socketSendAcceptedLogged) false else {
+                pending.socketSendAcceptedLogged = true
+                true
+            }
+        }
+        if (shouldRecord) {
+            recordDiagnostic(pending, CoreV4Diagnostics.Stage.SOCKET_SEND_ACCEPTED,
+                CoreV4Diagnostics.State.SENT, CoreV4Diagnostics.Result.ACCEPTED)
+        }
+    }
 
     private fun reportRemoteFailure(code: String) {
         val failure = RelayFailure.fromRemoteCode(code)
@@ -697,6 +865,12 @@ class RelayBackendTransport internal constructor(
         val expiresAt: Instant,
         val deadlineNanos: Long,
         val beforeDispatch: () -> Boolean,
+        val diagnosticContext: CoreV4Diagnostics.ExecutionContext?,
+        var diagnosticCategory: dev.atlas.coach.sync.v4.CoreV4Category?,
+        var diagnosticConsentVersion: Int? = null,
+        var diagnosticSessionGeneration: Long = 0L,
+        @Volatile var socketSendAcceptedLogged: Boolean = false,
+        val diagnosticStartedNanos: Long = System.nanoTime(),
         val done: CountDownLatch = CountDownLatch(1),
         var sent: Boolean = false,
         @Volatile var result: RelayCallResult? = null,
@@ -706,5 +880,6 @@ class RelayBackendTransport internal constructor(
         const val DEFAULT_REQUEST_TIMEOUT_MILLIS = 30_000L
         private const val CLIENT_VERSION = "0.1.0-r3b"
         private const val MAX_TIMED_OUT_IDS = 256
+        private val NEXT_SESSION_GENERATION = AtomicLong()
     }
 }

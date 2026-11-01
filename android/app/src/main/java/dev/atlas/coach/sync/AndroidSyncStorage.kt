@@ -153,6 +153,8 @@ data class CoreV4ConsentRecord(
     val sentAt: String,
 )
 
+enum class CoreV4ConsentAckResult { APPLIED, SUPERSEDED, MISSING }
+
 data class CoreV4PendingProjection(
     val sourceKey: String,
     val sourceVersion: Int,
@@ -318,10 +320,10 @@ class AndroidCoreV4SyncStore internal constructor(
         }
     }
 
-    fun acknowledgeConsent(category: CoreV4Category, receipt: CoreV4ConsentReceipt) = withCoreV4StateLock {
+    fun acknowledgeConsent(category: CoreV4Category, receipt: CoreV4ConsentReceipt): CoreV4ConsentAckResult = withCoreV4StateLock {
         val root = readRoot()
         val rows = root.optJSONObject(KEY_CONSENTS) ?: JSONObject()
-        val current = rows.optJSONObject(category.name) ?: return@withCoreV4StateLock
+        val current = rows.optJSONObject(category.name) ?: return@withCoreV4StateLock CoreV4ConsentAckResult.MISSING
         if (current.optInt("version") == receipt.version &&
             current.optString("state") == receipt.state.name &&
             receipt.category == category
@@ -337,6 +339,9 @@ class AndroidCoreV4SyncStore internal constructor(
             root.put(KEY_STATUS_MESSAGE, "Consentements V4 synchronisés.")
             root.put(KEY_STATUS_AT, receipt.updatedAt)
             writeRoot(root)
+            CoreV4ConsentAckResult.APPLIED
+        } else {
+            CoreV4ConsentAckResult.SUPERSEDED
         }
     }
 

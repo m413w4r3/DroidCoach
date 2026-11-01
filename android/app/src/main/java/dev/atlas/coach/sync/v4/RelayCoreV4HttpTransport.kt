@@ -12,6 +12,7 @@ import org.json.JSONObject
 /** The small surface the V4 route adapter needs from an authenticated relay session. */
 internal interface RelayCoreV4Session {
     val state: RelayConnectionState
+    val sessionGeneration: Long get() = 0L
     fun hasCapability(capability: String): Boolean
     fun executeDeferred(
         operation: String,
@@ -27,6 +28,7 @@ internal class RelayBackendCoreV4Session(
     private val transport: RelayBackendTransport,
 ) : RelayCoreV4Session {
     override val state: RelayConnectionState get() = transport.state()
+    override val sessionGeneration: Long get() = transport.sessionGeneration
 
     override fun hasCapability(capability: String): Boolean =
         transport.hasNegotiatedCapability(capability)
@@ -55,7 +57,16 @@ internal object RelayCoreV4SessionRegistry {
     fun current(): RelayCoreV4Session? = active
 
     fun install(session: RelayCoreV4Session) {
+        val previous = active
         active = session
+        if (previous != null && previous !== session) {
+            CoreV4Diagnostics.record(
+                stage = CoreV4Diagnostics.Stage.SESSION_REPLACED,
+                state = CoreV4Diagnostics.State.STARTED,
+                result = CoreV4Diagnostics.Result.SESSION_REPLACED,
+                sessionGeneration = session.sessionGeneration,
+            )
+        }
     }
 
     fun clear(session: RelayCoreV4Session) {
@@ -79,7 +90,10 @@ class RelayCoreV4HttpTransport internal constructor(
     override val requiresBearerToken: Boolean get() = false
 
     override fun post(request: CoreV4HttpRequest): CoreV4HttpResponse {
-        if (cancelled) fail(CoreV4FailureKind.OFFLINE, errorCode = "CANCELLED")
+        if (cancelled) {
+            recordRelayResult(request, CoreV4Diagnostics.Stage.CANCELLED, CoreV4Diagnostics.Result.CANCELLED)
+            fail(CoreV4FailureKind.OFFLINE, errorCode = "CANCELLED")
+        }
         if (request.body.toByteArray(Charsets.UTF_8).size > CoreV4SyncClient.MAX_REQUEST_BYTES) {
             fail(CoreV4FailureKind.PROTOCOL, errorCode = "PAYLOAD_TOO_LARGE")
         }
@@ -119,20 +133,29 @@ class RelayCoreV4HttpTransport internal constructor(
 
         val safeRequest = CoreV4HttpRequest(request.path, bearerToken = "", body = request.body)
         if (!requestAllowed(safeRequest)) fail(CoreV4FailureKind.CONSENT)
-        val session = sessionProvider() ?: fail(CoreV4FailureKind.OFFLINE)
+        val session = sessionProvider() ?: run {
+            recordRelayResult(request, CoreV4Diagnostics.Stage.OFFLINE, CoreV4Diagnostics.Result.OFFLINE)
+            fail(CoreV4FailureKind.OFFLINE)
+        }
         if (session.state != RelayConnectionState.RELAY_CONNECTED) {
             when (session.state) {
                 RelayConnectionState.AUTH_REQUIRED,
                 RelayConnectionState.REVOKED,
                 RelayConnectionState.PAIRING_REQUIRED,
                 -> fail(CoreV4FailureKind.AUTHENTICATION, errorCode = session.state.name)
-                else -> fail(CoreV4FailureKind.OFFLINE, errorCode = session.state.name)
+                else -> {
+                    recordRelayResult(request, CoreV4Diagnostics.Stage.OFFLINE, CoreV4Diagnostics.Result.OFFLINE,
+                        session.sessionGeneration)
+                    fail(CoreV4FailureKind.OFFLINE, errorCode = session.state.name)
+                }
             }
         }
         if (!session.hasCapability(relayCapability)) {
             fail(CoreV4FailureKind.UNAVAILABLE, httpStatus = 503, errorCode = "CAPABILITY_UNAVAILABLE")
         }
         if (!activeThread.compareAndSet(null, Thread.currentThread())) {
+            recordRelayResult(request, CoreV4Diagnostics.Stage.QUEUE_FULL, CoreV4Diagnostics.Result.QUEUE_FULL,
+                session.sessionGeneration)
             fail(CoreV4FailureKind.UNAVAILABLE, errorCode = "QUEUE_FULL")
         }
         val result = try {
@@ -156,6 +179,29 @@ class RelayCoreV4HttpTransport internal constructor(
             fail(CoreV4FailureKind.PROTOCOL, errorCode = "RESPONSE_TOO_LARGE")
         }
         return response
+    }
+
+    private fun recordRelayResult(
+        request: CoreV4HttpRequest,
+        stage: CoreV4Diagnostics.Stage,
+        result: CoreV4Diagnostics.Result,
+        sessionGeneration: Long = 0L,
+    ) {
+        val envelope = runCatching { JSONObject(request.body) }.getOrNull()
+        val category = if (request.path == CoreV4SyncClient.CONSENT_ROUTE) {
+            CoreV4Category.entries.firstOrNull { it.wireValue == envelope?.optString("category") }
+        } else {
+            CoreV4Category.entries.firstOrNull { it.route == request.path }
+        }
+        CoreV4Diagnostics.record(
+            stage = stage,
+            state = CoreV4Diagnostics.State.FAILED,
+            result = result,
+            category = category,
+            consentVersion = envelope?.optInt("consent_version")?.takeIf { it > 0 },
+            sessionGeneration = sessionGeneration,
+            requestId = envelope?.optString("request_id"),
+        )
     }
 
     override fun cancel() {

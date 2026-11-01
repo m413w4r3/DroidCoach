@@ -1,8 +1,8 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { BackendClient, assertLoopbackHttpUrl } from "../src/backend.js";
+import { BackendClient, BackendRequestError, assertLoopbackHttpUrl } from "../src/backend.js";
 import { readPrivateV4AndroidToken } from "../src/connector.js";
 import { DeviceRegistry } from "../src/device-registry.js";
 import { RemoteError } from "../src/errors.js";
@@ -24,6 +24,57 @@ const ID_H = "00000000-0000-4000-8000-000000000108";
 const ID_I = "00000000-0000-4000-8000-000000000109";
 const ID_J = "00000000-0000-4000-8000-000000000110";
 const V4_SENT_AT = "2026-10-29T08:02:04Z";
+const CONSENT_REQUEST_ID = "00000000-0000-4000-8000-000000000711";
+const CONSENT_IDEMPOTENCY_KEY = "00000000-0000-4000-8000-000000000712";
+const CONSENT_SESSION_ID = "00000000-0000-4000-8000-000000000713";
+const CONSENT_DEVICE_ID = "synthetic-consent-device";
+const CONSENT_PAYLOAD = {
+  contract_version: 4,
+  schema_version: 4,
+  request_id: CONSENT_REQUEST_ID,
+  capability: "consent.state.write",
+  sent_at: "2026-10-31T10:00:00Z",
+  category: "DAY_PLAN",
+  consent_version: 1,
+  state: "GRANTED",
+  idempotency_key: CONSENT_IDEMPOTENCY_KEY,
+};
+const CONSENT_RECEIPT = {
+  result_code: "ACCEPTED",
+  category: "DAY_PLAN",
+  consent_version: 1,
+  state: "GRANTED",
+  updated_at: "2026-10-31T10:00:01Z",
+};
+
+function consentRequest(
+  requestId = CONSENT_REQUEST_ID,
+  payloadOverrides: Record<string, unknown> = {},
+) {
+  return request(
+    CONSENT_SESSION_ID,
+    "v4.consent.state.upsert",
+    { ...CONSENT_PAYLOAD, ...payloadOverrides, request_id: requestId },
+    {
+      protocol: PROTOCOL_V2,
+      request_id: requestId,
+      idempotency_key: CONSENT_IDEMPOTENCY_KEY,
+    },
+  );
+}
+
+function renewConsentTransportEnvelope(
+  consent: ReturnType<typeof consentRequest>,
+  overrides: Partial<ReturnType<typeof consentRequest>> = {},
+) {
+  return {
+    ...consent,
+    session_id: "00000000-0000-4000-8000-000000000714",
+    created_at: new Date(Date.parse(consent.created_at) + 1_000).toISOString(),
+    expires_at: new Date(Date.parse(consent.expires_at) + 1_000).toISOString(),
+    ...overrides,
+  };
+}
 
 function v4Payloads(): Array<{ operation: Operation; payload: Record<string, unknown>; path: string }> {
   const syncBase = (capability: string, requestId: string) => ({
@@ -762,6 +813,258 @@ describe("closed operations and backend adapter", () => {
       const restartedExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
       await expect(restartedExecutor.execute("paired-device-synthetic", "00000000-0000-4000-8000-000000000198", chatRequest)).rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE", retryable: false });
       expect(backendCalls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("connectorReplayUsesSameKeyAndBody", async () => {
+    const posts: Array<{ url: string; authorization: string | undefined; body: unknown }> = [];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      v4Enabled: true,
+      pairedDeviceToken: () => "synthetic-core-android-token",
+      fetcher: async (input, init) => {
+        posts.push({
+          url: String(input),
+          authorization: new Headers(init?.headers).get("authorization") ?? undefined,
+          body: JSON.parse(String(init?.body)),
+        });
+        return new Response(JSON.stringify(CONSENT_RECEIPT), { status: 200 });
+      },
+    });
+    const executor = new OperationExecutor(backend, STATE);
+    const consent = consentRequest();
+
+    const initial = await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+    const replay = await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+
+    expect(initial.replayed).toBe(false);
+    expect(replay).toMatchObject({ replayed: true, result: CONSENT_RECEIPT });
+    expect(posts).toEqual([{
+      url: "http://127.0.0.1:8100/v4/sync/consent-state",
+      authorization: "Bearer synthetic-core-android-token",
+      body: CONSENT_PAYLOAD,
+    }]);
+  });
+
+  it("connectorRejectsSameKeyDifferentPayload", async () => {
+    let backendPosts = 0;
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      v4Enabled: true,
+      pairedDeviceToken: () => "synthetic-core-android-token",
+      fetcher: async () => {
+        backendPosts += 1;
+        return new Response(JSON.stringify(CONSENT_RECEIPT), { status: 200 });
+      },
+    });
+    const executor = new OperationExecutor(backend, STATE);
+    const initial = consentRequest();
+    const changed = consentRequest("00000000-0000-4000-8000-000000000714", {
+      request_id: "00000000-0000-4000-8000-000000000714",
+      state: "REVOKED",
+    });
+
+    await executor.execute(CONSENT_DEVICE_ID, initial.session_id, initial);
+    await expect(executor.execute(CONSENT_DEVICE_ID, changed.session_id, changed))
+      .rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    expect(backendPosts).toBe(1);
+  });
+
+  it("completedRedactedConsentIsReplayableInMemoryBeforeRestart", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atlas-v4-consent-memory-test-"));
+    const journalPath = join(dir, "operations.json");
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const executor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+    const consent = consentRequest();
+    try {
+      await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+        entries: Array<{ outcome: string; operation: string }>;
+      };
+      expect(journal.entries).toEqual([
+        expect.objectContaining({ operation: "v4.consent.state.upsert", outcome: "completed_redacted" }),
+      ]);
+
+      const replay = await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      expect(replay).toMatchObject({ replayed: true, result: CONSENT_RECEIPT });
+      expect(backendCalls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("consentReceiptSurvivesRestartAndReplays", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atlas-v4-consent-restart-test-"));
+    const journalPath = join(dir, "operations.json");
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const firstExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+    const consent = consentRequest();
+    try {
+      await firstExecutor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+        entries: Array<{ outcome: string; operation: string }>;
+      };
+      expect(journal.entries).toEqual([
+        expect.objectContaining({ operation: "v4.consent.state.upsert", outcome: "completed_redacted" }),
+      ]);
+
+      const restartedExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+      const replay = await restartedExecutor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      expect(replay).toMatchObject({ replayed: true, result: CONSENT_RECEIPT });
+      expect(backendCalls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("replaysV4ConsentWhenRelayRenewsTransportEnvelope", async () => {
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        if (backendCalls > 1) throw new Error("synthetic backend returned only one receipt");
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const executor = new OperationExecutor(backend, STATE);
+    const consent = consentRequest();
+    const renewed = renewConsentTransportEnvelope(consent);
+
+    expect(JSON.stringify(renewed.payload)).toBe(JSON.stringify(consent.payload));
+    expect(renewed).toMatchObject({
+      request_id: consent.request_id,
+      idempotency_key: consent.idempotency_key,
+    });
+    expect(renewed.session_id).not.toBe(consent.session_id);
+
+    const initial = await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+    const replay = await executor.execute(CONSENT_DEVICE_ID, renewed.session_id, renewed);
+
+    expect(initial).toMatchObject({ replayed: false, result: CONSENT_RECEIPT });
+    expect(replay).toMatchObject({
+      replayed: true,
+      request_id: consent.request_id,
+      result: CONSENT_RECEIPT,
+    });
+    expect(backendCalls).toBe(1);
+  });
+
+  it("replaysRestartedV4ConsentWhenRelayRenewsTransportEnvelope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atlas-v4-consent-renewed-restart-test-"));
+    const journalPath = join(dir, "operations.json");
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        if (backendCalls > 1) throw new Error("synthetic backend returned only one receipt");
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const firstExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+    const consent = consentRequest();
+    const renewed = renewConsentTransportEnvelope(consent);
+
+    try {
+      await firstExecutor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      const restartedExecutor = new OperationExecutor(backend, STATE, Date.now, journalPath);
+      const replay = await restartedExecutor.execute(CONSENT_DEVICE_ID, renewed.session_id, renewed);
+
+      expect(replay).toMatchObject({
+        replayed: true,
+        request_id: consent.request_id,
+        result: CONSENT_RECEIPT,
+      });
+      expect(backendCalls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejectsV4ConsentReplayWhenBusinessPayloadChanges", async () => {
+    let backendCalls = 0;
+    const backend = {
+      async execute(): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        if (backendCalls > 1) throw new Error("synthetic backend returned only one receipt");
+        return CONSENT_RECEIPT;
+      },
+    } as unknown as BackendClient;
+    const executor = new OperationExecutor(backend, STATE);
+    const consent = consentRequest();
+
+    await executor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+
+    const changedPayload = renewConsentTransportEnvelope(consentRequest(CONSENT_REQUEST_ID, { state: "REVOKED" }));
+    await expect(executor.execute(CONSENT_DEVICE_ID, changedPayload.session_id, changedPayload))
+      .rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+
+    const changedEnvelopeKey = renewConsentTransportEnvelope(consent, {
+      idempotency_key: "00000000-0000-4000-8000-000000000715",
+    });
+    expect(JSON.stringify(changedEnvelopeKey.payload)).toBe(JSON.stringify(consent.payload));
+    await expect(executor.execute(CONSENT_DEVICE_ID, changedEnvelopeKey.session_id, changedEnvelopeKey))
+      .rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(backendCalls).toBe(1);
+  });
+
+  it("uncertainConsentCanBeSafelyReexecutedAfterRestart", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atlas-v4-consent-uncertain-test-"));
+    const journalPath = join(dir, "operations.json");
+    const coreReceipts = new Map<string, Record<string, unknown>>();
+    let backendCalls = 0;
+    let coreEffects = 0;
+    const firstBackend = {
+      async execute(_operation: Operation, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        const key = String(payload.idempotency_key);
+        const receipt = { ...CONSENT_RECEIPT };
+        coreReceipts.set(key, receipt);
+        coreEffects += 1;
+        throw new BackendRequestError("BACKEND_UNAVAILABLE", false, true);
+      },
+    } as unknown as BackendClient;
+    const recoveryBackend = {
+      async execute(_operation: Operation, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+        backendCalls += 1;
+        const stored = coreReceipts.get(String(payload.idempotency_key));
+        if (!stored) throw new Error("synthetic Core receipt missing");
+        return { ...stored, result_code: "DUPLICATE", replayed: true };
+      },
+    } as unknown as BackendClient;
+    const firstExecutor = new OperationExecutor(firstBackend, STATE, Date.now, journalPath);
+    const consent = consentRequest();
+    try {
+      await expect(firstExecutor.execute(CONSENT_DEVICE_ID, consent.session_id, consent))
+        .rejects.toMatchObject({ code: "BACKEND_UNAVAILABLE", retryable: false });
+      const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+        entries: Array<{ outcome: string; operation: string }>;
+      };
+      expect(journal.entries).toEqual([
+        expect.objectContaining({ operation: "v4.consent.state.upsert", outcome: "uncertain" }),
+      ]);
+
+      const restartedExecutor = new OperationExecutor(recoveryBackend, STATE, Date.now, journalPath);
+      const recovered = await restartedExecutor.execute(CONSENT_DEVICE_ID, consent.session_id, consent);
+      expect(recovered).toMatchObject({
+        replayed: false,
+        result: { result_code: "DUPLICATE", replayed: true, category: "DAY_PLAN", consent_version: 1 },
+      });
+      expect(backendCalls).toBe(2);
+      expect(coreEffects).toBe(1);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

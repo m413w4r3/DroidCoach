@@ -38,15 +38,18 @@ internal class FakeRelaySocketFactory(
     private val beforeSendText: ((FakeRelaySocket, Int, String) -> Unit)? = null,
     private val onConnected: (FakeRelaySocket, Int) -> Unit = { _, _ -> },
     private val malformedRequestResponse: Boolean = false,
+    private val sessionIdForConnection: (Int) -> String = { FakeRelaySocket.SESSION_ID },
 ) : RelaySocketFactory {
     val connectCount = AtomicInteger()
     val secondConnection = CountDownLatch(1)
+    val secondSessionConnected = CountDownLatch(1)
     val sockets = CopyOnWriteArrayList<FakeRelaySocket>()
     val requests = CopyOnWriteArrayList<JSONObject>()
     val appHellos = CopyOnWriteArrayList<JSONObject>()
     val cancels = CopyOnWriteArrayList<JSONObject>()
     val urls = CopyOnWriteArrayList<String>()
     val requestCaptured = CountDownLatch(1)
+    val secondRequestCaptured = CountDownLatch(1)
     val cancelCaptured = CountDownLatch(1)
     private val idempotencyKeys = mutableSetOf<String>()
 
@@ -69,15 +72,18 @@ internal class FakeRelaySocketFactory(
             serverCapabilities,
             beforeSendText,
             malformedRequestResponse,
+            sessionIdForConnection(index),
         )
         sockets += socket
         callbacks.onOpen(socket)
         onConnected(socket, index)
+        if (index >= 2) secondSessionConnected.countDown()
     }
 
     internal fun recordRequest(request: JSONObject): Boolean {
         requests += JSONObject(request.toString())
         requestCaptured.countDown()
+        if (requests.size >= 2) secondRequestCaptured.countDown()
         val key = "${request.optString("operation")}:${request.optString("idempotency_key")}"
         return synchronized(idempotencyKeys) { !idempotencyKeys.add(key) }
     }
@@ -100,6 +106,7 @@ internal class FakeRelaySocket(
     private val serverCapabilities: Set<String>,
     private val beforeSendText: ((FakeRelaySocket, Int, String) -> Unit)?,
     private val malformedRequestResponse: Boolean,
+    private val sessionId: String,
 ) : RelaySocket {
     val sentText = CopyOnWriteArrayList<String>()
     val helloSends = CountDownLatch(2)
@@ -154,7 +161,7 @@ internal class FakeRelaySocket(
                 } else {
                     sendEnvelope(
                         JSONObject().put("protocol", applicationProtocol).put("kind", "hello_ok")
-                            .put("session_id", SESSION_ID).put("server_time", Instant.now().toString())
+                            .put("session_id", sessionId).put("server_time", Instant.now().toString())
                             .put("expires_in_seconds", 3600).put("capabilities", org.json.JSONArray(serverCapabilities.sorted()))
                             .put("max_request_bytes", AtlasRemoteProtocol.MAX_REQUEST_BYTES)
                             .put("max_response_bytes", AtlasRemoteProtocol.MAX_RESPONSE_BYTES),
@@ -169,7 +176,7 @@ internal class FakeRelaySocket(
                 } else if (!dropRequestResponses) {
                     val response = JSONObject().put("protocol", applicationProtocol).put("kind", "response")
                         .put("request_id", if (mismatchResponseId) "dddddddd-dddd-4ddd-8ddd-dddddddddddd" else envelope.getString("request_id"))
-                        .put("session_id", SESSION_ID)
+                        .put("session_id", sessionId)
                         .put("operation", envelope.getString("operation")).put("status", "OK")
                         .put("result", JSONObject(result.toString())).put("completed_at", Instant.now().toString())
                         .put("replayed", replayed)
@@ -208,19 +215,30 @@ internal class FakeRelaySocket(
     fun sendErrorEnvelope(code: String, message: String) {
         sendEnvelope(
             JSONObject().put("protocol", applicationProtocol).put("kind", "error")
-                .put("request_id", JSONObject.NULL).put("session_id", SESSION_ID)
+                .put("request_id", JSONObject.NULL).put("session_id", sessionId)
                 .put("error", JSONObject().put("code", code).put("message", message).put("retryable", false))
                 .put("completed_at", Instant.now().toString()),
         )
     }
 
-    fun sendResponseForRequest(requestId: String) {
+    fun sendResponseForRequest(requestId: String, responseSessionId: String = sessionId) {
         val request = factory.requests.firstOrNull { it.optString("request_id") == requestId }
             ?: error("request was not captured")
         sendEnvelope(
             JSONObject().put("protocol", applicationProtocol).put("kind", "response")
-                .put("request_id", requestId).put("session_id", SESSION_ID)
+                .put("request_id", requestId).put("session_id", responseSessionId)
                 .put("operation", request.getString("operation")).put("status", "OK")
+                .put("result", JSONObject(result.toString())).put("completed_at", Instant.now().toString())
+                .put("replayed", false),
+        )
+    }
+
+    /** Injects a valid app-protocol response whose request is unknown to the active client. */
+    fun sendUnknownResponse(requestId: String, responseSessionId: String) {
+        sendEnvelope(
+            JSONObject().put("protocol", applicationProtocol).put("kind", "response")
+                .put("request_id", requestId).put("session_id", responseSessionId)
+                .put("operation", "plan.revision.request").put("status", "OK")
                 .put("result", JSONObject(result.toString())).put("completed_at", Instant.now().toString())
                 .put("replayed", false),
         )
@@ -238,7 +256,7 @@ internal class FakeRelaySocket(
         httpStatus?.let { error.put("http_status", it) }
         remoteCode?.let { error.put("remote_code", it) }
         val envelope = JSONObject().put("protocol", applicationProtocol).put("kind", "error")
-            .put("request_id", requestId).put("session_id", SESSION_ID)
+            .put("request_id", requestId).put("session_id", sessionId)
             .put("error", error)
             .put("completed_at", Instant.now().toString())
         sendEnvelope(envelope)
@@ -291,7 +309,7 @@ internal class FakeRelaySocket(
         sendEnvelope(
             JSONObject().put("protocol", applicationProtocol).put("kind", "error")
                 .put("request_id", request.getString("request_id"))
-                .put("session_id", SESSION_ID)
+                .put("session_id", sessionId)
                 .put("error", JSONObject().put("code", code).put("message", message.take(120)).put("retryable", false))
                 .put("completed_at", Instant.now().toString()),
         )
