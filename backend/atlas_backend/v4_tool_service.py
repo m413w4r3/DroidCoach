@@ -439,6 +439,7 @@ class V4ToolService:
             capability,
             device_ref=device_ref,
             plan_id=args["plan_id"],
+            base_plan_version=observed_version,
         )
         if conflicts:
             data = {
@@ -555,20 +556,10 @@ class V4ToolService:
         *,
         device_ref: str,
         plan_id: str,
+        base_plan_version: int,
     ) -> tuple[list[dict[str, Any]], list[str]]:
         activities = plan.get("activities", [])
         by_id = {item.get("activity_id"): item for item in activities}
-        effective_status_by_id = {}
-        for item in activities:
-            activity_id = item.get("activity_id")
-            event = (
-                self.projections.latest_activity_status_event(device_ref, plan_id, activity_id)
-                if activity_id is not None
-                else None
-            )
-            effective_status_by_id[activity_id] = (
-                event["new_status"] if event is not None else item.get("status", "PLANNED")
-            )
         used: set[str] = set()
         diff: list[dict[str, Any]] = []
         conflicts: list[str] = []
@@ -586,7 +577,10 @@ class V4ToolService:
                 item = by_id.get(activity_id)
                 if item is None:
                     raise V4ToolError("VALIDATION_FAILED", "activité absente du plan de base", capability=capability)
-                if effective_status_by_id.get(activity_id) in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
+                status = self._proposal_activity_status(
+                    device_ref, plan_id, activity_id, item, base_plan_version, capability
+                )
+                if status in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
                     raise V4ToolError("VALIDATION_FAILED", "activité terminale non modifiable", capability=capability)
                 if activity_id in used:
                     raise V4ToolError("VALIDATION_FAILED", "une activité ne peut être modifiée deux fois", capability=capability)
@@ -610,7 +604,10 @@ class V4ToolService:
                 item = by_id.get(activity_id)
                 if item is None:
                     raise V4ToolError("VALIDATION_FAILED", "activité absente du plan de base", capability=capability)
-                if effective_status_by_id.get(activity_id) in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
+                status = self._proposal_activity_status(
+                    device_ref, plan_id, activity_id, item, base_plan_version, capability
+                )
+                if status in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
                     raise V4ToolError("VALIDATION_FAILED", "activité terminale non modifiable", capability=capability)
                 if activity_id in used:
                     raise V4ToolError("VALIDATION_FAILED", "une activité ne peut être modifiée deux fois", capability=capability)
@@ -683,6 +680,46 @@ class V4ToolService:
                 if l0 < r1 and r0 < l1:
                     conflicts.append(f"OVERLAP:{left_id}:{right_id}")
         return diff, conflicts[:16]
+
+    def _proposal_activity_status(
+        self,
+        device_ref: str,
+        plan_id: str,
+        activity_id: str,
+        activity: dict[str, Any],
+        base_plan_version: int,
+        capability: str,
+    ) -> str:
+        event = self.projections.latest_activity_status_event(device_ref, plan_id, activity_id)
+        if event is None:
+            return activity.get("status", "PLANNED")
+
+        consent = self._consent(device_ref, "ACTIVITY_STATUS")
+        if consent.state != "GRANTED" or consent.version is None:
+            raise V4ToolError(
+                "STALE_DATA", "le consentement du statut d'activité est absent ou révoqué", capability=capability
+            )
+        if self.projections.has_activity_status_sequence_gap(device_ref):
+            raise V4ToolError(
+                "STALE_DATA", "le flux de statuts d'activité contient une lacune", capability=capability
+            )
+        if event["consent_version"] != consent.version:
+            raise V4ToolError(
+                "STALE_DATA", "le statut d'activité ne correspond plus au consentement courant", capability=capability
+            )
+        if event["plan_version"] != base_plan_version:
+            raise V4ToolError(
+                "STALE_DATA", "le statut d'activité ne correspond pas à la version du plan", capability=capability
+            )
+
+        freshness, can_read = self._freshness(
+            capability, event.get("observed_at"), int(event["consent_version"]), consent
+        )
+        if not can_read or freshness != "FRESH":
+            raise V4ToolError(
+                "STALE_DATA", "l'horodatage du statut d'activité est ancien ou incertain", capability=capability
+            )
+        return str(event["new_status"])
 
     @staticmethod
     def _minute_values(start: Any, duration: Any, capability: str) -> None:

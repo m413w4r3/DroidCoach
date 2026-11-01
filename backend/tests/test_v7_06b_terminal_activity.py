@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from atlas_backend.store import SQLiteStore
-from atlas_backend.v4_projection_store import V4ProjectionStore
+from atlas_backend.v4_projection_store import SequenceGap, V4ProjectionStore
 from atlas_backend.v4_tool_service import Consent, V4ToolError, V4ToolService
 
 
@@ -142,3 +142,73 @@ def test_nonterminal_activity_event_still_allows_plan_revision(tmp_path) -> None
 
     assert result["data"]["status"] == "QUEUED"
     assert proposal_count(projections) == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["old", "future", "consent_revoked", "consent_version", "plan_version", "sequence_gap"],
+)
+@pytest.mark.parametrize("operation", ["reschedule", "edit_activity"])
+def test_untrusted_activity_status_event_rejects_plan_revision_without_persisting_proposal(
+    tmp_path, failure: str, operation: str
+) -> None:
+    projections, service, now = make_service(tmp_path)
+    observed_at = stamp(now)
+    projections.save_day_plan_snapshot(
+        DEVICE_REF, approved_plan(observed_at), consent_version=3, received_at=observed_at
+    )
+
+    event_observed_at = observed_at
+    event_consent_version = 3
+    event_plan_version = 7
+    if failure == "old":
+        event_observed_at = stamp(now - timedelta(minutes=6))
+    elif failure == "future":
+        event_observed_at = stamp(now + timedelta(minutes=3))
+    elif failure == "consent_revoked":
+        service.consent_lookup = lambda _device, category: (
+            Consent("REVOKED", 4) if category == "ACTIVITY_STATUS" else Consent("GRANTED", 3)
+        )
+    elif failure == "consent_version":
+        event_consent_version = 2
+    elif failure == "plan_version":
+        event_plan_version = 6
+    elif failure == "sequence_gap":
+        gap_event = status_event("IN_PROGRESS", observed_at)
+        gap_event.update({"event_id": "00000000-0000-4000-8000-000000000607", "sequence": 3})
+        with pytest.raises(SequenceGap):
+            projections.save_activity_status_event(
+                DEVICE_REF, gap_event, consent_version=3, received_at=observed_at
+            )
+
+    event = status_event("IN_PROGRESS", event_observed_at)
+    event["plan_version"] = event_plan_version
+    receipt = projections.save_activity_status_event(
+        DEVICE_REF,
+        event,
+        consent_version=event_consent_version,
+        received_at=observed_at,
+    )
+    assert receipt.accepted
+
+    with pytest.raises(V4ToolError) as error:
+        service.atlas_propose_plan_revision(DEVICE_REF, proposal_args(operation))
+
+    assert error.value.code == "STALE_DATA"
+    assert proposal_count(projections) == 0
+
+
+def test_missing_activity_status_event_uses_snapshot_status_fallback(tmp_path) -> None:
+    projections, service, now = make_service(tmp_path)
+    observed_at = stamp(now)
+    plan = approved_plan(observed_at)
+    plan["activities"][0]["status"] = "DONE"
+    projections.save_day_plan_snapshot(
+        DEVICE_REF, plan, consent_version=3, received_at=observed_at
+    )
+
+    with pytest.raises(V4ToolError) as error:
+        service.atlas_propose_plan_revision(DEVICE_REF, proposal_args("reschedule"))
+
+    assert error.value.code == "VALIDATION_FAILED"
+    assert proposal_count(projections) == 0
