@@ -154,10 +154,13 @@ android {
 
     sourceSets {
         getByName("test") {
+            java.directories.add("src/testShared/java")
             resources.directories.add("../../contracts/v4")
         }
+        getByName("androidTest") {
+            java.directories.add("src/testShared/java")
+        }
         getByName("qa") {
-            java.directories.add("src/debug/java")
             // Reuse the debug-only network security config; the two debug relay
             // helpers are copied into src/qa/java for the QA application variant.
             res.directories.add("src/debug/res")

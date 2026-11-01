@@ -202,20 +202,17 @@ class V7_06B_CoachLoopInstrumentedTest {
             )
 
             val runId = UUID.randomUUID().toString()
-            val promptIdempotencyKey = UUID.randomUUID().toString()
-            assertTrue("run_id and prompt idempotency key must be independent", runId != promptIdempotencyKey)
             val proposalIdsBefore = planController.inboxEntries.mapTo(mutableSetOf()) { it.proposal.proposalId }
             assertTrue("fresh qa inbox must have no previous proposal IDs", proposalIdsBefore.isEmpty())
             assertTrue("fresh qa package must have no previous chat messages", controller.agentConversation.isEmpty())
             val message = V7_06BChatTestSupport.syntheticCoachMessage(
-                localDate = plan.localDate,
-                planId = plan.planId,
-                baseVersion = PLAN_VERSION_APPROVED,
-                activityId = activity.activityId,
-                targetStartMinute = activity.scheduledLocal.startMinute + RESCHEDULE_MINUTES,
-                durationMinutes = activity.scheduledLocal.durationMinutes,
-                runId = runId,
-                promptIdempotencyKey = promptIdempotencyKey,
+                plan.localDate,
+                plan.planId,
+                PLAN_VERSION_APPROVED,
+                activity.activityId,
+                activity.scheduledLocal.startMinute + RESCHEDULE_MINUTES,
+                activity.scheduledLocal.durationMinutes,
+                runId,
             )
             assertTrue("controlled chat message must fit the V4 request limit", message.length <= MAX_CHAT_MESSAGE_LENGTH)
             val assistantCountBefore = controller.agentConversation.count { it.role == AgentMessageRole.ASSISTANT }
@@ -248,7 +245,7 @@ class V7_06B_CoachLoopInstrumentedTest {
             assertFalse("assistant reply must not reuse a previous proposal ID", proposalIdFromReply in proposalIdsBefore)
             Log.i(
                 LOG_TAG,
-                "step=05 result=PASS run_id=$runId prompt_idempotency_key=$promptIdempotencyKey " +
+                "step=05 result=PASS run_id=$runId " +
                     "agent_status=${controller.agentStatus} tool_state=${toolMetadata.toolState} " +
                     "tool_call_count=${toolMetadata.toolCallCount} reply_proposal_id=$proposalIdFromReply",
             )
@@ -279,10 +276,7 @@ class V7_06B_CoachLoopInstrumentedTest {
             val coreIdempotencyKey = inboxEntry.proposal.idempotencyKey
             assertTrue("Core proposal idempotency key must not be empty", coreIdempotencyKey.isNotBlank())
             assertTrue("Core proposal idempotency key must be a canonical UUID", isCanonicalUuid(coreIdempotencyKey))
-            assertFalse(
-                "Core must replace the prompt-supplied proposal idempotency key",
-                coreIdempotencyKey == promptIdempotencyKey,
-            )
+            // The adapter JVM test verifies backend key injection against the legacy sentinel.
             assertEquals(plan.planId, inboxEntry.proposal.planId)
             assertEquals(PLAN_VERSION_APPROVED.toLong(), inboxEntry.proposal.baseVersion)
             assertEquals(InboxV4ConfirmationMode.A0_USER_REVIEW, inboxEntry.proposal.confirmationMode)

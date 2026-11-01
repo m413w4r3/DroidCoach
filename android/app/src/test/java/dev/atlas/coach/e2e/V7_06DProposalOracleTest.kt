@@ -61,20 +61,18 @@ class V7_06DProposalOracleTest {
         assertTrue(rescheduleSchema.has("duration_minutes"))
 
         val prompt = V7_06BChatTestSupport.syntheticCoachMessage(
-            localDate = "2030-01-02",
-            planId = "00000000-0000-4000-8000-000000000201",
-            baseVersion = 2,
-            activityId = "00000000-0000-4000-8000-000000000203",
-            targetStartMinute = 610,
-            durationMinutes = 45,
-            runId = "synthetic-run",
-            promptIdempotencyKey = "00000000-0000-4000-8000-000000000299",
+            "2030-01-02",
+            "00000000-0000-4000-8000-000000000201",
+            2,
+            "00000000-0000-4000-8000-000000000203",
+            610,
+            45,
+            "synthetic-run",
         )
-        assertTrue(prompt.contains("changes:"))
-        assertTrue(prompt.contains("op=\"reschedule\""))
-        assertTrue(prompt.contains("activity_id="))
-        assertTrue(prompt.contains("target_start_minute="))
-        assertTrue(prompt.contains("duration_minutes="))
+        assertTrue(prompt.contains("changes: [{\"op\": \"reschedule\""))
+        assertTrue(prompt.contains("\"activity_id\": \"00000000-0000-4000-8000-000000000203\""))
+        assertTrue(prompt.contains("\"target_start_minute\": 610"))
+        assertTrue(prompt.contains("\"duration_minutes\": 45"))
         assertTrue(prompt.contains("justification:"))
         assertFalse(prompt.contains("idempotency_key"))
     }
