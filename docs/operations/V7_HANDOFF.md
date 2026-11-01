@@ -7,7 +7,8 @@ Aucun push, PR ou merge distant effectué.
 
 ## V7-06C — Coach Android QA puis transport public (2026-11-01)
 
-**Statut global : boucle Coach Android QA GO en local et via WSS public depuis LTE ;
+**Statut global : APPLY/REJECT/ACK Android QA GO ; harnais, chat, boucle QA et WSS
+public GO_WITH_LIMITATIONS ; revue indépendante ACCEPTED_WITH_LIMITATIONS sans P0 ;
 deux P1 ouverts (blocage intermittent avant chat, observabilité de révocation A4-4) ;
 application produit non testée (`GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` = NO GO).**
 
@@ -39,13 +40,19 @@ application produit non testée (`GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` = NO GO)
 - Identités live résiduelles : `pixel-v7` et `r3c-pixel-final` non révoqués,
   consentements `DAY_PLAN`/`ACTIVITY_STATUS` `GRANTED v2` pour `android-9a3f0f…` ;
   aucune révocation/rotation exécutée sans autorisation ciblée.
+- Revue indépendante lecture seule `d4a996c5-d07a-45d2-ad7e-9c837159c60b`
+  (`codex/gpt-6-luna/xhigh`, SHA `8cab6fc`) : **aucun P0**,
+  `ACCEPTED_WITH_LIMITATIONS`, P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA
+  suivi ; verdicts `GO_WITH_LIMITATIONS` pour le harnais, le chat, la boucle QA et
+  le WSS public QA, `GO` pour APPLY/REJECT/ACK, `NO GO` pour le produit.
 - Preuves : `docs/operations/V7-06C_FINAL_REPORT.md`,
   `REGISTRY_V7_06C.md`, `evidence/V7-06C_ANDROID_APPLY.md`,
   `evidence/V7-06C_ANDROID_REJECT.md`, `evidence/V7-06C_PUBLIC_WSS.md`,
   `evidence/V7-06C_SECURITY_REVIEW.md`.
 - Prochaines actions : diagnostic/correctif du blocage intermittent, correction de
-  l’observabilité A4-4, revue indépendante, puis qualification de l’application
-  produit et du fil rouge produit distant si autorisés.
+  l’observabilité A4-4, ajout de la provenance APK↔SHA aux proofs, puis
+  qualification de l’application produit et du fil rouge produit distant si
+  autorisés ; révocation ciblée des identités live seulement sur accord explicite.
 
 ## V7-06A — fiabilisation V4 (2026-11-01)
 

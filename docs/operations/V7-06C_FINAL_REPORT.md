@@ -1,8 +1,9 @@
 # ATLAS V7-06C — Coach Android puis transport public : rapport final
 
-**Statut du document : EN COURS — Coach Loop QA GO en local et via WSS public ;
-deux P1 ouverts (blocage intermittent avant chat, observabilité de révocation A4-4) ;
-revue indépendante en cours. `GO_PIXEL_PRODUCT` et `GO_PRODUCT_REMOTE` restent NO GO.**
+**Statut du document : CLÔTURE DE CAMPAGNE — Coach Loop QA GO_WITH_LIMITATIONS en
+local et via WSS public ; deux P1 ouverts (blocage intermittent avant chat,
+observabilité de révocation A4-4) ; revue indépendante ACCEPTED_WITH_LIMITATIONS,
+aucun P0. `GO_PIXEL_PRODUCT` et `GO_PRODUCT_REMOTE` restent NO GO.**
 Les sections sont mises à jour au fur et à mesure des exécutions réelles sur le SHA
 intégré. Une ligne `NOT_RUN`, `BLOCKED`, `FAIL` ou `CORRECTION_REQUIRED` ne doit pas
 être lue comme un succès.
@@ -212,6 +213,29 @@ Une révocation ciblée de ces deux appareils et/ou une rotation du bearer Core
 restent soumises à une autorisation spécifique, avec sauvegarde, commandes
 exactes, vérification des refus après révocation et rollback compatible.
 
+### Demande de révocation ciblée (non exécutée)
+
+- **Ressources** : devices connecteur `pixel-v7` (14 capabilities, dont V4) et
+  `r3c-pixel-final` (6 capabilities V1/V2) ; `device_ref` Core `android-9a3f0f…`
+  avec `DAY_PLAN`/`ACTIVITY_STATUS` `GRANTED` v2 ; bearer Android live associé.
+- **Effets** : fermeture des sessions relay de ces devices, refus des nouvelles
+  opérations V4, conservation des données existantes ; aucune suppression de
+  projection ou de consentement n’est nécessaire. Les autres appareils et le
+  produit ne sont pas touchés.
+- **Sauvegarde préalable** : copie privée 0600 de
+  `~/.local/state/atlas-relay/devices.json`, `operations.json` et d’un export
+  lecture seule des consentements Core, avec hashes.
+- **Commandes prévues** : `node dist/main.js revoke-device <device_id>` pour chaque
+  device ciblé, puis vérification `devices.json` et test de reconnexion refusée ;
+  la rotation du bearer Core reste une opération distincte, avec redémarrage
+  contrôlé du service live et mise à jour du client.
+- **Vérification** : aucune nouvelle session/opération pour les devices révoqués ;
+  refus observable ; services live healthy ; aucun impact sur les autres devices.
+- **Rollback** : restauration du registre sauvegardé uniquement en cas de
+  révocation erronée, suivie d’une nouvelle vérification ; une révocation
+  volontaire n’est pas annulée automatiquement.
+- **Autorisation** : requise explicitement avant toute commande live.
+
 Aucune identité personnelle n’est utilisée par la stack V7-06C. Le jeton relay de
 l’app QA est stocké sous forme `IV:ciphertext` chiffrée AES-GCM avec une clé
 Android Keystore (`KeystoreRelayCredentialStore`) ; aucun jeton en clair n’a été
@@ -247,19 +271,38 @@ Résultats runtime : voir §3 (harnais backend), §4 (APPLY), §5 (REJECT) et §
 
 | Verdict | Décision | Portée |
 |---|---|---|
-| `GO_E2E_HARNESS_REPRODUCIBLE` | **GO** | backend positif et négatif rejoués depuis le dépôt, DeepSeek réel isolé |
-| `GO_ANDROID_QA_CHAT` | **GO** | Pixel physique API 37, paquet QA, DeepSeek réel, 2 outils corrélés (local et public) |
+| `GO_E2E_HARNESS_REPRODUCIBLE` | **GO_WITH_LIMITATIONS** | backend positif et négatif rejoués depuis le dépôt, DeepSeek réel isolé ; P2 traçabilité APK↔SHA suivi, champ pull corrigé `20445bf` |
+| `GO_ANDROID_QA_CHAT` | **GO_WITH_LIMITATIONS** | Pixel physique API 37, paquet QA, DeepSeek réel, 2 outils corrélés (local et public) ; P1 blocage public intermittent |
 | `GO_ANDROID_QA_PLAN_APPLY` | **GO** | DayPlan v2→v3 appliqué par le code Android, Core v3 à 610 (local et public) |
 | `GO_ANDROID_QA_ACK` | **GO** | ACK APPLIED et REJECTED émis par Android, confirmés Core, rejeux identiques |
 | `GO_ANDROID_QA_REJECT` | **GO** | rejet explicite, plan v2 inchangé, aucun v3 (local et public) |
-| `GO_QA_COACH_LOOP` | **GO** | APPLY v2→v3 + ACK APPLIED et REJECT sans changement, sur Android QA physique |
-| `GO_REMOTE_V4_PUBLIC` | **GO (limité, P1 ouverts)** | APPLY/REJECT via WSS public LTE, TLS/Noise/auth, aucun `adb reverse`, Core/Gateway loopback ; P1 fiabilité (hang intermittent) et P1 A4-4 (state ERROR/close null après révocation, refus serveur confirmé) |
+| `GO_QA_COACH_LOOP` | **GO_WITH_LIMITATIONS** | APPLY v2→v3 + ACK APPLIED et REJECT sans changement ; P1 fiabilité public |
+| `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS (QA APPLY/REJECT uniquement)** | WSS public LTE, TLS/Noise/auth, aucun `adb reverse`, Core/Gateway loopback ; **pas** une qualification générale de fiabilité, A4-4 ou produit |
 | `GO_PIXEL_PRODUCT` | **NO GO** | paquet produit non testé ; seuls des paquets QA séparés l’ont été |
 | `GO_PRODUCT_REMOTE` | **NO GO** | produit non testé ; modèle/stack isolés, pas le produit |
 
 ## 10. Revue indépendante
 
-Statut : **PENDING**. Aucune revue ne peut accepter un runtime non exécuté.
+**Verdict : `GO_WITH_LIMITATIONS` pour les parcours QA APPLY/REJECT ; aucun P0.**
+Revue `d4a996c5-d07a-45d2-ad7e-9c837159c60b` (`codex:gpt-6-luna` / `xhigh`),
+worktree détaché `/tmp/atlas-v7-06c-review-ro` en lecture seule (`a-w`), SHA revu
+`8cab6fc`. La session a confirmé `HEAD`/`git status` propres et n’a modifié aucun
+fichier ; elle n’a lancé aucun test, ADB, Docker ni réseau.
+
+- **P0** : aucun.
+- **P1 fiabilité** : blocage intermittent avant chat, une occurrence, relance PASS,
+  cause racine non confirmée.
+- **P1 A4-4** : refus serveur de la reconnexion révoquée confirmé, mais app
+  `ERROR`/`close_code=null` ; sonde **FAIL**, A4-4 non qualifié.
+- **P2 pull** : champ `pull_count_after_runner` trompeur ; corrigé après revue
+  (`20445bf`), 17/17 tests harnais.
+- **P2 traçabilité APK↔SHA** : les proofs JSON ne sérialisent pas le SHA source ;
+  les SHAs d’exécution et hashes APK restent documentés dans les preuves. Limite
+  suivie pour une amélioration future.
+- La revue recommande `GO_WITH_LIMITATIONS` pour le harnais, le chat, la boucle
+  Coach et le public QA APPLY/REJECT ; `GO` pour APPLY/REJECT/ACK ; `NO GO` pour le
+  produit. Le parent adopte ces verdicts.
+- Détail complet : `docs/operations/evidence/V7-06C_SECURITY_REVIEW.md`.
 
 ## 11. Limites honnêtes
 

@@ -110,3 +110,12 @@ avant la fenêtre de dump).
 - La sonde de révocation est FAIL au sens observabilité ; le refus serveur est
   confirmé par les métriques du connecteur.
 - `GO_PIXEL_PRODUCT` et `GO_PRODUCT_REMOTE` restent **NO GO**.
+
+## 8. Revue indépendante
+
+Revue lecture seule `d4a996c5-d07a-45d2-ad7e-9c837159c60b`
+(`codex/gpt-6-luna/xhigh`, SHA `8cab6fc`) : **aucun P0**,
+`ACCEPTED_WITH_LIMITATIONS`. Elle recommande `GO_WITH_LIMITATIONS` pour
+`GO_REMOTE_V4_PUBLIC` **uniquement pour les parcours QA APPLY/REJECT réellement
+exécutés**, et `NO GO` pour toute qualification générale de fiabilité, A4-4 ou
+produit. Matrice complète : `V7-06C_SECURITY_REVIEW.md`.

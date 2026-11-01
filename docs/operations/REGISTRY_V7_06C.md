@@ -89,7 +89,7 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
 | V7-06C-P2-VALIDATION-422 | Aligner `VALIDATION_FAILED` sur HTTP 422 dans `invoke_tool` + test ciblé | — | **ACCEPTED** — commit `02be9c1`, intégré `b33d43b` ; test rouge→vert, backend **372 passed / 1 skipped** | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | `fix/v7-06c-validation-422` | test ciblé PASS, suite backend complète |
 | V7-06C-04-WSS-PUBLIC | Même parcours via WSS public, réseau extérieur, sans `adb reverse` | 03 + endpoint public autorisé | **ACCEPTED (runtime, limitations P1)** — Pixel LTE → `wss://all.taildc7886.ts.net:8443` → relais isolé 4400 ; APPLY + REJECT PASS, TLS valide, Noise/auth, aucun `adb reverse`, Core/Gateway loopback | parent opérateur | racine | proofs `remote-apply2`, `remote-reject` |
 | V7-06C-04-REVOKE-PROBE | Reconnexion avec device QA révoqué et code de fermeture | 04 | **FAIL (observabilité P1)** — device révoqué, connecteur refuse (aucune nouvelle session, `errors_total=1`) ; app `state=ERROR`, `close_code=null`, pas `REVOKED`/4001 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | probe instrumenté FAIL ; refus serveur confirmé par métriques |
-| V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–04 | **PENDING** | à créer | worktree détaché | grille P0/P1/P2, aucun P0 ouvert |
+| V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–04 | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; P1 fiabilité, P1 A4-4 ; P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA suivi ; `GO_WITH_LIMITATIONS` pour QA APPLY/REJECT | `d4a996c5-d07a-45d2-ad7e-9c837159c60b` | `/tmp/atlas-v7-06c-review-ro` (a-w, `8cab6fc`) | matrice, P0/P1/P2, verdicts ; aucun fichier modifié |
 
 ## 4. Journal des sessions
 
@@ -110,6 +110,7 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
 | 2026-11-01 | parent | Remote REJECT public WSS | Pixel LTE, stack `android-reject-1968579` | **PASS** — `network=public_wss`, plan v2, ACK REJECTED, sonde incluse |
 | 2026-11-01 | parent | Sonde reconnexion device révoqué | Pixel LTE, device `968aff85…` révoqué | **FAIL observabilité** — connecteur refuse (aucune session, `errors_total=1`) ; app `ERROR`, `close_code=null` |
 | 2026-11-01 | parent + autorisation propriétaire | Nettoyage QA | — | 18 paquets `qa*` désinstallés ; produit `dev.atlas.coach`/HOME intacts ; Wi‑Fi restauré ; Funnel état initial |
+| 2026-11-01 | `d4a996c5-d07a-45d2-ad7e-9c837159c60b` | Revue indépendante finale | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; P1 fiabilité + A4-4 ; P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA ; `GO_WITH_LIMITATIONS` QA APPLY/REJECT |
 
 ## 5. Résultats runtime (2026-11-01)
 
@@ -243,7 +244,30 @@ passé avant la fenêtre de dump). Défaut classé **P1 fiabilité**, non corrig
   `ERROR`/`close_code=null`, pas `REVOKED`/4001. Le probe est **FAIL**.
 - Le P2 HTTP 422 est corrigé (`02be9c1`, `b33d43b`) avec test rouge→vert et
   backend 372/1 ; les autres codes HTTP n’ont pas été modifiés.
+- Le P2 de revue sur le champ pull est corrigé (`20445bf`) : le proof n’expose plus
+  `pull_count_after_runner` (qui contenait le nombre de propositions pendantes) et
+  affiche `Pending proposals after runner`.
+- Le P2 de traçabilité APK↔SHA reste ouvert : les proofs ne sérialisent pas le SHA
+  source et aucun APK n’a été archivé avec eux. Les hashes APK et SHAs d’exécution
+  restent documentés dans les preuves, sans prétendre à un lien vérifiable.
 - Le `GO_REMOTE_V4_PUBLIC` porte sur le parcours APPLY/REJECT public réellement
   exécuté ; il ne vaut ni `GO_PIXEL_PRODUCT` ni `GO_PRODUCT_REMOTE`.
 - Les identités live résiduelles et les paquets produit restent hors périmètre de
   la campagne ; aucune révocation live n’a été exécutée.
+
+## 7. Verdicts finaux (après revue indépendante)
+
+| Verdict | Résultat | Fondement |
+|---|---|---|
+| `GO_E2E_HARNESS_REPRODUCIBLE` | **GO_WITH_LIMITATIONS** | Harnais repo-natif, backend réel positif/négatif ; P2 pull corrigé, traçabilité APK↔SHA suivie |
+| `GO_ANDROID_QA_CHAT` | **GO_WITH_LIMITATIONS** | Chat réel observé en local et public ; P1 blocage intermittent avant chat |
+| `GO_ANDROID_QA_PLAN_APPLY` | **GO** | APPLY local et public, oracles Core indépendants |
+| `GO_ANDROID_QA_REJECT` | **GO** | REJECT local et public, plan v2 conservé, ACK REJECTED |
+| `GO_ANDROID_QA_ACK` | **GO** | ACK durable et rejeu identique attesté depuis Android, un seul événement Core |
+| `GO_QA_COACH_LOOP` | **GO_WITH_LIMITATIONS** | Boucle QA APPLY/REJECT complète ; P1 fiabilité |
+| `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS (QA APPLY/REJECT)** | WSS public LTE, TLS/Noise, aucun `adb reverse` ; pas de qualification générale ni A4-4 |
+| `GO_PIXEL_PRODUCT` | **NO GO** | Application produit non testée |
+| `GO_PRODUCT_REMOTE` | **NO GO** | Produit distant non testé |
+
+Détail de la revue : `docs/operations/evidence/V7-06C_SECURITY_REVIEW.md`.
+Rapport final : `docs/operations/V7-06C_FINAL_REPORT.md`.
