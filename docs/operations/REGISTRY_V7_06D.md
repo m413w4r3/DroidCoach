@@ -12,7 +12,9 @@ SHA. Aucun push, PR, merge distant ni service live modifié à ce stade.
 
 **Statut global :** `CORRECTIONS INTÉGRÉES — P1 et P2 de revue provenance
 corrigés (rouge→vert) ; revue finale sans P0/P1, P2 de libellés corrigé,
-confirmation delta `06d30ed` **ACCEPTED** ; aucune qualification physique`.
+confirmation delta `06d30ed` **ACCEPTED** ; phase physique V7-06D-PHYS exécutée :
+A4-4 **PASS**, provenance installée **GO**, fiabilité chat **3/5 → NO GO / F1
+ouvert**`.
 
 ## 1. Contraintes d'exécution
 
@@ -44,7 +46,7 @@ confirmation delta `06d30ed` **ACCEPTED** ; aucune qualification physique`.
 | Docker | `27.1.1` |
 | SDK Android | platforms `android-37.0`, `37.1`, `37.2` ; build-tools `37.0.0` |
 | Paseo | provider `codex` disponible ; `gpt-6-luna` avec effort `xhigh` disponible |
-| Appareil physique | **non contacté** — aucun ADB lancé ; aucun test physique autorisé à ce stade |
+| Appareil physique | **non contacté au pré-vol** — aucun ADB lancé à ce stade ; phase physique exécutée plus tard sous autorisation ciblée (§4ter) |
 | Services live | non inspectés en écriture ; aucune action live prévue pendant les audits |
 
 **Décision de pré-vol :** les trois audits A1–A3 sont lancés en lecture seule sur
@@ -84,6 +86,10 @@ séparée (réappairage/reconfiguration possibles).
 | V7-06D-REVIEW | Revue indépendante lecture seule du SHA intégré | X/Y/Z/Z2 | **CORRECTION_REQUIRED puis P1 corrigé** — session `5f9adb37…` ; P1 provenance confirmé (gate bloquant), P2 libellés ; P1 corrigé Z2, P2 corrigé | `5f9adb37-57bc-4068-9aa8-53899f44f00b` | `/tmp/atlas-v7-06d-review-ro` | rapport P0/P1/P2, huit verdicts, aucun fichier modifié |
 | V7-06D-REVIEW2 | Revue delta indépendante du SHA corrigé | Z2 + REVIEW | **CORRECTION_REQUIRED puis corrigé** — P1 confirmé corrigé ; deux P2 (wrapper permissif, test mockant la frontière) et libellés obsolètes ; corrigés par Z3 ; revue finale REVIEW3 effectuée | `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` | `/tmp/atlas-v7-06d-review2-ro` | P1 rouge→vert, schéma proof exact, absence de régression, labels, huit verdicts |
 | V7-06D-REVIEW3 | Revue finale courte du SHA corrigé | Z3 + REVIEW2 | **CORRECTION_REQUIRED (P2 libellés uniquement) → corrigé, delta `06d30ed` ACCEPTED** — aucun P0/P1 ; schéma exact, test réel et absence de régression confirmés ; libellés de statut de revue obsolètes corrigés dans le commit documentaire final | `19c375fd-9e02-48ac-9fc8-c8c928d5562a` | `/tmp/atlas-v7-06d-review3-ro` (`88ac019`) | P0/P1/P2, huit verdicts, worktree propre, aucun test exécuté |
+| V7-06D-PHYS-PREFLIGHT | Pré-vol physique, autorisation ciblée, sauvegarde app QA | REVIEW3 | **ACCEPTED (lecture seule)** — Pixel 9 Pro XL, Android 17/SDK 37.1, HOME produit inchangé, aucun paquet QA préexistant, aucune donnée QA à sauvegarder | parent | appareil physique | modèle/API/HOME/stockage, aucun test produit |
+| V7-06D-PHYS-A4-4 | Sonde A4-4 stricte sur appareil | PREFLIGHT | **PASS** — `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session authentifiée, erreurs `0→1` | parent | appareil physique | instrumentation `OK (1 test)`, métriques isolées |
+| V7-06D-PHYS-COLD | Série de 5 démarrages froids avec chat | PREFLIGHT | **3 PASS / 2 FAIL** — échecs #2/#3 après réponse chat, zéro proposition après rejet d'outil ; deadlock G↔C non reproduite | parent | appareil physique | 5 preuves/attempts, provenance installée vérifiée |
+| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **OPEN — nouveau ticket requis** ; cause produit non corrigée, parseur `parseToolMetadata` à durcir (`PROPOSAL_MISSING`) | — | — | reproduction, correction, nouvelle série 5+ |
 
 ## 4. Journal des sessions
 
@@ -101,6 +107,9 @@ séparée (réappairage/reconfiguration possibles).
 | 2026-11-01 | `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` | V7-06D-REVIEW2 revue delta | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Plan`) | **CORRECTION_REQUIRED** sur `0c19a3f` — P1 confirmé corrigé ; P2 wrapper permissif, P2 test mockant la frontière, libellés obsolètes ; corrigés Z3 `fded03d`/`bfb1965` ; aucun fichier modifié |
 | 2026-11-01 | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | V7-06D-Z3 correction P2 provenance | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — rouge `052ca80`, fix `4ebdf5f`, intégrés `fded03d`/`bfb1965` ; harnais 27/27, backend 399/1 |
 | 2026-11-01 | `19c375fd-9e02-48ac-9fc8-c8c928d5562a` | V7-06D-REVIEW3 revue finale | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Plan` puis `Default` après approbation, worktree `chmod a-w`) | **CORRECTION_REQUIRED (P2 libellés uniquement)** sur `88ac019` (code `bfb1965`) — aucun P0/P1 ; tentative d'édition refusée, worktree propre, aucun test exécuté ; libellés corrigés dans les documents finaux ; confirmation delta `06d30ed` **ACCEPTED** |
+| 2026-11-01 | parent | V7-06D-PHYS pré-vol et A4-4 | appareil physique, ADB `shell`, aucun sous-agent | **PASS** — Pixel 9 Pro XL API 37.1, sonde A4-4 `REVOKED`/`REVOKED`, aucune nouvelle session, `close_code=null` ; QA uniquement |
+| 2026-11-01 | parent | V7-06D-PHYS série froide | appareil physique, ADB `shell`, aucun sous-agent | **3 PASS / 2 FAIL** — échecs #2/#3 après réponse chat (zéro proposition, outil rejeté) ; transport sans deadlock ; **F1 ouvert** |
+| 2026-11-01 | parent | V7-06D-PHYS nettoyage | appareil physique, ADB `shell` | **PASS** — QA désinstallés, reverse retiré, stacks arrêtées, HOME/produit/test produit inchangés |
 
 ## 4bis. Résultats finaux d'intégration
 
@@ -120,18 +129,45 @@ android/` vide). Le HEAD documentaire final ne change que `docs/`.
 | Backend `pytest -q` | **399 passed / 1 skipped**, 43 subtests |
 | `py_compile`, `git diff --check` | **PASS** |
 | APK final app / test | `1e31a643…` / `05dd465b…` ; manifeste `8d678af5…`, source `cf82cd0…`, propre, `qa`, `compile_sdk=37.2` |
-| Sonde A4-4 sur appareil | **NOT_RUN** |
-| Série de démarrages froids | **NOT_RUN** |
+| Sonde A4-4 sur appareil | **PASS** — `REVOKED`/`REVOKED`, aucune nouvelle session |
+| Série de démarrages froids | **3 PASS / 2 FAIL** — F1 zéro proposition après rejet d'outil |
 
 **Statut global :** deux P1 V7-06C corrigés avec preuves déterministes ; P2
 provenance fermé par un mécanisme vérifié ; **P1 et P2 de revue indépendante**
 sur le gate de provenance corrigés (`bfb1965`, rouge→vert) ; **revue finale sans
-P0/P1, P2 de libellés corrigé, confirmation delta `06d30ed` ACCEPTED** ;
-**aucune qualification physique**. Verdicts :
-`GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER` ; `GO_APK_PROVENANCE`
-(GO_WITH_LIMITATIONS, chaîne logicielle) ; `GO_CHAT_RELIABILITY_QA` et
-`GO_A4_4_CLIENT` **NOT_RUN** ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE`
+P0/P1, P2 de libellés corrigé, confirmation delta `06d30ed` ACCEPTED** ; **phase
+physique V7-06D-PHYS exécutée** (A4-4 PASS, provenance installée GO, fiabilité
+chat 3/5 → NO GO, F1 ouvert). Verdicts après phase physique :
+`GO_CHAT_CONCURRENCY` **GO**, `GO_REVOKED_DEVICE_SERVER` **GO**,
+`GO_A4_4_CLIENT` **GO**, `GO_APK_PROVENANCE` **GO** (APK QA installé),
+`GO_CHAT_RELIABILITY_QA` **NO GO**, `GO_REMOTE_V4_PUBLIC`
+**GO_WITH_LIMITATIONS hérité**, `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE`
 **NO GO**.
+
+## 4ter. Qualification physique V7-06D-PHYS (2026-11-01)
+
+Appareil : Pixel 9 Pro XL physique, Android 17 / SDK 37.1, patch
+`2026-09-05`, non-émulateur. Autorisation ciblée : paquet QA uniquement, stack
+isolée, identités synthétiques, sauvegarde app QA, aucun changement
+HOME/Keystore/produit/données personnelles/service live. Aucun paquet QA
+préexistant ; aucun produit testé.
+
+| Oracle | Résultat |
+|---|---|
+| Pré-vol | **PASS** — HOME `dev.atlas.coach/.app.LauncherActivity`, produit `0.1.0` inchangé, 32G libres |
+| A4-4 sonde stricte | **PASS** — `OK (1 test)`, `REVOKED`/`REVOKED`, `close_code=null`, connexions `1→2`, sessions `1→1`, erreurs `0→1` |
+| Démarrages froids | **3 PASS / 2 FAIL** (tentatives 1, 4, 5 PASS ; 2, 3 FAIL) |
+| Preuves PASS | `source_sha=2fa90bd`, arbre `40c9e5bc…`, propre, `qa`, compile `37.2`, hashes installés = construits, `VERIFIED` |
+| F1 | **OPEN** — zéro proposition après rejet de `atlas_propose_plan_revision` ; parseur `parseToolMetadata` à durcir |
+| Nettoyage | **PASS** — QA désinstallés, reverse retiré, stacks arrêtées, HOME/produit/test produit inchangés |
+
+**Verdicts après phase physique :** `GO_CHAT_CONCURRENCY` GO,
+`GO_CHAT_RELIABILITY_QA` **NO GO**, `GO_REVOKED_DEVICE_SERVER` GO,
+`GO_A4_4_CLIENT` **GO**, `GO_APK_PROVENANCE` **GO** (APK QA),
+`GO_REMOTE_V4_PUBLIC` GO_WITH_LIMITATIONS hérité, produit NO GO.
+**F1** est un nouveau ticket fiabilité, non corrigé dans cette phase ; ne pas
+rejouer jusqu'à un PASS artificiel. Preuve détaillée :
+`evidence/V7-06D_PHYSICAL_QA.md`.
 
 ## 5. Règles de preuve
 

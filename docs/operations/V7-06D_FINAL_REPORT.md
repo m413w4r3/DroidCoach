@@ -4,7 +4,9 @@
 localement avec tests discriminants ; P2 de provenance APK↔SHA fermé par un
 mécanisme vérifié ; P1 puis P2 de revue indépendante corrigés ; revue finale
 sans P0/P1, avec un P2 documentaire de libellés corrigé et confirmation delta
-`06d30ed` **ACCEPTED** ; aucune qualification physique exécutée (`NOT_RUN`).`
+`06d30ed` **ACCEPTED** ; qualification physique complémentaire exécutée :
+A4-4 **PASS**, fiabilité chat **3/5 PASS → NO GO**, provenance installée **GO** ;
+aucun test produit ni qualification publique.`
 **Campagne :** V7-06D « Fiabilité remote et révocation A4-4 ».
 **BASE_SHA :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`.
 **Branche :** `feat/atlas-v7-06d-remote-hardening`.
@@ -13,6 +15,9 @@ sans P0/P1, avec un P2 documentaire de libellés corrigé et confirmation delta
 est identique entre `cf82cd0` et `bfb1965` (`git diff cf82cd0..bfb1965 --
 android/` vide) ; le HEAD documentaire final ne contient que des changements de
 docs après ces SHA.
+**SHA de build physique (V7-06D-PHYS) :** `2fa90bd` — Android/Node/backend
+identiques à `bfb1965` ; build QA propre utilisé pour les cinq tentatives
+physiques.
 **Registre :** `docs/operations/REGISTRY_V7_06D.md`.
 **Diagnostic :** `docs/operations/V7-06D_DIAGNOSTIC.md`.
 **Date :** 2026-11-01.
@@ -34,16 +39,32 @@ Les deux P1 de V7-06C sont traités à l'échelle du code et des tests détermin
    strict Android rejetait (`ERROR`, `close_code=null`). Le connecteur respecte
    désormais le protocole du hello et vérifie le token **avant** de révéler la
    révocation. Android conserve l'état `REVOKED` après le close relay `1012` et la
-   sonde instrumentée est renforcée (état + type d'échec). La sonde n'a pas été
-   exécutée sur appareil : `GO_A4_4_CLIENT` reste **NO GO / NOT_RUN**.
+   sonde instrumentée est renforcée (état + type d'échec). La phase physique
+   complémentaire a exécuté la sonde stricte sur Pixel : **PASS**
+   (`REVOKED`/`REVOKED`, aucune nouvelle session) ; `GO_A4_4_CLIENT` = **GO**
+   pour ce périmètre.
 3. **Provenance APK↔SHA** : un manifeste de build est généré depuis la copie
    compilée, embarqué dans les APK app et AndroidTest, vérifié avant
    instrumentation, et sérialisé dans les proofs. Le build final porte
    `source_sha=cf82cd0…`, `worktree_clean=true`, et les deux APK ont été vérifiés.
-   Aucun run appareil n'a été exécuté. Verdict `GO_APK_PROVENANCE` avec limitation.
+   La phase physique a ensuite exercé le gate installé sur appareil ; les preuves
+   PASS documentent des hashes installés égaux aux construits. Verdict
+   `GO_APK_PROVENANCE` = **GO** pour les APK QA.
 
-Aucun push, PR, merge distant, service live modifié, ADB ou appareil physique n'a
-été utilisé. Les acquis V7-06A/B/C ne sont pas réécrits.
+4. **Qualification physique complémentaire (V7-06D-PHYS, 2026-11-01)** : sur le
+   Pixel 9 Pro XL API 37.1, la sonde stricte A4-4 est **PASS**
+   (`REVOKED`/`REVOKED`, aucune nouvelle session) et la provenance des APK QA
+   installés est **vérifiée** sur appareil. La série de 5 démarrages froids donne
+   **3 PASS / 2 FAIL** : les deux échecs surviennent après la réponse du chat,
+   sur un appel de proposition rejeté (zéro proposition), et non sur la deadlock
+   G↔C. En conséquence `GO_A4_4_CLIENT` et `GO_APK_PROVENANCE` passent à **GO**
+   pour ce périmètre, mais `GO_CHAT_RELIABILITY_QA` reste **NO GO**. Détails :
+   `evidence/V7-06D_PHYSICAL_QA.md`.
+
+Aucun push, PR, merge distant ou service live modifié. Les acquis V7-06A/B/C ne
+sont pas réécrits. La phase physique a utilisé ADB et le Pixel avec autorisation
+ciblée, paquets QA séparés, sans toucher au produit, au HOME, au Keystore ni aux
+données personnelles.
 
 ## 2. Périmètre et provenance
 
@@ -136,7 +157,7 @@ stables ; aucune augmentation de timeout pour masquer le défaut.
 | `RelayCoreV4HttpTransportTest` | **PASS 12/12** |
 | Suite JVM complète intégrée | **PASS 909/909**, 119 fichiers, 0 échec/erreur/ignoré |
 | Lint hors ligne | **PASS** |
-| Qualification appareil | **NOT_RUN** |
+| Qualification appareil | **NOT_RUN en phase déterministe** ; série physique §13 : 3 PASS / 2 FAIL |
 
 Le correctif est une suppression de deadlock atteignable, pas une attribution
 rétroactive certaine du run V7-06C.
@@ -176,7 +197,7 @@ Tests :
 | Node connecteur | **PASS 114/114**, 18 fichiers |
 | JVM politique d'état + enveloppe V1 rejetée sur transport V2 | **PASS** (inclus dans 909/909) |
 | Compilation de la sonde QA | **PASS** (`assembleQaAndroidTest`) |
-| Sonde instrumentée stricte sur appareil | **NOT_RUN** |
+| Sonde instrumentée stricte sur appareil | **NOT_RUN en phase déterministe** ; phase physique §13 : **PASS** |
 
 Limites : le relais déployé transforme le close 4001 en `1012` ; la preuve A4-4
 repose sur la trame applicative authentifiée, pas sur le code de fermeture.
@@ -236,10 +257,10 @@ inchangé par les correctifs harnais `69d0db6`/`bfb1965`) :
 
 Tests : harnais **27/27 PASS** (après corrections P1/P2), builds QA PASS,
 manifests app/test identiques, gate installé↔construit couvert par tests
-négatifs. Aucun run appareil ; le gate installé n'a donc pas été exercé sur un
-téléphone dans V7-06D. Le code Android étant identique entre `cf82cd0` (build
-APK) et `bfb1965` (correctifs harnais), les hashes APK ci-dessus restent valides
-pour les deux SHA.
+négatifs. Aucun run appareil dans la phase déterministe ; la phase physique
+`V7-06D-PHYS` (§13) a ensuite exercé le gate installé sur le Pixel. Le code
+Android étant identique entre `cf82cd0` (build APK) et `bfb1965` (correctifs
+harnais), les hashes APK ci-dessus restent valides pour les deux SHA.
 
 ## 7. Qualification d'intégration
 
@@ -260,11 +281,17 @@ inchangés) :
 | `py_compile` Python modifiés | **PASS** |
 | `git diff --check` | **PASS** |
 
-Aucune recette physique, aucun AVD, aucun ADB, aucun Docker de campagne, aucun
-réseau externe. Les scénarios backend réels V7-06C ne sont pas rejoués : le code
+La phase déterministe n'a utilisé aucune recette physique, aucun AVD, aucun ADB
+et aucun Docker de campagne ; la phase physique `V7-06D-PHYS` (§13) est décrite
+séparément. Les scénarios backend réels V7-06C ne sont pas rejoués : le code
 backend n'est pas modifié et leurs preuves restent valides dans leur périmètre.
 
-## 8. Verdicts
+## 8. Verdicts de la phase déterministe
+
+Ces verdicts sont ceux de la phase déterministe, **avant** la qualification
+physique complémentaire. La §13 les met à jour pour `GO_A4_4_CLIENT`,
+`GO_CHAT_RELIABILITY_QA` et `GO_APK_PROVENANCE` ; les verdicts historiques ne
+sont pas réécrits.
 
 | Verdict | Décision | Portée |
 |---|---|---|
@@ -308,9 +335,11 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
 
 ## 10. Nettoyage et inventaire
 
-- Aucun ADB, Pixel, AVD, émulateur ou instrumentation exécuté.
-- Aucun conteneur, stack, service ou réseau de campagne démarré ; les conteneurs
-  live n'ont été lus qu'en lecture seule.
+- Phase déterministe : aucun ADB, Pixel, AVD, émulateur ou instrumentation
+  exécuté. Phase physique : Pixel et ADB utilisés avec autorisation ciblée,
+  paquets QA uniquement, puis QA désinstallés et stacks arrêtées (§13).
+- Aucun conteneur, stack, service ou réseau de campagne live démarré ; les
+  conteneurs live n'ont été lus qu'en lecture seule.
 - Sessions Paseo : A1/A2/A3 (audits), X/Y/Z (implémentations), relecture
   indépendante ; aucune sous-délégation ; six enfants simultanés maximum.
 - Worktrees temporaires sous `/tmp` : audits et implémentations ; les worktrees
@@ -368,9 +397,13 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
 
 ## 11. Limites honnêtes
 
-- **Physique `NOT_RUN`** : aucun test sur téléphone, aucune série de démarrages
-  froids, aucune sonde A4-4 exécutée. `GO_CHAT_RELIABILITY_QA` et
-  `GO_A4_4_CLIENT` restent non accordés.
+- **Physique exécuté le 2026-11-01** : sonde A4-4 **PASS** et provenance des APK
+  QA installés **vérifiée** sur Pixel 9 Pro XL API 37.1 ; série de 5 démarrages
+  froids **3 PASS / 2 FAIL**. `GO_A4_4_CLIENT` et `GO_APK_PROVENANCE` passent à
+  **GO** sur ce périmètre. `GO_CHAT_RELIABILITY_QA` reste **NO GO** : les échecs
+  #2/#3 sont des zéros-propositions après rejet de l'outil, pas la deadlock G↔C ;
+  le parseur de test doit être durci et le contrat d'outil corrigé avant une
+  nouvelle série.
 - **Cause historique V7-06C `UNKNOWN`** : le deadlock G↔C est un mécanisme
   atteignable et supprimé, pas une attribution rétroactive certaine.
 - **Relais 1012** : le close 4001 n'atteint pas Android via le relais déployé ;
@@ -383,8 +416,10 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
 - **Autres hypothèses A1** : assemblage de contexte synchrone, famine
   worker/audit, garde de génération sur révocation de catégorie, transition de
   session ; non toutes corrigées.
-- **Provenance installée** : le gate installé↔construit est couvert par tests,
-  mais aucun APK installé n'a été vérifié sur appareil dans V7-06D.
+- **Provenance installée** : le gate installé↔construit a été exercé sur le Pixel
+  pour les cinq tentatives ; les trois preuves PASS documentent des hashes
+  installés égaux aux hashes construits (`VERIFIED`). Limite : APK QA uniquement,
+  pas d'APK produit.
 - **Scénarios backend réels** : non rejoués ; le backend n'est pas modifié et les
   preuves V7-06C restent valides dans leur périmètre.
 - **Revues initiale, delta et finale** : lecture seule, sans réexécution des
@@ -392,25 +427,98 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   trouvé était réel et a été corrigé ; les P2 de revue delta sont corrigés. La
   revue finale n'a trouvé aucun P0/P1 et un seul P2 documentaire de libellés,
   corrigé après le SHA examiné.
-- **Test de succès du gate installé** : il exécute la vraie fonction
-  `verify_installed_artifacts` mais simule les lectures bas niveau (dumps de
-  paquets, hashes installés, certificats) ; les sorties réelles d'un appareil ne
-  sont pas couvertes dans V7-06D.
+- **Test de succès du gate installé** : les tests unitaires simulent les lectures
+  bas niveau ; la phase physique a en plus exercé la vraie fonction sur le Pixel
+  et documenté, pour trois preuves PASS, des hashes installés égaux aux hashes
+  construits (`VERIFIED`).
 
 ## 12. Prochaines actions
 
-1. **Autorisation physique ciblée** (nouvelle, non permanente) pour :
-   - exécuter la sonde A4-4 renforcée sur le Pixel 9 Pro XL API 37, avec stack
-     isolée, identité synthétique révoquée et sauvegarde pré-vol ;
-   - exécuter une série de démarrages froids indépendants (par ex. 5) avec
-     consentements/plan synchronisés puis chat, en conservant chaque tentative ;
-     un échec intermittent conserve le verdict limité ;
-   - optionnellement, une recette APPLY et une REJECT sur des identités neuves.
-   Aucun paquet produit, HOME, Keystore ou donnée personnelle ne doit être touché.
-2. **Revue finale effectuée** sur le SHA intégré (`88ac019`, code `bfb1965`) :
-   aucun P0/P1, P2 documentaire de libellés corrigé ; aucune correction de code
-   requise.
+1. **Nouveau ticket fiabilité F1** issu de la phase physique : durcir
+   `parseToolMetadata` pour refuser explicitement une réponse à zéro proposition
+   (`PROPOSAL_MISSING`), puis diagnostiquer et corriger le rejet de
+   `atlas_propose_plan_revision` (contrat/prompt/idempotence) avant de rejouer
+   une série de 5+ démarrages froids. Ne pas rejouer jusqu'à obtenir un PASS
+   artificiel ; un échec conserve le verdict limité.
+2. **Phase physique A4-4 effectuée** sur le Pixel 9 Pro XL API 37.1 : sonde
+   stricte **PASS** (`REVOKED`/`REVOKED`, aucune nouvelle session) ; provenance
+   APK installée vérifiée ; série froide **3/5**. Détails :
+   `evidence/V7-06D_PHYSICAL_QA.md`.
 3. **Décisions live séparées** : révocation ciblée des deux devices obsolètes,
    puis rotation éventuelle du bearer Core, sur autorisation explicite et
    sauvegarde vérifiée.
 4. Ne pas accorder `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` par assimilation.
+
+## 13. Qualification physique complémentaire (V7-06D-PHYS)
+
+**Date :** 2026-11-01. **Appareil :** Pixel 9 Pro XL physique, Android 17 /
+SDK 37.1, patch `2026-09-05`, non-émulateur. **Code :** `2fa90bd` (Android
+identique à `bfb1965` ; delta docs-only). **Autorisation ciblée :** paquet QA
+uniquement, stack isolée, identités synthétiques, sauvegarde app QA, aucun
+changement HOME/Keystore/produit/données personnelles/service live.
+
+### 13.1 A4-4 — PASS
+
+Device QA synthétique révoqué dans le registre du connecteur isolé, sonde
+`V7_06C_RevokedDeviceReconnectInstrumentedTest` exécutée avec `adb reverse`
+local :
+
+- instrumentation **PASS** (`OK (1 test)`, 0,667 s) ;
+- état **`REVOKED`**, type d'échec **`REVOKED`**, `close_code=null`,
+  identifiants configurés ;
+- connexions relay `1 → 2`, sessions authentifiées **`1 → 1`** (aucune nouvelle
+  session), erreurs `0 → 1`, sessions actives `0`.
+
+Le refus explicite provient de la trame authentifiée ; aucune session n'est
+ouverte. La limite `close_code=null` reste documentée.
+
+### 13.2 Série de démarrages froids — 3 PASS / 2 FAIL
+
+Cinq stacks `android-apply` neuves, paquets QA neufs, build propre, gate APK
+installé exercé avant chaque instrumentation :
+
+| # | Résultat | Signature |
+|---|---|---|
+| 1 | PASS | parcours complet APPLIED/ACK APPLIED, replay identique |
+| 2 | FAIL | `ANDROID_RUNNER_PASS_MARKER_MISSING` ; `IllegalStateException` dans `parseToolMetadata` ; même signature que #3 |
+| 3 | FAIL | réponse assistant valide avec `tool_state=completed`, `tool_call_count=2`, **0 proposition** ; appel `atlas_propose_plan_revision` rejeté localement puis par le service ; parseur de test incapable de lire « Aucune proposition (0) » |
+| 4 | PASS | parcours complet APPLIED/ACK APPLIED, replay identique |
+| 5 | PASS | parcours complet APPLIED/ACK APPLIED, replay identique |
+
+Dans les échecs, les stages `BEFORE_DISPATCH`, `SOCKET_SEND_ACCEPTED`,
+`RESPONSE_RECEIVED`, `CORRELATED` et `UI_RESULT=SUCCESS` sont présents : le
+blocage G↔C de V7-06C n'est **pas** reproduit. Le nouvel échec est une
+**réponse à zéro proposition après rejet de l'outil**, aggravée par un défaut de
+diagnostic du test. Il est enregistré comme **F1** et n'est pas corrigé dans
+cette phase.
+
+### 13.3 Provenance APK installée — GO
+
+Les cinq tentatives ont franchi le gate installé↔construit avant
+instrumentation. Les trois preuves PASS documentent `installed_apk_verified=true`,
+`verification_result=VERIFIED`, des hashes installés égaux aux hashes construits,
+`source_sha=2fa90bd`, arbre `40c9e5bc…`, `worktree_clean=true`, variante `qa`,
+compile `37.2`, certificat `da301466…`. Limite : APK QA uniquement.
+
+### 13.4 Verdicts après phase physique
+
+| Verdict | Décision | Portée |
+|---|---|---|
+| `GO_CHAT_CONCURRENCY` | **GO** | Toutes les tentatives ont émis et reçu le chat ; aucune deadlock G↔C observée. |
+| `GO_CHAT_RELIABILITY_QA` | **NO GO** | 3 PASS / 2 FAIL ; F1 zéro-proposition après rejet d'outil. |
+| `GO_REVOKED_DEVICE_SERVER` | **GO** | Refus serveur confirmé, aucune nouvelle session. |
+| `GO_A4_4_CLIENT` | **GO** | Sonde stricte PASS sur Pixel API 37.1, stack isolée. |
+| `GO_APK_PROVENANCE` | **GO** | Gate installé exercé sur appareil, hashes installés = construits (APK QA). |
+| `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS (hérité)** | Aucun nouveau run public ; réseau local ADB reverse uniquement. |
+| `GO_PIXEL_PRODUCT` | **NO GO** | Aucun test de l'application produit. |
+| `GO_PRODUCT_REMOTE` | **NO GO** | Aucun test produit distant. |
+
+**Nettoyage :** paquets QA désinstallés, mappings `adb reverse` retirés, stacks
+arrêtées, HOME/produit/test produit inchangés, aucun service live modifié, aucun
+push/PR. Preuve détaillée : `evidence/V7-06D_PHYSICAL_QA.md`.
+
+**Note historique :** la revue finale sur `88ac019` avait correctement rendu
+`GO_A4_4_CLIENT=NO GO/NOT_RUN`, `GO_CHAT_RELIABILITY_QA=NOT_RUN` et
+`GO_APK_PROVENANCE=GO_WITH_LIMITATIONS` avant cette phase physique ; ces
+verdicts ne sont pas réécrits. La phase physique les met à jour dans son
+périmètre, sans qualifier le produit ni le réseau public.

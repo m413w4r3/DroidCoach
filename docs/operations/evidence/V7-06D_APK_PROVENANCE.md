@@ -176,7 +176,7 @@ inchangé.
 | P2 revue delta : wrapper permissif, test mockant la frontière | **PASS (corrigé)** — rouge `052ca80` → correctif `4ebdf5f`, intégrés `fded03d`/`bfb1965` |
 | Tests harnais complets | **PASS** — **27/27** (parent a rejoué) |
 | Build `assembleQa` / `assembleQaAndroidTest` | **PASS** — agent et parent |
-| Exécution physique avec ces APK | **NOT_RUN** — pas d'autorisation |
+| Exécution physique avec ces APK exacts | **NOT_RUN** — la phase physique a utilisé un build distinct `2fa90bd` (Android identique) ; gate installé exercé et documenté en §8 |
 
 ### Build de validation de la branche Z (`49ef354`)
 
@@ -224,10 +224,33 @@ changements `docs/` ; le SHA compilé et le manifeste embarqué restent
 
 ## 7. Verdict
 
-**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS** : la chaîne
-source→manifeste→APK est vérifiée sur le build intégré `cf82cd0`, le P1 de
-revue sur le champ installé et les P2 de la revue delta sont corrigés et testés
-(rouge → vert), la revue finale `19c375fd…` sur `88ac019` ne relève aucun P0/P1,
-et le gate installé↔construit est couvert par des tests négatifs ; aucun APK
-installé n'a été vérifié sur appareil dans V7-06D. Les preuves V7-06C
-historiques restent `INCONCLUSIVE` pour ce lien et ne sont pas reclassées.
+**`GO_APK_PROVENANCE` = GO** : la chaîne source→manifeste→APK est vérifiée sur
+le build intégré `cf82cd0`, le P1 de revue sur le champ installé et les P2 de la
+revue delta sont corrigés et testés (rouge → vert), la revue finale
+`19c375fd…` sur `88ac019` ne relève aucun P0/P1. La phase physique
+`V7-06D-PHYS` a exercé le gate installé↔construit sur le Pixel : pour les trois
+preuves PASS, les hashes installés sont égaux aux hashes construits
+(`installed_apk_verified=true`, `verification_result=VERIFIED`) ; les cinq
+tentatives ont franchi le gate avant instrumentation. Limite : APK QA
+uniquement, pas d'APK produit ; build `2fa90bd` (Android identique à
+`bfb1965`). Les preuves V7-06C historiques restent `INCONCLUSIVE` pour ce lien
+et ne sont pas reclassées. Détails : `V7-06D_PHYSICAL_QA.md`.
+
+## 8. Phase physique V7-06D-PHYS (2026-11-01)
+
+Sur Pixel 9 Pro XL physique (Android 17 / SDK 37.1), cinq tentatives QA
+isolées ont franchi le gate installé↔construit avant `am instrument`. Les trois
+preuves PASS (`2fa90bd`, arbre `40c9e5bc…`, `worktree_clean=true`, `qa`,
+compile `37.2`) portent `installed_apk_verified=true`,
+`verification_result=VERIFIED` et des hashes installés égaux aux hashes
+construits :
+
+| Tentative | APK app | APK test |
+|---|---|---|
+| 1 | `9cf3d847…` | `b9915e94…` |
+| 4 | `45683196…` | `08aeb076…` |
+| 5 | `472035b0…` | `10fc3c21…` |
+
+Les tentatives 2 et 3 ont également exécuté l'instrumentation, donc franchi le
+gate, mais n'ont pas produit de proof PASS (échec F1 après la réponse chat).
+Limites : APK QA uniquement ; pas d'APK produit ; aucune preuve publique WSS.

@@ -8,10 +8,12 @@ Aucun push, PR ou merge distant effectué.
 ## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
 
 **Statut global : deux P1 diagnostiqués et corrigés avec tests discriminants ;
-P2 de provenance APK↔SHA fermé par un mécanisme vérifié ; aucune qualification
-physique (`NOT_RUN`) ; `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`,
-`GO_APK_PROVENANCE` (avec limitation) ; `GO_CHAT_RELIABILITY_QA` et
-`GO_A4_4_CLIENT` non accordés ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` = NO GO.**
+P2 de provenance APK↔SHA fermé par un mécanisme vérifié ; phase physique
+complémentaire exécutée sur Pixel : A4-4 **PASS**, provenance installée **GO**,
+fiabilité chat **3/5 → NO GO (F1 ouvert)** ; `GO_CHAT_CONCURRENCY`,
+`GO_REVOKED_DEVICE_SERVER`, `GO_A4_4_CLIENT`, `GO_APK_PROVENANCE` ;
+`GO_CHAT_RELIABILITY_QA` non accordé ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` =
+NO GO.**
 
 - Branche locale `feat/atlas-v7-06d-remote-hardening`, base
   `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`, aucun push/PR/merge distant.
@@ -41,18 +43,24 @@ physique (`NOT_RUN`) ; `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`,
   Z3 `4ebdf5f` (rouge `052ca80`, intégrés `fded03d`/`bfb1965`) ; harnais 27/27.
   Revue finale `19c375fd…` sur `88ac019` (code `bfb1965`) : aucun P0/P1, un P2
   documentaire de libellés corrigé ; confirmation delta `06d30ed` `ACCEPTED`.
-  Chat concurrence et refus serveur jugés
-  sains ; A4-4 client non qualifié sans sonde physique.
-- Aucun ADB/AVD/Pixel/Docker de campagne ; contrôles live strictement en lecture
-  seule. Identités résiduelles inchangées : `pixel-v7` et `r3c-pixel-final` non
-  révoqués, consentements Core `GRANTED v2` ; aucune révocation/rotation
-  exécutée.
-- Prochaines actions : autorisation physique ciblée (sonde A4-4 + série de
-  démarrages froids), puis décisions live séparées (révocation des deux devices,
-  rotation éventuelle du bearer Core).
+- Phase physique `V7-06D-PHYS` (2026-11-01) : Pixel 9 Pro XL API 37.1, paquet QA
+  uniquement, stack isolée, autorisation ciblée. Sonde A4-4 **PASS**
+  (`REVOKED`/`REVOKED`, aucune nouvelle session, `close_code=null`) ; série de 5
+  démarrages froids **3 PASS / 2 FAIL**. Les échecs #2/#3 sont des réponses à
+  zéro proposition après rejet de l'outil (F1), pas la deadlock G↔C. Provenance
+  des APK QA installés **vérifiée** (`VERIFIED`, hashes installés = construits).
+  QA désinstallés, reverse retiré, HOME/produit inchangés, aucun service live.
+- Contrôles live strictement en lecture seule. Identités résiduelles inchangées :
+  `pixel-v7` et `r3c-pixel-final` non révoqués, consentements Core `GRANTED v2` ;
+  aucune révocation/rotation exécutée.
+- Prochaines actions : traiter **F1** (parseur de test `parseToolMetadata` à
+  durcir, rejet de `atlas_propose_plan_revision` à diagnostiquer/corriger), puis
+  nouvelle série de 5+ démarrages froids ; décisions live séparées (révocation
+  des deux devices, rotation éventuelle du bearer Core).
 - Preuves : `V7-06D_FINAL_REPORT.md`, `V7-06D_DIAGNOSTIC.md`,
   `REGISTRY_V7_06D.md`, `evidence/V7-06D_CHAT_CONCURRENCY.md`,
-  `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`.
+  `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`,
+  `evidence/V7-06D_PHYSICAL_QA.md`.
 
 ## V7-06C — Coach Android QA puis transport public (2026-11-01)
 
@@ -169,7 +177,9 @@ produit installée du propriétaire.**
   remédié : action sensible soumise à autorisation ciblée et sauvegarde.
 - Interdictions maintenues : aucun ADB/tests instrumentés sur le Pixel physique,
   aucun push/PR/merge distant, aucun service live modifié, un seul opérateur
-  ADB/AVD à la fois.
+  ADB/AVD à la fois. *(Section historique V7-06B ; la phase V7-06D-PHYS du
+  2026-11-01 a depuis utilisé le Pixel avec une autorisation ciblée, paquet QA
+  uniquement, documentée dans `evidence/V7-06D_PHYSICAL_QA.md`.)*
 
 ## Où en est la campagne
 

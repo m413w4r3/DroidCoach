@@ -226,3 +226,22 @@ dans la preuve ; à défaut, marquer `INCONCLUSIVE`.
   mais n'est pas re-vérifiée cryptographiquement ici.
 - Les corrections et leurs tests sont décrits dans
   `V7-06D_FINAL_REPORT.md` et les preuves associées.
+
+## 8. Phase physique complémentaire (2026-11-01)
+
+Sur Pixel 9 Pro XL API 37.1, la sonde A4-4 est **PASS** et le gate APK installé
+est exercé. La série de 5 démarrages froids donne **3 PASS / 2 FAIL**. Les
+échecs #2/#3 ne reproduisent pas le blocage G↔C : la requête chat est émise
+(`SOCKET_SEND_ACCEPTED`) et la réponse revient (`RESPONSE_RECEIVED`,
+`CORRELATED`, `UI_RESULT=SUCCESS`). L'app-state de #3 montre une réponse
+assistant valide avec `tool_state=completed`, `tool_call_count=2` et **zéro
+proposition** ; le modèle indique que `atlas_propose_plan_revision` a été refusé
+localement puis rejeté par le service. Le test échoue ensuite dans
+`parseToolMetadata` (ligne 641), qui ne sait pas lire la forme légitime « Aucune
+proposition (0) ».
+
+Ce comportement est enregistré comme **F1** : nouveau blocage de fiabilité du
+parcours coach, distinct de la deadlock G↔C. Il justifie `GO_CHAT_RELIABILITY_QA
+= NO GO`. Le parseur de test doit être durci (`PROPOSAL_MISSING`) et le rejet de
+l'outil diagnostiqué avant une nouvelle série. Détails :
+`evidence/V7-06D_PHYSICAL_QA.md`.

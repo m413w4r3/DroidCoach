@@ -43,13 +43,22 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
 - Build final QA : APK app `1e31a643…`, test `05dd465b…`, manifeste
   `8d678af5…`, source `cf82cd0…`, `worktree_clean=true`, variante `qa`,
   `compile_sdk=37.2`.
-- **Aucune qualification physique** : sonde A4-4 et série de démarrages froids
-  `NOT_RUN`, faute d'autorisation ciblée. `GO_CHAT_RELIABILITY_QA` et
-  `GO_A4_4_CLIENT` ne sont pas accordés ; `GO_CHAT_CONCURRENCY` et
-  `GO_REVOKED_DEVICE_SERVER` le sont ; `GO_APK_PROVENANCE` est
-  GO_WITH_LIMITATIONS (chaîne logicielle ; revue finale sans P0/P1).
-- Aucun ADB, AVD, Pixel, Docker de campagne ou service live modifié ; identités
-  live résiduelles inchangées (`pixel-v7`, `r3c-pixel-final`, consentements Core
+- **Phase physique V7-06D-PHYS** (2026-11-01, Pixel 9 Pro XL API 37.1) : sonde
+  A4-4 **PASS** (`REVOKED`/`REVOKED`, aucune nouvelle session,
+  `close_code=null`) ; provenance des APK QA installés **vérifiée**
+  (`VERIFIED`) ; série de 5 démarrages froids **3 PASS / 2 FAIL**. Les échecs
+  #2/#3 sont des réponses à zéro proposition après rejet de l'outil (F1), pas la
+  deadlock G↔C ; `parseToolMetadata` doit être durci. QA désinstallés, reverse
+  retiré, HOME/produit inchangés, aucun service live.
+- Verdicts après phase physique : `GO_CHAT_CONCURRENCY` **GO**,
+  `GO_REVOKED_DEVICE_SERVER` **GO**, `GO_A4_4_CLIENT` **GO**,
+  `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **NO GO**
+  (F1 ouvert), `GO_REMOTE_V4_PUBLIC` **GO_WITH_LIMITATIONS hérité**,
+  `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` **NO GO**.
+- Phase physique : Pixel 9 Pro XL API 37.1 et ADB utilisés avec autorisation
+  ciblée, paquets QA uniquement, aucun test produit ; QA désinstallés, reverse
+  retiré, stacks arrêtées. Aucun service live modifié ; identités live
+  résiduelles inchangées (`pixel-v7`, `r3c-pixel-final`, consentements Core
   `GRANTED v2`), révocation/rotation soumises à autorisation séparée.
 
 ## 0. Campagne V7-06A — fiabilisation V4 (2026-11-01)

@@ -5,8 +5,11 @@
 **Audit :** `codex/gpt-6-luna`, effort effectif `xhigh`, worktree
 `/tmp/atlas-v7-06d-a2-revocation-ro`, lecture seule (`collaborationMode=Plan`).
 **Statut :** cause racine établie ; correctifs et tests détaillés ci-dessous.
-**Sonde physique :** `NOT_RUN` — aucune autorisation ADB/Pixel nouvelle dans cette
-campagne. Le verdict `GO_A4_4_CLIENT` n'est donc **pas** accordé.
+**Sonde physique :** `NOT_RUN` dans la phase déterministe. La phase physique
+complémentaire `V7-06D-PHYS` du 2026-11-01 a exécuté la sonde stricte sur Pixel
+9 Pro XL API 37.1 : **PASS** (`REVOKED`/`REVOKED`, aucune nouvelle session,
+`close_code=null`). `GO_A4_4_CLIENT` = **GO** pour ce périmètre (voir §6 et
+`V7-06D_PHYSICAL_QA.md`).
 
 ## 1. Symptôme V7-06C
 
@@ -132,7 +135,7 @@ sont explicitement non prouvées par le code.
 | Tests JVM politique d'état / type d'échec | **PASS** — inclus dans la suite intégrée **909/909** |
 | Test JVM enveloppe V1 sur transport V2 rejetée (pas de downgrade) | **PASS** — `RevocationEnvelopeProtocolTest` dans la suite intégrée |
 | Compilation `assembleQaAndroidTest` (sonde renforcée) | **PASS** — build QA final `cf82cd0`, sonde compilée |
-| Sonde instrumentée stricte sur Pixel/AVD | **NOT_RUN** — pas d'autorisation |
+| Sonde instrumentée stricte sur Pixel/AVD | **PASS (Pixel physique, 2026-11-01)** — `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session authentifiée ; voir `V7-06D_PHYSICAL_QA.md` |
 
 ## 6. Intégration et verdict
 
@@ -141,16 +144,20 @@ sont explicitement non prouvées par le code.
 - Node : **114/114 PASS** ; JVM intégrée : **909/909 PASS** ; QA AndroidTest
   compilé.
 - **`GO_REVOKED_DEVICE_SERVER` = GO** : le refus serveur reste effectif et testé.
-- **`GO_A4_4_CLIENT` = NO GO — NOT_RUN`** : la sonde stricte renforcée n'a pas
-  été exécutée sur appareil. Les tests déterministes prouvent la correction du
-  protocole et de l'état, pas le PASS instrumenté exigé.
+- **`GO_A4_4_CLIENT` = GO`** (phase physique V7-06D-PHYS, 2026-11-01) : la
+  sonde stricte renforcée est **PASS** sur Pixel 9 Pro XL API 37.1, avec
+  `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session authentifiée
+  et erreurs `0→1`. Le verdict antérieur `NO GO — NOT_RUN` reste l'état correct
+  de la phase déterministe avant cette preuve ; il n'est pas réécrit.
 
 ## 7. Limites
 
 - Le relais déployé transforme le close 4001 en 1012. La preuve A4-4 repose sur
   la trame applicative authentifiée, pas sur le code de fermeture. Aucune
   modification du relais n'est faite.
-- La sonde physique n'a pas été exécutée ; `GO_A4_4_CLIENT` reste **NO GO /
-  NOT_RUN** malgré les tests déterministes.
+- La sonde physique a été exécutée le 2026-11-01 et est **PASS** sur un Pixel
+  9 Pro XL API 37.1, stack isolée, réseau local `adb reverse`. `close_code`
+  reste `null` ; la limite 4001→1012 n'est pas masquée. La portée reste un
+  appareil et un stack isolé, sans qualification publique.
 - Le refus serveur des appareils révoqués reste effectif ; `GO_REVOKED_DEVICE_SERVER`
   peut être maintenu sur la base des tests connecteur et des preuves V7-06C.

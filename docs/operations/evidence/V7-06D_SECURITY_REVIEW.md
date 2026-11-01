@@ -99,7 +99,9 @@ alors qu'il contenait les résultats finaux ; le registre portait encore
   exécuté.
 - Les totaux de tests sont des résumés documentés, non des logs bruts
   indépendamment rejoués par la revue.
-- Les qualifications physiques A4-4 et fiabilité restent `NOT_RUN`.
+- Au moment de la revue, les qualifications physiques A4-4 et fiabilité étaient
+  `NOT_RUN` ; la phase physique postérieure (§7) a exécuté A4-4 (PASS) et la
+  série froide (3/5, F1 ouvert).
 - La revue delta du SHA corrigé a confirmé le P1 de provenance et le P2
   documentaire, puis relevé deux P2 supplémentaires corrigés par Z3. La revue
   finale `19c375fd…` sur `88ac019` n'a trouvé aucun P0/P1 et un seul P2
@@ -197,3 +199,29 @@ documents `docs/`, les libellés courants reflètent la revue finale et le P2
 corrigé, les verdicts initiaux/delta restent explicitement historiques et les
 huit recommandations sont inchangées. Aucun nouveau P0/P1/P2, aucun test
 exécuté, worktree toujours propre.
+
+## 7. Phase physique postérieure (2026-11-01)
+
+Une phase physique complémentaire `V7-06D-PHYS` a été exécutée **après** la
+revue finale, avec une nouvelle autorisation ciblée et sans modification du code
+(`2fa90bd`, Android identique à `bfb1965`). Elle ne réécrit pas les verdicts de
+la §6, corrects pour `88ac019` au moment de la revue :
+
+- **A4-4** : la sonde stricte est **PASS** sur Pixel 9 Pro XL API 37.1
+  (`REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session
+  authentifiée, erreurs `0→1`). `GO_A4_4_CLIENT` passe à **GO** dans ce
+  périmètre.
+- **Fiabilité chat** : série de 5 démarrages froids **3 PASS / 2 FAIL**. Les
+  échecs #2/#3 surviennent après la réponse du chat, sur une réponse à zéro
+  proposition après rejet de `atlas_propose_plan_revision` ; le parseur de test
+  ne sait pas lire la forme « Aucune proposition (0) ». Le blocage G↔C n'est
+  pas reproduit. `GO_CHAT_RELIABILITY_QA` reste **NO GO** ; **F1** est ouvert.
+- **Provenance** : le gate installé↔construit est exercé sur appareil ; les
+  preuves PASS documentent des hashes installés égaux aux construits.
+  `GO_APK_PROVENANCE` passe à **GO** pour les APK QA.
+- **Produit / public** : aucun test produit, aucun réseau public ; verdicts
+  `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` **NO GO**, `GO_REMOTE_V4_PUBLIC`
+  inchangé (GO_WITH_LIMITATIONS hérité).
+
+Preuve détaillée : `V7-06D_PHYSICAL_QA.md`. Aucun service live, HOME, Keystore
+ou donnée personnelle n'a été modifié.
