@@ -64,6 +64,18 @@ python3 scripts/v7-06c/backend/stack.py stop --private-root "$PRIVATE_ROOT"
 
 L’arrêt vérifie marqueur, signature de commande et groupe de processus avant de signaler un enfant; il vérifie image et label propriétaire avant d’arrêter Relay. Il supprime uniquement la racine privée de cette stack. Les packages QA installés par le runner restent sur l’appareil et ne sont pas nettoyés.
 
+## Vérifier une exécution existante
+
+Si le test instrumenté a réussi mais que le wrapper s’est arrêté avant d’écrire la preuve, `verify-existing` relit le runner log, le logcat, SQLite, `operations.json` et la trace d’outils. Il ne relance pas `run_qa.py`, ne crée ni ne retire de mapping ADB et ne modifie pas la stack ou l’appareil. La seule écriture est le JSON de preuve et son résumé dans le répertoire d’évidence. Il lit les métadonnées appareil avec ADB en lecture seule.
+
+```sh
+python3 scripts/v7-06c/android/run_scenario.py verify-existing \
+  --serial "$ANDROID_SERIAL" --action reject --stack-root "$PRIVATE_ROOT" \
+  --suffix .qa.v706b.v706creject.b4d9e602
+```
+
+Le logcat peut conserver les attestations de plusieurs exécutions. Le vérificateur relie la ligne `step=11 result=PASS ack_replay=identical` à l’`ack_id` et à l’état lus dans l’ACK Core courant; une ancienne ligne APPLY ne peut donc pas attester un REJECT ultérieur. Il exige aussi le marqueur `V7_06B_RUNTIME_PASS` dans le runner log. La preuve porte `execution_mode=post_hoc_existing_stack` et le résumé indique explicitement qu’aucune nouvelle exécution n’a eu lieu. Les hashes APK restent `null` sauf si `--app-apk` et/ou `--test-apk` sont fournis.
+
 ## Recette publique `wss`
 
 La stack peut préparer une URL Relay publique fournie par l’environnement de recette:

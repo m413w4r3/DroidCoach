@@ -244,6 +244,43 @@ class RedactionAndCliTests(unittest.TestCase):
         self.assertEqual(mode, "public_wss")
         self.assertEqual(endpoint, {"scheme": "wss", "host": "all.example.ts.net", "port": 8443})
 
+    def test_ack_attestation_is_bound_to_core_ack_id_and_state(self) -> None:
+        ack_a = "11111111-1111-4111-8111-111111111111"
+        ack_b = "22222222-2222-4222-8222-222222222222"
+        apply_line = (
+            f"step=11 result=PASS ack_replay=identical ack_id={ack_a} ack_state=APPLIED"
+        )
+        reject_line = (
+            f"step=11 result=PASS ack_replay=identical ack_id={ack_b} ack_state=REJECTED"
+        )
+        selected = run_scenario.select_ack_attestation(
+            apply_line + "\n" + reject_line, ack_b, "REJECTED", [], "synthetic-serial", "synthetic-device",
+        )
+        self.assertEqual(selected, reject_line)
+        self.assertEqual(
+            run_scenario.select_ack_attestation(
+                reject_line, ack_b, "REJECTED", [], "synthetic-serial", "synthetic-device",
+            ),
+            reject_line,
+        )
+        for wrong_ack_id, wrong_state in ((ack_a, "REJECTED"), (ack_b, "APPLIED")):
+            with self.subTest(ack_id=wrong_ack_id, state=wrong_state), self.assertRaises(run_scenario.ScenarioFailure):
+                run_scenario.select_ack_attestation(
+                    reject_line, wrong_ack_id, wrong_state, [], "synthetic-serial", "synthetic-device",
+                )
+
+    def test_post_hoc_runner_log_requires_pass_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runner_log = root / "android-reject-b4d9e602.runner.log"
+            runner_log.write_text("OK (1 test)\n", encoding="utf-8")
+            os.chmod(runner_log, 0o600)
+            with self.assertRaises(run_scenario.ScenarioFailure):
+                run_scenario._read_existing_runner(
+                    root, "reject", ".qa.v706b.v706creject.b4d9e602", "synthetic-serial",
+                    "synthetic-device", [], None, None,
+                )
+
     def test_android_relay_url_security_validation(self) -> None:
         self.assertEqual(validate_android_relay_url("ws://127.0.0.1:4413"), "ws://127.0.0.1:4413")
         self.assertEqual(validate_android_relay_url("wss://all.example.ts.net:8443"),
