@@ -177,7 +177,9 @@ print("package: name='" + os.environ.get('MOCK_APK_PACKAGE', 'dev.atlas.coach') 
             check=False,
         )
 
-    def fixture_pair(self, files: dict[str, bytes] | None = None) -> tuple[Path, Path]:
+    def fixture_pair(
+        self, files: dict[str, bytes] | None = None, *, serial: str = "atlas-test-01"
+    ) -> tuple[Path, Path]:
         self.fixture_counter += 1
         directory = self.root / f"fixture-{self.fixture_counter}"
         directory.mkdir(mode=0o700)
@@ -190,7 +192,7 @@ print("package: name='" + os.environ.get('MOCK_APK_PACKAGE', 'dev.atlas.coach') 
             "certificate_sha256": backup_tool.EXPECTED_CERT_SHA256,
             "android_sdk": 37,
         }
-        backup_tool.write_manifest(manifest_path, backup_tool.build_manifest(archive, metadata, "atlas-test-01"))
+        backup_tool.write_manifest(manifest_path, backup_tool.build_manifest(archive, metadata, serial))
         return archive, manifest_path
 
     def log_entries(self) -> list[list[str]]:
@@ -373,6 +375,10 @@ print("package: name='" + os.environ.get('MOCK_APK_PACKAGE', 'dev.atlas.coach') 
     def test_restore_success_keeps_verified_rollback_and_only_targets_atlas(self) -> None:
         original_tar = self.device_tar.read_bytes()
         archive, manifest = self.fixture_pair({"shared_prefs/new.xml": b"<map><boolean name='new'/></map>\n"})
+        self.assertEqual(
+            json.loads(manifest.read_text(encoding="utf-8"))["serial_sha256"],
+            backup_tool.serial_digest("atlas-test-01"),
+        )
         backup_root = self.root / "rollback-root"
         env = self.env | {
             "ATLAS_CONFIRM_RESTORE": "RESTORE dev.atlas.coach",
@@ -407,6 +413,28 @@ print("package: name='" + os.environ.get('MOCK_APK_PACKAGE', 'dev.atlas.coach') 
         self.assertNotIn("-c", start_commands[0])
         self.assertTrue(all("-s atlas-test-01" in command for command in commands if command != "devices -l"))
         self.assertFalse(any("pm clear" in command or "uninstall" in command for command in commands))
+
+    def test_restore_refuses_different_serial_before_destructive_adb_commands(self) -> None:
+        archive, manifest = self.fixture_pair(serial="atlas-other-02")
+        env = self.env | {"ATLAS_CONFIRM_RESTORE": "RESTORE dev.atlas.coach"}
+        result = self.run_tool(
+            "restore",
+            "--serial",
+            "atlas-test-01",
+            "--archive",
+            str(archive),
+            "--manifest",
+            str(manifest),
+            "--confirm-restore",
+            env=env,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("autre serial", result.stderr.lower())
+        commands = self.log_entries()
+        self.assertTrue(commands)
+        self.assertFalse(any(command[2:5] == ["shell", "am", "force-stop"] for command in commands))
+        self.assertFalse(any(command[2:7] == ["shell", "run-as", "dev.atlas.coach", "sh", "-c"] for command in commands))
+        self.assertFalse(any(command[2:7] == ["shell", "run-as", "dev.atlas.coach", "tar", "-xf"] for command in commands))
 
     def test_restore_failure_reports_and_reapplies_rollback(self) -> None:
         original_tar = self.device_tar.read_bytes()
