@@ -121,6 +121,9 @@ elif serial_args[:5] == ['shell', 'run-as', 'dev.atlas.coach', 'tar', '-xf']:
     with open(os.environ['MOCK_DEVICE_TAR'], 'wb') as destination:
         destination.write(sys.stdin.buffer.read())
 elif serial_args[:3] == ['shell', 'am', 'start']:
+    if '-n' not in serial_args or serial_args[serial_args.index('-n') + 1] != 'dev.atlas.coach/dev.atlas.coach.app.MainActivity':
+        sys.stderr.write('start must use the explicit ATLAS activity component')
+        raise SystemExit(7)
     counter = os.environ.get('MOCK_START_COUNT_FILE')
     count = 0
     if counter:
@@ -379,6 +382,11 @@ print("package: name='" + os.environ.get('MOCK_APK_PACKAGE', 'dev.atlas.coach') 
         backup_tool.verify_archive(rollback_archive, rollback_manifest)
         commands = [" ".join(command) for command in self.log_entries()]
         self.assertTrue(any("run-as dev.atlas.coach" in command and "find" in command for command in commands))
+        start_commands = [command for command in self.log_entries() if command[2:5] == ["shell", "am", "start"]]
+        self.assertTrue(start_commands)
+        self.assertIn("dev.atlas.coach/dev.atlas.coach.app.MainActivity", start_commands[0])
+        self.assertNotIn("-a", start_commands[0])
+        self.assertNotIn("-c", start_commands[0])
         self.assertTrue(all("-s atlas-test-01" in command for command in commands if command != "devices -l"))
         self.assertFalse(any("pm clear" in command or "uninstall" in command for command in commands))
 

@@ -22,6 +22,7 @@ from typing import Any, BinaryIO
 
 
 PACKAGE = "dev.atlas.coach"
+LAUNCH_COMPONENT = "dev.atlas.coach/dev.atlas.coach.app.MainActivity"
 EXPECTED_VERSION_CODE = 1
 EXPECTED_VERSION_NAME = "0.1.0"
 EXPECTED_CERT_SHA256 = "da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee"
@@ -642,7 +643,7 @@ def start_and_check_app(serial: str) -> None:
     check_device_roster(serial)
     output = adb_text(
         serial,
-        ["shell", "am", "start", "-W", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", PACKAGE],
+        ["shell", "am", "start", "-W", "-n", LAUNCH_COMPONENT],
         label="démarrage de l'application",
     )
     if not re.search(r"\bStatus:\s*ok\b", output, flags=re.IGNORECASE):
