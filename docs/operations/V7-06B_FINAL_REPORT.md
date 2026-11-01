@@ -2,7 +2,7 @@
 
 **Campagne :** V7-06B « Coach Loop »
 **Base :** `b55062e1890ff10139ba5ce4a1384cb729c5c0f1`
-**Branche locale :** `feat/atlas-v7-06b-coach-loop` (aucun push, PR, merge distant)
+**SHA final local :** `fcb5329` (branche `feat/atlas-v7-06b-coach-loop`) — aucun push, PR, merge distant
 **Date :** 2026-11-01
 **Registre :** `docs/operations/REGISTRY_V7_06B.md`
 **Preuve OpenClaw :** `docs/operations/evidence/V7-06B_OPENCLAW_TRACE.md`
