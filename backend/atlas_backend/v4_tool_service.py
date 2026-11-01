@@ -433,7 +433,13 @@ class V4ToolService:
                 capability, data, freshness=freshness, source="ANDROID_SYNC", observed_at=row["observed_at"],
                 last_synced_at=row["received_at"], plan_id=args["plan_id"], version=observed_version,
             )
-        diff, conflicts = self._build_diff(projection, args["changes"], capability)
+        diff, conflicts = self._build_diff(
+            projection,
+            args["changes"],
+            capability,
+            device_ref=device_ref,
+            plan_id=args["plan_id"],
+        )
         if conflicts:
             data = {
                 "proposal_id": None,
@@ -541,9 +547,28 @@ class V4ToolService:
             if not isinstance(change, dict):
                 raise V4ToolError("BAD_REQUEST", "chaque changement doit être un objet", capability=capability)
 
-    def _build_diff(self, plan: dict[str, Any], changes: list[dict[str, Any]], capability: str) -> tuple[list[dict[str, Any]], list[str]]:
+    def _build_diff(
+        self,
+        plan: dict[str, Any],
+        changes: list[dict[str, Any]],
+        capability: str,
+        *,
+        device_ref: str,
+        plan_id: str,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
         activities = plan.get("activities", [])
         by_id = {item.get("activity_id"): item for item in activities}
+        effective_status_by_id = {}
+        for item in activities:
+            activity_id = item.get("activity_id")
+            event = (
+                self.projections.latest_activity_status_event(device_ref, plan_id, activity_id)
+                if activity_id is not None
+                else None
+            )
+            effective_status_by_id[activity_id] = (
+                event["new_status"] if event is not None else item.get("status", "PLANNED")
+            )
         used: set[str] = set()
         diff: list[dict[str, Any]] = []
         conflicts: list[str] = []
@@ -561,7 +586,7 @@ class V4ToolService:
                 item = by_id.get(activity_id)
                 if item is None:
                     raise V4ToolError("VALIDATION_FAILED", "activité absente du plan de base", capability=capability)
-                if item.get("status") in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
+                if effective_status_by_id.get(activity_id) in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
                     raise V4ToolError("VALIDATION_FAILED", "activité terminale non modifiable", capability=capability)
                 if activity_id in used:
                     raise V4ToolError("VALIDATION_FAILED", "une activité ne peut être modifiée deux fois", capability=capability)
@@ -585,7 +610,7 @@ class V4ToolService:
                 item = by_id.get(activity_id)
                 if item is None:
                     raise V4ToolError("VALIDATION_FAILED", "activité absente du plan de base", capability=capability)
-                if item.get("status") in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
+                if effective_status_by_id.get(activity_id) in {"DONE", "MISSED", "CANCELLED", "POSTPONED"}:
                     raise V4ToolError("VALIDATION_FAILED", "activité terminale non modifiable", capability=capability)
                 if activity_id in used:
                     raise V4ToolError("VALIDATION_FAILED", "une activité ne peut être modifiée deux fois", capability=capability)
