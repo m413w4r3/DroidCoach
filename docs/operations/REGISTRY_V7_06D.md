@@ -89,8 +89,8 @@ séparée (réappairage/reconfiguration possibles).
 | V7-06D-PHYS-PREFLIGHT | Pré-vol physique, autorisation ciblée, sauvegarde app QA | REVIEW3 | **ACCEPTED (lecture seule)** — Pixel 9 Pro XL, Android 17/SDK 37.1, HOME produit inchangé, aucun paquet QA préexistant, aucune donnée QA à sauvegarder | parent | appareil physique | modèle/API/HOME/stockage, aucun test produit |
 | V7-06D-PHYS-A4-4 | Sonde A4-4 stricte sur appareil | PREFLIGHT | **PASS** — `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session authentifiée, erreurs `0→1` | parent | appareil physique | instrumentation `OK (1 test)`, métriques isolées |
 | V7-06D-PHYS-COLD | Série de 5 démarrages froids avec chat | PREFLIGHT | **3 PASS / 2 FAIL** — échecs #2/#3 après réponse chat, zéro proposition après rejet d'outil ; deadlock G↔C non reproduite | parent | appareil physique | 5 preuves/attempts, provenance installée vérifiée |
-| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **F1-DIAG ACCEPTED (PARTIAL) — F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW PENDING** — F1a diagnostiqué ; incohérence prompt/schéma F1b **PROVEN** (`changes`/`justification`, `idempotency_key` backend-owned), attribution exacte du rejet `INCONCLUSIVE` ; ticket `V7-06D_F1_TICKET.md`, diagnostic `V7-06D_F1_DIAGNOSTIC.md`, rapport `V7-06D_F1_FIX_REPORT.md`, preuve physique `evidence/V7-06D_F1_PHYSICAL_QA.md` | `cbbda8c4-f724-4c43-b234-3daad189f0d1` | `fix/v7-06d-f1-proposal-missing` | F1a rouge→vert, F1b reproductible, suites déterministes, série physique 5/5 **PASS**, A4-4 **PASS**, revue de preuve à faire |
-| V7-06D-F1-FIX | Correctif F1a/F1b, helper partagé JVM/AndroidTest, tests backend simulés | PHYS-F1 | **IMPLEMENTED (code) — GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW PENDING** — rouge `725f9e3` (3 tests, 2 échecs ciblés), vert `0749037` (3/3) ; JVM **912/912**, backend **374 passed/1 skipped**, Node **114/114**, proxy **19/19**, harnais **27/27**, lint/build/AndroidTest PASS ; cinq fichiers, aucun code produit ; preuve physique `V7-06D_F1_PHYSICAL_QA.md` (source `9149c47`, gate installé vérifié) | `6302771e-82b7-45e2-acbe-4c2ed55b585f` | `fix/v7-06d-f1-fix` | F1a `PROPOSAL_MISSING`, F1b prompt sans `idempotency_key`, diff borné, aucun secret, 5/5 PASS, revue `b143ca97…` sans P0/P1 code |
+| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **F1-DIAG ACCEPTED (PARTIAL) — F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW GO_WITH_LIMITATIONS — GO_CHAT_RELIABILITY_QA GO (P2)** — F1a diagnostiqué ; incohérence prompt/schéma F1b **PROVEN** (`changes`/`justification`, `idempotency_key` backend-owned), attribution exacte du rejet `INCONCLUSIVE` ; ticket `V7-06D_F1_TICKET.md`, diagnostic `V7-06D_F1_DIAGNOSTIC.md`, rapport `V7-06D_F1_FIX_REPORT.md`, preuve physique `evidence/V7-06D_F1_PHYSICAL_QA.md` | `cbbda8c4-f724-4c43-b234-3daad189f0d1` | `fix/v7-06d-f1-proposal-missing` | F1a rouge→vert, F1b reproductible, suites déterministes, série physique 5/5 **PASS**, A4-4 **PASS**, revue de preuve `GO_WITH_LIMITATIONS` |
+| V7-06D-F1-FIX | Correctif F1a/F1b, helper partagé JVM/AndroidTest, tests backend simulés | PHYS-F1 | **IMPLEMENTED (code) — GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW GO_WITH_LIMITATIONS — GO_CHAT_RELIABILITY_QA GO (P2)** — rouge `725f9e3` (3 tests, 2 échecs ciblés), vert `0749037` (3/3) ; JVM **912/912**, backend **374 passed/1 skipped**, Node **114/114**, proxy **19/19**, harnais **27/27**, lint/build/AndroidTest PASS ; cinq fichiers, aucun code produit ; preuve physique `V7-06D_F1_PHYSICAL_QA.md` (source `9149c47`, gate installé vérifié) | `6302771e-82b7-45e2-acbe-4c2ed55b585f` | `fix/v7-06d-f1-fix` | F1a `PROPOSAL_MISSING`, F1b prompt sans `idempotency_key`, diff borné, aucun secret, 5/5 PASS, revue `b143ca97…` sans P0/P1 code, revue preuve `ee44d72e…` sans P0/P1 |
 
 ## 4. Journal des sessions
 
@@ -115,6 +115,7 @@ séparée (réappairage/reconfiguration possibles).
 | 2026-11-01 | `6302771e-82b7-45e2-acbe-4c2ed55b585f` | V7-06D-F1-FIX | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Default`, worktree `a-w`) | **IMPLEMENTED (code)** — rouge `725f9e3`, vert `0749037` ; JVM 912/912, backend 374/1, Node 114/114, proxy 19/19, harnais 27/27 ; aucun ADB/Docker/réseau ; aucun code produit modifié |
 | 2026-11-01 | `b143ca97-7418-4e21-b83f-3271c3d63304` | V7-06D-F1-REVIEW | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Default`, worktree `0749037` `chmod a-w`) | **GO_WITH_LIMITATIONS** — aucun P0/P1 code ; P1 `EVIDENCE_GAP` physique, P2 couverture parseur/`oneOf[0]` ; diff borné et absence de secret confirmés ; aucun fichier suivi modifié, aucun test exécuté |
 | 2026-11-01 | parent | V7-06D-F1-PHYS | appareil physique, ADB `shell`, aucun sous-agent | **PASS** — 5/5 démarrages froids, zéro échec F1 ; sonde A4-4 `REVOKED`/`REVOKED`, aucune nouvelle session ; provenance installée vérifiée ; aucun test produit/live. Nettoyage automatique incomplet (stdin), paquets QA supprimés manuellement ; état final propre |
+| 2026-11-01 | `ee44d72e-4a7f-4ece-87ea-52a00525c015` | V7-06D-F1-PHYS-REVIEW | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Default`, worktree `1631322` `chmod a-w`) | **GO_WITH_LIMITATIONS** — aucun P0/P1 ; cinq proofs, provenance installée, A4-4 et nettoyage final confirmés ; P2 chemin public corrigé, P2 couverture parseur ouvert ; `GO_CHAT_RELIABILITY_QA` **GO** pour la campagne |
 
 ## 4bis. Résultats finaux d'intégration
 
@@ -153,9 +154,10 @@ chat 3/5 → NO GO, F1 ouvert). Verdicts après phase physique :
 (rouge `725f9e3`, vert `0749037`) et la revue indépendante du code rend
 **GO_WITH_LIMITATIONS** sans P0/P1 code. La campagne physique F1 **PASS 5/5**
 (source `9149c47`, delta docs-only) avec sonde A4-4 **PASS** et gate de
-provenance vérifié. `GO_CHAT_RELIABILITY_QA` passe à **GO sous réserve de la
-revue indépendante de la preuve physique** ; les autres verdicts sont
-inchangés.
+provenance vérifié. La revue indépendante de la preuve rend
+**GO_WITH_LIMITATIONS** sans P0/P1 ; `GO_CHAT_RELIABILITY_QA` passe à **GO**
+pour la campagne, avec les P2 de couverture du parseur documentés ; les autres
+verdicts sont inchangés.
 
 ## 4ter. Qualification physique V7-06D-PHYS (2026-11-01)
 
@@ -202,8 +204,8 @@ ci-dessous et dans `evidence/V7-06D_F1_PHYSICAL_QA.md`.
 | Série physique F1 | **PASS** — **5/5** démarrages froids, zéro échec F1 ; source `9149c47` (delta docs-only depuis `0749037`), gate installé↔construit vérifié |
 | Sonde A4-4 physique | **PASS** — `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session, erreurs `0→1` |
 | Nettoyage final | **PASS** — QA 0, `adb reverse` vide, aucune stack, HOME/produit inchangés ; boucle automatique incomplète corrigée manuellement |
-| Revue indépendante de la preuve physique | **PENDING** |
-| `GO_CHAT_RELIABILITY_QA` | **GO sous réserve de la revue de preuve** ; sinon inchangé |
+| Revue indépendante de la preuve physique | **GO_WITH_LIMITATIONS** — aucun P0/P1 ; P2 chemin public corrigé, P2 couverture parseur ouvert |
+| `GO_CHAT_RELIABILITY_QA` | **GO** pour la campagne QA F1 (P2 documentés) |
 
 Rapport détaillé : `V7-06D_F1_FIX_REPORT.md`. Ticket :
 `V7-06D_F1_TICKET.md`. Aucun code produit Android/backend modifié ; aucun push,

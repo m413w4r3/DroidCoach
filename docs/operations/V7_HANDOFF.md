@@ -11,8 +11,8 @@ Aucun push, PR ou merge distant effectué.
 P2 de provenance APK↔SHA fermé par un mécanisme vérifié ; phase physique
 complémentaire exécutée sur Pixel : A4-4 **PASS**, provenance installée **GO**,
 fiabilité chat **3/5 → NO GO**, F1 corrigé côté harnais et **revalidé
-physiquement 5/5 + A4-4 PASS**, revue de preuve en cours ;
-`GO_CHAT_CONCURRENCY`,
+physiquement 5/5 + A4-4 PASS**, revue de preuve `GO_WITH_LIMITATIONS` ;
+`GO_CHAT_RELIABILITY_QA` **GO** pour cette campagne ; `GO_CHAT_CONCURRENCY`,
 `GO_REVOKED_DEVICE_SERVER`, `GO_A4_4_CLIENT`, `GO_APK_PROVENANCE` ;
 `GO_CHAT_RELIABILITY_QA` non accordé ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` =
 NO GO.**
@@ -68,15 +68,17 @@ NO GO.**
   `0749037`, hashes installés = construits, `runtime_sdk=37`). Nettoyage final
   propre après correction manuelle d'une boucle de nettoyage automate
   incomplète ; aucun paquet QA, reverse ni stack restant. Preuve :
-  `evidence/V7-06D_F1_PHYSICAL_QA.md`.
+  `evidence/V7-06D_F1_PHYSICAL_QA.md`. Revue indépendante de la preuve
+  `ee44d72e…` : **GO_WITH_LIMITATIONS**, aucun P0/P1 ; P2 de chemin public
+  corrigé, P2 de couverture du parseur ouvert. `GO_CHAT_RELIABILITY_QA` **GO**
+  pour la campagne QA F1.
 - Contrôles live strictement en lecture seule. Identités résiduelles inchangées :
   `pixel-v7` et `r3c-pixel-final` non révoqués, consentements Core `GRANTED v2` ;
   aucune révocation/rotation exécutée.
-- Prochaines actions : faire relire indépendamment la preuve physique F1
-  (`evidence/V7-06D_F1_PHYSICAL_QA.md`) ; alors seulement confirmer
-  `GO_CHAT_RELIABILITY_QA`. Décisions live séparées (révocation des deux
-  devices, rotation éventuelle du bearer Core). Aucune nouvelle série physique
-  n'est nécessaire sauf défaut relevé par cette revue.
+- Prochaines actions : le P2 de couverture du parseur (`oneOf[0]`, statut non
+  terminé) reste ouvert ; aucune nouvelle série physique n'est nécessaire.
+  Décisions live séparées (révocation des deux devices, rotation éventuelle du
+  bearer Core). Aucun push/merge sans autorisation.
 - Preuves : `V7-06D_FINAL_REPORT.md`, `V7-06D_DIAGNOSTIC.md`,
   `REGISTRY_V7_06D.md`, `evidence/V7-06D_CHAT_CONCURRENCY.md`,
   `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`,

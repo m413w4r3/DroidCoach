@@ -63,11 +63,12 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   (`REVOKED`/`REVOKED`, aucune nouvelle session), provenance installée vérifiée
   sur les cinq APK (`source_sha=9149c47`, delta docs-only depuis `0749037`).
   Preuve `evidence/V7-06D_F1_PHYSICAL_QA.md` ; revue indépendante de la preuve
-  **PENDING**.
+  `ee44d72e…` : **GO_WITH_LIMITATIONS**, aucun P0/P1, P2 chemin public corrigé,
+  P2 couverture du parseur ouvert.
 - Verdicts après phase physique : `GO_CHAT_CONCURRENCY` **GO**,
   `GO_REVOKED_DEVICE_SERVER` **GO**, `GO_A4_4_CLIENT` **GO**,
-  `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **GO sous
-  réserve de la revue de preuve**, `GO_REMOTE_V4_PUBLIC`
+  `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **GO** pour la
+  campagne QA F1 (P2 documentés), `GO_REMOTE_V4_PUBLIC`
   **GO_WITH_LIMITATIONS hérité**, `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE`
   **NO GO**.
 - Phase physique : Pixel 9 Pro XL API 37.1 et ADB utilisés avec autorisation

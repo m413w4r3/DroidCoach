@@ -15,9 +15,9 @@ contracts scripts` vide ; arbre propre).
 isolée, identités synthétiques, sauvegarde app QA, désinstallation QA à la fin ;
 aucun test produit, aucun changement HOME/Keystore/données personnelles/service
 live, aucun test sur `dev.atlas.coach`.
-**Preuves privées :** `/home/nill/.local/state/atlas-v7-06d-f1-phys/`, mode
-`0600`/`0700`, hors dépôt (`series-summary.json`, `preflight-f1.json`,
-`cleanup-final.json`, cinq répertoires `evidence-f1-cold-*`).
+**Preuves privées :** répertoire privé hors dépôt, mode `0600`/`0700`
+(`series-summary.json`, `preflight-f1.json`, `cleanup-final.json`, cinq
+répertoires `evidence-f1-cold-*`) ; chemins locaux non publiés.
 
 ## 1. Pré-vol
 
@@ -131,13 +131,34 @@ ci-dessous (`cleanup-final.json`).
 | Données produit / Keystore / HOME | inchangés ; aucun `pm clear`, aucune désinstallation produit |
 | Services live | aucun changement |
 
-## 6. Verdicts
+## 6. Revue indépendante de la preuve
+
+Session `ee44d72e-4a7f-4ece-87ea-52a00525c015`, provider `codex`, modèle
+`gpt-6-luna`, effort effectif `xhigh`, worktree détaché `1631322` et
+`chmod -R a-w`. Revue strictement en lecture seule : aucun build, test, ADB,
+Docker ou réseau ; aucun fichier modifié.
+
+**Verdict : `GO_WITH_LIMITATIONS`.** Aucun P0/P1 sur ce périmètre. La revue
+confirme les cinq proofs, la provenance installée, l'absence d'échec F1
+attribuable, la sonde A4-4 et le nettoyage final. Elle autorise
+`GO_CHAT_RELIABILITY_QA` **GO pour cette campagne**. Réserves :
+
+- **P2 — métadonnée publique :** un chemin absolu du home opérateur figurait
+  dans ce document. Il a été retiré après la revue ; aucun secret, token, UUID
+  brut ou donnée personnelle n'était présent.
+- **P2 — couverture du parseur :** dépendance à `oneOf[0]` et absence de test
+  d'un statut non terminé ou de compteurs incohérents ; ces limites restent
+  ouvertes dans le rapport F1 et ne bloquent pas la campagne physique.
+- L'attribution exacte du rejet des anciens échecs reste `INCONCLUSIVE` ; elle
+  ne remet pas en cause les cinq essais réussis.
+
+## 7. Verdicts
 
 | Verdict | État |
 |---|---|
 | Série physique F1 | **PASS** — 5/5, zéro échec F1 |
 | Sonde A4-4 | **PASS** — `REVOKED`/`REVOKED`, aucune nouvelle session |
-| `GO_CHAT_RELIABILITY_QA` | **GO sous réserve de la revue indépendante de cette preuve** ; sinon inchangé |
+| `GO_CHAT_RELIABILITY_QA` | **GO** pour la campagne QA F1 (limites P2 documentées) |
 | `GO_CHAT_CONCURRENCY` | **GO** — inchangé |
 | `GO_REVOKED_DEVICE_SERVER` | **GO** — inchangé |
 | `GO_A4_4_CLIENT` | **GO** — confirmé |

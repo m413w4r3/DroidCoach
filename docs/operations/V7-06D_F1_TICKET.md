@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `V7-06D-PHYS-F1 / F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW PENDING` |
+| TASK_ID / statut | `V7-06D-PHYS-F1 / F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS PASS 5/5 + A4-4 PASS — EVIDENCE REVIEW GO_WITH_LIMITATIONS — GO_CHAT_RELIABILITY_QA GO (P2)` |
 | Objectif | Supprimer l'échec F1 observé sur la série physique, rendre l'oracle de test exact, puis prouver la correction par tests déterministes et une nouvelle série de 5+ démarrages froids. |
 | Dépendances | V7-06D intégré localement sur `main` ; A4-4 **PASS** ; provenance QA **GO** ; preuve `evidence/V7-06D_PHYSICAL_QA.md`. |
 | BASE_SHA | `06424fdff48fb63eebe22ec7a7dd43282dbf428b` (main locale après merge fast-forward ; `origin/main` reste `9ad90c7…`). |
@@ -113,5 +113,7 @@ Aucune correction ne doit inventer une proposition, rejouer un outil de manière
 4. `F1-PHYS` : **PASS** — autorisation ciblée « F1 + A4-4 » ; 5/5 démarrages
    froids PASS, zéro échec F1, sonde A4-4 PASS, gate de provenance installé
    vérifié ; preuve `evidence/V7-06D_F1_PHYSICAL_QA.md`.
-5. Revue indépendante de la preuve physique : **PENDING** ; elle seule peut
-   confirmer `GO_CHAT_RELIABILITY_QA`.
+5. Revue indépendante de la preuve physique : **GO_WITH_LIMITATIONS**
+   (session `ee44d72e-4a7f-4ece-87ea-52a00525c015`, lecture seule) — aucun
+   P0/P1 ; `GO_CHAT_RELIABILITY_QA` **GO** pour la campagne, avec P2 de
+   couverture du parseur documentés.

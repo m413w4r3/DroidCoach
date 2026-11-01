@@ -2,7 +2,7 @@
 
 **Date :** 2026-11-01
 **Ticket :** `V7-06D-PHYS-F1` (`docs/operations/V7-06D_F1_TICKET.md`)
-**Statut :** **F1-FIX IMPLEMENTED (code) — revue `GO_WITH_LIMITATIONS` — physique F1 `PASS` (5/5) + A4-4 `PASS` — preuve physique en revue indépendante**
+**Statut :** **F1-FIX IMPLEMENTED (code) — revue code `GO_WITH_LIMITATIONS` — physique F1 `PASS` (5/5) + A4-4 `PASS` — revue de preuve `GO_WITH_LIMITATIONS` — `GO_CHAT_RELIABILITY_QA` GO (limites P2)**
 **Branche :** `fix/v7-06d-f1-fix`, aucun push/PR/merge distant.
 **BASE :** `25fbab5` (docs) / code `06424fd` (`main` locale).
 **Rouge :** `725f9e3089f85a609427e7e256158e0b46ff7e73`.
@@ -92,11 +92,11 @@ séparée `V7-06D-F1-PHYS` (voir §5bis et
 La revue lecture seule du SHA `0749037` rend **`GO_WITH_LIMITATIONS`** :
 
 - **P0 : aucun.**
-- **P1 : `EVIDENCE_GAP` de qualification physique — couvert par la campagne
+- **P1 : `EVIDENCE_GAP` de qualification physique — fermé par la campagne
   `V7-06D-F1-PHYS`.** Cinq démarrages froids PASS, zéro échec F1, sonde A4-4
   PASS et gate de provenance installé↔construit vérifié sur les cinq tentatives.
-  La revue indépendante de cette preuve physique est la dernière étape ; elle
-  ne rouvre pas le code.
+  La revue indépendante de la preuve physique rend `GO_WITH_LIMITATIONS`, sans
+  P0/P1 (voir §5bis).
 - **P2 : couverture du parseur.** Les tests couvrent zéro et une proposition en
   état `completed`, mais pas un statut non terminé ni des compteurs incohérents ;
   la branche zéro signale `PROPOSAL_MISSING` avant que l'appelant puisse
@@ -132,7 +132,13 @@ neuve, un paquet QA neuf et un build propre.
   désinstallés manuellement. État final vérifié : aucun paquet QA, `adb reverse`
   vide, aucune stack, HOME et produit inchangés, aucun service live modifié.
 - Preuve publique : `evidence/V7-06D_F1_PHYSICAL_QA.md` ; preuves privées
-  `0600` sous `/home/nill/.local/state/atlas-v7-06d-f1-phys/`.
+  `0600` hors dépôt, chemins locaux non publiés.
+- **Revue indépendante de la preuve** : session
+  `ee44d72e-4a7f-4ece-87ea-52a00525c015` (`codex/gpt-6-luna`/`xhigh`, lecture
+  seule) — `GO_WITH_LIMITATIONS`, aucun P0/P1. P2 : un chemin absolu du home
+  opérateur dans le document public, retiré après la revue ; P2 de couverture
+  du parseur (`oneOf[0]`, statut non terminé) toujours ouvert. La revue autorise
+  `GO_CHAT_RELIABILITY_QA` GO pour cette campagne.
 
 ## 6. Verdicts
 
@@ -141,7 +147,7 @@ neuve, un paquet QA neuf et un build propre.
 | `F1-FIX` (code) | **ACCEPTED AVEC LIMITATIONS** — `GO_WITH_LIMITATIONS` de la revue ; aucun P0/P1 code |
 | Série physique F1 | **PASS** — 5/5, zéro échec F1 |
 | Sonde A4-4 | **PASS** — `REVOKED`/`REVOKED`, aucune nouvelle session |
-| `GO_CHAT_RELIABILITY_QA` | **GO sous réserve de la revue indépendante de la preuve physique** ; sinon inchangé |
+| `GO_CHAT_RELIABILITY_QA` | **GO** pour la campagne QA F1 (5/5 + A4-4, revue de preuve `GO_WITH_LIMITATIONS`, P2 documentés) |
 | `GO_CHAT_CONCURRENCY` | **GO** — inchangé, non remis en cause par F1 |
 | `GO_REVOKED_DEVICE_SERVER` | **GO** — inchangé |
 | `GO_A4_4_CLIENT` | **GO** — confirmé sur appareil |
@@ -151,13 +157,12 @@ neuve, un paquet QA neuf et un build propre.
 
 ## 7. Restant à faire
 
-1. Faire relire indépendamment la preuve physique
-   `evidence/V7-06D_F1_PHYSICAL_QA.md` et les preuves privées ; alors seulement
-   confirmer `GO_CHAT_RELIABILITY_QA`.
-2. Les P2 de couverture du parseur et d'ordre `oneOf` restent documentés ; ils
-   ne bloquent pas la physique mais ne doivent pas être présentés comme fermés.
-3. Aucune nouvelle série physique n'est nécessaire sauf si la revue de preuve
-   relève un défaut.
+1. Revue indépendante de la preuve physique effectuée :
+   `GO_WITH_LIMITATIONS`, aucun P0/P1 ; le P2 de chemin public a été corrigé.
+2. Le P2 de couverture du parseur (`oneOf[0]`, statut non terminé, compteurs
+   incohérents) reste documenté ; il ne doit pas être présenté comme fermé.
+3. Aucune nouvelle série physique n'est nécessaire ; aucun GO produit/public
+   n'est déduit de cette campagne.
 
 Aucun push, PR, merge distant ou modification live. `origin/main` reste
 `9ad90c7` ; `main` locale reste `06424fd` ; le correctif F1 n'est pas intégré.

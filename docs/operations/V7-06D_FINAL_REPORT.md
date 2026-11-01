@@ -7,6 +7,10 @@ sans P0/P1, avec un P2 documentaire de libellés corrigé et confirmation delta
 `06d30ed` **ACCEPTED** ; qualification physique complémentaire exécutée :
 A4-4 **PASS**, fiabilité chat **3/5 PASS → NO GO**, provenance installée **GO** ;
 aucun test produit ni qualification publique.`
+**Delta F1 (2026-11-01) :** correctif de harnais puis campagne physique
+**5/5 PASS + A4-4 PASS**, provenance installée vérifiée, revue de preuve
+`GO_WITH_LIMITATIONS` sans P0/P1 ; `GO_CHAT_RELIABILITY_QA` **GO** pour cette
+campagne, produit/public toujours **NO GO**. Voir §14.
 **Campagne :** V7-06D « Fiabilité remote et révocation A4-4 ».
 **BASE_SHA :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`.
 **Branche :** `feat/atlas-v7-06d-remote-hardening`.
@@ -513,6 +517,10 @@ compile `37.2`, certificat `da301466…`. Limite : APK QA uniquement.
 | `GO_PIXEL_PRODUCT` | **NO GO** | Aucun test de l'application produit. |
 | `GO_PRODUCT_REMOTE` | **NO GO** | Aucun test produit distant. |
 
+**Delta F1 :** ces verdicts `3 PASS / 2 FAIL` sont l'état de la phase
+`V7-06D-PHYS` du 2026-11-01 ; le §14 les met à jour après la campagne F1
+`5/5 + A4-4 PASS`, sans réécrire l'état historique.
+
 **Nettoyage :** paquets QA désinstallés, mappings `adb reverse` retirés, stacks
 arrêtées, HOME/produit/test produit inchangés, aucun service live modifié, aucun
 push/PR. Preuve détaillée : `evidence/V7-06D_PHYSICAL_QA.md`.
@@ -551,8 +559,11 @@ Nettoyage final : aucun paquet QA, reverse ni stack restant, HOME/produit
 inchangés, aucun service live. La boucle de nettoyage automatique par tentative
 était incomplète ; les paquets restants ont été supprimés manuellement.
 
-Verdicts du §13.4 mis à jour dans ce périmètre : `GO_CHAT_RELIABILITY_QA`
-**GO sous réserve de la revue indépendante de la preuve physique** ; les autres
-verdicts sont inchangés, produit/public toujours **NO GO**. Preuve :
-`evidence/V7-06D_F1_PHYSICAL_QA.md`. Rapport détaillé :
+Revue indépendante de la preuve physique
+(`ee44d72e-4a7f-4ece-87ea-52a00525c015`, `codex/gpt-6-luna`/`xhigh`, lecture
+seule) : **GO_WITH_LIMITATIONS**, aucun P0/P1 ; P2 de chemin public corrigé,
+P2 de couverture du parseur ouvert. Verdicts du §13.4 mis à jour dans ce
+périmètre : `GO_CHAT_RELIABILITY_QA` **GO** pour la campagne QA F1 (P2
+documentés) ; les autres verdicts sont inchangés, produit/public toujours
+**NO GO**. Preuve : `evidence/V7-06D_F1_PHYSICAL_QA.md`. Rapport détaillé :
 `V7-06D_F1_FIX_REPORT.md`.
