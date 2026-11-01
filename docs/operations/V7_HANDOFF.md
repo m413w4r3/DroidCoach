@@ -5,6 +5,57 @@ Branche locale : `feat/atlas-v7-remote-operational`
 Base mission : `b759bdafbf0c67eda1a14ae2cf2f3fac75239e4c`  
 Aucun push, PR ou merge distant effectué.
 
+## V7-07 — Préproduction et pilote quotidien (2026-11-01/02)
+
+**Statut global : PRÉPARATION AVANCÉE — aucun `GO_PRODUCT_INSTALL`, aucun
+`GO_PRODUCT_REMOTE`, aucun `GO_DAILY_PILOT`. Le produit physique n'a pas été
+touché.**
+
+- Branche locale `feat/atlas-v7-07-preproduction`, base
+  `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d` (= `origin/main`, CI `41350216879`
+  `success`). Aucun push/PR/merge distant.
+- Pré-vol : Pixel non connecté (`adb devices` vide) ; Core live sain,
+  `mode=openclaw`, 7 capabilities ; Gateway live actif ; Relay sain sur 4402 ;
+  **connecteur PC arrêté**, Funnel `8443→4400` sans listener ; 2 devices actifs
+  (`pixel-v7`, `r3c-pixel-final`) et 2 consentements Core `GRANTED v2`.
+- Trois audits lecture seule `codex/gpt-6-luna`/`xhigh` :
+  - **A1** : 24 SharedPreferences, fichiers plans/mémoire/inbox, WorkManager,
+    deux alias Keystore non exportables ; `adb backup` inutilisable ;
+    P1 de perte potentielle `atlas_core_v4_sync` si racine invalide.
+  - **A2** : plugin natif `atlas_core_tools` activé en parallèle du chemin Core,
+    `profile=full`, modèle `openai/gpt-6-luna` non qualifié, `deepseek-chat`
+    documenté retiré ; transport distant indisponible ; bearer Android partagé.
+  - **A3** : procédure `run-as`/tar, matrice de restaurabilité, rollback,
+    export/import intégré nécessaire pour une sauvegarde durable.
+- Outillage : `scripts/v7-07/atlas-product-backup.sh` (branche
+  `feat/v7-07-backup-tool`, commits `2517097`, `30f1d63`, `2d49705`) ; 17 tests
+  hors ligne, deux corrections issues d'essais réels (composant explicite,
+  `df` via `run-as`).
+- **Essai AVD API 35 jetable, données synthétiques** :
+  préflight/backup/verify/restore **PASS** (archive `ec88d1a2…`, 11 fichiers,
+  zéro cache) ; HOME ATLAS et retour Nexus **PASS** ; hors ligne **PASS** ;
+  update in-place APK historique → candidat **PASS** ; rollback candidat →
+  historique **PASS**. Keystore/tokens **NOT_RUN**. Pixel API 37 **NOT_RUN**.
+  Preuve : `evidence/V7-07_AVD_BACKUP_RESTORE.md`.
+- **Candidat APK** : build propre sur `32e7c70`, JVM **912/912**, lint 0 erreur,
+  APK `d32efc7684c131131101f476f9f7ae186933efe863cb561b2ce0039ddc45e992`,
+  signature `da301466…eeee`, permissions identiques à l'historique,
+  provenance `worktree_clean=true`. Conservé en privé sous
+  `~/.local/state/atlas-v7-07/candidate/`. Aucune installation produit.
+- **P2 parseur F1** : commit test-only `fae8caa` sur
+  `test/v7-07-parser-p2`, 6/6 ciblés, **915/915 JVM**, aucun code produit ni
+  contrat modifié.
+- Revue indépendante finale et demande d'autorisation ciblée A–E restent à
+  faire. Les documents produits sont `V7-07_READINESS_AUDIT.md`,
+  `V7-07_BACKUP_AND_ROLLBACK.md`, `V7-07_LIVE_CONFIG_PLAN.md`,
+  `V7-07_PRODUCT_APK_CANDIDATE.md`, `V7-07_PILOT_RECIPE.md`,
+  `REGISTRY_V7_07.md`.
+- **Prochaines actions :** revue indépendante lecture seule du SHA final ;
+  soumettre au propriétaire les scopes A (sécurité live), B (Gateway/Core),
+  C (APK produit), D (appairage/recette distante), E (pilote quotidien).
+  Ne pas installer, révoquer, tourner le bearer ou modifier le Gateway sans
+  autorisation ciblée.
+
 ## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
 
 **Statut global : deux P1 diagnostiqués et corrigés avec tests discriminants ;

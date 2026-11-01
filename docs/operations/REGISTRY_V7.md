@@ -9,6 +9,45 @@
 **Modèle des sous-agents :** `codex:gpt-6-luna`, effort effectif `xhigh` — vérifié dans les métadonnées Paseo de chaque session. Aucune substitution.
 **Règle :** une notification de fin n'est pas une acceptation. Chaque résultat est examiné, revu, puis intégré localement par le parent.
 
+## 0ter. Campagne V7-07 — préproduction et pilote quotidien (2026-11-01/02)
+
+Registre détaillé : `REGISTRY_V7_07.md`. Audit :
+`V7-07_READINESS_AUDIT.md`. Sauvegarde/rollback :
+`V7-07_BACKUP_AND_ROLLBACK.md`. Configuration live :
+`V7-07_LIVE_CONFIG_PLAN.md`. Candidat :
+`V7-07_PRODUCT_APK_CANDIDATE.md`. Recette pilote :
+`V7-07_PILOT_RECIPE.md`. Preuve AVD :
+`evidence/V7-07_AVD_BACKUP_RESTORE.md`.
+
+- Base `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d` (= `origin/main`, CI
+  `41350216879` `success`), branche locale `feat/atlas-v7-07-preproduction`,
+  aucun push/PR/merge distant.
+- Audits A1/A2/A3 lecture seule (`codex/gpt-6-luna`, `xhigh`) : données produit
+  et migrations ; Gateway/plugin/outils/modèle ; procédure backup/restore et
+  rollback.
+- Outil `scripts/v7-07/atlas-product-backup.sh` : commit `2d49705` (branche
+  `feat/v7-07-backup-tool`), 17 tests hors ligne ; préflight/backup/verify/
+  restore validés sur AVD API 35 avec données synthétiques.
+- Candidat produit : build `32e7c70`, JVM **912/912**, lint 0 erreur, APK
+  `d32efc76…`, test `8f6376be…`, provenance `worktree_clean=true`, signature
+  `da301466…eeee`, permissions identiques à l'historique. Aucune installation
+  produit.
+- AVD API 35 : backup/restore/verify **PASS**, HOME **PASS**, hors ligne
+  **PASS**, update in-place **PASS**, rollback APK **PASS**. Keystore/tokens
+  **NOT_RUN** ; Pixel API 37 **NOT_RUN**.
+- P2 parseur F1 : commit test-only `fae8caa`, 6/6 ciblés, **915/915 JVM**.
+- Verdicts : `GO_SOURCE_AND_CI` **GO** ; `GO_DATA_BACKUP`,
+  `GO_DATA_RESTORE`, `GO_HOME_ROLLBACK` **GO (AVD synthétique)** mais
+  **NOT_RUN Pixel** ; `GO_LIVE_OPENCLAW_CONFIG` **NO-GO** (plugin natif
+  concurrent, `profile=full`, modèle non qualifié) ; `GO_LIVE_SECURITY`
+  **NO-GO/BLOCKED** (transport arrêté, identités de test, bearer partagé) ;
+  `GO_PRODUCT_APK_CANDIDATE` **PENDING** (revue indépendante) ;
+  `GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE`, `GO_DAILY_PILOT` **NO-GO**.
+- P1 ouverts : perte potentielle `atlas_core_v4_sync` sur racine invalide ;
+  restauration produit réel non observée ; configuration Gateway non qualifiée ;
+  transport distant indisponible ; identités/bearer non séparés ; training plan
+  incohérent sur projection non vide. Aucun P0.
+
 ## 0bis. Campagne V7-06D — fiabilité remote et révocation A4-4 (2026-11-01)
 
 Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
