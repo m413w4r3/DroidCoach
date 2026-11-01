@@ -299,3 +299,13 @@
 | 2026-10-31 | Aucune correction de comportement avant les tests discriminants C1–C8; instrumentation bornée d’abord, désactivée par défaut. | Prompt maître §3–§6; éviter une refonte non prouvée. |
 | 2026-10-31 | Aucun ADB sur le Pixel physique; qualification uniquement `emulator-*` avec identité/appairage/Core/relay synthétiques et isolés. | Décision propriétaire du 2026-10-31; aucun fichier privé du Pixel copié. |
 | 2026-10-31 | Audit lecture seule de l’accès résiduel effectué; aucune révocation/rotation live appliquée. | `pixel-v7` et `r3c-pixel-final` restent non révoqués, consents Core v2 GRANTED, aucune projection personnelle; action live soumise à autorisation ciblée et sauvegarde. |
+
+## V7-06B — Coach Loop (2026-11-01)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-11-01 | Chemin d’outils canonique = boucle orchestrée par Core (`OpenClawAgentAdapter.chat_v4` → `/v1/chat/completions` → `execute_tool` → `V4ToolService`). Le plugin natif `atlas_core_tools` est exclu de l’agent isolé. | A1/A2 : les outils client sont renvoyés au client et exécutés par Core; les outils natifs sont exécutés par Gateway. Deux chemins simultanés pourraient déposer deux propositions A0 sans garde transactionnelle commune. |
+| 2026-11-01 | L’instance Gateway de V7-06B est isolée : état, configuration, workspace, agent, port, token et stockage neufs; aucun partage avec `~/.openclaw` ni le Gateway personnel 18789. | Mission V7-06B et `AGENTS.md` : ne jamais faire partager deux Gateways concurrents sur le même état OpenClaw. |
+| 2026-11-01 | Le modèle réel de l’instance isolée est `deepseek/deepseek-chat` via un provider custom OpenClaw et `DEEPSEEK_API_KEY` déjà présent dans l’environnement, après échec de réutilisation isolée de `openai/gpt-6-luna` (auth OAuth dans l’état OpenClaw personnel) et rejet de `claude-cli` (outils client non transmis, outils natifs CLI). | Décision explicite du propriétaire le 2026-11-01 après explication. Les verdicts V7-06B portent sur ce modèle réel de substitution, **pas** sur `gpt-6-luna` du Gateway live ni sur l’application produit. |
+| 2026-11-01 | Aucune révocation/rotation live, aucun ADB sur le Pixel physique, aucune modification Funnel/Tailscale/Core/Gateway live pour V7-06B. | L’audit résiduel reste inchangé; toute action live exige sauvegarde, rollback et autorisation ciblée distincte. |
+| 2026-11-01 | La qualification AVD est bornée à un boot après pré-vol; en cas d’échec, `BLOCKED_ENVIRONMENT` et ticket séparé, sans boucle de boots. | Leçon V7-06A : ne pas perdre la campagne sur un émulateur défaillant. |
