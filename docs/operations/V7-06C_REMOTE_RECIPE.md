@@ -1,12 +1,12 @@
 # ATLAS V7-06C — recette de transport public (préparation)
 
 Date : 2026-11-01
-Statut : **préparation uniquement — aucun test distant exécuté, aucun service
-public modifié.**
-Référence : `V7-06B` démontre un fil rouge **backend** local via une stack
-isolée (relay loopback, connecteur PC, Core, Gateway et modèle réels) ; le
-runtime Android n’a pas pu être exécuté (AVD API 37 instable). Un succès local
-ne vaut **pas** `GO_REMOTE_V4_PUBLIC` ni `GO_PRODUCT_REMOTE`.
+Statut : **recette exécutée le 2026-11-01** dans la modalité « relais isolé sur le
+port 4400 déjà ciblé par le Funnel », depuis un Pixel en LTE, sans `adb reverse` ;
+APPLY et REJECT **PASS**, avec deux P1 documentés. Preuve :
+`docs/operations/evidence/V7-06C_PUBLIC_WSS.md`. Le Funnel, le relais live et les
+services personnels n’ont pas été modifiés. Ce document reste la procédure de
+référence ; il n’est pas remplacé par une seconde procédure.
 
 ## 1. Objectif
 
@@ -97,10 +97,20 @@ extérieur réellement distinct.
 | Perte de session en cours de route | Reprise idempotente, aucun nouvel effet ; preuve du rejeu |
 | Modification live irréversible | Sauvegarde + rollback documentés ; accord ciblé obligatoire |
 
-## 7. État actuel
+## 7. État après exécution V7-06C (2026-11-01)
 
-- `GO_REMOTE_V4_PUBLIC` : **NO GO — NOT_RUN**.
-- `GO_PRODUCT_REMOTE` : **NO GO — NOT_RUN**.
-- Aucun changement Funnel, DNS, Tailscale, service live ou secret n’a été
-  effectué pour V7-06B.
-- Le Pixel physique n’a pas été utilisé par V7-06B sans autorisation ciblée.
+- `GO_REMOTE_V4_PUBLIC` : **GO (limité)** — APPLY et REJECT ont réussi depuis le
+  Pixel en LTE via `wss://all.taildc7886.ts.net:8443`, sans `adb reverse`, avec TLS,
+  Noise/auth, relais isolé sur `127.0.0.1:4400`, Core/Gateway/proxy en loopback.
+- `GO_PRODUCT_REMOTE` : **NO GO — NOT_RUN** (application produit non testée).
+- **P1 fiabilité** : premier APPLY public bloqué après les syncs, avant le chat ;
+  relance PASS. Cause racine non confirmée.
+- **P1 A4-4** : device QA révoqué refusé par le connecteur (aucune nouvelle
+  session, `errors_total=1`), mais l’app observe `ERROR`/`close_code=null` au lieu
+  de `REVOKED`/4001 ; sonde instrumentée **FAIL**.
+- Aucun changement Funnel, DNS, Tailscale, service live ou secret n’a été effectué.
+  Le Funnel a retrouvé son état initial (cible 4400 sans listener).
+- Le Pixel physique a été utilisé avec autorisation ciblée, paquets QA séparés ;
+  produit, HOME, Keystore et données personnelles intacts. Les paquets QA ont été
+  désinstallés après autorisation.
+- Preuve détaillée : `docs/operations/evidence/V7-06C_PUBLIC_WSS.md`.
