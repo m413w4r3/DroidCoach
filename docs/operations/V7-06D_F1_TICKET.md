@@ -6,7 +6,7 @@
 | Objectif | Supprimer l'échec F1 observé sur la série physique, rendre l'oracle de test exact, puis prouver la correction par tests déterministes et une nouvelle série de 5+ démarrages froids. |
 | Dépendances | V7-06D intégré localement sur `main` ; A4-4 **PASS** ; provenance QA **GO** ; preuve `evidence/V7-06D_PHYSICAL_QA.md`. |
 | BASE_SHA | `06424fdff48fb63eebe22ec7a7dd43282dbf428b` (main locale après merge fast-forward ; `origin/main` reste `9ad90c7…`). |
-| Branche / worktree | `fix/v7-06d-f1-proposal-missing`, worktree isolé obligatoire ; aucune modification directe de `main`. |
+| Branche / worktree | Ticket/diagnostic : `fix/v7-06d-f1-proposal-missing` ; implémentation : `fix/v7-06d-f1-fix`, worktree isolé `/tmp/atlas-v7-06d-f1-fix` ; aucune modification directe de `main`. |
 | Profil | Tous les enfants : `codex:gpt-6-luna`, `effort=xhigh`, vérifié dans les métadonnées Paseo ; aucune sous-délégation ; 6 enfants maximum ; un seul opérateur ADB. |
 | Lire | `V7-06D_PHYSICAL_QA.md`, `V7-06D_FINAL_REPORT.md` §13, `V7-06D_DIAGNOSTIC.md` §8, `V7_06B_CoachLoopInstrumentedTest.kt`, `run_qa.py`, `run_scenario.py`, `test_harness.py`, schéma/prompt de l'outil `atlas_propose_plan_revision`. |
 | Écrire | Fichiers attribués exclusivement à l'enfant : test instrumenté, harnais/tests, code du contrat d'outil identifié par le diagnostic. Aucun fichier partagé entre deux enfants. |
