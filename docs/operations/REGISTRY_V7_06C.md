@@ -60,6 +60,22 @@ API 37.2 16 Ko n’est pas relancé (blocage V7-06B documenté). Le transport pu
 `BLOCKED_NETWORK` tant que le Funnel ne pointe pas vers un relais vivant et qu’une
 autorisation ciblée de changement Funnel n’est pas donnée.
 
+### 2bis. Paquets QA et autorisation physique
+
+Autorisation ciblée du propriétaire (2026-11-01) : APPLY + REJECT sur le Pixel
+9 Pro XL désigné, paquets QA uniquement, sans toucher à `dev.atlas.coach`, HOME,
+Keystore ni données personnelles. Le delta AndroidTest ajoutant le rejeu ACK a été
+explicitement re-confirmé.
+
+| Scénario | Package QA | APK app SHA-256 | APK AndroidTest SHA-256 |
+|---|---|---|---|
+| APPLY | `dev.atlas.coach.qa.v706b.v706capply.a7f3c21e` | `8441a5dab058d3a2852a77d30ccef7a23cec8c2563ac1083212d46439856224d` | `c97427fb9f2a029a065e0924221f351458151860a962604c021f5189576337d8` |
+| REJECT | `dev.atlas.coach.qa.v706b.v706creject.b4d9e602` | `b599532c171f3d169b80823f2e5dc63794864d7ae4042138dc7bce3aa32f9a6b` | `be283081cb0ec14e3853524feecc668aaae10629c1a1d25342579b08dcaa0e83` |
+
+Signature debug : `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`.
+Les APK app sont bit-identiques aux hashes présentés lors de la première autorisation ;
+seuls les APK AndroidTest ont changé pour le rejeu ACK.
+
 ## 3. Tickets
 
 | TASK_ID | Objectif | Dépendance | Statut | Session Paseo | Worktree | Oracle |
@@ -67,7 +83,7 @@ autorisation ciblée de changement Funnel n’est pas donnée.
 | V7-06C-00-PREFLIGHT | SHA, CI, services live, ressources, harnais, identités | — | **ACCEPTED (lecture seule)** | parent | racine | SHA local=distant, inventaire complet, aucun service modifié |
 | V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **RUNNING** | `3b012d9f-efaf-424f-9668-52c42be6cefc` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; runtime parent ensuite |
 | V7-06C-02-ANDROID-RUNTIME | Pré-vol physique, installation QA, Keystore/WorkManager | PREFLIGHT + autorisation | **READY** (autorisation accordée) | parent opérateur unique | racine | device boot/services stables, APK QA installé, package produit intact |
-| V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **RUNNING** | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | compilation QA, `ack_replay=identical`, 1 seul ACK local, aucun second effet |
+| V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **ACCEPTED (code)** — commit `69feb5c`, merge `f7e6441` ; compilation QA `compile3` PASS, classe présente ; runtime pending | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | compilation QA, `ack_replay=identical` attendu au runtime, 1 seul ACK local, aucun second effet |
 | V7-06C-03-APPLY | DayPlan v2→v3 par Android, ACK APPLIED durable, rejeu sans second effet | 01 + 02 + 03B | **READY** | parent opérateur | racine | runner PASS + oracle Core/journal/trace outils indépendants |
 | V7-06C-03-REJECT | Refus explicite sans modification du plan, ACK REJECTED durable | 01 + 02 + 03B | **READY** | parent opérateur | racine | runner PASS + plan v2 intact + aucun v3 + oracle Core |
 | V7-06C-04-WSS-PUBLIC | Même parcours via WSS public, réseau extérieur, sans `adb reverse` | 03 + endpoint public autorisé | **BLOCKED_NETWORK** | — | — | TLS/Noise/auth/révocation + fil rouge complet |
@@ -79,7 +95,7 @@ autorisation ciblée de changement Funnel n’est pas donnée.
 |---|---|---|---|---|
 | 2026-11-01 | parent | Pré-vol V7-06C-00 | session parente | `ACCEPTED` lecture seule ; aucune modification live |
 | 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `RUNNING` |
-| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK test | codex / `gpt-6-luna` / `xhigh` (métadonnées à vérifier à la fin) | `RUNNING` |
+| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK test | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `69feb5c`, compilé, intégré `f7e6441` |
 | 2026-11-01 | parent + autorisation propriétaire | QA physique APPLY+REJECT | — | autorisation ciblée accordée ; aucune installation avant harnais prêt |
 
 ## 5. Décisions et limites

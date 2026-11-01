@@ -75,10 +75,28 @@ autorisation ciblée et un endpoint vivant sont requis avant toute recette publi
 
 ## 7. Sécurité et identités résiduelles
 
-Le pré-vol V7-06C a relu l’audit V7-06A. Les consentements live `DAY_PLAN` et
-`ACTIVITY_STATUS` `GRANTED v2` et les appareils `pixel-v7`/`r3c-pixel-final` restent
-hors périmètre de cette campagne tant qu’aucune autorisation ciblée de révocation
-n’est donnée. Aucune identité personnelle n’est utilisée par la stack V7-06C.
+Le pré-vol V7-06C a relu l’audit V7-06A et recontrôlé l’état live en lecture seule
+le 2026-11-01 :
+
+- Core live `atlas-core-atlas-core-1` : un `device_ref` `android-9a3f0f…` conserve
+  `DAY_PLAN` et `ACTIVITY_STATUS` `GRANTED` version 2 (`updated_at`
+  `2026-10-31T00:23:51Z`), 2 événements de consentement, 0 snapshot DayPlan,
+  0 proposition et 0 ACK.
+- Registre connecteur : `pixel-v7` (14 capabilities, dont V4) et
+  `r3c-pixel-final` (6 capabilities V1/V2) ne sont pas révoqués ; les autres
+  entrées sont révoquées.
+- Journal d’opérations : dernière écriture `2026-10-31 16:40:43`, aucun signe
+  d’activité V7-06C.
+
+**Aucune révocation, rotation de bearer ou modification live n’a été effectuée.**
+Une révocation ciblée de ces deux appareils et/ou une rotation du bearer Core
+restent soumises à une autorisation spécifique, avec sauvegarde, commandes
+exactes, vérification des refus après révocation et rollback compatible.
+
+Aucune identité personnelle n’est utilisée par la stack V7-06C. L’appareil
+physique QA est sur Wi-Fi ; les interfaces `rmnet` sont `DOWN`. La recette
+publique exigera un réseau extérieur réel (données mobiles ou autorisation
+ciblée de changement réseau), sans `adb reverse`.
 
 ## 8. Suites et preuves
 
