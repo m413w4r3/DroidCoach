@@ -89,7 +89,7 @@ séparée (réappairage/reconfiguration possibles).
 | V7-06D-PHYS-PREFLIGHT | Pré-vol physique, autorisation ciblée, sauvegarde app QA | REVIEW3 | **ACCEPTED (lecture seule)** — Pixel 9 Pro XL, Android 17/SDK 37.1, HOME produit inchangé, aucun paquet QA préexistant, aucune donnée QA à sauvegarder | parent | appareil physique | modèle/API/HOME/stockage, aucun test produit |
 | V7-06D-PHYS-A4-4 | Sonde A4-4 stricte sur appareil | PREFLIGHT | **PASS** — `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session authentifiée, erreurs `0→1` | parent | appareil physique | instrumentation `OK (1 test)`, métriques isolées |
 | V7-06D-PHYS-COLD | Série de 5 démarrages froids avec chat | PREFLIGHT | **3 PASS / 2 FAIL** — échecs #2/#3 après réponse chat, zéro proposition après rejet d'outil ; deadlock G↔C non reproduite | parent | appareil physique | 5 preuves/attempts, provenance installée vérifiée |
-| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **READY — ticket ouvert** (`V7-06D_F1_TICKET.md`) ; cause produit non corrigée, parseur `parseToolMetadata` à durcir (`PROPOSAL_MISSING`) | à lancer | `fix/v7-06d-f1-proposal-missing` | F1a rouge→vert, F1b reproductible, suites, série physique 5+, revue |
+| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **F1-DIAG ACCEPTED (PARTIAL) — F1-FIX READY** — F1a diagnostiqué ; incohérence prompt/schéma F1b **PROVEN** (`changes`/`justification`, `idempotency_key` backend-owned), attribution exacte du rejet `INCONCLUSIVE` ; ticket `V7-06D_F1_TICKET.md`, diagnostic `V7-06D_F1_DIAGNOSTIC.md` | `cbbda8c4-f724-4c43-b234-3daad189f0d1` | `fix/v7-06d-f1-proposal-missing` | F1a rouge→vert, F1b reproductible, suites, série physique 5+, revue |
 
 ## 4. Journal des sessions
 
@@ -110,6 +110,7 @@ séparée (réappairage/reconfiguration possibles).
 | 2026-11-01 | parent | V7-06D-PHYS pré-vol et A4-4 | appareil physique, ADB `shell`, aucun sous-agent | **PASS** — Pixel 9 Pro XL API 37.1, sonde A4-4 `REVOKED`/`REVOKED`, aucune nouvelle session, `close_code=null` ; QA uniquement |
 | 2026-11-01 | parent | V7-06D-PHYS série froide | appareil physique, ADB `shell`, aucun sous-agent | **3 PASS / 2 FAIL** — échecs #2/#3 après réponse chat (zéro proposition, outil rejeté) ; transport sans deadlock ; **F1 ouvert** |
 | 2026-11-01 | parent | V7-06D-PHYS nettoyage | appareil physique, ADB `shell` | **PASS** — QA désinstallés, reverse retiré, stacks arrêtées, HOME/produit/test produit inchangés |
+| 2026-11-01 | `cbbda8c4-f724-4c43-b234-3daad189f0d1` | V7-06D-F1-DIAG | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Default`, worktree `a-w`) | **ACCEPTED (PARTIAL)** — F1a diagnostiqué ; F1b prompt/schéma `PROVEN`, attribution du rejet `INCONCLUSIVE` ; lecture seule, aucun test exécuté |
 
 ## 4bis. Résultats finaux d'intégration
 
