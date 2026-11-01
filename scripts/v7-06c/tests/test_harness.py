@@ -17,13 +17,15 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = REPO_ROOT / "backend"
 BACKEND_SCRIPTS = REPO_ROOT / "scripts" / "v7-06c" / "backend"
 ANDROID_SCRIPTS = REPO_ROOT / "scripts" / "v7-06c" / "android"
-for _path in (str(BACKEND_ROOT), str(BACKEND_SCRIPTS), str(ANDROID_SCRIPTS)):
+ANDROID_RUNNER_SCRIPTS = REPO_ROOT / "scripts" / "v7-06b" / "android"
+for _path in (str(BACKEND_ROOT), str(BACKEND_SCRIPTS), str(ANDROID_SCRIPTS), str(ANDROID_RUNNER_SCRIPTS)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
 from atlas_backend.store import SQLiteStore  # noqa: E402
 import run_scenario  # noqa: E402
 import run_backend_e2e  # noqa: E402
+import run_qa  # noqa: E402
 import stack as stack_module  # noqa: E402
 from stack import (  # noqa: E402
     PINNED_RELAY_IMAGE,
@@ -449,6 +451,109 @@ class RedactionAndCliTests(unittest.TestCase):
             cwd=REPO_ROOT, text=True, capture_output=True, check=False,
         )
         self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+
+
+class ApkProvenanceTests(unittest.TestCase):
+    def valid_manifest(self) -> dict:
+        return {
+            "source_sha": "a" * 40,
+            "source_tree_sha": "b" * 40,
+            "worktree_clean": True,
+            "variant": "qa",
+            "application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab",
+            "test_application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab.test",
+            "version_code": 1,
+            "version_name": "0.1.0-qa",
+            "compile_sdk": "37.2",
+            "min_sdk": 26,
+            "target_sdk": 36,
+            "scenario_id": "v7-06c-android-apply",
+        }
+
+    def test_dirty_source_tree_variant_package_and_version_are_rejected(self) -> None:
+        manifest = self.valid_manifest()
+        expected = dict(manifest)
+        for field, wrong in (
+            ("worktree_clean", False),
+            ("source_sha", "c" * 40),
+            ("source_tree_sha", "d" * 40),
+            ("variant", "debug"),
+            ("application_id", "dev.atlas.coach"),
+            ("test_application_id", "dev.atlas.coach.test"),
+            ("version_code", 9),
+            ("version_name", "wrong"),
+            ("scenario_id", "different-scenario"),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(run_qa.QaError):
+                    run_qa.verify_build_provenance({**manifest, field: wrong}, expected)
+
+    def test_missing_manifest_fields_and_secret_or_serial_in_scenario_are_rejected(self) -> None:
+        manifest = self.valid_manifest()
+        expected = dict(manifest)
+        del manifest["source_tree_sha"]
+        with self.assertRaises(run_qa.QaError):
+            run_qa.verify_build_provenance(manifest, expected)
+        with self.assertRaises(run_qa.QaError):
+            run_qa.verify_build_provenance(
+                {**expected, "scenario_id": "v7-06c-android-apply"}, expected,
+                secrets=("v7-06c-android-apply", "synthetic-device-serial"),
+            )
+
+    def test_missing_app_or_test_apk_and_missing_embedded_manifest_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app = root / "app.apk"
+            test = root / "test.apk"
+            app.write_bytes(b"not an apk")
+            with self.assertRaises(run_qa.QaError):
+                run_qa.read_apk_pair_provenance(app, test)
+            with self.assertRaises(run_qa.QaError):
+                run_qa.read_apk_pair_provenance(app, app)
+
+            import zipfile
+            for apk in (app, test):
+                with zipfile.ZipFile(apk, "w") as archive:
+                    archive.writestr("AndroidManifest.xml", b"manifest")
+            with self.assertRaises(run_qa.QaError):
+                run_qa.read_apk_pair_provenance(app, test)
+
+    def test_installed_app_and_test_hashes_and_signing_certificate_must_match(self) -> None:
+        manifest = self.valid_manifest()
+        built = {"app": "1" * 64, "android_test": "2" * 64}
+        run_qa.verify_installed_hashes(built, dict(built))
+        with self.assertRaises(run_qa.QaError):
+            run_qa.verify_installed_hashes(built, {"app": "3" * 64, "android_test": built["android_test"]})
+        with self.assertRaises(run_qa.QaError):
+            run_qa.verify_signing_certificate("a" * 64, "b" * 64)
+
+    def test_failed_install_verification_never_calls_instrumentation(self) -> None:
+        with patch("run_qa.verify_installed_artifacts", side_effect=run_qa.QaError("APK_HASH_MISMATCH")):
+            instrument = unittest.mock.Mock()
+            with self.assertRaises(run_qa.QaError):
+                run_qa.instrument_after_verification(
+                    "synthetic-serial", "app.apk", "test.apk", {}, "a" * 64, instrument,
+                )
+            instrument.assert_not_called()
+
+    def test_instrumentation_requires_exact_test_count_even_with_success_code(self) -> None:
+        self.assertEqual(
+            run_qa.instrumentation_failure_reason(0, "INSTRUMENTATION_CODE: -1", expected_count=1),
+            "instrumentation output does not report exactly 1 successful test",
+        )
+        self.assertIsNotNone(run_qa.instrumentation_failure_reason(0, "OK (2 tests)", expected_count=1))
+        self.assertIsNone(run_qa.instrumentation_failure_reason(0, "OK (1 test)\nINSTRUMENTATION_CODE: -1", expected_count=1))
+
+    def test_post_hoc_provenance_is_inconclusive_and_cannot_be_pass(self) -> None:
+        provenance = run_scenario.post_hoc_provenance(
+            "public_wss", {"scheme": "wss", "host": "synthetic.example", "port": 8443},
+        )
+        self.assertEqual(provenance["verification_result"], "INCONCLUSIVE")
+        self.assertFalse(provenance["installed_apk_verified"])
+        self.assertIsNone(provenance["app_apk_sha256"])
+        self.assertIsNone(provenance["android_test_apk_sha256"])
+        with self.assertRaises(run_scenario.ScenarioFailure):
+            run_scenario.require_pass_provenance(provenance)
 
 
 if __name__ == "__main__":
