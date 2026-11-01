@@ -2,8 +2,9 @@
 
 **Campagne :** V7-06B « Coach Loop »
 **Base :** `b55062e1890ff10139ba5ce4a1384cb729c5c0f1`
-**SHA de campagne :** `fcb5329` (contenu et preuves) ; **snapshot de revue :** `23748a2` — branche
-`feat/atlas-v7-06b-coach-loop`, aucun push, PR ou merge distant.
+**SHA de campagne :** `fcb5329` (contenu et preuves) ; **snapshots de revue :**
+`23748a2` (revue initiale), `72d5be4` (re-review), `6d35b99` (correctif gap) —
+branche `feat/atlas-v7-06b-coach-loop`, aucun push, PR ou merge distant.
 **Date :** 2026-11-01
 **Registre :** `docs/operations/REGISTRY_V7_06B.md`
 **Preuve OpenClaw :** `docs/operations/evidence/V7-06B_OPENCLAW_TRACE.md`
@@ -161,6 +162,14 @@ sans proposition ; un événement valide terminal reste `VALIDATION_FAILED` ; sa
 (12 nouveaux cas rouge→vert, 10 existants), backend complet **370 passed /
 1 skipped** (36,66 s).
 
+**`6d35b99` — lacune de séquence avant fallback (P1 re-review).** Le contrôle
+`has_activity_status_sequence_gap` passait après le retour fallback « aucun
+événement » : un flux incomplet sans entrée pour l’activité pouvait encore
+accepter un snapshot `PLANNED`. Le contrôle est déplacé **avant** le fallback ;
+un gap → `STALE_DATA` sans proposition, même sans événement. Nouveau test
+rouge→vert « aucun événement + gap + snapshot PLANNED » ; **23/23 ciblés**,
+backend complet **371 passed / 1 skipped** (29,51 s).
+
 ### Corrections de harnais (aucun produit)
 
 - enveloppe relay `expires_at` +120 s → +30 s (limite protocole 60 s) ;
@@ -181,8 +190,8 @@ recommandation : aligner le mapping dans un ticket borné séparé.
 
 | Suite | Résultat |
 |---|---|
-| Backend `pytest -q` | **370 passed / 1 skipped** (36,66 s) |
-| Garde statuts ciblée (T3b) | **22/22 PASS** (12 cas d’incertitude en `STALE_DATA` + 10 contrôles existants) |
+| Backend `pytest -q` | **371 passed / 1 skipped** (29,51 s) |
+| Garde statuts ciblée (T3b) | **23/23 PASS** (12 cas d’incertitude, 1 gap sans événement, 10 contrôles) |
 | Connecteur Node `npm run test:unit` | **109/109 PASS** (17 fichiers) |
 | Plugin OpenClaw `npm test` | **59/59 PASS** |
 | Android JVM `:app:testDebugUnitTest --offline --rerun-tasks` | **896/896 PASS**, 0 échec, 0 erreur, 0 ignoré (117 fichiers) ; BUILD SUCCESSFUL |
@@ -245,9 +254,15 @@ produit.
     identique avec `replayed=true` et ne crée **qu’un seul** événement ACK.
   - **P2 — SHA ambigu :** le rapport nommait `fcb5329` alors que le HEAD revu
     était `23748a2`. **Clarifié** : SHA de campagne `fcb5329`, snapshot de revue
-    `23748a2`, HEAD de branche après correctif `25bfed8`.
+    initiale `23748a2`, snapshot de re-review `72d5be4`.
 - **Runtime Android :** honnêtement `BLOCKED / NOT_RUN`, ce qui interdit de
   valider la boucle Android sans contredire les verdicts OpenClaw limités à
   DeepSeek ni les `NO GO` remote/produit.
-- **Re-review :** à exécuter sur le HEAD après correctif et preuves ACK ; le
-  premier verdict `REJECTED` reste la référence tant qu’elle n’a pas eu lieu.
+- **Re-review (`72d5be4`) : `REJECTED`.** Nouveau **P1** : le contrôle de lacune
+  de séquence passait après le fallback « aucun événement », laissant passer un
+  snapshot `PLANNED` sur un flux incomplet. **Corrigé par `6d35b99`** : contrôle
+  déplacé avant le fallback, test « gap sans événement » rouge→vert ; **23/23**
+  ciblés, backend **371/1**. Les P2 ACK et SHA restent fermés.
+- **Troisième vérification :** en cours sur le HEAD final après `6d35b99` ; le
+  verdict `REJECTED` de la re-review reste la référence tant qu’elle n’a pas
+  conclu.
