@@ -7,12 +7,14 @@ Aucun push, PR ou merge distant effectué.
 
 ## V7-06A — fiabilisation V4 (2026-11-01)
 
-**Statut global : code corrigé et suites déterministes PASS ; qualification VM
-`BLOCKED_ENVIRONMENT` ; aucun test Pixel dans cette campagne.**
+**Statut global : code corrigé, suites déterministes PASS, qualification physique
+QA PASS ; qualification VM `BLOCKED_ENVIRONMENT` ; aucun test de l'application
+produit installée du propriétaire.**
 
 - Branche locale : `feat/atlas-v7-06a-v4-reliability`. Base observée :
   `55625299c364e1c71eba5924fcfe933af1852a2f`. Code intégré :
-  `be31d097fe0cf6a5bc50688b421bc9eecbbc847e`. Docs/registre : voir
+  `be31d097fe0cf6a5bc50688b421bc9eecbbc847e` + correctif présentation
+  `fbfa403ac0c28ad32a9c5995b31ebd36edc7924f`. Docs/registre : voir
   `REGISTRY_V7_06A.md` et `evidence/V7-06A_FINAL_REPORT.md`.
 - Cause racine exacte de V7-05 : **UNKNOWN** ; les audits A1/A2/A3 établissent un
   mécanisme de perte/non-reprise (réponse envoyée mais non reçue classée
@@ -28,8 +30,17 @@ Aucun push, PR ou merge distant effectué.
   - Connecteur `e0d9062` (P1 revue) : rejeu V4 par identité métier stable quand
     Relay renouvelle `session_id`/horodatages ; conflit conservé si payload/clé
     change ; non-V4 inchangé.
-- Résultats sur le code intégré : Android **895/895** JVM, lint PASS ; Node
-  **109/109** ; backend **348 passed / 1 skipped** ; `git diff --check` PASS.
+  - Android `fbfa403` (issu du débogage physique) : une passe de suivi sans
+    travail ne dégrade plus `SYNCED` en `RUNNING`/`NO_PENDING_SOURCE` ; test JVM
+    ajouté.
+- Résultats sur le code intégré : Android **896/896** JVM (895 avant le correctif
+  de présentation), lint PASS ; Node **109/109** ; backend
+  **348 passed / 1 skipped** ; `git diff --check` PASS.
+- **Qualification physique QA : PASS** sur Pixel 9 Pro XL / Android 17 / API 37.1,
+  paquet séparé `dev.atlas.coach.qa4` (app propriétaire, données et HOME intacts) :
+  test strict `OK (1 test)`, 14 étapes, `SYNCED pending=0`, plan v2, DAY_PLAN
+  v2→v3, ACTIVITY_STATUS v2, oracle Core PASS. Preuve :
+  `evidence/V7-06A_PHYSICAL_QA.md` et `V7-06A_PHYSICAL_QA_TRACE.md`.
 - Tests rouges reproduits puis verts : perte consentement/plan, collision
   `request_id`, session obsolète, reçu après redémarrage, consentement incertain,
   enveloppe Relay renouvelée (mémoire et redémarrage). P2 documentés.
@@ -40,18 +51,24 @@ Aucun push, PR ou merge distant effectué.
   Nettoyage : AVD/stack arrêtés, conteneur supprimé, jetons synthétiques supprimés,
   services live intacts. Preuve : `evidence/V7-06A_VM_BLOCKED.md`.
 - Revue indépendante : pré-VM `CORRECTION_REQUIRED` (1 P1) → P1 corrigé et testé
-  → revue finale **`ACCEPTED`** sur `a3ebc10`, aucun P0/P1 ; P2 documentés.
+  → revue finale **`ACCEPTED`** sur `a3ebc10`, aucun P0/P1 ; delta physique
+  **`ACCEPTED`** sur `b918755` ; P2 documentés.
 - Verdicts : `GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`, `GO_V4_RECONCILIATION` =
-  **GO déterministe** (pas une preuve VM/Pixel) ; `GO_VM_V4_E2E` = **NO GO —
-  BLOCKED_ENVIRONMENT** ; `GO_REMOTE_CHAT_VM` et `GO_PLAN_REVISION_VM` =
-  **NO GO — NOT_RUN** ; `GO_PIXEL` et `GO_PRODUCT_REMOTE` = **NO GO**.
+  **GO** (preuve physique QA + suites déterministes) ; `GO_PHYSICAL_QA_V4_E2E` =
+  **GO** (paquet QA séparé) ; `GO_VM_V4_E2E` = **NO GO — BLOCKED_ENVIRONMENT** ;
+  `GO_REMOTE_CHAT_VM` et `GO_PLAN_REVISION_VM` = **NO GO — NOT_RUN** ;
+  `GO_PIXEL` = **NO GO** (aucun test de l'application produit installée) ;
+  `GO_PRODUCT_REMOTE` = **NO GO**.
 - Prochaines actions : réexécuter VM-1 sur un AVD API 37 sain (nouveau boot
-  vérifié), puis VM-2 seulement après VM-1 PASS ; une preuve Pixel reste requise
-  pour `GO_PIXEL`/`GO_PRODUCT_REMOTE`. Les P2 (validation stricte du reçu,
-  accumulation des travaux immédiats, inversion potentielle de verrous) restent
-  ouverts. L'audit d'accès résiduel live (`pixel-v7`, `r3c-pixel-final`, bearer
-  Android encore GRANTED v2 côté Core) n'a **pas** été remédié : action sensible
-  soumise à autorisation ciblée et sauvegarde.
+  vérifié), puis VM-2 seulement après VM-1 PASS ; si le propriétaire le souhaite,
+  tester l'**application produit installée** après sauvegarde app-only et
+  autorisation ciblée, seul chemin vers `GO_PIXEL`/`GO_PRODUCT_REMOTE` ; demander
+  l'autorisation de désinstaller les paquets QA `.qa`, `.qa2`, `.qa3`, `.qa4`.
+  Les P2 (validation stricte du reçu, accumulation des travaux immédiats,
+  inversion potentielle de verrous, indicateur `SYNCED` pendant un nouveau
+  consentement) restent ouverts. L'audit d'accès résiduel live (`pixel-v7`,
+  `r3c-pixel-final`, bearer Android encore GRANTED v2 côté Core) n'a **pas** été
+  remédié : action sensible soumise à autorisation ciblée et sauvegarde.
 - Interdictions maintenues : aucun ADB/tests instrumentés sur le Pixel physique,
   aucun push/PR/merge distant, aucun service live modifié, un seul opérateur
   ADB/AVD à la fois.

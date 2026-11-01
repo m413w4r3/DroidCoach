@@ -13,20 +13,29 @@
 
 Registre détaillé : `REGISTRY_V7_06A.md`. Rapport final : `V7-06A_FINAL_REPORT.md`.
 
-- Code intégré : `be31d097fe0cf6a5bc50688b421bc9eecbbc847e` ; docs finales :
-  `a3ebc10b7509fd4426e3c3402a27d6ff18483156`.
-- Android JVM **895/895** + lint PASS ; Node **109/109** ; backend
-  **348 passed / 1 skipped** ; `git diff --check` PASS.
+- Code intégré : `be31d097fe0cf6a5bc50688b421bc9eecbbc847e` + correctif
+  présentation `fbfa403ac0c28ad32a9c5995b31ebd36edc7924f` ; docs finales :
+  `a3ebc10b7509fd4426e3c3402a27d6ff18483156` puis mises à jour QA.
+- Android JVM **896/896** (895 avant le correctif de présentation) + lint PASS ;
+  Node **109/109** ; backend **348 passed / 1 skipped** ; `git diff --check` PASS.
 - P1 de revue (rejeu après renouvellement d'enveloppe Relay) corrigé `e0d9062`,
-  tests rouges→verts ; revue finale **`ACCEPTED`**, aucun P0/P1 ; P2 documentés.
+  tests rouges→verts ; revue finale **`ACCEPTED`** sur `a3ebc10`, delta physique
+  **`ACCEPTED`** sur `b918755` ; P2 documentés.
+- **Qualification physique QA : PASS** sur Pixel 9 Pro XL / Android 17 / API 37.1,
+  paquet séparé `dev.atlas.coach.qa4` (app propriétaire, données et HOME intacts) :
+  14 étapes, `SYNCED`, plan v2, consentements v2/v3, oracle Core PASS. Un défaut
+  de présentation (passe de suivi écrasant `SYNCED`) a été trouvé et corrigé
+  `fbfa403`.
 - VM-1 : **`BLOCKED_ENVIRONMENT`** (AVD API 37 non booté après trois tentatives) ;
   aucun APK installé, aucune instrumentation, aucun oracle Core, aucun VM-1/VM-2.
 - Verdicts : `GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`,
-  `GO_V4_RECONCILIATION` = **GO déterministe** (pas une preuve VM/Pixel) ;
-  `GO_VM_V4_E2E` = **NO GO — BLOCKED_ENVIRONMENT** ; `GO_REMOTE_CHAT_VM` et
-  `GO_PLAN_REVISION_VM` = **NO GO — NOT_RUN** ; `GO_PIXEL` et
-  `GO_PRODUCT_REMOTE` = **NO GO**.
-- Aucun push, PR ni merge distant ; aucun ADB sur le Pixel physique.
+  `GO_V4_RECONCILIATION` = **GO** (physique QA + suites) ;
+  `GO_PHYSICAL_QA_V4_E2E` = **GO** (paquet QA séparé) ; `GO_VM_V4_E2E` =
+  **NO GO — BLOCKED_ENVIRONMENT** ; `GO_REMOTE_CHAT_VM` et
+  `GO_PLAN_REVISION_VM` = **NO GO — NOT_RUN** ; `GO_PIXEL` = **NO GO** (aucun
+  test de l'application produit installée) ; `GO_PRODUCT_REMOTE` = **NO GO**.
+- Aucun push, PR ni merge distant ; aucun test sur l'application produit installée
+  du propriétaire ; les paquets QA séparés ont été utilisés.
 
 ## 1. Contraintes d'exécution
 

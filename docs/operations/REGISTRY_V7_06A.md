@@ -39,7 +39,8 @@ identité, appairage, consentements, plan et serveur de test synthétiques neufs
 | V7-06A-FIX-PC | Reçu consentement après restart, rejeu uncertain ciblé | TEST-PC | FINISHED — commit `51e3e00`, intégré `39746bd` ; Node 106, backend 348 | `df555254-e385-4cde-a714-a011fc8c6286` | `/tmp/atlas-v7-06a-fix-pc` | `evidence/V7-06A_FIX.md` |
 | V7-06A-FIX-PC-R2 | Rejeu V4 quand Relay renouvelle l'enveloppe (P1 revue) | REVIEW `b04a5ff` | FINISHED — commit `e0d9062`, intégré `be31d09` ; 109/109 tests Node, tsc PASS | `1dcb69b6-82cc-4ef4-8a13-25d54eed0115` | `/tmp/atlas-v7-06a-fix-pc-r2` | Test rouge puis vert : même corps/clé/request_id, nouvelle session/horodatages → reçu rejoué, un seul POST |
 | V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | Code `be31d09` | **BLOCKED_ENVIRONMENT** — boot AVD incomplet après 3 tentatives ; aucun APK installé, aucune instrumentation, aucun VM-1/VM-2 ; commit `6dfae8b` | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | `/tmp/atlas-v7-06a-vm` | Preuve : `evidence/V7-06A_VM_BLOCKED.md` |
-| V7-06A-REVIEW | Revue indépendante (sécurité, idempotence, révocation) | FIX `b04a5ff` / finale `a3ebc10` | FINISHED — pré-VM `CORRECTION_REQUIRED` (1 P1) ; **finale `ACCEPTED`**, aucun P0/P1, P2 documentés | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | `/tmp/atlas-v7-06a-review` | P1 clos ; rapport/verdicts cohérents ; suites non rejouées par le relecteur |
+| V7-06A-PHYSICAL-QA | Débogage et qualification sur téléphone physique, paquet QA séparé | Code `be31d09` + correctif `fbfa403` | FINISHED — Pixel 9 Pro XL API 37.1, QA4 strict **PASS** 14 étapes + oracle Core PASS ; revue ciblée **ACCEPTED** (`b918755`) ; app propriétaire/HOME intacts | parent, opérateur unique ADB/AVD | `/tmp/atlas-v7-06a-physical-qa` | Preuve : `evidence/V7-06A_PHYSICAL_QA.md` |
+| V7-06A-REVIEW | Revue indépendante (sécurité, idempotence, révocation) | FIX `b04a5ff` / finale `a3ebc10` / physique `b918755` | FINISHED — pré-VM `CORRECTION_REQUIRED` (1 P1) ; **finale `ACCEPTED`** sur `a3ebc10` ; **delta physique `ACCEPTED`** sur `b918755`, aucun P0/P1, P2 documentés | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | `/tmp/atlas-v7-06a-review` | P1 clos ; correctif présentation et preuve QA cohérents ; suites non rejouées par le relecteur |
 
 ## 3. Preuves historiques conservées
 
@@ -140,22 +141,53 @@ Audit lecture seule réalisé sans ADB ni modification live ; preuve
 - Preuve : `evidence/V7-06A_VM_BLOCKED.md`. Commit du harnais non exécuté :
   `6dfae8b`, intégré `f2d4474`.
 
+## 3octies. Qualification physique de substitution (2026-11-01)
+
+- Le propriétaire a branché son téléphone physique et autorisé le débogage. Pour ne
+  pas toucher son application, ses données, son Keystore ni son rôle HOME, une
+  variante QA séparée `dev.atlas.coach.qa4` (label `ATLAS QA`, données/Keystore
+  propres, certificat debug) a été installée ; l'app `dev.atlas.coach` et HOME
+  `dev.atlas.coach/.app.LauncherActivity` sont restés inchangés.
+- Appareil : Pixel 9 Pro XL, Android 17 / API 37.1 ; série non publiée. Stack
+  isolée Core `127.0.0.1:8110`, relais épinglé `127.0.0.1:4412`, connecteur
+  `127.0.0.1:4411`, appairage synthétique neuf ; `adb reverse tcp:4412` ; aucun
+  service live, aucun appairage/donnée du Pixel antérieur réutilisé.
+- Test strict `V7_06A_VmConsentSyncInstrumentedTest` : **PASS**, `OK (1 test)`,
+  3,08 s, 14 étapes, présentation `SYNCED pending=0`, plan v2, DAY_PLAN
+  GRANTED v2 → REVOKED v3, ACTIVITY_STATUS GRANTED v2, 75 événements de trace.
+  Oracle Core : **PASS** (3 événements, capture plan v2/consent v2, aucun doublon
+  d'idempotence, aucune quarantaine). Trace expurgée :
+  `evidence/V7-06A_PHYSICAL_QA_TRACE.md`.
+- Défaut découvert : une passe de suivi sans travail écrasait `SYNCED` en
+  `RUNNING`/`NO_PENDING_SOURCE` (échecs stricts `.qa` et `.qa3`). Correctif
+  `fbfa403` : ne plus enregistrer `RUNNING` si l'état précédent est `SYNCED` ;
+  test JVM `CoreV4SyncWorkerPresentationTest`. Le run strict `.qa4` est PASS.
+- Revue ciblée du delta : **`ACCEPTED`** (`b918755`), aucun P0/P1. P2 : un nouveau
+  consentement après `SYNCED` peut laisser `SYNCED` visible pendant la passe
+  réelle ; les résumés doivent dire « aucun test physique de l'application
+  produit installée », pas « aucun test physique ».
+- Nettoyage : stack arrêtée, conteneur supprimé, jetons/pairing/DB/état isolés
+  supprimés, `adb reverse` retiré. Les paquets QA `.qa`, `.qa2`, `.qa3`, `.qa4`
+  et leurs tests restent installés ; désinstallation soumise à autorisation
+  distincte. Aucun test VM-2, chat ou révision de plan.
+
 ## 4. Verdicts (état 2026-11-01)
 
 | Verdict | Résultat | Preuve / limite |
 |---|---|---|
-| `GO_V4_CONSENT_SYNC` | **GO déterministe** | JVM 895/895, Node 109/109, backend 348/1 ; rejeu perte/enveloppe renouvelée ; VM non exécutée |
-| `GO_V4_PLAN_SYNC` | **GO déterministe** | reçu plan C1b, aucun succès fictif ; VM non exécutée |
-| `GO_V4_RECONCILIATION` | **GO déterministe** | révocation v3 prioritaire, non-régression, backend ; VM non exécutée |
-| `GO_VM_V4_E2E` | **NO GO — BLOCKED_ENVIRONMENT** | AVD non booté ; aucun APK installé, aucune instrumentation |
+| `GO_V4_CONSENT_SYNC` | **GO** | preuve physique QA (Pixel API 37.1, 14 étapes, oracle PASS) + JVM 896/896 + Node 109/109 + backend 348/1 |
+| `GO_V4_PLAN_SYNC` | **GO** | reçu plan physique v2, rejeu même clé, JVM/Node/backend |
+| `GO_V4_RECONCILIATION` | **GO** | révocation physique v3, hors-ligne sans ACK fictif, oracle Core |
+| `GO_PHYSICAL_QA_V4_E2E` | **GO** | paquet QA séparé `.qa4` sur téléphone physique ; **pas** l’app produit installée |
+| `GO_VM_V4_E2E` | **NO GO — BLOCKED_ENVIRONMENT** | AVD non booté ; l’équivalent physique QA a passé, mais le gate VM reste non exécuté |
 | `GO_REMOTE_CHAT_VM` | **NO GO — NOT_RUN** | VM-2 non lancée ; aucun modèle réel prouvé |
 | `GO_PLAN_REVISION_VM` | **NO GO — NOT_RUN** | VM-2 non lancée |
-| `GO_PIXEL` | **NO GO** | aucun test physique dans cette campagne ; Pixel non reconnecté |
-| `GO_PRODUCT_REMOTE` | **NO GO** | exige une preuve physique plan/ACK absente |
+| `GO_PIXEL` | **NO GO** | aucun test physique de l’**application produit installée** ; le paquet QA séparé a passé |
+| `GO_PRODUCT_REMOTE` | **NO GO** | exige une preuve physique produit plan/ACK absente |
 
-Les trois GO déterministes ne constituent pas une preuve VM ou Pixel : ils
-établissent les mécanismes et les non-régressions sur transports/stockages simulés
-et sur le Core de test. Un succès VM n’est jamais converti en preuve Pixel.
+Les GO V4 sont adossés à la preuve physique QA et aux suites déterministes ; ils
+ne constituent ni une preuve VM ni une preuve de l’application produit installée.
+Un succès VM ou QA n’est jamais converti en preuve Pixel produit.
 
 ## 5. Journal des sessions
 
@@ -174,6 +206,7 @@ et sur le Core de test. Un succès VM n’est jamais converti en preuve Pixel.
 | 2026-11-01 | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | REVIEW finale | codex / gpt-6-luna / xhigh | FINISHED — `ACCEPTED` sur `a3ebc10`, aucun P0/P1 |
 | 2026-11-01 | `1dcb69b6-82cc-4ef4-8a13-25d54eed0115` | FIX PC R2 | codex / gpt-6-luna / xhigh | FINISHED — `e0d9062`, intégré `be31d09`, Node 109/109 |
 | 2026-11-01 | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | VM | codex / gpt-6-luna / xhigh | FINISHED — `BLOCKED_ENVIRONMENT`, commit `6dfae8b`, AVD/stack arrêtés, jetons supprimés |
+| 2026-11-01 | parent (opérateur unique ADB/AVD) | PHYSICAL QA | — (aucun enfant créé) | FINISHED — Pixel 9 Pro XL API 37.1, QA4 strict PASS 14 étapes, oracle PASS, correctif `fbfa403`, app propriétaire/HOME intacts |
 
 ## 6. Décisions d’orchestration
 

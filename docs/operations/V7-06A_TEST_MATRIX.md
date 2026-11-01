@@ -73,6 +73,19 @@ par les tests Node C5d/C5e sur journal et enveloppe renouvelée, et par les test
 C1a/C1b. VM-1 couvre l'intégration réelle consentements/DayPlan/reçu, la coupure
 réseau, l'absence d'ACK fictif et la réconciliation de révocation.
 
+## 4bis. Qualification physique QA (2026-11-01)
+
+| ID | Scénario | Résultat |
+|---|---|---|
+| PHY1 | Pixel 9 Pro XL API 37.1, paquet QA séparé `dev.atlas.coach.qa4`, stack isolée, `adb reverse tcp:4412`, appairage synthétique neuf | **PASS strict** — 14 étapes, `OK (1 test)`, `SYNCED pending=0`, plan v2, DAY_PLAN v2→v3, ACTIVITY_STATUS v2, oracle Core PASS |
+| PHY2 | Passe de suivi sans travail après un sync réussi | **PASS après correctif `fbfa403`** — le statut reste `SYNCED` ; sans le correctif, `.qa`/`.qa3` observaient `RUNNING`/`NO_PENDING_SOURCE` |
+| PHY3 | Perte de réponse WS injectée, redémarrage connecteur au milieu d'un consentement | **NOT_RUN** — non revendiqué ; couvert par les tests Node/JVM C5d/C5e et C1a/C1b |
+
+L'application `dev.atlas.coach` du propriétaire, ses données et son rôle HOME ne
+sont pas touchés ; `GO_PIXEL` n'est pas accordé pour l'application produit
+installée. Preuves : `evidence/V7-06A_PHYSICAL_QA.md`,
+`V7-06A_PHYSICAL_QA_TRACE.md`.
+
 ## 5. Règles d'exécution
 
 - Les tests C1–C8 sans appareil tournent sur JVM/Node/pytest, avec des données
