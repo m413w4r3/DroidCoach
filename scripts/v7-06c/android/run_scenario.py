@@ -425,13 +425,13 @@ def _adb(serial: str, *arguments: str, timeout: int = 20) -> str:
     return result.stdout.strip()
 
 
-def _device_metadata(serial: str, require_api: int) -> dict:
+def _device_metadata(serial: str, require_api: int, *, enforce_physical_qa: bool = True) -> dict:
     if not isinstance(serial, str) or not serial.strip() or any(char.isspace() for char in serial):
         raise ScenarioFailure("EXPLICIT_SERIAL_REQUIRED")
     if _adb(serial, "get-state") != "device":
         raise ScenarioFailure("SELECTED_DEVICE_NOT_READY")
     is_emulator = _adb(serial, "shell", "getprop", "ro.kernel.qemu") == "1"
-    if not is_emulator and os.environ.get("ATLAS_ALLOW_PHYSICAL_QA") != "1":
+    if enforce_physical_qa and not is_emulator and os.environ.get("ATLAS_ALLOW_PHYSICAL_QA") != "1":
         raise ScenarioFailure("PHYSICAL_QA_NOT_AUTHORIZED")
     sdk_text = _adb(serial, "shell", "getprop", "ro.build.version.sdk")
     try:
@@ -529,6 +529,49 @@ def _reverse_has_port(lines: set[str], port: int) -> bool:
     return any(pattern.search(line) for line in lines)
 
 
+def _private_stack_file(path: Path, root: Path, expected_name: str, error_code: str) -> Path:
+    if path.is_symlink():
+        raise ScenarioFailure(error_code)
+    try:
+        resolved = path.resolve(strict=True)
+        if (not resolved.is_file() or not resolved.is_relative_to(root.resolve(strict=True))
+                or resolved.name != expected_name or stat.S_IMODE(resolved.stat().st_mode) != 0o600):
+            raise ScenarioFailure(error_code)
+    except OSError:
+        raise ScenarioFailure(error_code) from None
+    return resolved
+
+
+def _check_private_log_text(text: str, secrets_list: list[str], serial: str, device_id: str) -> None:
+    if any(secret and secret in text for secret in [*secrets_list, serial, device_id]):
+        raise ScenarioFailure("ANDROID_LOG_PRIVATE_VALUE_LEAK")
+    bearer_values = re.findall(r"(?i)\bBearer\s+([^\s,}]+)", text)
+    if any(value.lower() not in {"<redacted>", "[redacted]", "redacted"} for value in bearer_values):
+        raise ScenarioFailure("ANDROID_LOG_BEARER_PRESENT")
+
+
+def _line_field(line: str, name: str) -> str | None:
+    match = re.search(rf"(?:^|\s){re.escape(name)}=([^\s]+)(?=\s|$)", line)
+    return match.group(1) if match else None
+
+
+def select_ack_attestation(logcat_text: str, ack_id: str, ack_state: str,
+                           secrets_list: list[str], serial: str, device_id: str) -> str:
+    _check_private_log_text(logcat_text, secrets_list, serial, device_id)
+    matching = [
+        line for line in logcat_text.splitlines()
+        if _line_field(line, "step") == "11"
+        and _line_field(line, "result") == "PASS"
+        and _line_field(line, "ack_replay") == "identical"
+        and _line_field(line, "ack_id") == ack_id
+        and _line_field(line, "ack_state") == ack_state
+    ]
+    if len(matching) != 1:
+        code = "ANDROID_ACK_REPLAY_ATTESTATION_MISSING" if not matching else "ANDROID_ACK_REPLAY_ATTESTATION_AMBIGUOUS"
+        raise ScenarioFailure(code)
+    return redact_text(matching[0], [*secrets_list, serial, device_id])
+
+
 def _run_runner(serial: str, action: str, stack_path: Path, suffix: str, root: Path,
                 secrets_list: list[str]) -> tuple[str, dict]:
     package = validate_target_package(f"{PRODUCT_PACKAGE}{suffix}")
@@ -556,28 +599,13 @@ def _run_runner(serial: str, action: str, stack_path: Path, suffix: str, root: P
         raise ScenarioFailure("ANDROID_LOGCAT_ATTESTATION_MISSING")
     logcat_candidate = Path(logcat_values[0])
     expected_logcat_name = f"android-{action}-{suffix.rsplit('.', 1)[-1]}.logcat.txt"
-    if logcat_candidate.is_symlink():
-        raise ScenarioFailure("ANDROID_LOGCAT_PATH_INVALID")
     try:
-        logcat_path = logcat_candidate.resolve(strict=True)
-        if (not logcat_path.is_relative_to(root.resolve(strict=True))
-                or logcat_path.name != expected_logcat_name
-                or stat.S_IMODE(logcat_path.stat().st_mode) != 0o600):
-            raise ScenarioFailure("ANDROID_LOGCAT_PATH_INVALID")
+        logcat_path = _private_stack_file(logcat_candidate, root, expected_logcat_name,
+                                          "ANDROID_LOGCAT_PATH_INVALID")
         logcat_text = logcat_path.read_text(encoding="utf-8", errors="replace")
-        logcat_lines = logcat_text.splitlines()
     except OSError:
         raise ScenarioFailure("ANDROID_LOGCAT_ATTESTATION_MISSING") from None
-    if any(secret and secret in logcat_text for secret in secrets_list) or serial in logcat_text:
-        raise ScenarioFailure("ANDROID_LOGCAT_PRIVATE_VALUE_LEAK")
-    bearer_values = re.findall(r"(?i)\bBearer\s+([^\s,}]+)", logcat_text)
-    if any(value.lower() not in {"<redacted>", "[redacted]", "redacted"} for value in bearer_values):
-        raise ScenarioFailure("ANDROID_LOGCAT_BEARER_PRESENT")
-    attestation_lines = [line for line in logcat_lines
-                         if "step=11 result=PASS" in line and "ack_replay=identical" in line]
-    if len(attestation_lines) != 1:
-        raise ScenarioFailure("ANDROID_ACK_REPLAY_ATTESTATION_MISSING")
-    ack_replay_line = redact_text(attestation_lines[0], [*secrets_list, serial])
+    _check_private_log_text(output, secrets_list, serial, "")
     if f"install_target={serial} package={package} action={action}" not in result.stdout:
         raise ScenarioFailure("ANDROID_RUNNER_PACKAGE_MISMATCH")
     apks: dict[str, str] = {}
@@ -597,10 +625,62 @@ def _run_runner(serial: str, action: str, stack_path: Path, suffix: str, root: P
         "package": package,
         "runner_log": str(log_path),
         "apk_sha256": apks,
-        "ack_replay_attested": True,
+        "ack_replay_attested": False,
         "logcat_path": str(logcat_path),
         "logcat_sha256": sha256_file(logcat_path),
-        "ack_replay_line": ack_replay_line,
+        "ack_replay_line": None,
+    }
+
+
+def _read_existing_runner(root: Path, action: str, suffix: str, serial: str, device_id: str,
+                          secrets_list: list[str], app_apk: Path | None,
+                          test_apk: Path | None) -> tuple[str, dict]:
+    package = validate_target_package(f"{PRODUCT_PACKAGE}{suffix}")
+    suffix_id = suffix.rsplit(".", 1)[-1]
+    runner_path = _private_stack_file(
+        root / f"android-{action}-{suffix_id}.runner.log", root,
+        f"android-{action}-{suffix_id}.runner.log", "ANDROID_RUNNER_LOG_INVALID",
+    )
+    try:
+        runner_text = runner_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raise ScenarioFailure("ANDROID_RUNNER_LOG_INVALID") from None
+    _check_private_log_text(runner_text, secrets_list, serial, device_id)
+    marker = f"V7_06B_RUNTIME_PASS action={action} package={package}"
+    if marker not in runner_text.splitlines():
+        raise ScenarioFailure("ANDROID_RUNNER_PASS_MARKER_MISSING")
+    if not any(f"package={package} action={action}" in line for line in runner_text.splitlines()):
+        raise ScenarioFailure("ANDROID_RUNNER_PACKAGE_MISMATCH")
+    logcat_values = [line.partition("=")[2].strip() for line in runner_text.splitlines()
+                     if line.startswith("logcat_redacted=")]
+    if len(logcat_values) != 1:
+        raise ScenarioFailure("ANDROID_LOGCAT_ATTESTATION_MISSING")
+    expected_logcat_name = f"android-{action}-{suffix_id}.logcat.txt"
+    logcat_path = _private_stack_file(Path(logcat_values[0]), root, expected_logcat_name,
+                                      "ANDROID_LOGCAT_PATH_INVALID")
+
+    apk_hashes: dict[str, str] = {}
+    apk_paths = {"app": app_apk, "android_test": test_apk}
+    for name, apk_path in apk_paths.items():
+        if apk_path is None:
+            continue
+        if apk_path.is_symlink():
+            raise ScenarioFailure("ANDROID_APK_PATH_INVALID")
+        try:
+            apk = apk_path.resolve(strict=True)
+            if not apk.is_file() or not apk.is_relative_to((ROOT / "android").resolve(strict=True)):
+                raise ScenarioFailure("ANDROID_APK_PATH_INVALID")
+        except OSError:
+            raise ScenarioFailure("ANDROID_APK_PATH_INVALID") from None
+        apk_hashes[name] = sha256_file(apk)
+    return marker, {
+        "package": package,
+        "runner_log": str(runner_path),
+        "apk_sha256": apk_hashes if apk_hashes else None,
+        "ack_replay_attested": False,
+        "logcat_path": str(logcat_path),
+        "logcat_sha256": sha256_file(logcat_path),
+        "ack_replay_line": None,
     }
 
 
@@ -666,8 +746,13 @@ def _write_evidence(evidence_dir: Path, proof: dict) -> tuple[Path, Path]:
     suffix = f"{proof['action']}-{uuid.uuid4().hex[:12]}"
     proof_path = evidence_dir / f"v7-06c-{suffix}.json"
     summary_path = evidence_dir / f"v7-06c-{suffix}.txt"
+    post_hoc_note = (
+        "Oracle post-hoc sur exécution réelle existante; aucune nouvelle exécution\n"
+        if proof.get("execution_mode") == "post_hoc_existing_stack" else ""
+    )
     summary = (
         f"V7-06C Android {proof['action'].upper()} — PASS\n"
+        f"{post_hoc_note}"
         f"Runner: V7_06B_RUNTIME_PASS\n"
         f"Core proposal: {proof['proposal_state']} base_version={proof['base_version']}\n"
         f"ACK: {proof['ack_state']} applied_plan_version={proof['applied_plan_version']}\n"
@@ -691,6 +776,49 @@ def _default_evidence_dir(root: Path, action: str) -> Path:
     if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o700:
         raise ScenarioFailure("EVIDENCE_NAMESPACE_NOT_PRIVATE")
     return namespace / f"evidence-{action}-{uuid.uuid4().hex[:12]}"
+
+
+def _build_proof(action: str, device: dict, pairing: dict, runner: dict, marker: str,
+                 core: dict, journal: dict, trace: dict, relay_endpoint: dict,
+                 network: str, adb_reverse_info: dict, execution_mode: str) -> dict:
+    return {
+        "schema_version": 1,
+        "status": "PASS",
+        "action": action,
+        "execution_mode": execution_mode,
+        "device": device,
+        "device_id_hash": sha256_text(pairing["device_id"]),
+        "runner": runner,
+        "runner_pass_marker": marker,
+        "ack_replay": "ATTESTED_BY_ANDROID_TEST",
+        "ack_event_count": core["ack_event_count"],
+        "ack_body_hash_match": "not_applicable",
+        "proposal_id": core["proposal_id"],
+        "plan_id": core["plan_id"],
+        "ack_id": core["ack_id"],
+        "proposal_state": core["proposal_state"],
+        "base_version": core["base_version"],
+        "confirmation_mode": "A0_USER_REVIEW",
+        "auto_application": "NONE_AT_CORE",
+        "change_count": core["change_count"],
+        "target_start_minute": core["target_start_minute"],
+        "duration_minutes": core["duration_minutes"],
+        "ack_state": core["ack_state"],
+        "ack_result_code": core["ack_result_code"],
+        "applied_plan_version": core["applied_plan_version"],
+        "snapshot_versions": core["snapshot_versions"],
+        "snapshot_starts": core["snapshot_starts"],
+        "consent_states": core["consent_states"],
+        "consent_event_count": core["consent_event_count"],
+        "pending_proposal_count": core["pending_proposal_count"],
+        "pull_count_after_runner": core["pending_proposal_count"],
+        "snapshot_count": core["snapshot_count"],
+        "connector_journal": journal,
+        "tool_trace": trace,
+        "network": network,
+        "network_endpoint": relay_endpoint,
+        "adb_reverse": adb_reverse_info,
+    }
 
 
 def run(args: argparse.Namespace) -> int:
@@ -728,47 +856,23 @@ def run(args: argparse.Namespace) -> int:
             [*secrets_list, pairing["device_id"]],
         )
         core = _read_core_state(Path(stack["core_db"]), args.action)
+        logcat_text = Path(runner["logcat_path"]).read_text(encoding="utf-8", errors="replace")
+        runner["ack_replay_line"] = select_ack_attestation(
+            logcat_text, core["ack_id"], core["ack_state"], secrets_list,
+            args.serial, pairing["device_id"],
+        )
+        runner["ack_replay_attested"] = True
         journal = verify_operation_journal(Path(stack["connector_state_dir"]), args.action, core)
         trace = verify_tool_trace(Path(stack["proxy_trace"]), str(stack.get("gateway_agent", "")))
-        proof = {
-            "schema_version": 1,
-            "status": "PASS",
-            "action": args.action,
-            "device": device,
-            "device_id_hash": sha256_text(pairing["device_id"]),
-            "runner": runner,
-            "runner_pass_marker": marker,
-            "ack_replay": "ATTESTED_BY_ANDROID_TEST",
-            "ack_event_count": core["ack_event_count"],
-            "ack_body_hash_match": "not_applicable",
-            "proposal_id": core["proposal_id"],
-            "plan_id": core["plan_id"],
-            "ack_id": core["ack_id"],
-            "proposal_state": core["proposal_state"],
-            "base_version": core["base_version"],
-            "confirmation_mode": "A0_USER_REVIEW",
-            "auto_application": "NONE_AT_CORE",
-            "change_count": core["change_count"],
-            "target_start_minute": core["target_start_minute"],
-            "duration_minutes": core["duration_minutes"],
-            "ack_state": core["ack_state"],
-            "ack_result_code": core["ack_result_code"],
-            "applied_plan_version": core["applied_plan_version"],
-            "snapshot_versions": core["snapshot_versions"],
-            "snapshot_starts": core["snapshot_starts"],
-            "consent_states": core["consent_states"],
-            "consent_event_count": core["consent_event_count"],
-            "pending_proposal_count": core["pending_proposal_count"],
-            "pull_count_after_runner": core["pending_proposal_count"],
-            "snapshot_count": core["snapshot_count"],
-            "connector_journal": journal,
-            "tool_trace": trace,
-            "network": "public_wss" if relay_mode == "public_wss" else (
+        proof = _build_proof(
+            args.action, device, pairing, runner, marker, core, journal, trace,
+            relay_endpoint,
+            "public_wss" if relay_mode == "public_wss" else (
                 "local_adb_reverse" if args.adb_reverse is True else "local_emulator_bridge"
             ),
-            "network_endpoint": relay_endpoint,
-            "adb_reverse": {"requested": args.adb_reverse is True, "added_by_wrapper": reverse_added},
-        }
+            {"requested": args.adb_reverse is True, "added_by_wrapper": reverse_added},
+            "normal_run",
+        )
         _assert_no_secret_leak(proof, secrets_list, pairing, private_values=(args.serial,))
     finally:
         if args.adb_reverse is True and reverse_before is not None:
@@ -785,6 +889,54 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
+def verify_existing(args: argparse.Namespace) -> int:
+    suffix = action_suffix(args.action, args.suffix)
+    stack_file_arg = args.stack_file if args.stack_file is not None else args.stack_root / "stack.json"
+    stack, root, pairing, secrets_list = _read_stack_file(stack_file_arg, args.action)
+    if not args.serial or any(character.isspace() for character in args.serial):
+        raise ScenarioFailure("EXPLICIT_SERIAL_REQUIRED")
+    device = _device_metadata(args.serial, args.require_api, enforce_physical_qa=False)
+    relay_mode, relay_endpoint = parse_android_relay_url(stack["relay_url_android"])
+    if stack["relay_transport"] != relay_mode:
+        raise ScenarioFailure("RELAY_TRANSPORT_MISMATCH")
+    if relay_endpoint["scheme"] == "ws" and relay_endpoint["host"] == "10.0.2.2":
+        if not device["is_emulator"]:
+            raise ScenarioFailure("EMULATOR_BRIDGE_REQUIRES_EMULATOR")
+        network = "local_emulator_bridge"
+    elif relay_mode == "public_wss":
+        network = "public_wss"
+    else:
+        network = "local_adb_reverse"
+
+    marker, runner = _read_existing_runner(
+        root, args.action, suffix, args.serial, pairing["device_id"], secrets_list,
+        args.app_apk, args.test_apk,
+    )
+    core = _read_core_state(Path(stack["core_db"]), args.action)
+    logcat_text = Path(runner["logcat_path"]).read_text(encoding="utf-8", errors="replace")
+    runner["ack_replay_line"] = select_ack_attestation(
+        logcat_text, core["ack_id"], core["ack_state"], secrets_list,
+        args.serial, pairing["device_id"],
+    )
+    runner["ack_replay_attested"] = True
+    journal = verify_operation_journal(Path(stack["connector_state_dir"]), args.action, core)
+    trace = verify_tool_trace(Path(stack["proxy_trace"]), str(stack.get("gateway_agent", "")))
+    proof = _build_proof(
+        args.action, device, pairing, runner, marker, core, journal, trace,
+        relay_endpoint, network,
+        {"requested": "not_observed", "added_by_wrapper": "not_applicable_post_hoc",
+         "state_restored": "not_checked_post_hoc"},
+        "post_hoc_existing_stack",
+    )
+    _assert_no_secret_leak(proof, secrets_list, pairing, private_values=(args.serial,))
+    evidence_dir = args.evidence_dir if args.evidence_dir is not None else _default_evidence_dir(root, args.action)
+    if evidence_dir.resolve(strict=False).is_relative_to(root.resolve(strict=True)):
+        raise ScenarioFailure("EVIDENCE_DIR_INSIDE_STACK")
+    proof_path, summary_path = _write_evidence(evidence_dir, proof)
+    print(f"V7_06C_EXISTING_RUNTIME_PASS action={args.action} proof={proof_path} summary={summary_path}")
+    return 0
+
+
 def assert_android_stack_empty(core_db: Path) -> None:
     connection = readonly_db(core_db)
     try:
@@ -797,7 +949,24 @@ def assert_android_stack_empty(core_db: Path) -> None:
         connection.close()
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "verify-existing":
+        parser = argparse.ArgumentParser(description="Read-only post-hoc oracle for an existing Android run")
+        parser.add_argument("--serial", required=True, help="explicit adb serial; read-only device metadata")
+        parser.add_argument("--action", choices=("apply", "reject"), required=True)
+        stack_group = parser.add_mutually_exclusive_group(required=True)
+        stack_group.add_argument("--stack-root", type=Path)
+        stack_group.add_argument("--stack-file", type=Path)
+        parser.add_argument("--suffix", required=True)
+        parser.add_argument("--evidence-dir", type=Path)
+        parser.add_argument("--require-api", type=int, default=37)
+        parser.add_argument("--app-apk", type=Path)
+        parser.add_argument("--test-apk", type=Path)
+        args = parser.parse_args(argv[1:])
+        args.execution_mode = "post_hoc_existing_stack"
+        return args
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True, help="explicit adb serial; no implicit device selection")
     parser.add_argument("--action", choices=("apply", "reject"), required=True)
@@ -812,21 +981,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--relay-url", help="optional assertion matching stack.json relay_url_android")
     parser.add_argument("--require-api", type=int, default=37)
     parser.add_argument("--evidence-dir", type=Path)
-    return parser.parse_args()
+    args = parser.parse_args(argv)
+    args.execution_mode = "normal_run"
+    return args
 
 
 def main() -> int:
     args = parse_args()
     try:
+        if args.execution_mode == "post_hoc_existing_stack":
+            return verify_existing(args)
         return run(args)
     except ScenarioFailure as exc:
-        print(f"V7_06C_RUNTIME_FAIL action={args.action} error_code={exc.code}")
+        prefix = "V7_06C_EXISTING_RUNTIME_FAIL" if args.execution_mode == "post_hoc_existing_stack" else "V7_06C_RUNTIME_FAIL"
+        print(f"{prefix} action={args.action} error_code={exc.code}")
         return 1
     except (OSError, sqlite3.Error, KeyError, TypeError, ValueError):
-        print(f"V7_06C_RUNTIME_FAIL action={args.action} error_code=ORACLE_INPUT_INVALID")
+        prefix = "V7_06C_EXISTING_RUNTIME_FAIL" if args.execution_mode == "post_hoc_existing_stack" else "V7_06C_RUNTIME_FAIL"
+        print(f"{prefix} action={args.action} error_code=ORACLE_INPUT_INVALID")
         return 1
     except Exception:
-        print(f"V7_06C_RUNTIME_FAIL action={args.action} error_code=HARNESS_FAILURE")
+        prefix = "V7_06C_EXISTING_RUNTIME_FAIL" if args.execution_mode == "post_hoc_existing_stack" else "V7_06C_RUNTIME_FAIL"
+        print(f"{prefix} action={args.action} error_code=HARNESS_FAILURE")
         return 1
 
 
