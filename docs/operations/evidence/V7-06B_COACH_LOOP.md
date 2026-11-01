@@ -24,12 +24,16 @@ son aperçu pour obtenir le plan approuvé v2. Il configure le relais et le Coac
 mandat `PROPOSALS_ONLY`, accorde les deux consentements, vérifie leur reçu, le reçu du plan
 v2, `FRESH` et `SYNCED`, puis envoie le scénario contrôlé à `sendAgentMessage`. Le contrôleur
 crée son `request_id` V4/clé d’idempotence UUID à chaque envoi; le harnais génère aussi un
-`run_id` et une clé d’idempotence de proposition propres au scénario.
+`run_id` et une clé d’idempotence de proposition à placer dans le prompt. Core remplace cette
+dernière par sa propre UUIDv5, dérivée du `request_id`, du device et du corps canonique; le test
+vérifie la clé réellement stockée sans la confondre avec celle du prompt.
 
 La réponse doit être connectée, avoir l’état d’outil `completed`, compter au moins deux
 appels et annoncer un seul identifiant de proposition. Le test ne déduit aucun nom d’outil
 du texte assistant. Il vérifie ensuite l’entrée inbox A0 / `NONE_AT_CORE`, sa révision
-unique, son absence de conflits et le décalage de dix minutes. APPLY passe par
+unique, son absence de conflits et le décalage de dix minutes. La durée peut être omise dans
+`changes`, mais le `diff.after.duration_minutes` doit rester strictement égal à la durée
+d’origine. APPLY passe par
 `PlanController.applyInboxProposal` comme `PlanScreen` (A0 suit `PlanRevisionEngine`, sans
 consentement A1); REJECT passe par
 `rejectInboxProposal`. Les deux chemins vérifient l’ACK durable après relecture disque, puis
@@ -47,12 +51,12 @@ n’arrête de services.
 
 | Oracle | Résultat | Preuve |
 |---|---|---|
-| `:app:assembleQa :app:assembleQaAndroidTest -PqaTestBuildType=qa -PqaSuffix=.qa.v706b.compile --offline` | `PASS` | `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleQa :app:assembleQaAndroidTest -PqaTestBuildType=qa -PqaSuffix=.qa.v706b.compile --offline`; `BUILD SUCCESSFUL` (build initial puis rebuild incrémental après les assertions Kotlin finales) |
+| `:app:assembleQa :app:assembleQaAndroidTest -PqaTestBuildType=qa -PqaSuffix=.qa.v706b.compile --offline` | `PASS` | `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleQa :app:assembleQaAndroidTest -PqaTestBuildType=qa -PqaSuffix=.qa.v706b.compile --offline`; `BUILD SUCCESSFUL` en 2 s, 67 tâches actionable (4 exécutées, dont `compileQaAndroidTestKotlin`) |
 | Présence de `V7_06B_CoachLoopInstrumentedTest` dans l’APK AndroidTest | `PASS` | Scan ZIP de `android/app/build/outputs/apk/androidTest/qa/app-qa-androidTest.apk`: classe trouvée dans `classes7.dex` (12 fichiers DEX); IDs vérifiés: `dev.atlas.coach.qa.v706b.compile` et `.test` |
-| `:app:testDebugUnitTest --offline` | `PASS` | `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest --offline`; `BUILD SUCCESSFUL`, 24 tâches actionable |
+| `:app:testDebugUnitTest --offline --rerun-tasks` | `PASS` | `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest --offline --rerun-tasks`; `BUILD SUCCESSFUL` en 34 s, 24 tâches exécutées |
 | Runtime ADB/AVD APPLY | `NOT_RUN` | Aucun ADB/AVD lancé par cette session |
 | Runtime ADB/AVD REJECT | `NOT_RUN` | Aucun ADB/AVD lancé par cette session |
-| Runner Python (`py_compile`, aide CLI) | `PASS` | Syntaxe compilée; `build --help` et `run --help` affichent les interfaces attendues |
+| Runner Python (`py_compile`, aide CLI, parser résultat) | `PASS` | Syntaxe compilée; aides CLI valides; simulation de 8 sorties: `INSTRUMENTATION_CODE: -1` et `OK (n test[s])` acceptés, marqueurs d’échec/code retour non nul/sortie sans succès refusés |
 | `git diff --check` | `PASS` | Vérification whitespace du diff final; aucun écart |
 
 ## Limites et reprise

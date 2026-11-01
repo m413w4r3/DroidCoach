@@ -199,12 +199,12 @@ class V7_06B_CoachLoopInstrumentedTest {
             )
 
             val runId = UUID.randomUUID().toString()
-            val proposalIdempotencyKey = UUID.randomUUID().toString()
-            assertTrue("run_id and proposal idempotency key must be independent", runId != proposalIdempotencyKey)
+            val promptIdempotencyKey = UUID.randomUUID().toString()
+            assertTrue("run_id and prompt idempotency key must be independent", runId != promptIdempotencyKey)
             val proposalIdsBefore = planController.inboxEntries.mapTo(mutableSetOf()) { it.proposal.proposalId }
             assertTrue("fresh qa inbox must have no previous proposal IDs", proposalIdsBefore.isEmpty())
             assertTrue("fresh qa package must have no previous chat messages", controller.agentConversation.isEmpty())
-            val message = syntheticCoachMessage(plan, activity, runId, proposalIdempotencyKey)
+            val message = syntheticCoachMessage(plan, activity, runId, promptIdempotencyKey)
             assertTrue("controlled chat message must fit the V4 request limit", message.length <= MAX_CHAT_MESSAGE_LENGTH)
             val assistantCountBefore = controller.agentConversation.count { it.role == AgentMessageRole.ASSISTANT }
             var sent = false
@@ -236,7 +236,7 @@ class V7_06B_CoachLoopInstrumentedTest {
             assertFalse("assistant reply must not reuse a previous proposal ID", proposalIdFromReply in proposalIdsBefore)
             Log.i(
                 LOG_TAG,
-                "step=05 result=PASS run_id=$runId proposal_idempotency_key=$proposalIdempotencyKey " +
+                "step=05 result=PASS run_id=$runId prompt_idempotency_key=$promptIdempotencyKey " +
                     "agent_status=${controller.agentStatus} tool_state=${toolMetadata.toolState} " +
                     "tool_call_count=${toolMetadata.toolCallCount} reply_proposal_id=$proposalIdFromReply",
             )
@@ -263,7 +263,14 @@ class V7_06B_CoachLoopInstrumentedTest {
             val inboxEntry = requireNotNull(receivedEntry) { "assistant proposal ID was not pulled into the local inbox" }
             assertEquals("fresh inbox must contain exactly one proposal", 1, planController.inboxEntries.size)
             assertEquals(proposalIdFromReply, inboxEntry.proposal.proposalId)
-            assertEquals(proposalIdempotencyKey, inboxEntry.proposal.idempotencyKey)
+            // Core owns the stored idempotency key and derives it from the chat request, device and canonical body.
+            val coreIdempotencyKey = inboxEntry.proposal.idempotencyKey
+            assertTrue("Core proposal idempotency key must not be empty", coreIdempotencyKey.isNotBlank())
+            assertTrue("Core proposal idempotency key must be a canonical UUID", isCanonicalUuid(coreIdempotencyKey))
+            assertFalse(
+                "Core must replace the prompt-supplied proposal idempotency key",
+                coreIdempotencyKey == promptIdempotencyKey,
+            )
             assertEquals(plan.planId, inboxEntry.proposal.planId)
             assertEquals(PLAN_VERSION_APPROVED.toLong(), inboxEntry.proposal.baseVersion)
             assertEquals(InboxV4ConfirmationMode.A0_USER_REVIEW, inboxEntry.proposal.confirmationMode)
@@ -278,15 +285,28 @@ class V7_06B_CoachLoopInstrumentedTest {
                 activity.scheduledLocal.startMinute + RESCHEDULE_MINUTES,
                 (change[CHANGE_TARGET_START] as? Number)?.toInt(),
             )
+            if (change.containsKey(CHANGE_DURATION)) {
+                assertEquals(
+                    activity.scheduledLocal.durationMinutes,
+                    (change[CHANGE_DURATION] as? Number)?.toInt(),
+                )
+            }
+            assertEquals("proposal diff must describe the single reschedule", 1, inboxEntry.proposal.diff.size)
+            val diff = inboxEntry.proposal.diff.single()
+            assertEquals("reschedule", diff[CHANGE_OP])
+            assertEquals(activity.activityId, diff[CHANGE_ACTIVITY_ID])
+            val after = diff[CHANGE_AFTER] as? Map<*, *> ?: error("proposal diff after must be an object")
             assertEquals(
+                "proposal diff must retain the original activity duration",
                 activity.scheduledLocal.durationMinutes,
-                (change[CHANGE_DURATION] as? Number)?.toInt(),
+                (after[CHANGE_DURATION] as? Number)?.toInt(),
             )
             Log.i(
                 LOG_TAG,
                 "step=06 result=PASS proposal_id=${inboxEntry.proposal.proposalId} " +
                     "state=${inboxEntry.proposal.state} confirmation=A0_USER_REVIEW auto_application=$NONE_AT_CORE " +
-                    "base_version=${inboxEntry.proposal.baseVersion} changes=1 conflicts=0",
+                "base_version=${inboxEntry.proposal.baseVersion} changes=1 conflicts=0 " +
+                    "core_idempotency_key=$coreIdempotencyKey",
             )
 
             val currentDayConsent = syncStore.consent(CoreV4Category.DAY_PLAN).snapshot
@@ -558,7 +578,7 @@ class V7_06B_CoachLoopInstrumentedTest {
         plan: DayPlan,
         activity: PlanActivity,
         runId: String,
-        proposalIdempotencyKey: String,
+        promptIdempotencyKey: String,
     ): String = "Décale mon activité de travail de 10 minutes et présente-moi la modification à confirmer. " +
         "run_id=$runId. Appelle atlas_get_day_plan pour local_date=${plan.localDate}; vérifie exactement " +
         "plan_id=${plan.planId} et version=${PLAN_VERSION_APPROVED}. Ensuite appelle " +
@@ -566,7 +586,7 @@ class V7_06B_CoachLoopInstrumentedTest {
         "base_version=${PLAN_VERSION_APPROVED}, activity_id=${activity.activityId}, op=reschedule, " +
         "target_start_minute=${activity.scheduledLocal.startMinute + RESCHEDULE_MINUTES}, " +
         "duration_minutes=${activity.scheduledLocal.durationMinutes} (inchangée), " +
-        "idempotency_key=$proposalIdempotencyKey. Ne crée aucune autre proposition et n'applique rien."
+        "idempotency_key=$promptIdempotencyKey. Ne crée aucune autre proposition et n'applique rien."
 
     private fun parseToolMetadata(text: String): ToolMetadata {
         val metadataIndex = text.lastIndexOf(TOOLS_PROVENANCE_LABEL)
@@ -722,6 +742,7 @@ class V7_06B_CoachLoopInstrumentedTest {
         const val CHANGE_ACTIVITY_ID = "activity_id"
         const val CHANGE_TARGET_START = "target_start_minute"
         const val CHANGE_DURATION = "duration_minutes"
+        const val CHANGE_AFTER = "after"
         const val TOOLS_PROVENANCE_LABEL = "État des outils"
         const val MAX_CHAT_MESSAGE_LENGTH = 2_000
         const val PRIVATE_FILE_MODE = 0x180

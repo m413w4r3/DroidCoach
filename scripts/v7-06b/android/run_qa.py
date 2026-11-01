@@ -159,6 +159,18 @@ def sanitized(text: str, secrets: Sequence[str]) -> str:
     return BEARER_PATTERN.sub("Bearer <redacted>", text)
 
 
+def instrumentation_failure_reason(returncode: int, output: str) -> str | None:
+    if returncode != 0:
+        return f"adb exited with status {returncode}"
+    if re.search(r"FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed", output, re.IGNORECASE):
+        return "instrumentation output contains a failure marker"
+    has_ok_summary = re.search(r"\bOK\s+\(\d+\s+tests?\)", output) is not None
+    has_success_code = "INSTRUMENTATION_CODE: -1" in output
+    if not has_ok_summary and not has_success_code:
+        return "instrumentation output has no success summary or Activity.RESULT_OK code"
+    return None
+
+
 def adb(serial: str, *arguments: str) -> str:
     return command_output(["adb", "-s", serial, *arguments])
 
@@ -354,8 +366,9 @@ def run(args: argparse.Namespace) -> int:
         print(sanitized(test_result.stderr, secret_values), file=sys.stderr, end="")
     print(f"logcat_redacted={log_path}")
     instrumentation_output = test_result.stdout + test_result.stderr
-    if test_result.returncode != 0 or "INSTRUMENTATION_CODE: -1" in instrumentation_output or "FAILURES!!!" in instrumentation_output:
-        raise QaError(f"instrumentation failed with status {test_result.returncode}")
+    failure_reason = instrumentation_failure_reason(test_result.returncode, instrumentation_output)
+    if failure_reason is not None:
+        raise QaError(f"instrumentation failed: {failure_reason}")
     print(f"V7_06B_RUNTIME_PASS action={args.action} package={app_id}")
     return 0
 
