@@ -26,6 +26,18 @@ android {
         compose = true
     }
 
+    // Separate QA installation for physical-device qualification: it has its own
+    // applicationId/data/Keystore namespace so the owner's ATLAS app, HOME role
+    // and personal data are never replaced or read.
+    buildTypes {
+        create("qa") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = (project.findProperty("qaSuffix") as String?) ?: ".qa"
+            versionNameSuffix = "-qa"
+            isDebuggable = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -33,6 +45,17 @@ android {
 
     testOptions {
         animationsDisabled = true
+    }
+
+    // The physical QA test APK must target the isolated QA applicationId.
+    testBuildType = "qa"
+
+    sourceSets {
+        getByName("qa") {
+            // Reuse the debug-only network security config; the two debug relay
+            // helpers are copied into src/qa/java for the QA application variant.
+            res.srcDirs("src/debug/res")
+        }
     }
 }
 
