@@ -48,14 +48,24 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   `close_code=null`) ; provenance des APK QA installés **vérifiée**
   (`VERIFIED`) ; série de 5 démarrages froids **3 PASS / 2 FAIL**. Les échecs
   #2/#3 sont des réponses à zéro proposition après rejet de l'outil (F1), pas la
-  deadlock G↔C ; `parseToolMetadata` doit être durci. Ticket
-  `V7-06D_F1_TICKET.md` **READY** sur `fix/v7-06d-f1-proposal-missing`. QA
-  désinstallés, reverse retiré, HOME/produit inchangés, aucun service live.
+  deadlock G↔C ; `parseToolMetadata` devait être durci. Ticket
+  `V7-06D_F1_TICKET.md` **READY** à cette date. QA désinstallés, reverse retiré,
+  HOME/produit inchangés, aucun service live.
+- **F1 (2026-11-01)** : `F1-DIAG` **ACCEPTED (PARTIAL)**, puis `F1-FIX`
+  **IMPLEMENTED (code)** — rouge `725f9e3`, vert `0749037` ; parseur
+  `PROPOSAL_MISSING`, prompt aligné sur `changes`/`justification` sans
+  `idempotency_key` backend-owned. JVM **912/912**, backend **374 passed/1
+  skipped**, Node **114/114**, proxy **19/19**, harnais **27/27**, lint/build/
+  AndroidTest PASS ; aucun code produit modifié. Revue indépendante
+  `b143ca97…` : **GO_WITH_LIMITATIONS**, aucun P0/P1 code, P1 `EVIDENCE_GAP`
+  physique, P2 couverture du parseur. **Série physique F1 `NOT_RUN`** : aucun
+  ADB lancé ; 5+ démarrages froids restent requis.
 - Verdicts après phase physique : `GO_CHAT_CONCURRENCY` **GO**,
   `GO_REVOKED_DEVICE_SERVER` **GO**, `GO_A4_4_CLIENT` **GO**,
   `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **NO GO**
-  (F1 ouvert), `GO_REMOTE_V4_PUBLIC` **GO_WITH_LIMITATIONS hérité**,
-  `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` **NO GO**.
+  (F1 corrigé code, physique `NOT_RUN`), `GO_REMOTE_V4_PUBLIC`
+  **GO_WITH_LIMITATIONS hérité**, `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE`
+  **NO GO**.
 - Phase physique : Pixel 9 Pro XL API 37.1 et ADB utilisés avec autorisation
   ciblée, paquets QA uniquement, aucun test produit ; QA désinstallés, reverse
   retiré, stacks arrêtées. Aucun service live modifié ; identités live

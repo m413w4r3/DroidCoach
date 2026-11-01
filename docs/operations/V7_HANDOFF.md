@@ -10,7 +10,8 @@ Aucun push, PR ou merge distant effectué.
 **Statut global : deux P1 diagnostiqués et corrigés avec tests discriminants ;
 P2 de provenance APK↔SHA fermé par un mécanisme vérifié ; phase physique
 complémentaire exécutée sur Pixel : A4-4 **PASS**, provenance installée **GO**,
-fiabilité chat **3/5 → NO GO (F1 ouvert)** ; `GO_CHAT_CONCURRENCY`,
+fiabilité chat **3/5 → NO GO**, F1 corrigé côté harnais mais **non revalidé
+physiquement (`NOT_RUN`)** ; `GO_CHAT_CONCURRENCY`,
 `GO_REVOKED_DEVICE_SERVER`, `GO_A4_4_CLIENT`, `GO_APK_PROVENANCE` ;
 `GO_CHAT_RELIABILITY_QA` non accordé ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` =
 NO GO.**
@@ -50,13 +51,22 @@ NO GO.**
   zéro proposition après rejet de l'outil (F1), pas la deadlock G↔C. Provenance
   des APK QA installés **vérifiée** (`VERIFIED`, hashes installés = construits).
   QA désinstallés, reverse retiré, HOME/produit inchangés, aucun service live.
+- Correctif F1 (2026-11-01, `fix/v7-06d-f1-fix`) : diagnostic `F1-DIAG`
+  `ACCEPTED (PARTIAL)` ; rouge `725f9e3` (oracle zéro proposition + parité
+  prompt), vert `0749037` ; prompt aligné sur `changes`/`justification` sans
+  `idempotency_key` backend-owned, parseur émettant `PROPOSAL_MISSING`. JVM
+  **912/912**, backend **374 passed/1 skipped**, Node **114/114**, proxy
+  **19/19**, harnais **27/27**, lint/build/AndroidTest PASS. Revue indépendante
+  `b143ca97…` : **GO_WITH_LIMITATIONS**, aucun P0/P1 code ; P1 `EVIDENCE_GAP`
+  physique, P2 couverture du parseur. Aucun code produit modifié.
 - Contrôles live strictement en lecture seule. Identités résiduelles inchangées :
   `pixel-v7` et `r3c-pixel-final` non révoqués, consentements Core `GRANTED v2` ;
   aucune révocation/rotation exécutée.
-- Prochaines actions : traiter **F1** (parseur de test `parseToolMetadata` à
-  durcir, rejet de `atlas_propose_plan_revision` à diagnostiquer/corriger), puis
-  nouvelle série de 5+ démarrages froids ; décisions live séparées (révocation
-  des deux devices, rotation éventuelle du bearer Core).
+- Prochaines actions : obtenir une **nouvelle autorisation physique ciblée**,
+  puis rejouer 5+ démarrages froids sur le SHA F1 avec gate de provenance
+  installé↔construit et zéro échec F1 ; faire relire la preuve. Décisions live
+  séparées (révocation des deux devices, rotation éventuelle du bearer Core).
+  Aucun ADB ne doit être lancé avant cette autorisation.
 - Preuves : `V7-06D_FINAL_REPORT.md`, `V7-06D_DIAGNOSTIC.md`,
   `REGISTRY_V7_06D.md`, `evidence/V7-06D_CHAT_CONCURRENCY.md`,
   `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`,

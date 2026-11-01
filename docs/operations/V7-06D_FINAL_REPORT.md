@@ -522,3 +522,26 @@ push/PR. Preuve détaillée : `evidence/V7-06D_PHYSICAL_QA.md`.
 `GO_APK_PROVENANCE=GO_WITH_LIMITATIONS` avant cette phase physique ; ces
 verdicts ne sont pas réécrits. La phase physique les met à jour dans son
 périmètre, sans qualifier le produit ni le réseau public.
+
+## 14. Delta F1 — correctif de harnais (2026-11-01)
+
+Le ticket F1 a été diagnostiqué (`F1-DIAG`, `ACCEPTED (PARTIAL)`) puis corrigé
+sur `fix/v7-06d-f1-fix` : rouge `725f9e3` (oracle zéro proposition et parité
+prompt), vert `0749037`. Le parseur signale désormais `PROPOSAL_MISSING` sur
+`Aucune proposition (0).` et l'instrumentation continue d'exiger `completed` et
+exactement une proposition ; le prompt synthétique demande
+`changes`/`justification` sans `idempotency_key`, clé backend-owned. Cinq
+fichiers de test/configuration sont modifiés, **aucun code produit**.
+
+Vérifications déterministes sur le SHA final : Android JVM **912/912**, backend
+**374 passed / 1 skipped**, Node **114/114**, proxy **19/19**, harnais
+**27/27**, lint 0 erreur, builds `assembleDebug`/`assembleQa`/
+`assembleQaAndroidTest` PASS. Revue indépendante `b143ca97…` :
+**GO_WITH_LIMITATIONS**, aucun P0/P1 code ; P1 `EVIDENCE_GAP` physique, P2 de
+couverture du parseur et d'ordre `oneOf[0]`.
+
+**Aucune série physique F1 n'a été exécutée (`NOT_RUN`).** Les verdicts du
+§13.4 restent donc inchangés, en particulier `GO_CHAT_RELIABILITY_QA` **NO GO**.
+Une nouvelle autorisation physique ciblée, 5+ démarrages froids avec gate de
+provenance et une relecture de la preuve sont requis avant toute mise à jour.
+Rapport détaillé : `V7-06D_F1_FIX_REPORT.md`.

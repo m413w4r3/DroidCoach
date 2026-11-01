@@ -2,7 +2,7 @@
 
 | Clé | Valeur |
 |---|---|
-| TASK_ID / statut | `V7-06D-PHYS-F1 / READY` |
+| TASK_ID / statut | `V7-06D-PHYS-F1 / F1-FIX IMPLEMENTED — REVIEW GO_WITH_LIMITATIONS — PHYS NOT_RUN` |
 | Objectif | Supprimer l'échec F1 observé sur la série physique, rendre l'oracle de test exact, puis prouver la correction par tests déterministes et une nouvelle série de 5+ démarrages froids. |
 | Dépendances | V7-06D intégré localement sur `main` ; A4-4 **PASS** ; provenance QA **GO** ; preuve `evidence/V7-06D_PHYSICAL_QA.md`. |
 | BASE_SHA | `06424fdff48fb63eebe22ec7a7dd43282dbf428b` (main locale après merge fast-forward ; `origin/main` reste `9ad90c7…`). |
@@ -97,12 +97,18 @@ Aucune correction ne doit inventer une proposition, rejouer un outil de manière
   AccessibilityService.
 - Aucune réécriture des verdicts historiques V7-06D.
 
-## 6. Prochaines sous-sessions proposées
+## 6. Sous-sessions exécutées et suite
 
-1. `F1-DIAG` (lecture seule) : reconstruire le contrat d'outil et le rejet, à
-   partir des preuves privées et du code ; rendre un diagnostic et un plan de
-   test rouge.
-2. `F1-FIX` (écriture bornée) : F1a puis F1b avec tests rouges→verts, suites
-   complètes.
-3. `F1-REVIEW` (lecture seule) : revue indépendante du SHA final.
-4. `F1-PHYS` : nouvelle série de 5+ démarrages froids sur autorisation ciblée.
+1. `F1-DIAG` (lecture seule) : **ACCEPTED (PARTIAL)** — session
+   `cbbda8c4-f724-4c43-b234-3daad189f0d1`, diagnostic
+   `V7-06D_F1_DIAGNOSTIC.md`.
+2. `F1-FIX` (écriture bornée) : **IMPLEMENTED** — session
+   `6302771e-82b7-45e2-acbe-4c2ed55b585f` ; rouge
+   `725f9e3089f85a609427e7e256158e0b46ff7e73`, vert
+   `07490370e7afa964c1eb6223945544af7b21b887` ; rapport
+   `V7-06D_F1_FIX_REPORT.md`.
+3. `F1-REVIEW` (lecture seule) : **GO_WITH_LIMITATIONS** — session
+   `b143ca97-7418-4e21-b83f-3271c3d63304`, aucun P0/P1 code ; P1
+   `EVIDENCE_GAP` physique, P2 de couverture du parseur.
+4. `F1-PHYS` : **NOT_RUN** — nouvelle autorisation physique ciblée requise.
+   Aucun ADB lancé. `GO_CHAT_RELIABILITY_QA` reste **NO GO**.
