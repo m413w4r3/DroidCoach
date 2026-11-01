@@ -3,8 +3,8 @@
 **Statut du document :** `CLÔTURE DE CAMPAGNE — deux P1 diagnostiqués et corrigés
 localement avec tests discriminants ; P2 de provenance APK↔SHA fermé par un
 mécanisme vérifié ; P1 puis P2 de revue indépendante corrigés ; revue finale
-sans P0/P1, avec un P2 documentaire de libellés corrigé ; aucune qualification
-physique exécutée (`NOT_RUN`).`
+sans P0/P1, avec un P2 documentaire de libellés corrigé et confirmation delta
+`06d30ed` **ACCEPTED** ; aucune qualification physique exécutée (`NOT_RUN`).`
 **Campagne :** V7-06D « Fiabilité remote et révocation A4-4 ».
 **BASE_SHA :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`.
 **Branche :** `feat/atlas-v7-06d-remote-hardening`.
@@ -361,6 +361,10 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   concurrence GO, refus serveur GO, provenance GO_WITH_LIMITATIONS, A4-4 client
   NO GO/NOT_RUN, fiabilité QA NOT_RUN, remote public V4 GO_WITH_LIMITATIONS
   hérité, produit Pixel et produit remote NO GO.
+- **Confirmation delta** `06d30ed` (docs-only, code `bfb1965` inchangé) : la
+  même session a rendu **`ACCEPTED`** — portée limitée à `README.md` et six
+  documents `docs/`, libellés corrects, verdicts historiques préservés, huit
+  recommandations inchangées, aucun nouveau P0/P1/P2, aucun test exécuté.
 
 ## 11. Limites honnêtes
 

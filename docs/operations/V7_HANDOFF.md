@@ -40,7 +40,8 @@ physique (`NOT_RUN`) ; `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`,
   test mockant la frontière du vérificateur) et libellés obsolètes, corrigés par
   Z3 `4ebdf5f` (rouge `052ca80`, intégrés `fded03d`/`bfb1965`) ; harnais 27/27.
   Revue finale `19c375fd…` sur `88ac019` (code `bfb1965`) : aucun P0/P1, un P2
-  documentaire de libellés corrigé. Chat concurrence et refus serveur jugés
+  documentaire de libellés corrigé ; confirmation delta `06d30ed` `ACCEPTED`.
+  Chat concurrence et refus serveur jugés
   sains ; A4-4 client non qualifié sans sonde physique.
 - Aucun ADB/AVD/Pixel/Docker de campagne ; contrôles live strictement en lecture
   seule. Identités résiduelles inchangées : `pixel-v7` et `r3c-pixel-final` non

@@ -190,3 +190,10 @@ Constats confirmés :
 **Limites finales :** revue statique, sans réexécution des suites ; le P2
 documentaire est corrigé après le SHA examiné ; les qualifications physiques
 A4-4 et fiabilité restent `NOT_RUN`.
+
+**Confirmation delta :** sur `06d30ed` (docs-only, code `bfb1965` inchangé), la
+même session a rendu **`ACCEPTED`** : la portée est limitée à `README.md` et six
+documents `docs/`, les libellés courants reflètent la revue finale et le P2
+corrigé, les verdicts initiaux/delta restent explicitement historiques et les
+huit recommandations sont inchangées. Aucun nouveau P0/P1/P2, aucun test
+exécuté, worktree toujours propre.
