@@ -39,15 +39,16 @@ physique (`NOT_RUN`) ; `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`,
   `c2c2abd5…` sur `0c19a3f` : P1 confirmé corrigé, deux P2 (wrapper permissif,
   test mockant la frontière du vérificateur) et libellés obsolètes, corrigés par
   Z3 `4ebdf5f` (rouge `052ca80`, intégrés `fded03d`/`bfb1965`) ; harnais 27/27.
-  Confirmation finale courte du SHA corrigé en cours. Chat concurrence et refus
-  serveur jugés sains ; A4-4 client non qualifié sans sonde physique.
+  Revue finale `19c375fd…` sur `88ac019` (code `bfb1965`) : aucun P0/P1, un P2
+  documentaire de libellés corrigé. Chat concurrence et refus serveur jugés
+  sains ; A4-4 client non qualifié sans sonde physique.
 - Aucun ADB/AVD/Pixel/Docker de campagne ; contrôles live strictement en lecture
   seule. Identités résiduelles inchangées : `pixel-v7` et `r3c-pixel-final` non
   révoqués, consentements Core `GRANTED v2` ; aucune révocation/rotation
   exécutée.
 - Prochaines actions : autorisation physique ciblée (sonde A4-4 + série de
-  démarrages froids), revue indépendante sur le SHA final, puis décisions live
-  séparées (révocation des deux devices, rotation éventuelle du bearer Core).
+  démarrages froids), puis décisions live séparées (révocation des deux devices,
+  rotation éventuelle du bearer Core).
 - Preuves : `V7-06D_FINAL_REPORT.md`, `V7-06D_DIAGNOSTIC.md`,
   `REGISTRY_V7_06D.md`, `evidence/V7-06D_CHAT_CONCURRENCY.md`,
   `evidence/V7-06D_REVOCATION_A4_4.md`, `evidence/V7-06D_APK_PROVENANCE.md`.

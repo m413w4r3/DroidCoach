@@ -13,7 +13,9 @@
 `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` sur `0c19a3f` : P1 confirmé corrigé,
 deux P2 supplémentaires (wrapper acceptant des clés inconnues, test de succès
 mockant la frontière du vérificateur), corrigés par Z3 `4ebdf5f` (rouge
-`052ca80`, intégrés `fded03d`/`bfb1965`). Confirmation finale en cours.
+`052ca80`, intégrés `fded03d`/`bfb1965`). **Revue finale** `19c375fd…` sur
+`88ac019` : aucun P0/P1, un P2 documentaire (libellés de statut de revue devenus
+obsolètes), corrigé ; les huit recommandations de verdict sont inchangées.
 
 La session a confirmé `HEAD=b163202`, `git status --short` vide, aucun fichier
 modifié, aucun test/build/ADB/Docker/réseau lancé.
@@ -98,8 +100,10 @@ alors qu'il contenait les résultats finaux ; le registre portait encore
 - Les totaux de tests sont des résumés documentés, non des logs bruts
   indépendamment rejoués par la revue.
 - Les qualifications physiques A4-4 et fiabilité restent `NOT_RUN`.
-- La revue delta du SHA corrigé doit confirmer le P1 de provenance et le P2
-  documentaire.
+- La revue delta du SHA corrigé a confirmé le P1 de provenance et le P2
+  documentaire, puis relevé deux P2 supplémentaires corrigés par Z3. La revue
+  finale `19c375fd…` sur `88ac019` n'a trouvé aucun P0/P1 et un seul P2
+  documentaire (libellés obsolètes), corrigé dans les documents finaux.
 
 ## 5. Revue delta du SHA corrigé (`0c19a3f`)
 
@@ -139,5 +143,50 @@ Harnais **27/27 PASS**, backend **399 passed / 1 skipped**, `py_compile` et
 | `GO_PIXEL_PRODUCT` | **NO GO** |
 | `GO_PRODUCT_REMOTE` | **NO GO** |
 
-**Confirmation finale du SHA corrigé : en cours.** Les limitations physiques
-restent : A4-4 client et fiabilité QA `NOT_RUN`.
+## 6. Revue finale du SHA corrigé (`88ac019`)
+
+**Session :** `19c375fd-9e02-48ac-9fc8-c8c928d5562a`, `provider=codex`,
+`model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`
+pendant la préparation puis `Default` après approbation du plan, worktree
+`/tmp/atlas-v7-06d-review3-ro` détaché à `88ac019` et `chmod -R a-w`. Le parent a
+vérifié ces métadonnées Paseo. Aucun fichier modifié ; aucun test, build, ADB,
+AVD, Docker ou réseau exécuté. Une tentative d'édition documentaire de la revue
+a été refusée par le contrôle d'approbation ; le worktree est resté propre et la
+revue ne l'a pas réessayée.
+
+**Verdict global sur `88ac019` : `CORRECTION_REQUIRED` uniquement pour un P2
+documentaire.** Aucun P0, aucun P1, aucune correction de code requise. Les
+libellés de statut de revue des sept documents étaient devenus obsolètes après
+la revue finale ; ils sont corrigés dans le commit documentaire final, sans
+réécrire les verdicts initiaux ou delta explicitement datés.
+
+Constats confirmés :
+
+- le wrapper exige l'ensemble exact des clés de provenance et rejette les clés
+  inconnues ; le proof post-hoc porte le même ensemble avec `INCONCLUSIVE` et
+  ne peut pas passer le validateur PASS ;
+- le runner exige `installed_apk_sha256` exactement `{app, android_test}`, en
+  SHA-256 minuscules, égaux aux hashes construits ;
+- le test exécute la vraie fonction `verify_installed_artifacts` avec ses
+  primitives bas niveau simulées, puis valide le proof fusionné avec les deux
+  validateurs stricts ; les négatifs couvrent hash divergent et absence ;
+- `fded03d` ne change que le harnais de tests ; `bfb1965` porte les corrections
+  attendues ; `bfb1965..88ac019` ne contient que les sept documents, aucun
+  changement Android, Node ou backend.
+
+**Huit recommandations de la revue finale :**
+
+| Verdict | Recommandation |
+|---|---|
+| `GO_CHAT_CONCURRENCY` | **GO** |
+| `GO_CHAT_RELIABILITY_QA` | **NOT_RUN** |
+| `GO_REVOKED_DEVICE_SERVER` | **GO** |
+| `GO_A4_4_CLIENT` | **NO GO / NOT_RUN** |
+| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS** (chaîne logicielle ; aucune preuve installée sur appareil) |
+| `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS, hérité** |
+| `GO_PIXEL_PRODUCT` | **NO GO** |
+| `GO_PRODUCT_REMOTE` | **NO GO** |
+
+**Limites finales :** revue statique, sans réexécution des suites ; le P2
+documentaire est corrigé après le SHA examiné ; les qualifications physiques
+A4-4 et fiabilité restent `NOT_RUN`.

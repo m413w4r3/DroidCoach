@@ -37,7 +37,8 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   (`installed_apk_sha256` rejeté comme champ inconnu) et un P2 de libellés ;
   P1 corrigé `69d0db6`, P2 corrigé. Revue delta `c2c2abd5…` sur `0c19a3f` :
   P1 confirmé corrigé, deux P2 (wrapper permissif, test mockant la frontière)
-  corrigés `bfb1965` (rouge→vert) ; confirmation finale courte en cours.
+  corrigés `bfb1965` (rouge→vert). Revue finale `19c375fd…` sur `88ac019` :
+  aucun P0/P1, P2 documentaire de libellés corrigé.
 - Build final QA : APK app `1e31a643…`, test `05dd465b…`, manifeste
   `8d678af5…`, source `cf82cd0…`, `worktree_clean=true`, variante `qa`,
   `compile_sdk=37.2`.
@@ -45,7 +46,7 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   `NOT_RUN`, faute d'autorisation ciblée. `GO_CHAT_RELIABILITY_QA` et
   `GO_A4_4_CLIENT` ne sont pas accordés ; `GO_CHAT_CONCURRENCY` et
   `GO_REVOKED_DEVICE_SERVER` le sont ; `GO_APK_PROVENANCE` est
-  GO_WITH_LIMITATIONS (chaîne logicielle ; confirmation finale courte en cours).
+  GO_WITH_LIMITATIONS (chaîne logicielle ; revue finale sans P0/P1).
 - Aucun ADB, AVD, Pixel, Docker de campagne ou service live modifié ; identités
   live résiduelles inchangées (`pixel-v7`, `r3c-pixel-final`, consentements Core
   `GRANTED v2`), révocation/rotation soumises à autorisation séparée.

@@ -11,7 +11,7 @@ traçabilité APK↔SHA. Aucune nouvelle campagne produit.
 SHA. Aucun push, PR, merge distant ni service live modifié à ce stade.
 
 **Statut global :** `CORRECTIONS INTÉGRÉES — P1 et P2 de revue provenance
-corrigés (rouge→vert) ; confirmation finale du SHA corrigé en cours ; aucune
+corrigés (rouge→vert) ; revue finale sans P0/P1, P2 de libellés corrigé ; aucune
 qualification physique`.
 
 ## 1. Contraintes d'exécution
@@ -82,8 +82,8 @@ séparée (réappairage/reconfiguration possibles).
 | V7-06D-Z2-PROVENANCE-P1 | Correction du rejet du champ `installed_apk_sha256` par le validateur strict + régression du chemin complet | Z + revue | **ACCEPTED (code)** — rouge `c599661`, fix `1031a1a`, intégrés `7ea8c58`/`69d0db6` ; harnais **26/26 PASS**, `py_compile` et `git diff --check` PASS ; code Android inchangé | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | `/tmp/atlas-v7-06d-feat-provenance` | test rouge `PROOF_PROVENANCE_FIELD_MISSING` puis vert ; hashes installés validés/égaux aux construits |
 | V7-06D-Z3-PROVENANCE-P2 | Schéma exact des proofs, test exécutant la vraie vérification installée, post-hoc aligné | REVIEW2 | **ACCEPTED (code)** — rouge `052ca80`, fix `4ebdf5f`, intégrés `fded03d`/`bfb1965` ; harnais **27/27 PASS**, backend **399 passed/1 skipped**, `py_compile` et `git diff --check` PASS ; code Android inchangé | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | `/tmp/atlas-v7-06d-feat-provenance` | clés inconnues refusées par le wrapper ; test du chemin réel `verify_installed_artifacts` ; post-hoc `INCONCLUSIVE` |
 | V7-06D-REVIEW | Revue indépendante lecture seule du SHA intégré | X/Y/Z/Z2 | **CORRECTION_REQUIRED puis P1 corrigé** — session `5f9adb37…` ; P1 provenance confirmé (gate bloquant), P2 libellés ; P1 corrigé Z2, P2 corrigé | `5f9adb37-57bc-4068-9aa8-53899f44f00b` | `/tmp/atlas-v7-06d-review-ro` | rapport P0/P1/P2, huit verdicts, aucun fichier modifié |
-| V7-06D-REVIEW2 | Revue delta indépendante du SHA corrigé | Z2 + REVIEW | **CORRECTION_REQUIRED puis corrigé** — P1 confirmé corrigé ; deux P2 (wrapper permissif, test mockant la frontière) et libellés obsolètes ; corrigés par Z3, revue de confirmation relancée | `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` | `/tmp/atlas-v7-06d-review2-ro` | P1 rouge→vert, schéma proof exact, absence de régression, labels, huit verdicts |
-| V7-06D-REVIEW3 | Confirmation finale courte du SHA corrigé | Z3 + REVIEW2 | **RUNNING** | à renseigner | worktree dédié en lecture seule | confirmer P2 et l'absence de régression ; huit verdicts |
+| V7-06D-REVIEW2 | Revue delta indépendante du SHA corrigé | Z2 + REVIEW | **CORRECTION_REQUIRED puis corrigé** — P1 confirmé corrigé ; deux P2 (wrapper permissif, test mockant la frontière) et libellés obsolètes ; corrigés par Z3 ; revue finale REVIEW3 effectuée | `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` | `/tmp/atlas-v7-06d-review2-ro` | P1 rouge→vert, schéma proof exact, absence de régression, labels, huit verdicts |
+| V7-06D-REVIEW3 | Revue finale courte du SHA corrigé | Z3 + REVIEW2 | **CORRECTION_REQUIRED (P2 libellés uniquement) → corrigé** — aucun P0/P1 ; schéma exact, test réel et absence de régression confirmés ; libellés de statut de revue obsolètes corrigés dans le commit documentaire final | `19c375fd-9e02-48ac-9fc8-c8c928d5562a` | `/tmp/atlas-v7-06d-review3-ro` (`88ac019`) | P0/P1/P2, huit verdicts, worktree propre, aucun test exécuté |
 
 ## 4. Journal des sessions
 
@@ -100,6 +100,7 @@ séparée (réappairage/reconfiguration possibles).
 | 2026-11-01 | `5f9adb37-57bc-4068-9aa8-53899f44f00b` | V7-06D-REVIEW relecture indépendante | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Plan`) | **CORRECTION_REQUIRED** sur `b163202` — P1 gate provenance confirmé, P2 libellés ; P1 corrigé Z2, P2 corrigé |
 | 2026-11-01 | `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` | V7-06D-REVIEW2 revue delta | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Plan`) | **CORRECTION_REQUIRED** sur `0c19a3f` — P1 confirmé corrigé ; P2 wrapper permissif, P2 test mockant la frontière, libellés obsolètes ; corrigés Z3 `fded03d`/`bfb1965` ; aucun fichier modifié |
 | 2026-11-01 | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | V7-06D-Z3 correction P2 provenance | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — rouge `052ca80`, fix `4ebdf5f`, intégrés `fded03d`/`bfb1965` ; harnais 27/27, backend 399/1 |
+| 2026-11-01 | `19c375fd-9e02-48ac-9fc8-c8c928d5562a` | V7-06D-REVIEW3 revue finale | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Plan` puis `Default` après approbation, worktree `chmod a-w`) | **CORRECTION_REQUIRED (P2 libellés uniquement)** sur `88ac019` (code `bfb1965`) — aucun P0/P1 ; tentative d'édition refusée, worktree propre, aucun test exécuté ; libellés corrigés dans les documents finaux |
 
 ## 4bis. Résultats finaux d'intégration
 
@@ -124,8 +125,8 @@ android/` vide). Le HEAD documentaire final ne change que `docs/`.
 
 **Statut global :** deux P1 V7-06C corrigés avec preuves déterministes ; P2
 provenance fermé par un mécanisme vérifié ; **P1 et P2 de revue indépendante**
-sur le gate de provenance corrigés (`bfb1965`, rouge→vert) ; **confirmation
-finale du SHA corrigé en cours** ; **aucune qualification physique**. Verdicts :
+sur le gate de provenance corrigés (`bfb1965`, rouge→vert) ; **revue finale sans
+P0/P1, P2 de libellés corrigé** ; **aucune qualification physique**. Verdicts :
 `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER` ; `GO_APK_PROVENANCE`
 (GO_WITH_LIMITATIONS, chaîne logicielle) ; `GO_CHAT_RELIABILITY_QA` et
 `GO_A4_4_CLIENT` **NOT_RUN** ; `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE`

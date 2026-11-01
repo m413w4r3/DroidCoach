@@ -2,9 +2,9 @@
 
 **Statut du document :** `CLÔTURE DE CAMPAGNE — deux P1 diagnostiqués et corrigés
 localement avec tests discriminants ; P2 de provenance APK↔SHA fermé par un
-mécanisme vérifié ; P1 puis P2 de revue indépendante corrigés (confirmation
-finale en cours sur le SHA documentaire) ; aucune qualification physique
-exécutée (`NOT_RUN`).`
+mécanisme vérifié ; P1 puis P2 de revue indépendante corrigés ; revue finale
+sans P0/P1, avec un P2 documentaire de libellés corrigé ; aucune qualification
+physique exécutée (`NOT_RUN`).`
 **Campagne :** V7-06D « Fiabilité remote et révocation A4-4 ».
 **BASE_SHA :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`.
 **Branche :** `feat/atlas-v7-06d-remote-hardening`.
@@ -272,7 +272,7 @@ backend n'est pas modifié et leurs preuves restent valides dans leur périmètr
 | `GO_CHAT_RELIABILITY_QA` | **NOT_RUN** | Aucune autorisation physique ; aucune série de démarrages froids ; une relance PASS ne serait pas une preuve suffisante. |
 | `GO_REVOKED_DEVICE_SERVER` | **GO** | Refus connecteur conservé et testé (token correct → `DEVICE_REVOKED`, mauvais token → `AUTH_FAILED`) ; preuves V7-06C inchangées. |
 | `GO_A4_4_CLIENT` | **NO GO — NOT_RUN** | La sonde stricte renforcée n'a pas été exécutée sur appareil ; les tests déterministes ne remplacent pas ce PASS. |
-| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS, confirmation finale en cours** | Chaîne source→manifeste→APK vérifiée sur le build `cf82cd0` ; P1 et P2 de revue corrigés (`bfb1965`, rouge→vert) ; gate installé↔construit testé, mais pas exercé sur téléphone dans V7-06D. |
+| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS** | Chaîne source→manifeste→APK vérifiée sur le build `cf82cd0` ; P1 et P2 de revue corrigés (`bfb1965`, rouge→vert), revue finale sans P0/P1 ; gate installé↔construit testé, mais pas exercé sur téléphone dans V7-06D. |
 | `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS (QA APPLY/REJECT)** | Inchangé V7-06C ; aucun nouveau run public ; la fiabilité chat publique n'est pas requalifiée. |
 | `GO_PIXEL_PRODUCT` | **NO GO** | Application produit non testée. |
 | `GO_PRODUCT_REMOTE` | **NO GO** | Application produit distante non testée. |
@@ -348,11 +348,19 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   `GO_APK_PROVENANCE` GO_WITH_LIMITATIONS (chaîne logicielle), `GO_A4_4_CLIENT`
   NO GO/NOT_RUN, `GO_CHAT_RELIABILITY_QA` NOT_RUN,
   `GO_REMOTE_V4_PUBLIC` GO_WITH_LIMITATIONS hérité, produit NO GO.
-- **Confirmation finale :** une revue courte en lecture seule est demandée sur le
-  SHA intégré corrigé (`bfb1965` + documentation finale) pour confirmer les P2
-  Z3, le schéma exact des proofs, l'exécution réelle de
-  `verify_installed_artifacts` et l'absence de régression. Résultat non encore
-  prononcé : aucun verdict n'est réécrit par anticipation.
+- **Revue finale** `19c375fd-9e02-48ac-9fc8-c8c928d5562a` (`codex/gpt-6-luna`,
+  effort effectif `xhigh`, worktree `/tmp/atlas-v7-06d-review3-ro` en lecture
+  seule) sur `88ac0197cfb60c5743482a022c0a5848ad011b97` (code `bfb1965`) :
+  **aucun P0, aucun P1**, un P2 documentaire — les libellés de statut de revue
+  étaient devenus obsolètes. Le schéma exact du wrapper, le champ
+  `installed_apk_sha256` validé/égal aux hashes construits, le test exécutant la
+  vraie fonction `verify_installed_artifacts` et l'absence de changement
+  Android/Node/backend sont confirmés. Le P2 est corrigé dans le commit
+  documentaire final ; aucun code n'a été modifié. La revue n'a exécuté aucun
+  test/build/ADB/Docker/réseau. Les huit recommandations restent : chat
+  concurrence GO, refus serveur GO, provenance GO_WITH_LIMITATIONS, A4-4 client
+  NO GO/NOT_RUN, fiabilité QA NOT_RUN, remote public V4 GO_WITH_LIMITATIONS
+  hérité, produit Pixel et produit remote NO GO.
 
 ## 11. Limites honnêtes
 
@@ -375,10 +383,11 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   mais aucun APK installé n'a été vérifié sur appareil dans V7-06D.
 - **Scénarios backend réels** : non rejoués ; le backend n'est pas modifié et les
   preuves V7-06C restent valides dans leur périmètre.
-- **Revue initiale/delta** : lecture seule, sans réexécution des suites ; les
-  totaux sont ceux des logs de test parent et des documents. Le P1 trouvé était
-  réel et a été corrigé ; les P2 de revue delta sont corrigés et une confirmation
-  finale reste à prononcer.
+- **Revues initiale, delta et finale** : lecture seule, sans réexécution des
+  suites ; les totaux sont ceux des logs de test parent et des documents. Le P1
+  trouvé était réel et a été corrigé ; les P2 de revue delta sont corrigés. La
+  revue finale n'a trouvé aucun P0/P1 et un seul P2 documentaire de libellés,
+  corrigé après le SHA examiné.
 - **Test de succès du gate installé** : il exécute la vraie fonction
   `verify_installed_artifacts` mais simule les lectures bas niveau (dumps de
   paquets, hashes installés, certificats) ; les sorties réelles d'un appareil ne
@@ -394,8 +403,9 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
      un échec intermittent conserve le verdict limité ;
    - optionnellement, une recette APPLY et une REJECT sur des identités neuves.
    Aucun paquet produit, HOME, Keystore ou donnée personnelle ne doit être touché.
-2. **Revue indépendante** sur le SHA intégré final (lecture seule), puis
-   correction des éventuels P0/P1.
+2. **Revue finale effectuée** sur le SHA intégré (`88ac019`, code `bfb1965`) :
+   aucun P0/P1, P2 documentaire de libellés corrigé ; aucune correction de code
+   requise.
 3. **Décisions live séparées** : révocation ciblée des deux devices obsolètes,
    puis rotation éventuelle du bearer Core, sur autorisation explicite et
    sauvegarde vérifiée.

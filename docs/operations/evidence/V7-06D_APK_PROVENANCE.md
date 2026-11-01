@@ -224,10 +224,10 @@ changements `docs/` ; le SHA compilé et le manifeste embarqué restent
 
 ## 7. Verdict
 
-**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS, confirmation finale en cours** : la
-chaîne source→manifeste→APK est vérifiée sur le build intégré `cf82cd0`, le P1
-de revue sur le champ installé et les P2 de la revue delta sont corrigés et
-testés (rouge → vert), et le gate installé↔construit est couvert par des tests
-négatifs ; aucun APK installé n'a été vérifié sur appareil dans V7-06D. Les
-preuves V7-06C historiques restent `INCONCLUSIVE` pour ce lien et ne sont pas
-reclassées.
+**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS** : la chaîne
+source→manifeste→APK est vérifiée sur le build intégré `cf82cd0`, le P1 de
+revue sur le champ installé et les P2 de la revue delta sont corrigés et testés
+(rouge → vert), la revue finale `19c375fd…` sur `88ac019` ne relève aucun P0/P1,
+et le gate installé↔construit est couvert par des tests négatifs ; aucun APK
+installé n'a été vérifié sur appareil dans V7-06D. Les preuves V7-06C
+historiques restent `INCONCLUSIVE` pour ce lien et ne sont pas reclassées.
