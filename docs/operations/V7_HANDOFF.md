@@ -72,6 +72,9 @@ NO GO.**
   `ee44d72e…` : **GO_WITH_LIMITATIONS**, aucun P0/P1 ; P2 de chemin public
   corrigé, P2 de couverture du parseur ouvert. `GO_CHAT_RELIABILITY_QA` **GO**
   pour la campagne QA F1.
+- Intégration locale : lignée F1 (ticket, diagnostic, correctif, preuves
+  physiques, revues) fast-forwardée sur `main` à `0588be0` le 2026-11-01 ;
+  aucun push/PR/merge distant.
 - Contrôles live strictement en lecture seule. Identités résiduelles inchangées :
   `pixel-v7` et `r3c-pixel-final` non révoqués, consentements Core `GRANTED v2` ;
   aucune révocation/rotation exécutée.

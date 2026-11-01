@@ -116,6 +116,7 @@ séparée (réappairage/reconfiguration possibles).
 | 2026-11-01 | `b143ca97-7418-4e21-b83f-3271c3d63304` | V7-06D-F1-REVIEW | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Default`, worktree `0749037` `chmod a-w`) | **GO_WITH_LIMITATIONS** — aucun P0/P1 code ; P1 `EVIDENCE_GAP` physique, P2 couverture parseur/`oneOf[0]` ; diff borné et absence de secret confirmés ; aucun fichier suivi modifié, aucun test exécuté |
 | 2026-11-01 | parent | V7-06D-F1-PHYS | appareil physique, ADB `shell`, aucun sous-agent | **PASS** — 5/5 démarrages froids, zéro échec F1 ; sonde A4-4 `REVOKED`/`REVOKED`, aucune nouvelle session ; provenance installée vérifiée ; aucun test produit/live. Nettoyage automatique incomplet (stdin), paquets QA supprimés manuellement ; état final propre |
 | 2026-11-01 | `ee44d72e-4a7f-4ece-87ea-52a00525c015` | V7-06D-F1-PHYS-REVIEW | codex / `gpt-6-luna` / `xhigh` (`collaborationMode=Default`, worktree `1631322` `chmod a-w`) | **GO_WITH_LIMITATIONS** — aucun P0/P1 ; cinq proofs, provenance installée, A4-4 et nettoyage final confirmés ; P2 chemin public corrigé, P2 couverture parseur ouvert ; `GO_CHAT_RELIABILITY_QA` **GO** pour la campagne |
+| 2026-11-01 | parent | Intégration locale F1 | `git merge --ff-only fix/v7-06d-f1-fix` | **PASS** — `main` locale mise à jour de `06424fd` à `0588be0` (fast-forward), worktree propre ; `origin/main` reste `9ad90c7` ; aucun push/PR/merge distant |
 
 ## 4bis. Résultats finaux d'intégration
 

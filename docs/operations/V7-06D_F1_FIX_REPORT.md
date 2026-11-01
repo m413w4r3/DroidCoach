@@ -3,7 +3,8 @@
 **Date :** 2026-11-01
 **Ticket :** `V7-06D-PHYS-F1` (`docs/operations/V7-06D_F1_TICKET.md`)
 **Statut :** **F1-FIX IMPLEMENTED (code) — revue code `GO_WITH_LIMITATIONS` — physique F1 `PASS` (5/5) + A4-4 `PASS` — revue de preuve `GO_WITH_LIMITATIONS` — `GO_CHAT_RELIABILITY_QA` GO (limites P2)**
-**Branche :** `fix/v7-06d-f1-fix`, aucun push/PR/merge distant.
+**Branche :** `fix/v7-06d-f1-fix`, intégrée localement sur `main` à
+`0588be0` (fast-forward) ; aucun push/PR/merge distant.
 **BASE :** `25fbab5` (docs) / code `06424fd` (`main` locale).
 **Rouge :** `725f9e3089f85a609427e7e256158e0b46ff7e73`.
 **Vert / SHA final :** `07490370e7afa964c1eb6223945544af7b21b887`.
@@ -165,4 +166,5 @@ neuve, un paquet QA neuf et un build propre.
    n'est déduit de cette campagne.
 
 Aucun push, PR, merge distant ou modification live. `origin/main` reste
-`9ad90c7` ; `main` locale reste `06424fd` ; le correctif F1 n'est pas intégré.
+`9ad90c7` ; `main` locale est passée à `0588be0` (fast-forward), le correctif
+F1 est donc intégré localement ; aucun push n'a été effectué.
