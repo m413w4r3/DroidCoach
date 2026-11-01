@@ -560,6 +560,7 @@ class ApkProvenanceTests(unittest.TestCase):
             "network": "local_emulator_bridge",
             "endpoint": {"scheme": "ws", "host": "10.0.2.2", "port": 4413},
             "installed_apk_verified": True,
+            "installed_apk_sha256": {"app": "1" * 64, "android_test": "2" * 64},
             "verification_result": "VERIFIED",
         }
         run_qa.verify_complete_proof_provenance(provenance)
@@ -602,6 +603,8 @@ class ApkProvenanceTests(unittest.TestCase):
         }
         run_qa.verify_complete_proof_provenance(provenance)
         run_scenario.require_pass_provenance(provenance)
+        with self.assertRaisesRegex(run_qa.QaError, "PROOF_PROVENANCE_FIELD_MISSING"):
+            run_qa.verify_complete_proof_provenance({**provenance, "unexpected_field": "rejected"})
 
         with tempfile.TemporaryDirectory() as temporary:
             app_apk = Path(temporary) / "app.apk"
@@ -624,6 +627,13 @@ class ApkProvenanceTests(unittest.TestCase):
             self.assertIsNone(result)
             instrumenter.assert_called_once()
 
+        missing = dict(provenance)
+        del missing["installed_apk_sha256"]
+        with self.assertRaisesRegex(run_qa.QaError, "PROOF_PROVENANCE_FIELD_MISSING"):
+            run_qa.verify_complete_proof_provenance(missing)
+        with self.assertRaises(run_scenario.ScenarioFailure):
+            run_scenario.require_pass_provenance(missing)
+
         for invalid_hashes in (
             None,
             {"app": "1" * 64},
@@ -632,10 +642,7 @@ class ApkProvenanceTests(unittest.TestCase):
         ):
             with self.subTest(installed_apk_sha256=invalid_hashes):
                 invalid = dict(provenance)
-                if invalid_hashes is None:
-                    invalid.pop("installed_apk_sha256")
-                else:
-                    invalid["installed_apk_sha256"] = invalid_hashes
+                invalid["installed_apk_sha256"] = invalid_hashes
                 with self.assertRaises(run_qa.QaError):
                     run_qa.verify_complete_proof_provenance(invalid)
                 with self.assertRaises(run_scenario.ScenarioFailure):

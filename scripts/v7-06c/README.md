@@ -70,6 +70,7 @@ Chaque preuve normale contient un objet `provenance`. Exemple synthétique (tout
   "runtime_sdk": 37,
   "app_apk_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
   "android_test_apk_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "installed_apk_sha256": {"app": "1111111111111111111111111111111111111111111111111111111111111111", "android_test": "2222222222222222222222222222222222222222222222222222222222222222"},
   "signing_cert_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
   "build_provenance_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
   "android_manifest_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
@@ -81,6 +82,8 @@ Chaque preuve normale contient un objet `provenance`. Exemple synthétique (tout
   "verification_result": "VERIFIED"
 }
 ```
+
+`installed_apk_sha256` conserve les hashes lus après installation pour l’app et l’APK AndroidTest. Le validateur exige exactement ces deux clés, des hashes SHA-256 minuscules, et leur égalité avec `app_apk_sha256` et `android_test_apk_sha256` avant d’accepter une preuve PASS.
 
 L’oracle lit ensuite SQLite en mode lecture seule, le journal `operations.json` du connecteur et la trace de métadonnées du proxy. Il exige les cardinalités ACK/proposition/snapshots, les versions et horaires attendus, les consentements révoqués, les outils autorisés et la corrélation des tool calls. Le rejeu ACK n’est pas lancé par ce wrapper: il est attesté par le test Android avant révocation. La preuve indique `ack_replay=ATTESTED_BY_ANDROID_TEST`, un événement ACK et `ack_body_hash_match=not_applicable`.
 

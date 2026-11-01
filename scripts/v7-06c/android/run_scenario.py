@@ -50,7 +50,8 @@ PASS_PROVENANCE_FIELDS = {
     "test_application_id", "version_code", "version_name", "compile_sdk", "runtime_sdk",
     "app_apk_sha256", "android_test_apk_sha256", "signing_cert_sha256",
     "build_provenance_sha256", "android_manifest_sha256", "android_test_manifest_sha256",
-    "scenario_id", "network", "endpoint", "installed_apk_verified", "verification_result",
+    "scenario_id", "network", "endpoint", "installed_apk_verified", "installed_apk_sha256",
+    "verification_result",
 }
 SECRET_FIELD_PATTERN = re.compile(r"(?i)\b(?:device_)?token\b\s*[:=]\s*([^\s,}]+)")
 BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[^\s,}]+")
@@ -87,6 +88,15 @@ def require_pass_provenance(provenance: dict) -> None:
     if any(not isinstance(provenance[field], str) or not re.fullmatch(r"[0-9a-f]{64}", provenance[field])
            for field in hash_fields):
         raise ScenarioFailure("APK_PROVENANCE_HASH_MISSING")
+    installed_hashes = provenance["installed_apk_sha256"]
+    if (not isinstance(installed_hashes, dict)
+            or set(installed_hashes) != {"app", "android_test"}
+            or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+                   for value in installed_hashes.values())):
+        raise ScenarioFailure("APK_PROVENANCE_INSTALLED_APK_HASH_INVALID")
+    if (installed_hashes["app"] != provenance["app_apk_sha256"]
+            or installed_hashes["android_test"] != provenance["android_test_apk_sha256"]):
+        raise ScenarioFailure("APK_PROVENANCE_INSTALLED_APK_HASH_MISMATCH")
     if (provenance["worktree_clean"] is not True or provenance["variant"] != "qa"
             or not isinstance(provenance["application_id"], str)
             or not isinstance(provenance["test_application_id"], str)

@@ -40,7 +40,7 @@ PROVENANCE_FIELDS = {
 QA_PROOF_FIELDS = {
     "runtime_sdk", "app_apk_sha256", "android_test_apk_sha256", "signing_cert_sha256",
     "build_provenance_sha256", "android_manifest_sha256", "android_test_manifest_sha256",
-    "network", "endpoint", "installed_apk_verified", "verification_result",
+    "network", "endpoint", "installed_apk_verified", "installed_apk_sha256", "verification_result",
 }
 APK_SHA_RE = re.compile(r"[0-9a-f]{64}")
 LOG_TAG = "ATLAS_V7_06B"
@@ -198,6 +198,15 @@ def verify_complete_proof_provenance(provenance: dict, *, private_values: Sequen
     ):
         if not isinstance(provenance[field], str) or not APK_SHA_RE.fullmatch(provenance[field]):
             raise QaError("PROOF_PROVENANCE_HASH_MISSING")
+    installed_hashes = provenance["installed_apk_sha256"]
+    if (not isinstance(installed_hashes, dict)
+            or set(installed_hashes) != {"app", "android_test"}
+            or any(not isinstance(value, str) or not APK_SHA_RE.fullmatch(value)
+                   for value in installed_hashes.values())):
+        raise QaError("PROOF_PROVENANCE_INSTALLED_APK_HASH_INVALID")
+    if (installed_hashes["app"] != provenance["app_apk_sha256"]
+            or installed_hashes["android_test"] != provenance["android_test_apk_sha256"]):
+        raise QaError("PROOF_PROVENANCE_INSTALLED_APK_HASH_MISMATCH")
     endpoint = provenance["endpoint"]
     if (provenance["worktree_clean"] is not True or provenance["variant"] != "qa"
             or not isinstance(provenance["application_id"], str)
