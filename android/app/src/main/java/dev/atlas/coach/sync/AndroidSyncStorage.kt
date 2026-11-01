@@ -25,6 +25,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import org.json.JSONException
 import org.json.JSONObject
 
 /** App-private token storage configured by the settings integration; values are never logged. */
@@ -183,6 +184,7 @@ data class CoreV4SyncPresentation(
 internal interface CoreV4SyncPersistence {
     fun read(): String?
     fun write(value: String)
+    fun quarantine(raw: String, reason: String): Boolean = false
 }
 
 private class SharedPreferencesCoreV4SyncPersistence(context: Context) : CoreV4SyncPersistence {
@@ -196,6 +198,18 @@ private class SharedPreferencesCoreV4SyncPersistence(context: Context) : CoreV4S
             "Unable to persist V4 sync state"
         }
     }
+
+    override fun quarantine(raw: String, reason: String): Boolean {
+        val key = "quarantine_${System.currentTimeMillis()}_${UUID.randomUUID()}"
+        return try {
+            preferences.edit()
+                .putString(key, raw)
+                .putString("${key}_reason", reason)
+                .commit()
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
 }
 
 /**
@@ -207,6 +221,9 @@ private class SharedPreferencesCoreV4SyncPersistence(context: Context) : CoreV4S
 class AndroidCoreV4SyncStore internal constructor(
     private val persistence: CoreV4SyncPersistence,
 ) {
+    private var quarantineFailed = false
+    private var lastQuarantinedRaw: String? = null
+
     constructor(context: Context) : this(SharedPreferencesCoreV4SyncPersistence(context))
 
     internal fun <T> withExclusiveState(action: () -> T): T = withCoreV4StateLock(action)
@@ -715,14 +732,38 @@ class AndroidCoreV4SyncStore internal constructor(
 
     private fun readRoot(): JSONObject {
         val raw = persistence.read() ?: return JSONObject().put("schema_version", SCHEMA_VERSION)
-        return runCatching {
-            JSONObject(raw).also { require(it.optInt("schema_version") == SCHEMA_VERSION) }
-        }.getOrElse { JSONObject().put("schema_version", SCHEMA_VERSION) }
+        val parsed = try {
+            JSONObject(raw)
+        } catch (_: JSONException) {
+            quarantineAndReturnEmpty(raw, "Invalid JSON")
+        }
+        if (parsed.optInt("schema_version") != SCHEMA_VERSION) {
+            return quarantineAndReturnEmpty(raw, "Unsupported schema version")
+        }
+        return parsed
     }
 
     private fun writeRoot(root: JSONObject) {
+        check(!quarantineFailed) {
+            "Refusing to overwrite V4 sync state because quarantine failed"
+        }
         root.put("schema_version", SCHEMA_VERSION)
         persistence.write(root.toString())
+        lastQuarantinedRaw = null
+    }
+
+    private fun quarantineAndReturnEmpty(raw: String, reason: String): JSONObject {
+        if (lastQuarantinedRaw != raw) {
+            lastQuarantinedRaw = raw
+            val quarantined = try {
+                persistence.quarantine(raw, reason)
+            } catch (failure: Exception) {
+                quarantineFailed = true
+                throw failure
+            }
+            if (!quarantined) quarantineFailed = true
+        }
+        return JSONObject().put("schema_version", SCHEMA_VERSION)
     }
 
     private fun JSONObject.toConsent(category: CoreV4Category) = CoreV4ConsentRecord(
