@@ -81,29 +81,35 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
 | TASK_ID | Objectif | Dépendance | Statut | Session Paseo | Worktree | Oracle |
 |---|---|---|---|---|---|---|
 | V7-06C-00-PREFLIGHT | SHA, CI, services live, ressources, harnais, identités | — | **ACCEPTED (lecture seule)** | parent | racine | SHA local=distant, inventaire complet, aucun service modifié |
-| V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **ACCEPTED (code + runtime backend)** — commit `64020d7`, intégré `b4db8da` ; correctif attestation `f9017f4` intégré `5ca0a92` ; 14/14 tests harnais, backend positif et négatif PASS | `3b012d9f-efaf-424f-9668-52c42be6cefc` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; backend réel PASS |
+| V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **ACCEPTED (code + runtime backend)** — commits `64020d7`, `f9017f4`, `d0f7d48` intégrés jusqu’à `3b9b3d1` ; 17/17 tests harnais, backend positif et négatif PASS | `3b012d9f-efaf-424f-9668-52c42be6cefc` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; backend réel PASS |
 | V7-06C-02-ANDROID-RUNTIME | Pré-vol physique, installation QA, Keystore/WorkManager | PREFLIGHT + autorisation | **ACCEPTED (runtime)** — Pixel 9 Pro XL API 37, paquets QA installés, Keystore/WorkManager exercés, produit intact | parent opérateur unique | racine | device stable, runner PASS, produit/HOME inchangés |
 | V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **ACCEPTED (code + runtime)** — commit `69feb5c`, merge `f7e6441` ; APPLY et REJECT ont émis `ack_replay=identical` | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | compilation QA, runtime APPLY + REJECT |
-| V7-06C-03-APPLY | DayPlan v2→v3 par Android, ACK APPLIED durable, rejeu sans second effet | 01 + 02 + 03B | **ACCEPTED (runtime)** — runner PASS 12 étapes / 19,387 s ; oracle Core indépendant PASS | parent opérateur | racine | proof `v7-06c-apply-a49e3a3aa819.json` |
-| V7-06C-03-REJECT | Refus explicite sans modification du plan, ACK REJECTED durable | 01 + 02 + 03B | **ACCEPTED (runtime, oracle post-hoc)** — runner PASS 12 étapes / 21,214 s ; Core REJECTED/v2 sans v3 ; wrapper corrigé lié à l’`ack_id`, proof post-hoc PASS | parent opérateur | racine | proof `v7-06c-reject-2fb57424d534.json` |
-| V7-06C-P2-VALIDATION-422 | Aligner `VALIDATION_FAILED` sur HTTP 422 dans `invoke_tool` + test ciblé | — | **RUNNING** | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | `fix/v7-06c-validation-422` | test rouge→vert, suite backend complète |
-| V7-06C-04-WSS-PUBLIC | Même parcours via WSS public, réseau extérieur, sans `adb reverse` | 03 + endpoint public autorisé | **BLOCKED_NETWORK** | — | — | TLS/Noise/auth/révocation + fil rouge complet |
-| V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–03 | **PENDING** | à créer | worktree détaché | grille P0/P1/P2, aucun P0 ouvert |
+| V7-06C-03-APPLY | DayPlan v2→v3 par Android, ACK APPLIED durable, rejeu sans second effet | 01 + 02 + 03B | **ACCEPTED (runtime local + public)** — local 12 étapes / 19,387 s ; public `network=public_wss` APPLIED v3 | parent opérateur | racine | proofs `v7-06c-apply-a49e3a3aa819.json`, `v7-06c-apply-e4557615f525.json` |
+| V7-06C-03-REJECT | Refus explicite sans modification du plan, ACK REJECTED durable | 01 + 02 + 03B | **ACCEPTED (runtime local + public)** — local runner PASS + proof post-hoc ; public `network=public_wss` REJECTED, plan v2 | parent opérateur | racine | proofs `v7-06c-reject-2fb57424d534.json`, `v7-06c-reject-be5168ed2070.json` |
+| V7-06C-P2-VALIDATION-422 | Aligner `VALIDATION_FAILED` sur HTTP 422 dans `invoke_tool` + test ciblé | — | **ACCEPTED** — commit `02be9c1`, intégré `b33d43b` ; test rouge→vert, backend **372 passed / 1 skipped** | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | `fix/v7-06c-validation-422` | test ciblé PASS, suite backend complète |
+| V7-06C-04-WSS-PUBLIC | Même parcours via WSS public, réseau extérieur, sans `adb reverse` | 03 + endpoint public autorisé | **ACCEPTED (runtime, limitations P1)** — Pixel LTE → `wss://all.taildc7886.ts.net:8443` → relais isolé 4400 ; APPLY + REJECT PASS, TLS valide, Noise/auth, aucun `adb reverse`, Core/Gateway loopback | parent opérateur | racine | proofs `remote-apply2`, `remote-reject` |
+| V7-06C-04-REVOKE-PROBE | Reconnexion avec device QA révoqué et code de fermeture | 04 | **FAIL (observabilité P1)** — device révoqué, connecteur refuse (aucune nouvelle session, `errors_total=1`) ; app `state=ERROR`, `close_code=null`, pas `REVOKED`/4001 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | probe instrumenté FAIL ; refus serveur confirmé par métriques |
+| V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–04 | **PENDING** | à créer | worktree détaché | grille P0/P1/P2, aucun P0 ouvert |
 
 ## 4. Journal des sessions
 
 | Date | Session | Rôle | Provider/modèle/effort constatés | Résultat |
 |---|---|---|---|---|
 | 2026-11-01 | parent | Pré-vol V7-06C-00 | session parente | `ACCEPTED` lecture seule ; aucune modification live |
-| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `64020d7`, intégré `b4db8da` ; 12/12 tests |
-| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK test | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code + runtime)` — `69feb5c`, intégré `f7e6441` |
+| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `64020d7`, `f9017f4`, `d0f7d48` ; 17/17 tests |
+| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK + sonde révocation | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `69feb5c`, `f1b6b30` intégrés `f7e6441`/`fa960d5` |
 | 2026-11-01 | parent + autorisation propriétaire | QA physique APPLY+REJECT | — | autorisation ciblée accordée ; produit/HOME/Keystore non touchés |
 | 2026-11-01 | parent | Backend reproductible positif | DeepSeek réel isolé | **PASS** — 3 tours proxy, 2 outils corrélés, 1 proposition A0, ACK APPLIED v3 |
 | 2026-11-01 | parent | Backend reproductible négatif | DeepSeek réel isolé | **PASS** — stale/unknown/terminal/injection/consent révoqué ; 0 proposition/ACK |
-| 2026-11-01 | parent | Android APPLY physique | Pixel 9 Pro XL, API 37, paquet QA `…v706capply.a7f3c21e` | **PASS** — 12 étapes / 19,387 s, v2→v3, ACK APPLIED v3, rejeu identique |
-| 2026-11-01 | parent | Android REJECT physique | Pixel 9 Pro XL, API 37, paquet QA `…v706creject.b4d9e602` | **PASS (post-hoc)** — 12 étapes / 21,214 s, plan v2, ACK REJECTED, oracle Core PASS ; incident logcat multi-runs corrigé |
-| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | Correctif attestation harnais | codex / `gpt-6-luna` / `xhigh` | `f9017f4`, intégré `5ca0a92` ; 14/14 tests |
-| 2026-11-01 | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | P2 `VALIDATION_FAILED` 422 | codex / `gpt-6-luna` / `xhigh` (à vérifier) | `RUNNING` |
+| 2026-11-01 | parent | Android APPLY physique local | Pixel 9 Pro XL, API 37, paquet `…v706capply.a7f3c21e` | **PASS** — 12 étapes / 19,387 s, v2→v3, ACK APPLIED v3, rejeu identique |
+| 2026-11-01 | parent | Android REJECT physique local | Pixel 9 Pro XL, API 37, paquet `…v706creject.b4d9e602` | **PASS (post-hoc)** — 12 étapes / 21,214 s, plan v2, ACK REJECTED ; incident logcat multi-runs corrigé |
+| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | Correctif attestation + port 4400 | codex / `gpt-6-luna` / `xhigh` | `f9017f4`/`d0f7d48` intégrés `5ca0a92`/`3b9b3d1` ; 17/17 tests |
+| 2026-11-01 | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | P2 `VALIDATION_FAILED` 422 | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | **ACCEPTED** — `02be9c1`, intégré `b33d43b` ; backend 372/1 |
+| 2026-11-01 | parent | Remote APPLY public WSS — 1er essai | Pixel LTE, stack `android-apply-1853166` | **BLOCKED (hang intermittent)** — USER persisté, aucune requête chat, session relay fermée ; root non confirmée |
+| 2026-11-01 | parent | Remote APPLY public WSS — 2e essai | Pixel LTE, stack `android-apply-1940890` | **PASS** — `network=public_wss`, v2→v3, ACK APPLIED v3, TLS/Noise, aucun `adb reverse` |
+| 2026-11-01 | parent | Remote REJECT public WSS | Pixel LTE, stack `android-reject-1968579` | **PASS** — `network=public_wss`, plan v2, ACK REJECTED, sonde incluse |
+| 2026-11-01 | parent | Sonde reconnexion device révoqué | Pixel LTE, device `968aff85…` révoqué | **FAIL observabilité** — connecteur refuse (aucune session, `errors_total=1`) ; app `ERROR`, `close_code=null` |
+| 2026-11-01 | parent + autorisation propriétaire | Nettoyage QA | — | 18 paquets `qa*` désinstallés ; produit `dev.atlas.coach`/HOME intacts ; Wi‑Fi restauré ; Funnel état initial |
 
 ## 5. Résultats runtime (2026-11-01)
 
@@ -161,6 +167,62 @@ existante (`execution_mode=post_hoc_existing_stack`, aucune nouvelle exécution)
 a produit le proof PASS `v7-06c-reject-2fb57424d534.json`. Le test et le produit
 n'étaient pas en cause.
 
+### 5.4 WSS public depuis réseau extérieur — APPLY/REJECT PASS
+
+| Élément | Valeur |
+|---|---|
+| Réseau | Pixel 9 Pro XL sur **LTE** (`MOBILE[LTE]`, réseau 151), Wi‑Fi désactivé ; DNS public résolu, ping Funnel OK |
+| Endpoint | `wss://all.taildc7886.ts.net:8443` ; TLS valide (`curl` 200, `ssl_verify_result=0`) ; Funnel inchangé `8443 → 127.0.0.1:4400` |
+| Relais | Conteneur isolé épinglé publié sur `127.0.0.1:4400` (port déjà ciblé par le Funnel), identité/jetons synthétiques neufs |
+| Exposition | Core `8111`, Gateway `19076`, proxy `19075` en loopback uniquement ; aucun port Core/Gateway publié |
+| `adb reverse` | **absent** (`requested=false`, `added=false`) sur les deux scénarios |
+| APPLY | stack `android-apply-1940890` ; paquet `…v706capply.f1e2d3c4b5a6` ; APK `92fb9708…` / `57321867…` ; proposition `26240af5-…` APPLIED, plan v2→v3, ACK `80962380-…` APPLIED v3 |
+| REJECT | stack `android-reject-1968579` ; paquet `…v706creject.bf5b0d3e2c4a` ; APK `7759c26b…` / `c6eebb6a…` ; proposition `9adb680d-…` REJECTED, plan v2, ACK `6122332c-…` REJECTED |
+| Oracles | Snapshots v2/v3 et {2} ; consentements révoqués v3 ; journal connecteur ; trace outils 3 tours corrélés ; rejeu ACK identique |
+| Funnel après | Cible 4400 de nouveau sans listener (état initial) ; relais live `atlas-v7-relay` sur 4402 intact ; aucun changement Funnel/Tailscale |
+
+### 5.5 Sonde de reconnexion après révocation — FAIL d’observabilité (P1)
+
+Le device QA `968aff85-ab1e-4b50-a398-10085e1d2c25` a été révoqué dans le registre
+du connecteur isolé (`revoked_at=2026-11-01T14:05:07Z`). La sonde instrumentée
+`V7_06C_RevokedDeviceReconnectInstrumentedTest` a reconnecté l’app QA existante :
+
+- **Refus serveur confirmé** : métriques connecteur `connections_opened_total=2`,
+  `sessions_opened_total=1` (aucune nouvelle session), `errors_total=1`,
+  `active_sessions=0`.
+- **Côté client** : `state=ERROR`, `close_code=null`, credentials présents.
+  Le probe a échoué son assertion stricte (`explicit_refusal_not_observed`) ; il
+  n’a pas observé `REVOKED`/`AUTH_REQUIRED` ni le code 4001 attendu.
+- Conclusion : la révocation est **effective côté serveur** (aucune nouvelle
+  session/opération), mais l’observabilité client A4-4 reste défectueuse
+  (`ERROR`/`null` au lieu d’un refus lisible `REVOKED`/4001). Le test est rapporté
+  **FAIL**, pas transformé en PASS.
+
+### 5.6 Incident de fiabilité — blocage intermittent avant chat (P1)
+
+Au **premier** essai APPLY public (stack `android-apply-1853166`), le test a
+synchronisé consentements + plan v2 + pull, persisté le message USER dans la
+conversation locale, puis **aucune requête `v4.coach.chat.request`** n’a atteint le
+connecteur. Le runner hôte a été coupé après 540 s ; l’instrumentation est restée
+active jusqu’à `am force-stop`. La relance sur une stack neuve a **PASS** (APPLY
+public). Root cause non confirmée : hypothèse dominante d’inversion de verrous
+`consentGate` ↔ WebSocket (`AgentContextCoordinator.consentStillAllows`,
+`RelayBackendTransport.pump`), cohérente avec le P2 V7-06A « non reproduit ».
+Aucun thread-dump n’a pu être obtenu (debuggerd root requis ; le second essai a
+passé avant la fenêtre de dump). Défaut classé **P1 fiabilité**, non corrigé.
+
+### 5.7 Nettoyage et identités
+
+- 18 paquets QA (`dev.atlas.coach.qa*`, y compris les anciens qa/qa2/qa3/qa4) ont
+  été désinstallés après autorisation explicite. Le produit `dev.atlas.coach`,
+  `dev.atlas.coach.test`, HOME, Keystore et données personnelles sont intacts.
+- Wi‑Fi restauré (`wifi_on=1`, réseau par défaut 152), aucun `adb reverse`.
+- Le Funnel est revenu à son état initial (cible 4400 sans listener) ; le relais
+  live `atlas-v7-relay` sur 4402 et le Core/Gateway live n’ont pas été modifiés.
+- Les identités live résiduelles (`pixel-v7`, `r3c-pixel-final`, consentements
+  `GRANTED v2` du `device_ref` `android-9a3f0f…`) restent **non révoquées** ; aucune
+  action live n’a été effectuée sans autorisation ciblée.
+
 ## 6. Décisions et limites
 
 - Le harnais V7-06B sous `/tmp` est audité comme source de reprise ; sa version
@@ -175,3 +237,13 @@ n'étaient pas en cause.
   l’`ack_id` et l’unicité de l’événement Core. Le rejeu backend V7-06B reste une
   preuve distincte.
 - Aucun verdict GO n’est prononcé avant exécution réelle et oracle indépendant.
+- **P1 fiabilité** : blocage intermittent avant chat observé une fois en public ;
+  relance PASS. Aucun correctif produit appliqué ; diagnostic indépendant requis.
+- **P1 observabilité A4-4** : device révoqué refusé par le connecteur mais app
+  `ERROR`/`close_code=null`, pas `REVOKED`/4001. Le probe est **FAIL**.
+- Le P2 HTTP 422 est corrigé (`02be9c1`, `b33d43b`) avec test rouge→vert et
+  backend 372/1 ; les autres codes HTTP n’ont pas été modifiés.
+- Le `GO_REMOTE_V4_PUBLIC` porte sur le parcours APPLY/REJECT public réellement
+  exécuté ; il ne vaut ni `GO_PIXEL_PRODUCT` ni `GO_PRODUCT_REMOTE`.
+- Les identités live résiduelles et les paquets produit restent hors périmètre de
+  la campagne ; aucune révocation live n’a été exécutée.

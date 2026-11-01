@@ -5,6 +5,48 @@ Branche locale : `feat/atlas-v7-remote-operational`
 Base mission : `b759bdafbf0c67eda1a14ae2cf2f3fac75239e4c`  
 Aucun push, PR ou merge distant effectué.
 
+## V7-06C — Coach Android QA puis transport public (2026-11-01)
+
+**Statut global : boucle Coach Android QA GO en local et via WSS public depuis LTE ;
+deux P1 ouverts (blocage intermittent avant chat, observabilité de révocation A4-4) ;
+application produit non testée (`GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` = NO GO).**
+
+- Branche locale : `feat/atlas-v7-06c-android-coach-loop`, base
+  `3e0d1f4c9ca591f903a894be87183395d30fee0b`, aucun push/PR/merge distant.
+- Harnais reproductible : `64020d7`, correctif attestation `f9017f4`, port Relay
+  épinglé `d0f7d48`, intégrés jusqu’à `3b9b3d1` ; 17/17 tests, backend positif et
+  négatif PASS avec DeepSeek réel isolé (`GO_E2E_HARNESS_REPRODUCIBLE`).
+- Test Android QA : rejeu ACK exact `69feb5c` (intégré `f7e6441`) et sonde de
+  reconnexion révoquée `f1b6b30` (intégré `fa960d5`).
+- P2 HTTP 422 : `02be9c1`, intégré `b33d43b`, test rouge→vert, backend
+  **372 passed / 1 skipped**.
+- Exécutions physiques (Pixel 9 Pro XL, Android 17 / API 37, paquets QA séparés) :
+  APPLY local 12 étapes/19,387 s (plan v2→v3, ACK APPLIED v3) ; REJECT local
+  12 étapes/21,214 s (plan v2, ACK REJECTED, proof post-hoc corrigé).
+- WSS public depuis LTE, sans `adb reverse` : APPLY sur
+  `wss://all.taildc7886.ts.net:8443` (proposition `26240af5-…`, ACK `80962380-…`
+  APPLIED v3) et REJECT (proposition `9adb680d-…`, ACK `6122332c-…` REJECTED),
+  relais isolé sur `127.0.0.1:4400`, TLS/Noise/auth, Core/Gateway loopback.
+- P1 fiabilité : premier APPLY public bloqué après les syncs, avant le chat ;
+  relance PASS. Cause racine non confirmée (inversion `consentGate`/WebSocket
+  suspectée). P1 A4-4 : device QA révoqué, le connecteur refuse (aucune nouvelle
+  session, `errors_total=1`) mais l’app observe `ERROR`/`close_code=null` au lieu de
+  `REVOKED`/4001 ; la sonde instrumentée est **FAIL**.
+- Nettoyage : 10 paquets QA V7-06C + 8 anciens `qa/qa2/qa3/qa4` désinstallés après
+  autorisation ; produit, HOME, Keystore et données personnelles intacts. Wi‑Fi
+  restauré ; Funnel revenu à son état initial (cible 4400 sans listener) ; relais
+  live 4402 et Core/Gateway live non modifiés.
+- Identités live résiduelles : `pixel-v7` et `r3c-pixel-final` non révoqués,
+  consentements `DAY_PLAN`/`ACTIVITY_STATUS` `GRANTED v2` pour `android-9a3f0f…` ;
+  aucune révocation/rotation exécutée sans autorisation ciblée.
+- Preuves : `docs/operations/V7-06C_FINAL_REPORT.md`,
+  `REGISTRY_V7_06C.md`, `evidence/V7-06C_ANDROID_APPLY.md`,
+  `evidence/V7-06C_ANDROID_REJECT.md`, `evidence/V7-06C_PUBLIC_WSS.md`,
+  `evidence/V7-06C_SECURITY_REVIEW.md`.
+- Prochaines actions : diagnostic/correctif du blocage intermittent, correction de
+  l’observabilité A4-4, revue indépendante, puis qualification de l’application
+  produit et du fil rouge produit distant si autorisés.
+
 ## V7-06A — fiabilisation V4 (2026-11-01)
 
 **Statut global : code corrigé, suites déterministes PASS, qualification physique

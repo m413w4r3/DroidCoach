@@ -1,10 +1,11 @@
 # ATLAS V7-06C — Coach Android puis transport public : rapport final
 
-**Statut du document : EN COURS — boucle Coach Android QA GO ; P2, suites finales,
-revue indépendante et transport public restent à traiter.**
+**Statut du document : EN COURS — Coach Loop QA GO en local et via WSS public ;
+deux P1 ouverts (blocage intermittent avant chat, observabilité de révocation A4-4) ;
+revue indépendante en cours. `GO_PIXEL_PRODUCT` et `GO_PRODUCT_REMOTE` restent NO GO.**
 Les sections sont mises à jour au fur et à mesure des exécutions réelles sur le SHA
-intégré. Une ligne `NOT_RUN`, `BLOCKED` ou `CORRECTION_REQUIRED` ne doit pas être lue
-comme un succès.
+intégré. Une ligne `NOT_RUN`, `BLOCKED`, `FAIL` ou `CORRECTION_REQUIRED` ne doit pas
+être lue comme un succès.
 
 **Campagne :** V7-06C « Coach Android puis transport public »
 **BASE_SHA :** `3e0d1f4c9ca591f903a894be87183395d30fee0b`
@@ -31,9 +32,25 @@ Un défaut de sélection d'attestation logcat du harnais (deux runs dans le buff
 l'`ack_id` Core, sans ré-exécution. `GO_ANDROID_QA_REJECT` et `GO_QA_COACH_LOOP` sont
 donc **GO** sur le paquet QA physique.
 
-Le transport public reste **BLOCKED_NETWORK** : le Funnel pointe vers
-`127.0.0.1:4400`, sans listener, et la sonde TLS échoue. Aucun changement Funnel/Tailscale
-n'a été effectué.
+Le **transport public WSS** a été qualifié depuis le Pixel en **LTE**, sans
+`adb reverse`, vers `wss://all.taildc7886.ts.net:8443` : TLS valide, relais isolé
+sur `127.0.0.1:4400`, Core/Gateway/proxy en loopback. APPLY et REJECT ont tous deux
+produit leurs preuves `network=public_wss` (DayPlan v3/ACK APPLIED ; plan v2/ACK
+REJECTED). Le Funnel n'a pas été modifié et a retrouvé son état initial après arrêt
+de la stack.
+
+Deux **P1** restent ouverts et ne sont pas transformés en succès :
+
+1. **Fiabilité** : le premier essai APPLY public s'est bloqué après la synchronisation,
+   avant l'envoi du chat ; une relance sur stack neuve a PASS. Cause racine non
+   confirmée (inversion de verrous `consentGate`/WebSocket suspectée).
+2. **Observabilité A4-4** : après révocation du device QA, le connecteur refuse bien
+   la reconnexion (aucune nouvelle session, `errors_total=1`), mais l'app observe
+   `state=ERROR`, `close_code=null` au lieu de `REVOKED`/4001. La sonde instrumentée
+   est **FAIL**.
+
+Le produit `dev.atlas.coach` n'a jamais été installé, remplacé ni instrumenté ; les
+18 paquets QA ont été désinstallés après autorisation.
 
 ## 2. Périmètre et provenance
 
@@ -53,12 +70,12 @@ n'a été effectué.
 ## 3. Harnais reproductible (V7-06C-01)
 
 Statut : **PASS** — `GO_E2E_HARNESS_REPRODUCIBLE`.
-Commit `64020d7543febf4322d8ba8002d8695322e43606`, intégré localement dans
-`b4db8da5f3ae3aa1ea85d52a4bcaf996f4d3744a`. Le harnais V7-06B non commité sous
-`/tmp/atlas-v7-06b-backend` a été audité ; ses éléments utiles sont portés sous
-`scripts/v7-06c/` avec les correctifs connus : `expires_at` 30 s, arrêt Gateway par
-signature, stderr des enfants en fichiers privés 0600, readiness réelle, identités
-synthétiques et oracles indépendants.
+Commits `64020d7` (harnais), `f9017f4` (attestation ACK liée à l'`ack_id`),
+`d0f7d48` (port Relay épinglé), intégrés jusqu'à `3b9b3d1`. Le harnais V7-06B non
+commité sous `/tmp/atlas-v7-06b-backend` a été audité ; ses éléments utiles sont portés
+sous `scripts/v7-06c/` avec les correctifs connus : `expires_at` 30 s, arrêt Gateway
+par signature, stderr des enfants en fichiers privés 0600, readiness réelle,
+identités synthétiques et oracles indépendants.
 
 Commandes de reproduction :
 
@@ -76,15 +93,19 @@ Résultats constatés :
 | Backend positif | **PASS** | 3 tours proxy ; DeepSeek réel ; 6 outils client ; `atlas_get_day_plan` + `atlas_propose_plan_revision` corrélés ; 1 proposition A0 `base_version=2` ; 1 ACK `APPLIED` v3 ; snapshots v2/v3 ; rejeu identique ; 1 cache chat |
 | Backend négatif | **PASS** | stale version/projection/unknown refusés ; terminal `VALIDATION_FAILED` ; injection sans sentinelle ; consentement révoqué refusé ; **0 proposition / 0 ACK** |
 
-Tests statiques du harnais : `12/12` unittest PASS, `py_compile`, `node --check`,
-`git diff --check`. Nettoyage : chaque stack arrêtée par identité propriétaire
+Tests statiques du harnais : `17/17` unittest PASS (dont attestation ACK et port
+épinglé), `py_compile`, `node --check`, `git diff --check`. Nettoyage : chaque stack
+arrêtée par identité propriétaire
 (processus, conteneur, racine) ; aucune ressource `atlas-v7-06c` résiduelle.
 
 ## 4. Android APPLY
 
-Statut : **PASS** — `GO_ANDROID_QA_CHAT`, `GO_ANDROID_QA_PLAN_APPLY`, `GO_ANDROID_QA_ACK`
-pour le scénario APPLY. Preuve : `v7-06c-apply-a49e3a3aa819.json` et
-`docs/operations/evidence/V7-06C_ANDROID_APPLY.md`.
+Statut : **PASS local et public WSS** — `GO_ANDROID_QA_CHAT`,
+`GO_ANDROID_QA_PLAN_APPLY`, `GO_ANDROID_QA_ACK` pour le scénario APPLY. Preuves :
+`v7-06c-apply-a49e3a3aa819.json` (local) et
+`v7-06c-apply-e4557615f525.json` (public, `network=public_wss`),
+`docs/operations/evidence/V7-06C_ANDROID_APPLY.md` et
+`docs/operations/evidence/V7-06C_PUBLIC_WSS.md`.
 
 | Élément | Valeur |
 |---|---|
@@ -110,9 +131,11 @@ connecteur (1 ACK `completed_redacted`, 2 snapshots complétés, 1 chat complét
 
 ## 5. Android REJECT
 
-Statut : **PASS** — `GO_ANDROID_QA_REJECT`. Preuve :
-`v7-06c-reject-2fb57424d534.json` et
-`docs/operations/evidence/V7-06C_ANDROID_REJECT.md`.
+Statut : **PASS local et public WSS** — `GO_ANDROID_QA_REJECT`. Preuves :
+`v7-06c-reject-2fb57424d534.json` (local, post-hoc) et
+`v7-06c-reject-be5168ed2070.json` (public, `network=public_wss`),
+`docs/operations/evidence/V7-06C_ANDROID_REJECT.md` et
+`docs/operations/evidence/V7-06C_PUBLIC_WSS.md`.
 
 | Élément | Valeur |
 |---|---|
@@ -138,18 +161,36 @@ pas en cause ; les 14 tests du harnais passent.
 
 ## 6. Transport public WSS
 
-Statut : **BLOCKED_NETWORK — NOT_RUN**.
+Statut : **APPLY et REJECT PASS via WSS public depuis LTE** — `GO_REMOTE_V4_PUBLIC`
+avec deux P1 documentés (fiabilité, observabilité A4-4).
 
-Constat de pré-vol (lecture seule) :
+Modalité autorisée par le propriétaire : relais isolé publié sur `127.0.0.1:4400`,
+port déjà ciblé par le Funnel existant ; **aucun changement Funnel/Tailscale**, aucun
+`sudo`, aucun service live modifié.
 
-- DNS public `all.taildc7886.ts.net` résolu.
-- Funnel actif `tcp://all.taildc7886.ts.net:8443` → `127.0.0.1:4400`.
-- Aucun listener sur `127.0.0.1:4400`.
-- Le relais live publie `4000/tcp -> 127.0.0.1:4402`.
-- Sonde TLS `https://all.taildc7886.ts.net:8443/health` : erreur `SSL_ERROR_SYSCALL`.
+| Élément | Constat |
+|---|---|
+| Réseau Android | Pixel 9 Pro XL sur LTE (`MOBILE[LTE]`, réseau 151), Wi‑Fi désactivé pendant les tests, restauré ensuite |
+| DNS/TLS | `all.taildc7886.ts.net` résolu depuis le téléphone ; `https://…:8443/health` → HTTP 200, TLS valide (`ssl_verify_result=0`) |
+| Relay | conteneur isolé épinglé `atlas-paseo-relay:r3a`, publié `127.0.0.1:4400` ; Funnel inchangé `8443 → 4400` |
+| Noise/auth | Noise NK protégé, `server_public_key` épinglée, session device authentifiée, capabilities V4 |
+| Exposition | Core `8111`, Gateway `19076` et proxy `19075` en loopback uniquement ; aucun port Core/Gateway public |
+| `adb reverse` | **absent** sur APPLY et REJECT |
+| APPLY | `network=public_wss`, proposition `26240af5-…` APPLIED, plan v2→v3, ACK `80962380-…` APPLIED v3, rejeu identique |
+| REJECT | `network=public_wss`, proposition `9adb680d-…` REJECTED, plan v2, ACK `6122332c-…` REJECTED, aucun v3 |
+| Funnel final | cible `127.0.0.1:4400` de nouveau sans listener, état initial ; relais live `atlas-v7-relay` sur 4402 intact |
 
-Aucun changement Funnel/Tailscale, service live ou secret n’a été effectué. Une
-autorisation ciblée et un endpoint vivant sont requis avant toute recette publique.
+Deux limites P1 sont conservées :
+
+1. **Blocage intermittent avant chat** : au premier essai APPLY public, le message
+   USER a été persisté mais aucune requête chat n'a atteint le connecteur ; le test
+   est resté bloqué et a été arrêté. Une relance sur stack neuve a PASS. Cause racine
+   non confirmée (inversion de verrous `consentGate`/WebSocket suspectée).
+2. **Révocation A4-4** : le device QA `968aff85…` a été révoqué durablement. La
+   reconnexion est refusée par le connecteur (`connections_opened_total=2`,
+   `sessions_opened_total=1`, `errors_total=1`, aucune nouvelle session), mais l'app
+   observe `state=ERROR`, `close_code=null` au lieu de `REVOKED`/4001. La sonde
+   instrumentée est **FAIL** ; le refus serveur est confirmé par les métriques.
 
 ## 7. Sécurité et identités résiduelles
 
@@ -171,42 +212,50 @@ Une révocation ciblée de ces deux appareils et/ou une rotation du bearer Core
 restent soumises à une autorisation spécifique, avec sauvegarde, commandes
 exactes, vérification des refus après révocation et rollback compatible.
 
-Aucune identité personnelle n’est utilisée par la stack V7-06C. L’appareil
-physique QA est sur Wi-Fi ; les interfaces `rmnet` sont `DOWN`. La recette
-publique exigera un réseau extérieur réel (données mobiles ou autorisation
-ciblée de changement réseau), sans `adb reverse`.
+Aucune identité personnelle n’est utilisée par la stack V7-06C. Le jeton relay de
+l’app QA est stocké sous forme `IV:ciphertext` chiffrée AES-GCM avec une clé
+Android Keystore (`KeystoreRelayCredentialStore`) ; aucun jeton en clair n’a été
+publié dans les preuves. L’appareil a été temporairement basculé en LTE pour la
+recette publique, puis le Wi‑Fi a été restauré (`wifi_on=1`, réseau par défaut 152) ;
+la configuration `mobile_data=1` d’origine est inchangée.
+
+**Nettoyage :** les 10 paquets QA V7-06C et les 8 anciens paquets `qa/qa2/qa3/qa4`
+(app + test) ont été désinstallés après autorisation explicite. Seuls
+`dev.atlas.coach` (produit) et `dev.atlas.coach.test` restent installés ; le produit,
+HOME, Keystore et données personnelles sont intacts (`lastUpdateTime` inchangé).
 
 ## 8. Suites et preuves
 
-Exécutées sur le SHA intégré `b4db8da` (et complétées après les correctifs de harnais) :
+Exécutées sur le code intégré (SHA de code `fa960d5` pour la sonde, backend P2
+`b33d43b`, harnais jusqu'à `3b9b3d1`) :
 
 | Suite | Résultat |
 |---|---|
-| Backend `pytest -q` | **371 passed / 1 skipped** (30,87 s, 3 warnings) |
+| Backend `pytest -q` (après P2 422) | **372 passed / 1 skipped** (29,38 s, 3 warnings) |
 | Connecteur Node `npm run test:unit` | **109/109 PASS** (17 fichiers) |
 | Plugin OpenClaw `npm test` | **59/59 PASS** |
 | Proxy relay `node --test proxy.test.mjs` | **19/19 PASS** |
 | Android JVM `:app:testDebugUnitTest --offline --rerun-tasks` | **896/896 PASS**, 0 échec/erreur/ignoré (117 fichiers) |
 | Android lint `:app:lintDebug --offline` | **PASS** (HTML/SARIF générés) |
-| Builds `assembleDebug`, `assembleQa`, `assembleQaAndroidTest` | **PASS** ; APK QA REJECT app `b599532c…9a6b`, test `be283081…0e83` ; debug `b0095cf4…c694` |
-| Tests du harnais | **14/14 PASS** après correctif attestation (intégré `5ca0a92`) |
-| `git diff --check` | À rejouer sur le SHA final après le P2 |
+| Builds `assembleDebug`, `assembleQa`, `assembleQaAndroidTest` | **PASS** ; QA REJECT public app `7759c26b…c36b`, test `c6eebb6a…aed` (ACK replay + sonde) ; debug `b0095cf4…c694` |
+| Tests du harnais | **17/17 PASS** (attestation ACK, port épinglé) |
+| `git diff --check` | À rejouer sur le SHA final documentaire |
 
-Résultats runtime : voir §3 (harnais backend), §4 (APPLY) et §5 (REJECT).
+Résultats runtime : voir §3 (harnais backend), §4 (APPLY), §5 (REJECT) et §6 (WSS public).
 
 ## 9. Verdicts
 
 | Verdict | Décision | Portée |
 |---|---|---|
-| `GO_E2E_HARNESS_REPRODUCIBLE` | **GO** | backend positif et négatif rejoués depuis le dépôt sur `b4db8da`, DeepSeek réel isolé |
-| `GO_ANDROID_QA_CHAT` | **GO** | Pixel physique API 37, paquet QA, DeepSeek réel, 2 outils corrélés (APPLY) |
-| `GO_ANDROID_QA_PLAN_APPLY` | **GO** | DayPlan v2→v3 appliqué par le code Android, Core v3 à 610 |
+| `GO_E2E_HARNESS_REPRODUCIBLE` | **GO** | backend positif et négatif rejoués depuis le dépôt, DeepSeek réel isolé |
+| `GO_ANDROID_QA_CHAT` | **GO** | Pixel physique API 37, paquet QA, DeepSeek réel, 2 outils corrélés (local et public) |
+| `GO_ANDROID_QA_PLAN_APPLY` | **GO** | DayPlan v2→v3 appliqué par le code Android, Core v3 à 610 (local et public) |
 | `GO_ANDROID_QA_ACK` | **GO** | ACK APPLIED et REJECTED émis par Android, confirmés Core, rejeux identiques |
-| `GO_ANDROID_QA_REJECT` | **GO** | rejet explicite, plan v2 inchangé, aucun v3, oracle post-hoc lié à l’ACK Android |
+| `GO_ANDROID_QA_REJECT` | **GO** | rejet explicite, plan v2 inchangé, aucun v3 (local et public) |
 | `GO_QA_COACH_LOOP` | **GO** | APPLY v2→v3 + ACK APPLIED et REJECT sans changement, sur Android QA physique |
-| `GO_REMOTE_V4_PUBLIC` | **NO GO — BLOCKED_NETWORK** | Funnel cible morte, aucune autorisation de changement |
-| `GO_PIXEL_PRODUCT` | **NO GO** | paquet produit non testé |
-| `GO_PRODUCT_REMOTE` | **NO GO** | produit et transport public non testés |
+| `GO_REMOTE_V4_PUBLIC` | **GO (limité, P1 ouverts)** | APPLY/REJECT via WSS public LTE, TLS/Noise/auth, aucun `adb reverse`, Core/Gateway loopback ; P1 fiabilité (hang intermittent) et P1 A4-4 (state ERROR/close null après révocation, refus serveur confirmé) |
+| `GO_PIXEL_PRODUCT` | **NO GO** | paquet produit non testé ; seuls des paquets QA séparés l’ont été |
+| `GO_PRODUCT_REMOTE` | **NO GO** | produit non testé ; modèle/stack isolés, pas le produit |
 
 ## 10. Revue indépendante
 
@@ -217,5 +266,13 @@ Statut : **PENDING**. Aucune revue ne peut accepter un runtime non exécuté.
 - Un test compilé n’est pas un test exécuté.
 - Une proposition Core n’est pas une modification Android appliquée.
 - Un ACK construit par le harnais backend n’est pas un ACK émis par Android.
-- Un succès local ne vaut pas `GO_REMOTE_V4_PUBLIC`.
-- Un succès sur paquet QA ne vaut pas `GO_PIXEL_PRODUCT`.
+- Un succès local ne vaut pas `GO_REMOTE_V4_PUBLIC` ; les preuves publiques ont été
+  obtenues séparément sur LTE, sans `adb reverse`.
+- Un succès sur paquet QA ne vaut pas `GO_PIXEL_PRODUCT` ; le produit n’a pas été testé.
+- **P1 fiabilité** : le premier APPLY public s’est bloqué avant le chat ; la relance a
+  PASS. Le défaut n’est pas corrigé et sa cause racine n’est pas confirmée.
+- **P1 A4-4** : la révocation est refusée côté connecteur mais l’app renvoie
+  `ERROR`/`close_code=null` ; la sonde instrumentée est FAIL. Aucun 4001/`REVOKED`
+  propre n’a été observé.
+- Les identités live résiduelles (`pixel-v7`, `r3c-pixel-final`, consentements
+  `GRANTED v2`) restent non révoquées ; aucune action live n’a été effectuée.
