@@ -2,12 +2,17 @@
 
 **Statut du document :** `CLÔTURE DE CAMPAGNE — deux P1 diagnostiqués et corrigés
 localement avec tests discriminants ; P2 de provenance APK↔SHA fermé par un
-mécanisme vérifié ; aucune qualification physique exécutée (`NOT_RUN`).`
+mécanisme vérifié ; P1 de revue indépendante sur le gate de provenance corrigé
+(revue delta du SHA corrigé en cours) ; aucune qualification physique exécutée
+(`NOT_RUN`).`
 **Campagne :** V7-06D « Fiabilité remote et révocation A4-4 ».
 **BASE_SHA :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`.
 **Branche :** `feat/atlas-v7-06d-remote-hardening`.
-**SHA de build de provenance :** `cf82cd02a8e00f75d1cd7d476a84691a276f3011`
-(le HEAD documentaire final ne contient que des changements de docs après ce SHA).
+**SHA de build de provenance (APK) :** `cf82cd02a8e00f75d1cd7d476a84691a276f3011`
+**SHA de code final (correctif harnais P1) :** `69d0db6` — le code Android est
+identique entre `cf82cd0` et `69d0db6` (`git diff cf82cd0..69d0db6 -- android/`
+vide) ; le HEAD documentaire final ne contient que des changements de docs après
+ces SHA.
 **Registre :** `docs/operations/REGISTRY_V7_06D.md`.
 **Diagnostic :** `docs/operations/V7-06D_DIAGNOSTIC.md`.
 **Date :** 2026-11-01.
@@ -187,7 +192,8 @@ Commits `04960c6` (tests), `4c8b691`/`49ef354` (implémentation, intégrés
 - manifeste embarqué dans les assets des APK app **et** AndroidTest ;
 - runner : vérification du manifeste, des métadonnées APK, du certificat de
   signature, des SHA-256 des APK installés **avant** `am instrument` ;
-- proof : objet `provenance` complet ; post-hoc sans provenance →
+- proof : objet `provenance` complet, incluant `installed_apk_sha256` (hashes
+  installés égaux aux hashes construits) ; post-hoc sans provenance →
   `INCONCLUSIVE` ;
 - nombre exact de tests d'instrumentation requis (le seul code
   `INSTRUMENTATION_CODE: -1` ne suffit plus) ;
@@ -195,7 +201,17 @@ Commits `04960c6` (tests), `4c8b691`/`49ef354` (implémentation, intégrés
 - correctif de suffixe QA pour garantir un segment Android valide commençant par
   une lettre.
 
-Build final de la campagne (worktree propre, `HEAD=cf82cd0…`) :
+**P1 de revue indépendante et correction.** La revue a trouvé que
+`verify_installed_artifacts` ajoutait `installed_apk_sha256` au proof, puis que
+le validateur strict le rejetait comme champ inconnu, bloquant le run avant
+`am instrument`. Correction `1031a1a` (rouge `c599661`, intégrés
+`7ea8c58`/`69d0db6`) : le champ est intégré au schéma, validé comme
+`{app, android_test}` de SHA-256 minuscules et comparé aux hashes construits ;
+le rejet des champs inconnus reste strict ; une régression couvre le chemin
+complet. Le wrapper V7-06C applique la même validation.
+
+Build final de la campagne (worktree propre, `HEAD=cf82cd0…`, code Android
+inchangé par le correctif harnais `69d0db6`) :
 
 | Élément | Valeur |
 |---|---|
@@ -205,15 +221,20 @@ Build final de la campagne (worktree propre, `HEAD=cf82cd0…`) :
 | Source / arbre | `cf82cd02a8e00f75d1cd7d476a84691a276f3011` / `1d7c1a6069abc2878aa11805f29b347863cbd047` |
 | Variante / SDK | `qa` / compile `37.2`, min `26`, target `36` |
 | Version | code `1`, nom `0.1.0-qa` |
+| Signature (app et test) | certificat debug SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Scénario | `v7-06d-final` |
 
-Tests : harnais **25/25 PASS**, builds QA PASS, manifests app/test identiques,
-gate installé↔construit couvert par tests négatifs. Aucun run appareil ; le gate
-installé n'a donc pas été exercé sur un téléphone dans V7-06D.
+Tests : harnais **26/26 PASS** (après correction P1), builds QA PASS, manifests
+app/test identiques, gate installé↔construit couvert par tests négatifs. Aucun
+run appareil ; le gate installé n'a donc pas été exercé sur un téléphone dans
+V7-06D. Le code Android étant identique entre `cf82cd0` (build APK) et `69d0db6`
+(correctif harnais), les hashes APK ci-dessus restent valides pour les deux SHA.
 
 ## 7. Qualification d'intégration
 
-Sur le SHA intégré `cf82cd0` (worktree propre) :
+Sur le SHA intégré `cf82cd0` (Android/Node/backend, worktree propre) et le SHA
+de code final `69d0db6` (correctif harnais P1 ; Android, Node et backend
+inchangés) :
 
 | Suite | Résultat |
 |---|---|
@@ -223,8 +244,8 @@ Sur le SHA intégré `cf82cd0` (worktree propre) :
 | Builds QA `assembleQa`, `assembleQaAndroidTest` | **PASS** |
 | Node connecteur `npm run test:unit` | **114/114 PASS**, 18 fichiers |
 | Proxy `node --test integrations/relay/proxy/test` | **19/19 PASS** |
-| Harnais `python3 -m unittest discover -s scripts/v7-06c/tests` | **25/25 PASS** |
-| Backend `python3 -m pytest -q` | **397 passed / 1 skipped**, 39 subtests |
+| Harnais `python3 -m unittest discover -s scripts/v7-06c/tests` | **26/26 PASS** (après correction P1) |
+| Backend `python3 -m pytest -q` | **398 passed / 1 skipped**, 43 subtests (la découverte pytest inclut aussi les tests du harnais) |
 | `py_compile` Python modifiés | **PASS** |
 | `git diff --check` | **PASS** |
 
@@ -240,7 +261,7 @@ backend n'est pas modifié et leurs preuves restent valides dans leur périmètr
 | `GO_CHAT_RELIABILITY_QA` | **NOT_RUN** | Aucune autorisation physique ; aucune série de démarrages froids ; une relance PASS ne serait pas une preuve suffisante. |
 | `GO_REVOKED_DEVICE_SERVER` | **GO** | Refus connecteur conservé et testé (token correct → `DEVICE_REVOKED`, mauvais token → `AUTH_FAILED`) ; preuves V7-06C inchangées. |
 | `GO_A4_4_CLIENT` | **NO GO — NOT_RUN** | La sonde stricte renforcée n'a pas été exécutée sur appareil ; les tests déterministes ne remplacent pas ce PASS. |
-| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS** | Chaîne source→manifeste→APK vérifiée sur le build `cf82cd0` ; gate installé↔construit testé, mais pas exercé sur téléphone dans V7-06D. |
+| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS, sous réserve de la revue delta** | Chaîne source→manifeste→APK vérifiée sur le build `cf82cd0` ; P1 de revue sur le champ installé corrigé (`69d0db6`, rouge→vert) ; gate installé↔construit testé, mais pas exercé sur téléphone dans V7-06D. |
 | `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS (QA APPLY/REJECT)** | Inchangé V7-06C ; aucun nouveau run public ; la fiabilité chat publique n'est pas requalifiée. |
 | `GO_PIXEL_PRODUCT` | **NO GO** | Application produit non testée. |
 | `GO_PRODUCT_REMOTE` | **NO GO** | Application produit distante non testée. |
@@ -286,6 +307,28 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
 - Aucun push, PR ou merge distant ; aucun secret ou donnée personnelle dans les
   preuves.
 
+## 10bis. Revue indépendante
+
+- Session `5f9adb37-57bc-4068-9aa8-53899f44f00b`, `codex/gpt-6-luna`, effort
+  effectif `xhigh`, `collaborationMode=Plan`, worktree détaché
+  `/tmp/atlas-v7-06d-review-ro`, lecture seule.
+- SHA revu : `b163202f8f0aee6d1ef5d101b180432967a2646b` (code `cf82cd0…`,
+  delta docs-only). Aucun fichier modifié, aucun test/ADB/Docker/réseau.
+- **Verdict initial : `CORRECTION_REQUIRED`.** Un P1 confirmé : le runner
+  ajoutait `installed_apk_sha256` au proof puis le validateur strict le rejetait
+  (`PROOF_PROVENANCE_FIELD_MISSING`), bloquant l'instrumentation. Un P2 de
+  libellés de progression obsolètes.
+- Le P1 est corrigé `1031a1a` (rouge `c599661`, intégrés
+  `7ea8c58`/`69d0db6`) : champ intégré au schéma, validé et comparé aux hashes
+  construits ; régression couvrant le chemin complet. Le P2 documentaire est
+  corrigé dans les documents finaux.
+- Recommandations initiales : `GO_CHAT_CONCURRENCY` GO,
+  `GO_REVOKED_DEVICE_SERVER` GO, `GO_A4_4_CLIENT` NO GO/NOT_RUN,
+  `GO_APK_PROVENANCE` NO GO en attente de revue du SHA corrigé,
+  `GO_CHAT_RELIABILITY_QA` NOT_RUN, `GO_REMOTE_V4_PUBLIC`
+  GO_WITH_LIMITATIONS hérité, `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` NO GO.
+- **Revue delta du SHA corrigé : `[À COMPLÉTER APRÈS REVUE DELTA]`.**
+
 ## 11. Limites honnêtes
 
 - **Physique `NOT_RUN`** : aucun test sur téléphone, aucune série de démarrages
@@ -307,6 +350,10 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   mais aucun APK installé n'a été vérifié sur appareil dans V7-06D.
 - **Scénarios backend réels** : non rejoués ; le backend n'est pas modifié et les
   preuves V7-06C restent valides dans leur périmètre.
+- **Revue initiale** : lecture seule, sans réexécution des suites ; les totaux
+  sont ceux des logs de test parent et des documents, et la revue delta du SHA
+  corrigé doit confirmer le P1 de provenance. Le P1 trouvé était réel et a été
+  corrigé avant clôture.
 
 ## 12. Prochaines actions
 

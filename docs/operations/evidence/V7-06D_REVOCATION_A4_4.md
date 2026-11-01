@@ -145,7 +145,7 @@ sont explicitement non prouvées par le code.
   été exécutée sur appareil. Les tests déterministes prouvent la correction du
   protocole et de l'état, pas le PASS instrumenté exigé.
 
-## 6. Limites
+## 7. Limites
 
 - Le relais déployé transforme le close 4001 en 1012. La preuve A4-4 repose sur
   la trame applicative authentifiée, pas sur le code de fermeture. Aucune

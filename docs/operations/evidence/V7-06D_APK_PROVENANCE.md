@@ -4,8 +4,9 @@
 **Base :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`
 **Audit :** `codex/gpt-6-luna`, effort effectif `xhigh`, worktree
 `/tmp/atlas-v7-06d-a3-proof-ro`, lecture seule (`collaborationMode=Plan`).
-**Statut :** conception et implémentation en cours ; résultats détaillés
-ci-dessous. Aucun APK contenant un secret ou une fixture personnelle n'est publié.
+**Statut :** implémentation et tests terminés ; P1 de revue indépendante corrigé
+et revérifié ; aucun run physique. Aucun APK contenant un secret ou une fixture
+personnelle n'est publié.
 
 ## 1. Lacune V7-06C
 
@@ -85,6 +86,7 @@ provenance.signing_cert_sha256
 provenance.build_provenance_sha256
 provenance.android_manifest_sha256
 provenance.android_test_manifest_sha256
+provenance.installed_apk_sha256
 provenance.scenario_id
 provenance.network
 provenance.endpoint
@@ -109,6 +111,33 @@ APK installés ne peuvent plus être vérifiés, porte
 - proof post-hoc sans provenance → `INCONCLUSIVE`, pas `PASS` ;
 - aucun token, bearer, série brute ou donnée personnelle dans le manifeste/proof.
 
+## 4bis. P1 de revue indépendante et correction
+
+La revue indépendante `5f9adb37-57bc-4068-9aa8-53899f44f00b` a trouvé que
+`verify_installed_artifacts` retourne `installed_apk_sha256`, que
+`start_instrumentation` l'ajoute au proof, puis que `verify_complete_proof_provenance`
+rejette tout champ hors `QA_PROOF_FIELDS` : le run réel était bloqué avant
+`am instrument` (`PROOF_PROVENANCE_FIELD_MISSING`). Le test existant masquait le
+problème car son mock ne retournait que `installed_apk_verified`.
+
+Correction (commit rouge `c599661`, correctif `1031a1a`, intégrés
+`7ea8c58`/`69d0db6`) :
+
+- `installed_apk_sha256` est intégré au schéma (`QA_PROOF_FIELDS` et
+  `PASS_PROVENANCE_FIELDS`) et validé comme dictionnaire exact `{app,
+  android_test}` de SHA-256 minuscules ;
+- les hashes installés doivent être égaux aux hashes des APK construits ;
+- le rejet des champs inconnus reste strict ;
+- une régression couvre le chemin `verify_installed_artifacts` →
+  `instrument_after_verification` → `start_instrumentation` →
+  `verify_complete_proof_provenance`, y compris les hashes absents, malformés ou
+  différents ;
+- le wrapper V7-06C applique la même validation.
+
+Le code Android est inchangé entre le build APK `cf82cd0` et le correctif
+`69d0db6` (`git diff cf82cd0..69d0db6 -- android/` vide) ; le build APK final
+reste donc valide et le correctif porte sur le harnais de vérification.
+
 ## 5. Résultats
 
 | Oracle | Résultat |
@@ -119,7 +148,8 @@ APK installés ne peuvent plus être vérifiés, porte
 | Extraction et hash du manifeste | **PASS** — hash canonique `dd4b7d39…` (raw `abbbde46…`) identique dans les deux APK |
 | Gate installé↔construit testé (négatifs inclus) | **PASS** — tests unitaires dirty/mismatch/absent/cert/version/hash |
 | Proof post-hoc sans provenance → `INCONCLUSIVE` | **PASS** — `post_hoc_provenance` et `require_pass_provenance` |
-| Tests harnais complets | **PASS** — **25/25** (parent a rejoué) |
+| P1 revue : `installed_apk_sha256` rejeté par le validateur strict | **PASS (corrigé)** — test rouge `c599661` → correctif `1031a1a`, intégrés `7ea8c58`/`69d0db6` |
+| Tests harnais complets | **PASS** — **26/26** (parent a rejoué) |
 | Build `assembleQa` / `assembleQaAndroidTest` | **PASS** — agent et parent |
 | Exécution physique avec ces APK | **NOT_RUN** — pas d'autorisation |
 
@@ -149,6 +179,7 @@ preuve d'un autre SHA.
 | Propreté / variante | `worktree_clean=true` / `qa` |
 | SDK | `compile_sdk=37.2`, `min_sdk=26`, `target_sdk=36` |
 | Version | code `1`, nom `0.1.0-qa` |
+| Signature (app et test) | certificat debug SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Scénario | `v7-06d-final` |
 | Manifestes app/test | identiques octet pour octet |
 
@@ -168,8 +199,9 @@ changements `docs/` ; le SHA compilé et le manifeste embarqué restent
 
 ## 7. Verdict
 
-**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS** : la chaîne
-source→manifeste→APK est vérifiée sur le build intégré `cf82cd0` et le gate
-installé↔construit est couvert par des tests négatifs ; aucun APK installé n'a
-été vérifié sur appareil dans V7-06D. Les preuves V7-06C historiques restent
-`INCONCLUSIVE` pour ce lien et ne sont pas reclassées.
+**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS, sous réserve de la revue delta du
+SHA corrigé** : la chaîne source→manifeste→APK est vérifiée sur le build intégré
+`cf82cd0`, le P1 de revue sur le champ installé est corrigé et testé (rouge →
+vert), et le gate installé↔construit est couvert par des tests négatifs ; aucun
+APK installé n'a été vérifié sur appareil dans V7-06D. Les preuves V7-06C
+historiques restent `INCONCLUSIVE` pour ce lien et ne sont pas reclassées.

@@ -101,7 +101,7 @@ Invariants :
 | Suite JVM complète sur SHA intégré (`cf82cd0`) | **PASS** — 119 fichiers, **909/909**, 0 échec/erreur/ignoré |
 | Lint hors ligne sur SHA intégré | **PASS** |
 | Build `assembleDebug` | **PASS** |
-| Lint | **EN ATTENTE** |
+| Lint | **PASS** sur le SHA intégré |
 | Test timeout avant envoi (`TIMEOUT_NOT_SENT`, aucun octet) | **PASS (ciblé)** — `timeoutWaitingForConsentGateReturnsNotSentWithinTheRequestDeadline` |
 | Test timeout après acceptation (une seule requête, incertain) | **PASS (ciblé)** — `expiresTimedOutRequestAndSendsOnlyBestEffortCancel` |
 | Test révocation/close pendant `beforeDispatch` | **PASS (ciblé)** — `closeDuringBeforeDispatchNeverWritesTheRequest` |

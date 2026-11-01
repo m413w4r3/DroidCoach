@@ -29,8 +29,15 @@ physique (`NOT_RUN`) ; `GO_CHAT_CONCURRENCY`, `GO_REVOKED_DEVICE_SERVER`,
   `7b0ae5a`) : manifeste de build embarqué dans les deux APK, gate
   installé↔construit, proof enrichi ; build final `cf82cd0`, APK
   `1e31a643…`/`05dd465b…`, manifeste `8d678af5…`, `worktree_clean=true`.
-- Suites : Node **114/114**, proxy **19/19**, harnais **25/25**, backend
-  **397 passed/1 skipped**, lint/build PASS, `git diff --check` PASS.
+- Suites : Node **114/114**, proxy **19/19**, harnais **26/26** (après correction
+  P1 de revue), backend **398 passed/1 skipped**, lint/build PASS,
+  `git diff --check` PASS.
+- Revue indépendante `5f9adb37…` (`codex/gpt-6-luna`/`xhigh`, lecture seule) :
+  **CORRECTION_REQUIRED** sur `b163202` — P1 confirmé sur le gate de provenance
+  (`installed_apk_sha256` rejeté comme champ inconnu), corrigé `1031a1a` (rouge
+  `c599661`, intégrés `7ea8c58`/`69d0db6`), P2 de libellés corrigé ; revue delta
+  du SHA corrigé en cours. Chat concurrence et refus serveur jugés sains ;
+  A4-4 client non qualifié sans sonde physique.
 - Aucun ADB/AVD/Pixel/Docker de campagne ; contrôles live strictement en lecture
   seule. Identités résiduelles inchangées : `pixel-v7` et `r3c-pixel-final` non
   révoqués, consentements Core `GRANTED v2` ; aucune révocation/rotation
