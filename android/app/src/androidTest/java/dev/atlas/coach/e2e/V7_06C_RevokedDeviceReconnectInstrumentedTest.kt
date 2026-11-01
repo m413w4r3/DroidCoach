@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atlas.coach.app.AtlasApplication
 import dev.atlas.coach.sync.relay.RelayConnectionState
+import dev.atlas.coach.sync.relay.RelayFailureKind
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +21,7 @@ class V7_06C_RevokedDeviceReconnectInstrumentedTest {
 
         var credentialsConfigured = false
         var observedState: RelayConnectionState? = null
+        var observedFailureKind: RelayFailureKind? = null
         var closeCode = "null"
         var failure: Throwable? = null
         var failureReason = "probe_error"
@@ -33,15 +35,18 @@ class V7_06C_RevokedDeviceReconnectInstrumentedTest {
             val deadline = SystemClock.uptimeMillis() + TIMEOUT_MILLIS
             while (SystemClock.uptimeMillis() < deadline) {
                 observedState = relaySettings.state
-                if (isExplicitRefusal(observedState)) break
+                observedFailureKind = relaySettings.lastFailureKind
+                if (isExplicitRefusal(observedState, observedFailureKind)) break
                 SystemClock.sleep(POLL_INTERVAL_MILLIS)
             }
             observedState = relaySettings.state
+            observedFailureKind = relaySettings.lastFailureKind
             closeCode = relaySettings.lastCloseCode?.toString() ?: "null"
-            if (!isExplicitRefusal(observedState)) failureReason = "explicit_refusal_not_observed"
+            if (!isExplicitRefusal(observedState, observedFailureKind)) failureReason = "explicit_refusal_not_observed"
             assertTrue(
-                "Revoked device reconnect was not explicitly refused within 30s; state=${observedState?.name}",
-                isExplicitRefusal(observedState),
+                "Revoked device reconnect was not explicitly refused within 30s; " +
+                    "state=${observedState?.name} failure=${observedFailureKind?.name}",
+                isExplicitRefusal(observedState, observedFailureKind),
             )
             failureReason = "none"
         } catch (caught: Throwable) {
@@ -66,19 +71,24 @@ class V7_06C_RevokedDeviceReconnectInstrumentedTest {
             Log.e(
                 LOG_TAG,
                 "v7_06c_revoked_reconnect result=FAIL state=${observedState?.name ?: "unavailable"} " +
-                    "close_code=$closeCode credentials=$credentialsConfigured reason=$failureReason",
+                    "failure=${observedFailureKind?.name ?: "unavailable"} close_code=$closeCode " +
+                    "credentials=$credentialsConfigured reason=$failureReason",
             )
             throw failureToThrow
         }
         Log.i(
             LOG_TAG,
             "v7_06c_revoked_reconnect result=PASS state=${observedState?.name} " +
-                "close_code=$closeCode credentials=true",
+                "failure=${observedFailureKind?.name} close_code=$closeCode credentials=true",
         )
     }
 
-    private fun isExplicitRefusal(state: RelayConnectionState?): Boolean =
-        state == RelayConnectionState.REVOKED || state == RelayConnectionState.AUTH_REQUIRED
+    private fun isExplicitRefusal(
+        state: RelayConnectionState?,
+        failureKind: RelayFailureKind?,
+    ): Boolean =
+        (state == RelayConnectionState.REVOKED && failureKind == RelayFailureKind.REVOKED) ||
+            (state == RelayConnectionState.AUTH_REQUIRED && failureKind == RelayFailureKind.AUTHENTICATION)
 
     private companion object {
         const val LOG_TAG = "V7_06C_RevokeProbe"

@@ -118,6 +118,8 @@ class RelaySettingsController(
         private set
     var lastError by mutableStateOf<String?>(null)
         private set
+    var lastFailureKind by mutableStateOf<RelayFailureKind?>(null)
+        private set
     var credentialsConfigured by mutableStateOf(credentialStore.credentials() != null)
         private set
     private var v4ChatOptIn by mutableStateOf(V4_CHAT_DEFAULT_ENABLED)
@@ -188,6 +190,7 @@ class RelaySettingsController(
         credentialsConfigured = credentialStore.credentials() != null
         if (mode == RelayTransportMode.RELAY) {
             stopTransport()
+            lastFailureKind = null
             state = RelayConnectionState.OFFLINE
             lastError = null
         }
@@ -200,6 +203,7 @@ class RelaySettingsController(
         settings = settings.copy(mode = newMode)
         mode = newMode
         stopTransport()
+        lastFailureKind = null
         when (newMode) {
             RelayTransportMode.RELAY -> {
                 state = if (credentialsConfigured) RelayConnectionState.OFFLINE else RelayConnectionState.PAIRING_REQUIRED
@@ -219,6 +223,7 @@ class RelaySettingsController(
 
     fun disconnect() {
         stopTransport()
+        lastFailureKind = null
         state = when (mode) {
             RelayTransportMode.RELAY -> RelayConnectionState.OFFLINE
             RelayTransportMode.OFFLINE -> RelayConnectionState.OFFLINE
@@ -241,6 +246,7 @@ class RelaySettingsController(
 
     fun clearCredentials() {
         stopTransport()
+        lastFailureKind = null
         credentialStore.clear()
         val current = settingsStore.read()
         settings = current
@@ -299,6 +305,7 @@ class RelaySettingsController(
         if (!force && now - lastStartAttemptAt < MIN_START_INTERVAL_MILLIS) return
         lastStartAttemptAt = now
         stopTransport()
+        lastFailureKind = null
         lastError = null
         val credentials = credentialStore.credentials()
         if (credentials == null) {
@@ -346,6 +353,11 @@ class RelaySettingsController(
         val failureListener: (RelayFailure) -> Unit = { failure ->
             mainHandler.post {
                 if (generation == transportGeneration) {
+                    lastFailureKind = RelaySettingsPresentationPolicy.afterFailure(
+                        currentState = state,
+                        currentKind = lastFailureKind,
+                        failure = failure,
+                    )
                     lastError = RelaySettingsErrorPolicy.afterFailure(state, failure, lastError)
                 }
             }
@@ -390,20 +402,24 @@ class RelaySettingsController(
     }
 
     private fun applyState(newState: RelayConnectionState) {
-        state = newState
-        when (newState) {
+        val acceptedState = RelaySettingsPresentationPolicy.afterStateChange(
+            currentState = state,
+            incomingState = newState,
+        )
+        state = acceptedState
+        when (acceptedState) {
             RelayConnectionState.RELAY_CONNECTED -> {
                 val now = clock()
                 lastConnectedAtUtcMillis = now
                 settingsStore.updateLastConnected(now)
-                lastError = RelaySettingsErrorPolicy.afterStateChange(newState, lastError)
+                lastError = RelaySettingsErrorPolicy.afterStateChange(acceptedState, lastError)
             }
             RelayConnectionState.OFFLINE,
             RelayConnectionState.AUTH_REQUIRED,
             RelayConnectionState.REVOKED,
             RelayConnectionState.ERROR,
             RelayConnectionState.PAIRING_REQUIRED -> {
-                lastError = RelaySettingsErrorPolicy.afterStateChange(newState, lastError)
+                lastError = RelaySettingsErrorPolicy.afterStateChange(acceptedState, lastError)
             }
             RelayConnectionState.RELAY_CONNECTING, RelayConnectionState.LOCAL -> Unit
         }
@@ -434,5 +450,38 @@ internal object RelaySettingsErrorPolicy {
         current
     } else {
         failure.message
+    }
+}
+
+/**
+ * Presentation-only guard for a revocation reported by the transport's parsed authenticated frame.
+ * It never creates REVOKED; that state is accepted only when the transport reports it.
+ */
+internal object RelaySettingsPresentationPolicy {
+    fun afterStateChange(
+        currentState: RelayConnectionState,
+        incomingState: RelayConnectionState,
+        explicitRecovery: Boolean = false,
+    ): RelayConnectionState = if (
+        currentState == RelayConnectionState.REVOKED &&
+        !(incomingState == RelayConnectionState.RELAY_CONNECTED && explicitRecovery)
+    ) {
+        RelayConnectionState.REVOKED
+    } else {
+        incomingState
+    }
+
+    fun afterFailure(
+        currentState: RelayConnectionState,
+        currentKind: RelayFailureKind?,
+        failure: RelayFailure,
+    ): RelayFailureKind = if (
+        currentState == RelayConnectionState.REVOKED &&
+        currentKind == RelayFailureKind.REVOKED &&
+        failure.kind != RelayFailureKind.REVOKED
+    ) {
+        currentKind
+    } else {
+        failure.kind
     }
 }

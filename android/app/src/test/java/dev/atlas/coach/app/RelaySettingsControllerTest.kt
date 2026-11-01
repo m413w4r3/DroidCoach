@@ -9,6 +9,80 @@ import org.junit.Test
 
 class RelaySettingsControllerTest {
     @Test
+    fun revokedStateSurvivesOfflineErrorAndAuthenticationRequiredCallbacks() {
+        listOf(
+            RelayConnectionState.OFFLINE,
+            RelayConnectionState.ERROR,
+            RelayConnectionState.AUTH_REQUIRED,
+        ).forEach { incoming ->
+            assertEquals(
+                RelayConnectionState.REVOKED,
+                RelaySettingsPresentationPolicy.afterStateChange(
+                    currentState = RelayConnectionState.REVOKED,
+                    incomingState = incoming,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun revokedStateClearsToConnectedOnlyForExplicitRecovery() {
+        assertEquals(
+            RelayConnectionState.REVOKED,
+            RelaySettingsPresentationPolicy.afterStateChange(
+                currentState = RelayConnectionState.REVOKED,
+                incomingState = RelayConnectionState.RELAY_CONNECTED,
+            ),
+        )
+        assertEquals(
+            RelayConnectionState.RELAY_CONNECTED,
+            RelaySettingsPresentationPolicy.afterStateChange(
+                currentState = RelayConnectionState.REVOKED,
+                incomingState = RelayConnectionState.RELAY_CONNECTED,
+                explicitRecovery = true,
+            ),
+        )
+    }
+
+    @Test
+    fun nonRevokedTransitionsRemainUnchangedAndNetworkFailureDoesNotCreateRevocation() {
+        assertEquals(
+            RelayConnectionState.OFFLINE,
+            RelaySettingsPresentationPolicy.afterStateChange(
+                currentState = RelayConnectionState.RELAY_CONNECTING,
+                incomingState = RelayConnectionState.OFFLINE,
+            ),
+        )
+        assertEquals(
+            RelayConnectionState.ERROR,
+            RelaySettingsPresentationPolicy.afterStateChange(
+                currentState = RelayConnectionState.OFFLINE,
+                incomingState = RelayConnectionState.ERROR,
+            ),
+        )
+        assertEquals(
+            RelayFailureKind.NETWORK_UNREACHABLE,
+            RelaySettingsPresentationPolicy.afterFailure(
+                currentState = RelayConnectionState.OFFLINE,
+                currentKind = null,
+                failure = RelayFailure.of(RelayFailureKind.NETWORK_UNREACHABLE),
+            ),
+        )
+    }
+
+    @Test
+    fun revokedFailureKindSurvivesLaterNetworkFailureWhileRevoked() {
+        assertEquals(
+            RelayFailureKind.REVOKED,
+            RelaySettingsPresentationPolicy.afterFailure(
+                currentState = RelayConnectionState.REVOKED,
+                currentKind = RelayFailureKind.REVOKED,
+                failure = RelayFailure.of(RelayFailureKind.NETWORK_UNREACHABLE),
+            ),
+        )
+    }
+
+    @Test
     fun revokedMessageReplacesEarlierErrorAndSurvivesLaterNetworkFailure() {
         val revokedMessage = RelayFailure.of(RelayFailureKind.REVOKED).message
         var lastError = RelaySettingsErrorPolicy.afterStateChange(
