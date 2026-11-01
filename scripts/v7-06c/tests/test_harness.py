@@ -580,6 +580,67 @@ class ApkProvenanceTests(unittest.TestCase):
                 )
         instrument.assert_not_called()
 
+    def test_complete_proof_gate_accepts_and_validates_installed_apk_hashes(self) -> None:
+        app_id = "dev.atlas.coach.qa.v706b.v706capply.a123456789ab"
+        verification = {
+            "installed_apk_verified": True,
+            "installed_apk_sha256": {"app": "1" * 64, "android_test": "2" * 64},
+            "verification_result": "VERIFIED",
+        }
+        provenance = {
+            **self.valid_manifest(),
+            "runtime_sdk": 37,
+            "app_apk_sha256": "1" * 64,
+            "android_test_apk_sha256": "2" * 64,
+            "signing_cert_sha256": "3" * 64,
+            "build_provenance_sha256": "4" * 64,
+            "android_manifest_sha256": "5" * 64,
+            "android_test_manifest_sha256": "6" * 64,
+            "network": "local_emulator_bridge",
+            "endpoint": {"scheme": "ws", "host": "10.0.2.2", "port": 4413},
+            **verification,
+        }
+        run_qa.verify_complete_proof_provenance(provenance)
+        run_scenario.require_pass_provenance(provenance)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            app_apk = Path(temporary) / "app.apk"
+            test_apk = Path(temporary) / "test.apk"
+            instrumenter = unittest.mock.Mock()
+
+            def validate_before_instrumentation(installed: dict) -> None:
+                complete_provenance = {**provenance, **installed}
+                run_qa.verify_complete_proof_provenance(complete_provenance)
+                run_scenario.require_pass_provenance(complete_provenance)
+                instrumenter()
+
+            with patch("run_qa.verify_installed_artifacts", return_value=verification):
+                result = run_qa.instrument_after_verification(
+                    "synthetic-device-serial", provenance["application_id"],
+                    provenance["test_application_id"], app_apk, test_apk, provenance,
+                    {"app": "1" * 64, "android_test": "2" * 64}, "3" * 64,
+                    validate_before_instrumentation,
+                )
+            self.assertIsNone(result)
+            instrumenter.assert_called_once()
+
+        for invalid_hashes in (
+            None,
+            {"app": "1" * 64},
+            {"app": "1" * 64, "android_test": "Z" * 64},
+            {"app": "9" * 64, "android_test": "2" * 64},
+        ):
+            with self.subTest(installed_apk_sha256=invalid_hashes):
+                invalid = dict(provenance)
+                if invalid_hashes is None:
+                    invalid.pop("installed_apk_sha256")
+                else:
+                    invalid["installed_apk_sha256"] = invalid_hashes
+                with self.assertRaises(run_qa.QaError):
+                    run_qa.verify_complete_proof_provenance(invalid)
+                with self.assertRaises(run_scenario.ScenarioFailure):
+                    run_scenario.require_pass_provenance(invalid)
+
     def test_failed_install_verification_never_calls_instrumentation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             app_apk = Path(temporary) / "app.apk"
