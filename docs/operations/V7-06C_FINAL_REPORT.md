@@ -1,6 +1,7 @@
 # ATLAS V7-06C — Coach Android puis transport public : rapport final
 
-**Statut du document : EN COURS — résultats runtime Android partiels.**
+**Statut du document : EN COURS — boucle Coach Android QA GO ; P2, suites finales,
+revue indépendante et transport public restent à traiter.**
 Les sections sont mises à jour au fur et à mesure des exécutions réelles sur le SHA
 intégré. Une ligne `NOT_RUN`, `BLOCKED` ou `CORRECTION_REQUIRED` ne doit pas être lue
 comme un succès.
@@ -23,10 +24,12 @@ exécuté les 12 étapes du test QA en 19,387 s : DayPlan v2→v3 par le code An
 ACK sans second effet, consentements révoqués v3. Le produit, HOME, Keystore et données
 personnelles sont restés intacts.
 
-Le scénario **REJECT** a également exécuté les 12 étapes en 21,214 s avec un Core
-`REJECTED`/plan v2 et aucun v3 ; la preuve automatique du wrapper est en cours de
-régénération après un défaut de harnais (sélection d'attestation logcat multi-runs), pas
-après un échec du test.
+Le scénario **REJECT** a également exécuté les 12 étapes en 21,214 s : proposition
+`REJECTED`, plan resté v2 sans aucune v3, ACK `REJECTED` durable et rejeu identique.
+Un défaut de sélection d'attestation logcat du harnais (deux runs dans le buffer) a
+été corrigé et l'oracle post-hoc en lecture seule a produit un proof PASS lié à
+l'`ack_id` Core, sans ré-exécution. `GO_ANDROID_QA_REJECT` et `GO_QA_COACH_LOOP` sont
+donc **GO** sur le paquet QA physique.
 
 Le transport public reste **BLOCKED_NETWORK** : le Funnel pointe vers
 `127.0.0.1:4400`, sans listener, et la sonde TLS échoue. Aucun changement Funnel/Tailscale
@@ -107,13 +110,13 @@ connecteur (1 ACK `completed_redacted`, 2 snapshots complétés, 1 chat complét
 
 ## 5. Android REJECT
 
-Statut : **runner PASS, preuve automatique `CORRECTION_REQUIRED`**. Le test a réellement
-exécuté 12 étapes en 21,214 s ; le plan est resté v2, l'ACK `REJECTED` est durable et
-aucune version v3 n'existe.
+Statut : **PASS** — `GO_ANDROID_QA_REJECT`. Preuve :
+`v7-06c-reject-2fb57424d534.json` et
+`docs/operations/evidence/V7-06C_ANDROID_REJECT.md`.
 
 | Élément | Valeur |
 |---|---|
-| Appareil / SHA | Pixel 9 Pro XL API 37 ; `b4db8da…` |
+| Appareil / exécution | Pixel 9 Pro XL API 37 ; exécution sur `b4db8da…` |
 | Paquet QA | `dev.atlas.coach.qa.v706b.v706creject.b4d9e602` |
 | APK app / test | `b599532c…9a6b` / `be283081…0e83` |
 | Runner | `OK (1 test)`, 21,214 s, 12 étapes PASS |
@@ -122,14 +125,16 @@ aucune version v3 n'existe.
 | ACK | `c22d1829-…`, `REJECTED`, `applied_plan_version=NULL`, 1 seul événement |
 | Rejeu ACK | `ack_replay=identical`, 1 ACK local, aucun second effet |
 | Consentements | `REVOKED` v3 pour les deux catégories |
+| Journal / trace | 1 ACK `completed_redacted`, 1 snapshot, 1 chat, 0 incertain ; 3 tours proxy corrélés |
 
-**Défaut de harnais constaté** : le wrapper a refusé la preuve avec
-`ANDROID_ACK_REPLAY_ATTESTATION_MISSING` car le buffer logcat contenait aussi
-l'attestation APPLY du run précédent et exigeait exactement une ligne. Le correctif
-lie l'attestation à l'`ack_id` et à l'état ACK du Core, et ajoute un oracle post-hoc en
-lecture seule. Le verdict `GO_ANDROID_QA_REJECT` et `GO_QA_COACH_LOOP` restent
-`PENDING` jusqu'à régénération de la preuve corrigée ; le produit et le test ne sont
-pas en cause.
+**Incident de harnais et correction.** Le premier wrapper a exécuté le test avec
+succès mais a refusé de produire la preuve (`ANDROID_ACK_REPLAY_ATTESTATION_MISSING`) :
+le buffer logcat contenait aussi l'attestation APPLY et le wrapper exigeait exactement
+une ligne. Le correctif `f9017f4` (intégré `5ca0a92`) lie l'attestation à l'`ack_id` et
+à l'état ACK du Core, et ajoute `verify-existing`. L'oracle post-hoc a été exécuté en
+lecture seule sur la stack existante (`execution_mode=post_hoc_existing_stack`,
+aucune nouvelle exécution) et a produit le proof PASS. Le test et le produit ne sont
+pas en cause ; les 14 tests du harnais passent.
 
 ## 6. Transport public WSS
 
@@ -173,9 +178,21 @@ ciblée de changement réseau), sans `adb reverse`.
 
 ## 8. Suites et preuves
 
-À exécuter sur le SHA intégré : backend pytest complet, connecteur Node, plugin
-OpenClaw, Android JVM, lint, builds debug/QA/AndroidTest, tests du harnais,
-`git diff --check`, revue indépendante.
+Exécutées sur le SHA intégré `b4db8da` (et complétées après les correctifs de harnais) :
+
+| Suite | Résultat |
+|---|---|
+| Backend `pytest -q` | **371 passed / 1 skipped** (30,87 s, 3 warnings) |
+| Connecteur Node `npm run test:unit` | **109/109 PASS** (17 fichiers) |
+| Plugin OpenClaw `npm test` | **59/59 PASS** |
+| Proxy relay `node --test proxy.test.mjs` | **19/19 PASS** |
+| Android JVM `:app:testDebugUnitTest --offline --rerun-tasks` | **896/896 PASS**, 0 échec/erreur/ignoré (117 fichiers) |
+| Android lint `:app:lintDebug --offline` | **PASS** (HTML/SARIF générés) |
+| Builds `assembleDebug`, `assembleQa`, `assembleQaAndroidTest` | **PASS** ; APK QA REJECT app `b599532c…9a6b`, test `be283081…0e83` ; debug `b0095cf4…c694` |
+| Tests du harnais | **14/14 PASS** après correctif attestation (intégré `5ca0a92`) |
+| `git diff --check` | À rejouer sur le SHA final après le P2 |
+
+Résultats runtime : voir §3 (harnais backend), §4 (APPLY) et §5 (REJECT).
 
 ## 9. Verdicts
 
@@ -184,9 +201,9 @@ OpenClaw, Android JVM, lint, builds debug/QA/AndroidTest, tests du harnais,
 | `GO_E2E_HARNESS_REPRODUCIBLE` | **GO** | backend positif et négatif rejoués depuis le dépôt sur `b4db8da`, DeepSeek réel isolé |
 | `GO_ANDROID_QA_CHAT` | **GO** | Pixel physique API 37, paquet QA, DeepSeek réel, 2 outils corrélés (APPLY) |
 | `GO_ANDROID_QA_PLAN_APPLY` | **GO** | DayPlan v2→v3 appliqué par le code Android, Core v3 à 610 |
-| `GO_ANDROID_QA_ACK` | **GO (APPLY)** | ACK APPLIED émis par Android, confirmé Core v3, rejeu identique |
-| `GO_ANDROID_QA_REJECT` | **PENDING** | runner PASS et Core REJECTED/v2 ; preuve automatique corrigée attendue |
-| `GO_QA_COACH_LOOP` | **PENDING** | APPLY GO ; REJECT en attente de la preuve corrigée |
+| `GO_ANDROID_QA_ACK` | **GO** | ACK APPLIED et REJECTED émis par Android, confirmés Core, rejeux identiques |
+| `GO_ANDROID_QA_REJECT` | **GO** | rejet explicite, plan v2 inchangé, aucun v3, oracle post-hoc lié à l’ACK Android |
+| `GO_QA_COACH_LOOP` | **GO** | APPLY v2→v3 + ACK APPLIED et REJECT sans changement, sur Android QA physique |
 | `GO_REMOTE_V4_PUBLIC` | **NO GO — BLOCKED_NETWORK** | Funnel cible morte, aucune autorisation de changement |
 | `GO_PIXEL_PRODUCT` | **NO GO** | paquet produit non testé |
 | `GO_PRODUCT_REMOTE` | **NO GO** | produit et transport public non testés |
