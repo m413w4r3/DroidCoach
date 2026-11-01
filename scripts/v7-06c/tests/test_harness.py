@@ -296,7 +296,7 @@ class RedactionAndCliTests(unittest.TestCase):
 
     def test_suffix_and_package_validation(self) -> None:
         generated = run_scenario.action_suffix("apply")
-        self.assertRegex(generated, r"^\.qa\.v706b\.v706capply\.[0-9a-f]{12}$")
+        self.assertRegex(generated, r"^\.qa\.v706b\.v706capply\.[a-f][0-9a-f]{11}$")
         self.assertEqual(run_scenario.validate_target_package("dev.atlas.coach" + generated),
                          "dev.atlas.coach" + generated)
         for value in (
@@ -308,6 +308,8 @@ class RedactionAndCliTests(unittest.TestCase):
                 run_scenario.validate_target_package(value)
         with self.assertRaises(run_scenario.ScenarioFailure):
             run_scenario.action_suffix("apply", ".qa.v706b.v706creject.0123456789ab")
+        with self.assertRaises(run_scenario.ScenarioFailure):
+            run_scenario.action_suffix("apply", ".qa.v706b.v706capply.0123456789ab")
         self.assertEqual(run_scenario.action_suffix("apply", ".qa.v706b.v706capply.a7f3c21e"),
                          ".qa.v706b.v706capply.a7f3c21e")
         self.assertEqual(
@@ -460,8 +462,8 @@ class ApkProvenanceTests(unittest.TestCase):
             "source_tree_sha": "b" * 40,
             "worktree_clean": True,
             "variant": "qa",
-            "application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab",
-            "test_application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab.test",
+            "application_id": "dev.atlas.coach.qa.v706b.v706capply.a123456789ab",
+            "test_application_id": "dev.atlas.coach.qa.v706b.v706capply.a123456789ab.test",
             "version_code": 1,
             "version_name": "0.1.0-qa",
             "compile_sdk": "37.2",
@@ -543,7 +545,7 @@ class ApkProvenanceTests(unittest.TestCase):
             run_qa.verify_signing_certificate("a" * 64, "b" * 64)
 
     def test_complete_proof_gate_rejects_missing_field_before_instrumentation(self) -> None:
-        app_id = "dev.atlas.coach.qa.v706b.v706capply.0123456789ab"
+        app_id = "dev.atlas.coach.qa.v706b.v706capply.a123456789ab"
         provenance = {
             **self.valid_manifest(),
             "application_id": app_id,

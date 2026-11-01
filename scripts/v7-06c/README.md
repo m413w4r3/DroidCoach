@@ -50,7 +50,7 @@ python3 scripts/v7-06c/android/run_scenario.py \
 
 Pour un téléphone local utilisant `adb reverse`, démarrer avec `--android-relay-host 127.0.0.1` et passer `--adb-reverse` au runner. Le wrapper mémorise les reverse existants et ne retire que le mapping qu’il a lui-même ajouté.
 
-Le suffixe QA est généré avec 12 caractères hexadécimaux minuscules; une valeur explicite de 8 à 12 caractères est acceptée si elle porte l’action demandée. Le package cible reste dans `dev.atlas.coach.qa.v706b.v706c{apply|reject}.<suffix>`. Le package produit `dev.atlas.coach` est refusé. Avant `am instrument`, le runner vérifie le manifeste embarqué des deux APK, leur identifiant et leur version, le certificat de signature, puis compare les SHA-256 des APK installés à ceux des APK construits. Le test doit aussi produire exactement `OK (1 test)`; le seul code `INSTRUMENTATION_CODE: -1` ne suffit plus. Le logcat privé doit contenir l’attestation `step=11 result=PASS ack_replay=identical` émise par le test instrumenté.
+Le suffixe QA est généré avec 12 caractères hexadécimaux minuscules et commence toujours par `a` à `f`, pour former un segment d’identifiant Android valide; une valeur explicite de 8 à 12 caractères suit la même règle et porte l’action demandée. Le package cible reste dans `dev.atlas.coach.qa.v706b.v706c{apply|reject}.<suffix>`. Le package produit `dev.atlas.coach` est refusé. Avant `am instrument`, le runner vérifie le manifeste embarqué des deux APK, leur identifiant et leur version, le certificat de signature, puis compare les SHA-256 des APK installés à ceux des APK construits. Le test doit aussi produire exactement `OK (1 test)`; le seul code `INSTRUMENTATION_CODE: -1` ne suffit plus. Le logcat privé doit contenir l’attestation `step=11 result=PASS ack_replay=identical` émise par le test instrumenté.
 
 Le JSON `assets/atlas-build-provenance.json` est généré au build, trié par clé et sans horodatage. Il lie chaque APK à `git rev-parse HEAD`, à l’arbre Git, à l’état propre du worktree, à la variante, aux IDs, aux versions et aux niveaux SDK. Les sorties `build/` sont exclues du calcul de propreté. Un run V7-06C exige un worktree propre; un manifeste marqué sale est refusé avant installation ou instrumentation. Le scénario est fourni au build par `-PatlasScenarioId=...` (ou `ATLAS_SCENARIO_ID`); les runs APPLY/REJECT utilisent `v7-06c-android-apply` et `v7-06c-android-reject`.
 
@@ -62,8 +62,8 @@ Chaque preuve normale contient un objet `provenance`. Exemple synthétique (tout
   "source_tree_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "worktree_clean": true,
   "variant": "qa",
-  "application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab",
-  "test_application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab.test",
+  "application_id": "dev.atlas.coach.qa.v706b.v706capply.a123456789ab",
+  "test_application_id": "dev.atlas.coach.qa.v706b.v706capply.a123456789ab.test",
   "version_code": 1,
   "version_name": "0.1.0-qa",
   "compile_sdk": "37.2",

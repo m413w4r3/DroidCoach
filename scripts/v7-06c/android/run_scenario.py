@@ -141,7 +141,7 @@ def validate_target_package(package: str) -> str:
     if package == PRODUCT_PACKAGE or not package.startswith(QA_PACKAGE_PREFIX):
         raise ScenarioFailure("PACKAGE_OUTSIDE_V7_06B_QA_NAMESPACE")
     suffix = package[len("dev.atlas.coach"):]
-    if not re.fullmatch(r"\.qa\.v706b\.v706c(?:apply|reject)\.[0-9a-f]{8,12}", suffix):
+    if not re.fullmatch(r"\.qa\.v706b\.v706c(?:apply|reject)\.[a-f][0-9a-f]{7,11}", suffix):
         raise ScenarioFailure("QA_SUFFIX_INVALID")
     return package
 
@@ -149,8 +149,14 @@ def validate_target_package(package: str) -> str:
 def action_suffix(action: str, suffix: str | None = None) -> str:
     if action not in {"apply", "reject"}:
         raise ScenarioFailure("ACTION_INVALID")
-    value = suffix if suffix is not None else f".qa.v706b.v706c{action}.{uuid.uuid4().hex[:12]}"
-    if not re.fullmatch(r"\.qa\.v706b\.v706c(?:apply|reject)\.[0-9a-f]{8,12}", value):
+    if suffix is None:
+        generated_id = uuid.uuid4().hex[:12]
+        if generated_id[0].isdigit():
+            generated_id = "a" + generated_id[1:]
+        value = f".qa.v706b.v706c{action}.{generated_id}"
+    else:
+        value = suffix
+    if not re.fullmatch(r"\.qa\.v706b\.v706c(?:apply|reject)\.[a-f][0-9a-f]{7,11}", value):
         raise ScenarioFailure("QA_SUFFIX_INVALID")
     if f".v706c{action}." not in value:
         raise ScenarioFailure("QA_SUFFIX_ACTION_MISMATCH")
