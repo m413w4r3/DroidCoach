@@ -39,7 +39,7 @@ identité, appairage, consentements, plan et serveur de test synthétiques neufs
 | V7-06A-FIX-PC | Reçu consentement après restart, rejeu uncertain ciblé | TEST-PC | FINISHED — commit `51e3e00`, intégré `39746bd` ; Node 106, backend 348 | `df555254-e385-4cde-a714-a011fc8c6286` | `/tmp/atlas-v7-06a-fix-pc` | `evidence/V7-06A_FIX.md` |
 | V7-06A-FIX-PC-R2 | Rejeu V4 quand Relay renouvelle l'enveloppe (P1 revue) | REVIEW `b04a5ff` | FINISHED — commit `e0d9062`, intégré `be31d09` ; 109/109 tests Node, tsc PASS | `1dcb69b6-82cc-4ef4-8a13-25d54eed0115` | `/tmp/atlas-v7-06a-fix-pc-r2` | Test rouge puis vert : même corps/clé/request_id, nouvelle session/horodatages → reçu rejoué, un seul POST |
 | V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | Code `be31d09` | **BLOCKED_ENVIRONMENT** — boot AVD incomplet après 3 tentatives ; aucun APK installé, aucune instrumentation, aucun VM-1/VM-2 ; commit `6dfae8b` | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | `/tmp/atlas-v7-06a-vm` | Preuve : `evidence/V7-06A_VM_BLOCKED.md` |
-| V7-06A-REVIEW | Revue indépendante (sécurité, idempotence, révocation) | FIX `b04a5ff` | FINISHED pré-VM — `CORRECTION_REQUIRED`, aucun P0, 1 P1, 3 P2 | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | `/tmp/atlas-v7-06a-review` | Relecture finale obligatoire après correctif et VM |
+| V7-06A-REVIEW | Revue indépendante (sécurité, idempotence, révocation) | FIX `b04a5ff` / finale `a3ebc10` | FINISHED — pré-VM `CORRECTION_REQUIRED` (1 P1) ; **finale `ACCEPTED`**, aucun P0/P1, P2 documentés | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | `/tmp/atlas-v7-06a-review` | P1 clos ; rapport/verdicts cohérents ; suites non rejouées par le relecteur |
 
 ## 3. Preuves historiques conservées
 
@@ -111,6 +111,10 @@ Audit lecture seule réalisé sans ADB ni modification live ; preuve
 - P2 documentés sans blocage : validation stricte du reçu connecteur et corrélation
   `request_id` ; accumulation possible de travaux immédiats `APPEND_OR_REPLACE` ;
   risque pré-existant d'inversion `consentGate` ↔ verrou WebSocket (non reproduit).
+- **Revue finale (lecture seule, `a3ebc10`, code `be31d09`) : `ACCEPTED`**, aucun
+  P0/P1 ouvert. Le P1 R2 est clos (identité métier stable, non-V4 inchangé, aucun
+  test affaibli) ; la preuve VM bloquée et les verdicts sont jugés cohérents. Le
+  relecteur n'a pas relancé les suites et n'a exécuté aucun test VM/Pixel.
 - **Correctif terminé** : commit `e0d9062`, merge `be31d09` ; preuve rouge
   `2 failed | 1 passed` avant, puis **17 fichiers / 109 tests Node PASS**, `tsc`
   et `git diff --check` PASS. Preuve : `evidence/V7-06A_FIX_PC_R2.md`.
@@ -167,6 +171,7 @@ et sur le Core de test. Un succès VM n’est jamais converti en preuve Pixel.
 | 2026-10-31 | `9f329781-ae13-49bf-a785-a53db1b965cb` | FIX Android | codex / gpt-6-luna / xhigh | FINISHED — `2004500`, 895 tests + lint |
 | 2026-10-31 | `df555254-e385-4cde-a714-a011fc8c6286` | FIX PC | codex / gpt-6-luna / xhigh | FINISHED — `51e3e00`, Node 106 |
 | 2026-11-01 | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | REVIEW pré-VM | codex / gpt-6-luna / xhigh | FINISHED — `CORRECTION_REQUIRED`, 1 P1 |
+| 2026-11-01 | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | REVIEW finale | codex / gpt-6-luna / xhigh | FINISHED — `ACCEPTED` sur `a3ebc10`, aucun P0/P1 |
 | 2026-11-01 | `1dcb69b6-82cc-4ef4-8a13-25d54eed0115` | FIX PC R2 | codex / gpt-6-luna / xhigh | FINISHED — `e0d9062`, intégré `be31d09`, Node 109/109 |
 | 2026-11-01 | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | VM | codex / gpt-6-luna / xhigh | FINISHED — `BLOCKED_ENVIRONMENT`, commit `6dfae8b`, AVD/stack arrêtés, jetons supprimés |
 

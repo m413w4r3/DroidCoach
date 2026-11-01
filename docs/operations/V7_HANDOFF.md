@@ -39,6 +39,8 @@ Aucun push, PR ou merge distant effectué.
   aucun pairing poussé, aucune instrumentation, aucun oracle Core, aucun VM-2.
   Nettoyage : AVD/stack arrêtés, conteneur supprimé, jetons synthétiques supprimés,
   services live intacts. Preuve : `evidence/V7-06A_VM_BLOCKED.md`.
+- Revue indépendante : pré-VM `CORRECTION_REQUIRED` (1 P1) → P1 corrigé et testé
+  → revue finale **`ACCEPTED`** sur `a3ebc10`, aucun P0/P1 ; P2 documentés.
 - Verdicts : `GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`, `GO_V4_RECONCILIATION` =
   **GO déterministe** (pas une preuve VM/Pixel) ; `GO_VM_V4_E2E` = **NO GO —
   BLOCKED_ENVIRONMENT** ; `GO_REMOTE_CHAT_VM` et `GO_PLAN_REVISION_VM` =

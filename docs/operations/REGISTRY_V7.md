@@ -9,6 +9,25 @@
 **Modèle des sous-agents :** `codex:gpt-6-luna`, effort effectif `xhigh` — vérifié dans les métadonnées Paseo de chaque session. Aucune substitution.
 **Règle :** une notification de fin n'est pas une acceptation. Chaque résultat est examiné, revu, puis intégré localement par le parent.
 
+## 0. Campagne V7-06A — fiabilisation V4 (2026-11-01)
+
+Registre détaillé : `REGISTRY_V7_06A.md`. Rapport final : `V7-06A_FINAL_REPORT.md`.
+
+- Code intégré : `be31d097fe0cf6a5bc50688b421bc9eecbbc847e` ; docs finales :
+  `a3ebc10b7509fd4426e3c3402a27d6ff18483156`.
+- Android JVM **895/895** + lint PASS ; Node **109/109** ; backend
+  **348 passed / 1 skipped** ; `git diff --check` PASS.
+- P1 de revue (rejeu après renouvellement d'enveloppe Relay) corrigé `e0d9062`,
+  tests rouges→verts ; revue finale **`ACCEPTED`**, aucun P0/P1 ; P2 documentés.
+- VM-1 : **`BLOCKED_ENVIRONMENT`** (AVD API 37 non booté après trois tentatives) ;
+  aucun APK installé, aucune instrumentation, aucun oracle Core, aucun VM-1/VM-2.
+- Verdicts : `GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`,
+  `GO_V4_RECONCILIATION` = **GO déterministe** (pas une preuve VM/Pixel) ;
+  `GO_VM_V4_E2E` = **NO GO — BLOCKED_ENVIRONMENT** ; `GO_REMOTE_CHAT_VM` et
+  `GO_PLAN_REVISION_VM` = **NO GO — NOT_RUN** ; `GO_PIXEL` et
+  `GO_PRODUCT_REMOTE` = **NO GO**.
+- Aucun push, PR ni merge distant ; aucun ADB sur le Pixel physique.
+
 ## 1. Contraintes d'exécution
 
 - 6 enfants simultanés maximum ; 3 implémentations indépendantes maximum ; 1 propriétaire d'écriture par fichier ; 1 seul opérateur ADB/Pixel/AVD à la fois.

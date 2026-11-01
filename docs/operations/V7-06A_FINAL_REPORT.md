@@ -132,8 +132,9 @@ toujours bloqué après redémarrage, remplacement de session, rejeu sans second
   `APPEND_OR_REPLACE` ; risque pré-existant d’inversion `consentGate` ↔ verrou
   WebSocket (non reproduit) et verrou de stockage pendant l’ouverture réseau en
   mode DIRECT.
-- Revue finale : à exécuter sur le SHA final docs+code ; aucun P0/P1 ne doit rester
-  ouvert dans le périmètre.
+- Revue finale (lecture seule, `a3ebc10`, code `be31d09`) : **`ACCEPTED`**, aucun
+  P0/P1 ouvert. P1 clos ; preuve VM bloquée et verdicts jugés cohérents. Le
+  relecteur n'a pas relancé les suites et n'a exécuté aucun test VM/Pixel.
 
 ## 9. Verdicts
 
@@ -177,7 +178,8 @@ l’appairage, la base, le token ni les données du Pixel.
 1. Reprendre VM-1 sur un AVD API 37 sain après un boot vérifié
    (`sys.boot_completed=1`, `activity`/`package` stables), avec le harnais et les
    scripts déjà commités, puis VM-2 seulement après VM-1 PASS.
-2. Rejouer la revue finale sur le SHA final docs+code.
+2. Revue finale : faite et `ACCEPTED` sur `a3ebc10` (aucun P0/P1) ; conserver la
+   lecture seule pour toute reprise.
 3. Faire autoriser et appliquer la révocation/rotation résiduelle live avec
    sauvegarde, si le propriétaire le décide.
 4. Traiter les P2 séparément, avec tests dédiés, sans élargir ce lot minimal.
