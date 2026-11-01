@@ -5,6 +5,9 @@ Déclencheur : le propriétaire a branché son téléphone physique et autorisé
 utilisation pour déboguer ce qui peut l’être, puis mettre à jour les résultats.
 Code de base : `be31d097fe0cf6a5bc50688b421bc9eecbbc847e`.
 Commit QA (correctif de présentation + harnais) : `21cd84467e8b4a19fa393ba8e08ba102665a8ca4`.
+Intégration campagne (correctif + test + preuves, sans la configuration de build
+QA) : `fbfa403ac0c28ad32a9c5995b31ebd36edc7924f`. Le harnais physique reste sur la
+branche `v7-06a/physical-qa` (`b918755`) pour une reprise.
 
 ## Résultat
 
