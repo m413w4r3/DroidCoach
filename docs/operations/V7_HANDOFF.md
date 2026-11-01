@@ -5,6 +5,55 @@ Branche locale : `feat/atlas-v7-remote-operational`
 Base mission : `b759bdafbf0c67eda1a14ae2cf2f3fac75239e4c`  
 Aucun push, PR ou merge distant effectué.
 
+## V7-06A — fiabilisation V4 (2026-11-01)
+
+**Statut global : code corrigé et suites déterministes PASS ; qualification VM
+`BLOCKED_ENVIRONMENT` ; aucun test Pixel dans cette campagne.**
+
+- Branche locale : `feat/atlas-v7-06a-v4-reliability`. Base observée :
+  `55625299c364e1c71eba5924fcfe933af1852a2f`. Code intégré :
+  `be31d097fe0cf6a5bc50688b421bc9eecbbc847e`. Docs/registre : voir
+  `REGISTRY_V7_06A.md` et `evidence/V7-06A_FINAL_REPORT.md`.
+- Cause racine exacte de V7-05 : **UNKNOWN** ; les audits A1/A2/A3 établissent un
+  mécanisme de perte/non-reprise (réponse envoyée mais non reçue classée
+  `UNAVAILABLE`, arrêt de la passe, reçu non rejoué ; connecteur
+  `completed_redacted` bloquant après redémarrage). Ne pas présenter ce mécanisme
+  comme la cause certaine.
+- Correctifs bornés intégrés :
+  - Android `2004500` : reprise unique `UNAVAILABLE` même corps/clé, relecture
+    `syncedVersion`, refus de collision `request_id`, frames d'ancienne session
+    ignorées, single-flight + `APPEND_OR_REPLACE`/`UPDATE`.
+  - Connecteur `51e3e00` : reçu consentement borné conservé après redémarrage,
+    ré-exécution limitée au consentement incertain, autres V4 toujours rédigés.
+  - Connecteur `e0d9062` (P1 revue) : rejeu V4 par identité métier stable quand
+    Relay renouvelle `session_id`/horodatages ; conflit conservé si payload/clé
+    change ; non-V4 inchangé.
+- Résultats sur le code intégré : Android **895/895** JVM, lint PASS ; Node
+  **109/109** ; backend **348 passed / 1 skipped** ; `git diff --check` PASS.
+- Tests rouges reproduits puis verts : perte consentement/plan, collision
+  `request_id`, session obsolète, reçu après redémarrage, consentement incertain,
+  enveloppe Relay renouvelée (mémoire et redémarrage). P2 documentés.
+- **VM-1 : non exécuté.** AVD `atlas_v7_06a_api37` / `emulator-5580` API 37.2 :
+  trois boots (cold, `-no-boot-anim`, `-wipe-data`) sans `sys.boot_completed=1`
+  sous 300 s ; services intermittents, logs filtrés vides. Aucun APK installé,
+  aucun pairing poussé, aucune instrumentation, aucun oracle Core, aucun VM-2.
+  Nettoyage : AVD/stack arrêtés, conteneur supprimé, jetons synthétiques supprimés,
+  services live intacts. Preuve : `evidence/V7-06A_VM_BLOCKED.md`.
+- Verdicts : `GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`, `GO_V4_RECONCILIATION` =
+  **GO déterministe** (pas une preuve VM/Pixel) ; `GO_VM_V4_E2E` = **NO GO —
+  BLOCKED_ENVIRONMENT** ; `GO_REMOTE_CHAT_VM` et `GO_PLAN_REVISION_VM` =
+  **NO GO — NOT_RUN** ; `GO_PIXEL` et `GO_PRODUCT_REMOTE` = **NO GO**.
+- Prochaines actions : réexécuter VM-1 sur un AVD API 37 sain (nouveau boot
+  vérifié), puis VM-2 seulement après VM-1 PASS ; une preuve Pixel reste requise
+  pour `GO_PIXEL`/`GO_PRODUCT_REMOTE`. Les P2 (validation stricte du reçu,
+  accumulation des travaux immédiats, inversion potentielle de verrous) restent
+  ouverts. L'audit d'accès résiduel live (`pixel-v7`, `r3c-pixel-final`, bearer
+  Android encore GRANTED v2 côté Core) n'a **pas** été remédié : action sensible
+  soumise à autorisation ciblée et sauvegarde.
+- Interdictions maintenues : aucun ADB/tests instrumentés sur le Pixel physique,
+  aucun push/PR/merge distant, aucun service live modifié, un seul opérateur
+  ADB/AVD à la fois.
+
 ## Où en est la campagne
 
 ### Acquis et intégrés localement

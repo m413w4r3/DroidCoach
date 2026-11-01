@@ -20,7 +20,7 @@ Le build APK a réussi depuis `android/` avec :
 BUILD SUCCESSFUL — 67 tâches exécutées
 ```
 
-Le build du connecteur `npm run build` a également réussi. La suite Node 109/109 est rapportée par le parent sur ce SHA, mais n’a pas été réexécutée dans cette campagne.
+Le build du connecteur `npm run build` a également réussi. La suite Node **109/109** a été exécutée par le parent sur le SHA intégré `be31d09` ; l’agent VM ne l’a pas relancée.
 
 ## Historique des boots
 
@@ -51,4 +51,4 @@ PASS: connector=stopped_sigint relay=stopped_removed core=stopped_sigint; databa
 
 La vérification des PID consignés a retourné `owned_processes_remaining=none`. `docker ps -a --filter name=atlas-v7-06a-relay` n’a retourné aucun conteneur. Aucun service live n’a été touché ; la stack utilisait uniquement Core loopback `127.0.0.1:8110`, relay `127.0.0.1:4412` et connecteur `127.0.0.1:4411`.
 
-`cleanup_vm1_tokens.py` a confirmé la suppression des trois fichiers synthétiques `core-token`, `tool-token` et `pairing.json`, sans mismatch d’inode. Les logs privés, la configuration/manifest privés, `core.sqlite3`, sa sauvegarde de migration et le répertoire d’état `connector/` propres à cette stack ont également été supprimés. Vérification finale : répertoire privé absent, fichiers token/pairing absents, processus isolés absents et conteneur relay absent.
+`cleanup_vm1_tokens.py` a confirmé la suppression des trois fichiers synthétiques `core-token`, `tool-token` et `pairing.json`, sans mismatch d’inode. Une commande de nettoyage distincte, bornée aux chemins de cette stack, a ensuite supprimé les logs privés, la configuration/manifest privés, `core.sqlite3`, sa sauvegarde de migration et le répertoire d’état `connector/`. Vérification finale : répertoire privé absent, fichiers token/pairing absents, processus isolés absents et conteneur relay absent.

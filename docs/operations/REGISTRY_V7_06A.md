@@ -38,7 +38,7 @@ identité, appairage, consentements, plan et serveur de test synthétiques neufs
 | V7-06A-FIX-ANDROID | Reprise incertaine, collision `request_id`, session obsolète, single-flight | TEST-ANDROID | FINISHED — commit `2004500`, intégré `39746bd` ; 895 tests + lint PASS | `9f329781-ae13-49bf-a785-a53db1b965cb` | `/tmp/atlas-v7-06a-fix-android` | `evidence/V7-06A_FIX.md` |
 | V7-06A-FIX-PC | Reçu consentement après restart, rejeu uncertain ciblé | TEST-PC | FINISHED — commit `51e3e00`, intégré `39746bd` ; Node 106, backend 348 | `df555254-e385-4cde-a714-a011fc8c6286` | `/tmp/atlas-v7-06a-fix-pc` | `evidence/V7-06A_FIX.md` |
 | V7-06A-FIX-PC-R2 | Rejeu V4 quand Relay renouvelle l'enveloppe (P1 revue) | REVIEW `b04a5ff` | FINISHED — commit `e0d9062`, intégré `be31d09` ; 109/109 tests Node, tsc PASS | `1dcb69b6-82cc-4ef4-8a13-25d54eed0115` | `/tmp/atlas-v7-06a-fix-pc-r2` | Test rouge puis vert : même corps/clé/request_id, nouvelle session/horodatages → reçu rejoué, un seul POST |
-| V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | Code `be31d09` | RUNNING — stack isolée et VM-1 sur le SHA corrigé ; VM-2 non autorisée | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | `/tmp/atlas-v7-06a-vm` | VM-1 PASS avant toute VM-2 ; preuves SHA/APK/hash |
+| V7-06A-VM | Qualification VM/AVD API 37, recettes VM-1 puis VM-2 | Code `be31d09` | **BLOCKED_ENVIRONMENT** — boot AVD incomplet après 3 tentatives ; aucun APK installé, aucune instrumentation, aucun VM-1/VM-2 ; commit `6dfae8b` | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | `/tmp/atlas-v7-06a-vm` | Preuve : `evidence/V7-06A_VM_BLOCKED.md` |
 | V7-06A-REVIEW | Revue indépendante (sécurité, idempotence, révocation) | FIX `b04a5ff` | FINISHED pré-VM — `CORRECTION_REQUIRED`, aucun P0, 1 P1, 3 P2 | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | `/tmp/atlas-v7-06a-review` | Relecture finale obligatoire après correctif et VM |
 
 ## 3. Preuves historiques conservées
@@ -117,13 +117,41 @@ Audit lecture seule réalisé sans ADB ni modification live ; preuve
 - La qualification VM reprend sur le code `be31d09` ; aucune preuve VM n'est produite
   sur `b04a5ff`.
 
-## 4. Verdicts visés (distincts)
+## 3septies. Qualification VM-1 — BLOCKED_ENVIRONMENT (2026-11-01)
 
-`GO_V4_CONSENT_SYNC`, `GO_V4_PLAN_SYNC`, `GO_V4_RECONCILIATION`, `GO_VM_V4_E2E`,
-`GO_REMOTE_CHAT_VM`, `GO_PLAN_REVISION_VM`.
+- Worktree `/tmp/atlas-v7-06a-vm` fast-forwardé sur le code `be31d09` ; APK app et
+  AndroidTest recompilés (`--rerun-tasks`) et hashés, mais **jamais installés**.
+- Stack isolée démarrée puis arrêtée : Core `127.0.0.1:8110` (DB temporaire), relais
+  épinglé `127.0.0.1:4412`, connecteur neuf `127.0.0.1:4411` ; jetons synthétiques
+  `0600`, aucun service live.
+- Trois boots AVD `atlas_v7_06a_api37` / `emulator-5580` (API 37.2) : cold boot,
+  redémarrage `-no-boot-anim`, puis `-wipe-data` autorisé sur cet AVD uniquement.
+  À chaque fois `sys.boot_completed` n'a jamais valu `1` sous 300 s ; services
+  `activity`/`package` intermittents, logs système filtrés vides. L'AVD avait booté
+  le 2026-10-31 (`evidence/V7-06A_AVD_BOOT.md`) : blocage environnemental transitoire,
+  pas une preuve d'échec du correctif.
+- Aucun APK installé, aucun pairing poussé, aucune instrumentation, aucun oracle
+  Core, aucun VM-1/VM-2 ; ni PASS ni FAIL VM. Nettoyage : AVD arrêté, stack arrêtée,
+  conteneur supprimé, jetons/pairing/DB/état isolés supprimés ; services live intacts.
+- Preuve : `evidence/V7-06A_VM_BLOCKED.md`. Commit du harnais non exécuté :
+  `6dfae8b`, intégré `f2d4474`.
 
-`GO_PIXEL` et `GO_PRODUCT_REMOTE` restent **sans GO** tant qu’une preuve physique
-requise n’existe pas. Un succès VM n’est jamais converti en preuve Pixel.
+## 4. Verdicts (état 2026-11-01)
+
+| Verdict | Résultat | Preuve / limite |
+|---|---|---|
+| `GO_V4_CONSENT_SYNC` | **GO déterministe** | JVM 895/895, Node 109/109, backend 348/1 ; rejeu perte/enveloppe renouvelée ; VM non exécutée |
+| `GO_V4_PLAN_SYNC` | **GO déterministe** | reçu plan C1b, aucun succès fictif ; VM non exécutée |
+| `GO_V4_RECONCILIATION` | **GO déterministe** | révocation v3 prioritaire, non-régression, backend ; VM non exécutée |
+| `GO_VM_V4_E2E` | **NO GO — BLOCKED_ENVIRONMENT** | AVD non booté ; aucun APK installé, aucune instrumentation |
+| `GO_REMOTE_CHAT_VM` | **NO GO — NOT_RUN** | VM-2 non lancée ; aucun modèle réel prouvé |
+| `GO_PLAN_REVISION_VM` | **NO GO — NOT_RUN** | VM-2 non lancée |
+| `GO_PIXEL` | **NO GO** | aucun test physique dans cette campagne ; Pixel non reconnecté |
+| `GO_PRODUCT_REMOTE` | **NO GO** | exige une preuve physique plan/ACK absente |
+
+Les trois GO déterministes ne constituent pas une preuve VM ou Pixel : ils
+établissent les mécanismes et les non-régressions sur transports/stockages simulés
+et sur le Core de test. Un succès VM n’est jamais converti en preuve Pixel.
 
 ## 5. Journal des sessions
 
@@ -140,7 +168,7 @@ requise n’existe pas. Un succès VM n’est jamais converti en preuve Pixel.
 | 2026-10-31 | `df555254-e385-4cde-a714-a011fc8c6286` | FIX PC | codex / gpt-6-luna / xhigh | FINISHED — `51e3e00`, Node 106 |
 | 2026-11-01 | `d1a7590b-a0c0-49b6-bc47-cf57dd4d262e` | REVIEW pré-VM | codex / gpt-6-luna / xhigh | FINISHED — `CORRECTION_REQUIRED`, 1 P1 |
 | 2026-11-01 | `1dcb69b6-82cc-4ef4-8a13-25d54eed0115` | FIX PC R2 | codex / gpt-6-luna / xhigh | FINISHED — `e0d9062`, intégré `be31d09`, Node 109/109 |
-| 2026-11-01 | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | VM | codex / gpt-6-luna / xhigh | PAUSED — build contrôle PASS, AVD arrêté |
+| 2026-11-01 | `a9280272-0534-4cc6-91db-2c78c9abb2b0` | VM | codex / gpt-6-luna / xhigh | FINISHED — `BLOCKED_ENVIRONMENT`, commit `6dfae8b`, AVD/stack arrêtés, jetons supprimés |
 
 ## 6. Décisions d’orchestration
 
