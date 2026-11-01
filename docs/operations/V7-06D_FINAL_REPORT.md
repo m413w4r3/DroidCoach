@@ -2,17 +2,17 @@
 
 **Statut du document :** `CLÔTURE DE CAMPAGNE — deux P1 diagnostiqués et corrigés
 localement avec tests discriminants ; P2 de provenance APK↔SHA fermé par un
-mécanisme vérifié ; P1 de revue indépendante sur le gate de provenance corrigé
-(revue delta du SHA corrigé en cours) ; aucune qualification physique exécutée
-(`NOT_RUN`).`
+mécanisme vérifié ; P1 puis P2 de revue indépendante corrigés (confirmation
+finale en cours sur le SHA documentaire) ; aucune qualification physique
+exécutée (`NOT_RUN`).`
 **Campagne :** V7-06D « Fiabilité remote et révocation A4-4 ».
 **BASE_SHA :** `9ad90c7a079736ffc5f7bb6a7f0d4ee3eed70580`.
 **Branche :** `feat/atlas-v7-06d-remote-hardening`.
 **SHA de build de provenance (APK) :** `cf82cd02a8e00f75d1cd7d476a84691a276f3011`
-**SHA de code final (correctif harnais P1) :** `69d0db6` — le code Android est
-identique entre `cf82cd0` et `69d0db6` (`git diff cf82cd0..69d0db6 -- android/`
-vide) ; le HEAD documentaire final ne contient que des changements de docs après
-ces SHA.
+**SHA de code final (correctifs harnais P1/P2) :** `bfb1965` — le code Android
+est identique entre `cf82cd0` et `bfb1965` (`git diff cf82cd0..bfb1965 --
+android/` vide) ; le HEAD documentaire final ne contient que des changements de
+docs après ces SHA.
 **Registre :** `docs/operations/REGISTRY_V7_06D.md`.
 **Diagnostic :** `docs/operations/V7-06D_DIAGNOSTIC.md`.
 **Date :** 2026-11-01.
@@ -210,8 +210,18 @@ le validateur strict le rejetait comme champ inconnu, bloquant le run avant
 le rejet des champs inconnus reste strict ; une régression couvre le chemin
 complet. Le wrapper V7-06C applique la même validation.
 
+**P2 de revue delta et correction.** La revue delta a confirmé le P1 corrigé et
+relevé deux P2 : le wrapper acceptait des champs de provenance inconnus, et le
+test de succès mockait la frontière du vérificateur. Correction `4ebdf5f`
+(rouge `052ca80`, intégrés `fded03d`/`bfb1965`) : le wrapper exige désormais le
+schéma exact (clés inconnues refusées), un test exécute la vraie fonction
+`verify_installed_artifacts` avec des primitives bas niveau simulées et valide
+le proof fusionné, et le schéma post-hoc reflète les mêmes clés avec
+`verification_result=INCONCLUSIVE`. Les libellés de statut obsolètes sont
+corrigés dans les documents finaux.
+
 Build final de la campagne (worktree propre, `HEAD=cf82cd0…`, code Android
-inchangé par le correctif harnais `69d0db6`) :
+inchangé par les correctifs harnais `69d0db6`/`bfb1965`) :
 
 | Élément | Valeur |
 |---|---|
@@ -224,16 +234,17 @@ inchangé par le correctif harnais `69d0db6`) :
 | Signature (app et test) | certificat debug SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Scénario | `v7-06d-final` |
 
-Tests : harnais **26/26 PASS** (après correction P1), builds QA PASS, manifests
-app/test identiques, gate installé↔construit couvert par tests négatifs. Aucun
-run appareil ; le gate installé n'a donc pas été exercé sur un téléphone dans
-V7-06D. Le code Android étant identique entre `cf82cd0` (build APK) et `69d0db6`
-(correctif harnais), les hashes APK ci-dessus restent valides pour les deux SHA.
+Tests : harnais **27/27 PASS** (après corrections P1/P2), builds QA PASS,
+manifests app/test identiques, gate installé↔construit couvert par tests
+négatifs. Aucun run appareil ; le gate installé n'a donc pas été exercé sur un
+téléphone dans V7-06D. Le code Android étant identique entre `cf82cd0` (build
+APK) et `bfb1965` (correctifs harnais), les hashes APK ci-dessus restent valides
+pour les deux SHA.
 
 ## 7. Qualification d'intégration
 
 Sur le SHA intégré `cf82cd0` (Android/Node/backend, worktree propre) et le SHA
-de code final `69d0db6` (correctif harnais P1 ; Android, Node et backend
+de code final `bfb1965` (correctifs harnais P1/P2 ; Android, Node et backend
 inchangés) :
 
 | Suite | Résultat |
@@ -244,8 +255,8 @@ inchangés) :
 | Builds QA `assembleQa`, `assembleQaAndroidTest` | **PASS** |
 | Node connecteur `npm run test:unit` | **114/114 PASS**, 18 fichiers |
 | Proxy `node --test integrations/relay/proxy/test` | **19/19 PASS** |
-| Harnais `python3 -m unittest discover -s scripts/v7-06c/tests` | **26/26 PASS** (après correction P1) |
-| Backend `python3 -m pytest -q` | **398 passed / 1 skipped**, 43 subtests (la découverte pytest inclut aussi les tests du harnais) |
+| Harnais `python3 -m unittest discover -s scripts/v7-06c/tests` | **27/27 PASS** (après corrections P1/P2) |
+| Backend `python3 -m pytest -q` | **399 passed / 1 skipped**, 43 subtests (la découverte pytest inclut aussi les tests du harnais) |
 | `py_compile` Python modifiés | **PASS** |
 | `git diff --check` | **PASS** |
 
@@ -261,7 +272,7 @@ backend n'est pas modifié et leurs preuves restent valides dans leur périmètr
 | `GO_CHAT_RELIABILITY_QA` | **NOT_RUN** | Aucune autorisation physique ; aucune série de démarrages froids ; une relance PASS ne serait pas une preuve suffisante. |
 | `GO_REVOKED_DEVICE_SERVER` | **GO** | Refus connecteur conservé et testé (token correct → `DEVICE_REVOKED`, mauvais token → `AUTH_FAILED`) ; preuves V7-06C inchangées. |
 | `GO_A4_4_CLIENT` | **NO GO — NOT_RUN** | La sonde stricte renforcée n'a pas été exécutée sur appareil ; les tests déterministes ne remplacent pas ce PASS. |
-| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS, sous réserve de la revue delta** | Chaîne source→manifeste→APK vérifiée sur le build `cf82cd0` ; P1 de revue sur le champ installé corrigé (`69d0db6`, rouge→vert) ; gate installé↔construit testé, mais pas exercé sur téléphone dans V7-06D. |
+| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS, confirmation finale en cours** | Chaîne source→manifeste→APK vérifiée sur le build `cf82cd0` ; P1 et P2 de revue corrigés (`bfb1965`, rouge→vert) ; gate installé↔construit testé, mais pas exercé sur téléphone dans V7-06D. |
 | `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS (QA APPLY/REJECT)** | Inchangé V7-06C ; aucun nouveau run public ; la fiabilité chat publique n'est pas requalifiée. |
 | `GO_PIXEL_PRODUCT` | **NO GO** | Application produit non testée. |
 | `GO_PRODUCT_REMOTE` | **NO GO** | Application produit distante non testée. |
@@ -327,7 +338,21 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   `GO_APK_PROVENANCE` NO GO en attente de revue du SHA corrigé,
   `GO_CHAT_RELIABILITY_QA` NOT_RUN, `GO_REMOTE_V4_PUBLIC`
   GO_WITH_LIMITATIONS hérité, `GO_PIXEL_PRODUCT`/`GO_PRODUCT_REMOTE` NO GO.
-- **Revue delta du SHA corrigé : `[À COMPLÉTER APRÈS REVUE DELTA]`.**
+- **Revue delta** `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` sur `0c19a3f` :
+  P1 confirmé corrigé ; deux P2 relevés (wrapper acceptant des clés inconnues,
+  test de succès mockant la frontière du vérificateur) et libellés de statut
+  obsolètes. Correction Z3 `4ebdf5f` (rouge `052ca80`, intégrés
+  `fded03d`/`bfb1965`) : schéma exact côté wrapper, test exécutant la vraie
+  fonction `verify_installed_artifacts`, schéma post-hoc aligné. Verdicts de la
+  revue delta : `GO_CHAT_CONCURRENCY` GO, `GO_REVOKED_DEVICE_SERVER` GO,
+  `GO_APK_PROVENANCE` GO_WITH_LIMITATIONS (chaîne logicielle), `GO_A4_4_CLIENT`
+  NO GO/NOT_RUN, `GO_CHAT_RELIABILITY_QA` NOT_RUN,
+  `GO_REMOTE_V4_PUBLIC` GO_WITH_LIMITATIONS hérité, produit NO GO.
+- **Confirmation finale :** une revue courte en lecture seule est demandée sur le
+  SHA intégré corrigé (`bfb1965` + documentation finale) pour confirmer les P2
+  Z3, le schéma exact des proofs, l'exécution réelle de
+  `verify_installed_artifacts` et l'absence de régression. Résultat non encore
+  prononcé : aucun verdict n'est réécrit par anticipation.
 
 ## 11. Limites honnêtes
 
@@ -350,10 +375,14 @@ Recontrôle lecture seule du 2026-11-01, sans modification :
   mais aucun APK installé n'a été vérifié sur appareil dans V7-06D.
 - **Scénarios backend réels** : non rejoués ; le backend n'est pas modifié et les
   preuves V7-06C restent valides dans leur périmètre.
-- **Revue initiale** : lecture seule, sans réexécution des suites ; les totaux
-  sont ceux des logs de test parent et des documents, et la revue delta du SHA
-  corrigé doit confirmer le P1 de provenance. Le P1 trouvé était réel et a été
-  corrigé avant clôture.
+- **Revue initiale/delta** : lecture seule, sans réexécution des suites ; les
+  totaux sont ceux des logs de test parent et des documents. Le P1 trouvé était
+  réel et a été corrigé ; les P2 de revue delta sont corrigés et une confirmation
+  finale reste à prononcer.
+- **Test de succès du gate installé** : il exécute la vraie fonction
+  `verify_installed_artifacts` mais simule les lectures bas niveau (dumps de
+  paquets, hashes installés, certificats) ; les sorties réelles d'un appareil ne
+  sont pas couvertes dans V7-06D.
 
 ## 12. Prochaines actions
 

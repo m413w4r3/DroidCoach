@@ -134,9 +134,33 @@ Correction (commit rouge `c599661`, correctif `1031a1a`, intégrés
   différents ;
 - le wrapper V7-06C applique la même validation.
 
-Le code Android est inchangé entre le build APK `cf82cd0` et le correctif
-`69d0db6` (`git diff cf82cd0..69d0db6 -- android/` vide) ; le build APK final
-reste donc valide et le correctif porte sur le harnais de vérification.
+Le code Android est inchangé entre le build APK `cf82cd0` et les correctifs
+harnais `69d0db6`/`bfb1965` (`git diff cf82cd0..bfb1965 -- android/` vide) ; le
+build APK final reste donc valide et les correctifs portent sur le harnais de
+vérification.
+
+## 4ter. P2 de revue delta et correction
+
+La revue delta `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` a confirmé le P1 corrigé
+et relevé deux P2 : `require_pass_provenance` du wrapper V7-06C n'exigeait pas
+le schéma exact et acceptait des clés inconnues, alors que le validateur du
+runner les refuse ; le test de succès mockait la frontière du vérificateur et
+n'exécutait pas la vraie fonction `verify_installed_artifacts`.
+
+Correction Z3 (commit rouge `052ca80`, correctif `4ebdf5f`, intégrés
+`fded03d`/`bfb1965`) :
+
+- le wrapper exige l'ensemble exact de clés de provenance et refuse toute clé
+  inconnue, y compris dans le proof post-hoc ;
+- un test de succès exécute la vraie fonction `verify_installed_artifacts` avec
+  des primitives bas niveau simulées (dumps de paquets, hashes installés,
+  certificats), puis valide le proof fusionné par le validateur strict ;
+- le schéma post-hoc reflète les mêmes clés avec
+  `verification_result=INCONCLUSIVE` ;
+- les libellés de statut obsolètes sont corrigés dans les documents finaux.
+
+Harnais **27/27 PASS**, `py_compile` et `git diff --check` PASS ; code Android
+inchangé.
 
 ## 5. Résultats
 
@@ -149,7 +173,8 @@ reste donc valide et le correctif porte sur le harnais de vérification.
 | Gate installé↔construit testé (négatifs inclus) | **PASS** — tests unitaires dirty/mismatch/absent/cert/version/hash |
 | Proof post-hoc sans provenance → `INCONCLUSIVE` | **PASS** — `post_hoc_provenance` et `require_pass_provenance` |
 | P1 revue : `installed_apk_sha256` rejeté par le validateur strict | **PASS (corrigé)** — test rouge `c599661` → correctif `1031a1a`, intégrés `7ea8c58`/`69d0db6` |
-| Tests harnais complets | **PASS** — **26/26** (parent a rejoué) |
+| P2 revue delta : wrapper permissif, test mockant la frontière | **PASS (corrigé)** — rouge `052ca80` → correctif `4ebdf5f`, intégrés `fded03d`/`bfb1965` |
+| Tests harnais complets | **PASS** — **27/27** (parent a rejoué) |
 | Build `assembleQa` / `assembleQaAndroidTest` | **PASS** — agent et parent |
 | Exécution physique avec ces APK | **NOT_RUN** — pas d'autorisation |
 
@@ -199,9 +224,10 @@ changements `docs/` ; le SHA compilé et le manifeste embarqué restent
 
 ## 7. Verdict
 
-**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS, sous réserve de la revue delta du
-SHA corrigé** : la chaîne source→manifeste→APK est vérifiée sur le build intégré
-`cf82cd0`, le P1 de revue sur le champ installé est corrigé et testé (rouge →
-vert), et le gate installé↔construit est couvert par des tests négatifs ; aucun
-APK installé n'a été vérifié sur appareil dans V7-06D. Les preuves V7-06C
-historiques restent `INCONCLUSIVE` pour ce lien et ne sont pas reclassées.
+**`GO_APK_PROVENANCE` = GO_WITH_LIMITATIONS, confirmation finale en cours** : la
+chaîne source→manifeste→APK est vérifiée sur le build intégré `cf82cd0`, le P1
+de revue sur le champ installé et les P2 de la revue delta sont corrigés et
+testés (rouge → vert), et le gate installé↔construit est couvert par des tests
+négatifs ; aucun APK installé n'a été vérifié sur appareil dans V7-06D. Les
+preuves V7-06C historiques restent `INCONCLUSIVE` pour ce lien et ne sont pas
+reclassées.

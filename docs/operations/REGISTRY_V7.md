@@ -26,14 +26,18 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   `173dd01`/`8d0aa1c`/`7b0ae5a` (manifeste de build embarqué, gate
   installé↔construit, proof enrichi), puis correctif P1 de revue
   `7ea8c58`/`69d0db6` (`installed_apk_sha256` intégré au schéma, validé et
-  comparé aux hashes construits, régression du chemin complet).
+  comparé aux hashes construits, régression du chemin complet), puis correctif
+  P2 de revue delta `fded03d`/`bfb1965` (schéma exact côté wrapper, test
+  exécutant la vraie vérification installée, post-hoc aligné).
 - Suites : Android JVM **909/909**, lint/build PASS, Node **114/114**, proxy
-  **19/19**, harnais **26/26** (après correction P1), backend
-  **398 passed/1 skipped**, `git diff --check` PASS.
+  **19/19**, harnais **27/27** (après corrections P1/P2), backend
+  **399 passed/1 skipped**, `git diff --check` PASS.
 - Revue indépendante `5f9adb37…` (`codex/gpt-6-luna`/`xhigh`, lecture seule) :
   **CORRECTION_REQUIRED** sur `b163202` pour un P1 de gate de provenance
   (`installed_apk_sha256` rejeté comme champ inconnu) et un P2 de libellés ;
-  P1 corrigé `69d0db6`, P2 corrigé ; revue delta du SHA corrigé en cours.
+  P1 corrigé `69d0db6`, P2 corrigé. Revue delta `c2c2abd5…` sur `0c19a3f` :
+  P1 confirmé corrigé, deux P2 (wrapper permissif, test mockant la frontière)
+  corrigés `bfb1965` (rouge→vert) ; confirmation finale courte en cours.
 - Build final QA : APK app `1e31a643…`, test `05dd465b…`, manifeste
   `8d678af5…`, source `cf82cd0…`, `worktree_clean=true`, variante `qa`,
   `compile_sdk=37.2`.
@@ -41,7 +45,7 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   `NOT_RUN`, faute d'autorisation ciblée. `GO_CHAT_RELIABILITY_QA` et
   `GO_A4_4_CLIENT` ne sont pas accordés ; `GO_CHAT_CONCURRENCY` et
   `GO_REVOKED_DEVICE_SERVER` le sont ; `GO_APK_PROVENANCE` est
-  GO_WITH_LIMITATIONS sous réserve de la revue delta du SHA corrigé.
+  GO_WITH_LIMITATIONS (chaîne logicielle ; confirmation finale courte en cours).
 - Aucun ADB, AVD, Pixel, Docker de campagne ou service live modifié ; identités
   live résiduelles inchangées (`pixel-v7`, `r3c-pixel-final`, consentements Core
   `GRANTED v2`), révocation/rotation soumises à autorisation séparée.

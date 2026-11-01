@@ -9,8 +9,11 @@
 (code/build `cf82cd02a8e00f75d1cd7d476a84691a276f3011`, delta docs-only).
 **Verdict initial :** `CORRECTION_REQUIRED` — un P1 confirmé et un P2.
 **Après correction :** P1 corrigé `1031a1a` (rouge `c599661`, intégrés
-`7ea8c58`/`69d0db6`), P2 documentaire corrigé ; revue delta du SHA corrigé
-`[À COMPLÉTER]`.
+`7ea8c58`/`69d0db6`), P2 documentaire corrigé. **Revue delta**
+`c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15` sur `0c19a3f` : P1 confirmé corrigé,
+deux P2 supplémentaires (wrapper acceptant des clés inconnues, test de succès
+mockant la frontière du vérificateur), corrigés par Z3 `4ebdf5f` (rouge
+`052ca80`, intégrés `fded03d`/`bfb1965`). Confirmation finale en cours.
 
 La session a confirmé `HEAD=b163202`, `git status --short` vide, aucun fichier
 modifié, aucun test/build/ADB/Docker/réseau lancé.
@@ -97,3 +100,44 @@ alors qu'il contenait les résultats finaux ; le registre portait encore
 - Les qualifications physiques A4-4 et fiabilité restent `NOT_RUN`.
 - La revue delta du SHA corrigé doit confirmer le P1 de provenance et le P2
   documentaire.
+
+## 5. Revue delta du SHA corrigé (`0c19a3f`)
+
+**Session :** `c2c2abd5-0340-4bfe-8fe6-35e5cc6bfc15`, `codex/gpt-6-luna`,
+effort effectif `xhigh`, `collaborationMode=Plan`, worktree
+`/tmp/atlas-v7-06d-review2-ro` en lecture seule. Aucun fichier modifié, aucun
+test/build/ADB/Docker/réseau lancé.
+
+**Verdict delta initial : `CORRECTION_REQUIRED` sur `0c19a3f`.** Le P1
+antérieur est confirmé corrigé. Deux P2 restent :
+
+1. `run_scenario.require_pass_provenance` n'exigeait pas le schéma exact et
+   acceptait des clés inconnues, alors que le validateur du runner les refuse.
+2. Le test de succès utilisait un mock à la frontière du vérificateur et
+   n'exécutait pas la vraie fonction `verify_installed_artifacts`.
+3. Les libellés de statut de revue étaient encore marqués « en cours » /
+   `[À COMPLÉTER]` dans les documents.
+
+**Correction Z3 :** commit rouge `052ca80`, correctif `4ebdf5f`, intégrés
+`fded03d`/`bfb1965`. Le wrapper exige le schéma exact ; le test exécute
+`verify_installed_artifacts` avec des primitives bas niveau simulées et valide
+le proof fusionné ; le schéma post-hoc reflète les mêmes clés avec
+`INCONCLUSIVE` ; les libellés sont corrigés dans les documents finaux.
+Harnais **27/27 PASS**, backend **399 passed / 1 skipped**, `py_compile` et
+`git diff --check` PASS.
+
+**Verdicts de la revue delta :**
+
+| Verdict | Recommandation |
+|---|---|
+| `GO_CHAT_CONCURRENCY` | **GO** |
+| `GO_CHAT_RELIABILITY_QA` | **NOT_RUN** |
+| `GO_REVOKED_DEVICE_SERVER` | **GO** |
+| `GO_A4_4_CLIENT` | **NO GO — NOT_RUN** |
+| `GO_APK_PROVENANCE` | **GO_WITH_LIMITATIONS** (chaîne logicielle ; pas de preuve installée sur appareil) |
+| `GO_REMOTE_V4_PUBLIC` | **GO_WITH_LIMITATIONS, hérité** |
+| `GO_PIXEL_PRODUCT` | **NO GO** |
+| `GO_PRODUCT_REMOTE` | **NO GO** |
+
+**Confirmation finale du SHA corrigé : en cours.** Les limitations physiques
+restent : A4-4 client et fiabilité QA `NOT_RUN`.
