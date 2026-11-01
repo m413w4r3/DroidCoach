@@ -557,6 +557,8 @@ def check_manifest_matches_device(manifest: dict[str, Any], installed: dict[str,
     for key in ("package", "version_code", "version_name", "certificate_sha256"):
         if manifest[key] != installed[key]:
             fail(f"archive {key} différent du paquet installé")
+    if manifest["serial_sha256"] != installed["serial_sha256"]:
+        fail("archive créée pour un autre serial (empreinte du serial différente)")
 
 
 def check_restore_space(
@@ -665,6 +667,7 @@ def restore(serial: str, archive: Path, manifest_path: Path) -> None:
     manifest, entries = verify_archive(archive, manifest_path)
     restore_confirmation()
     installed = inspect_installed(serial)
+    installed["serial_sha256"] = serial_digest(serial)
     check_manifest_matches_device(manifest, installed)
     rollback_directory = create_rollback_directory()
     try:
