@@ -301,7 +301,7 @@ def inspect_installed(serial: str) -> dict[str, Any]:
     if app_path != APP_DATA_PATH:
         fail(f"chemin applicatif inattendu: {app_path}")
 
-    disk_output = adb_text(serial, ["shell", "df", "-k", APP_DATA_PATH], label="vérification de l'espace appareil")
+    disk_output = adb_text(serial, ["shell", "run-as", PACKAGE, "df", "-k", "."], label="vérification de l'espace appareil")
     device_free = parse_disk_available(disk_output, label="appareil")
     size_output = adb_text(serial, ["shell", "run-as", PACKAGE, "du", "-sk", "."], label="estimation de la taille applicative")
     app_bytes = parse_du_bytes(size_output)

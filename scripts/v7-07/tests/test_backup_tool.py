@@ -110,8 +110,8 @@ elif serial_args[:4] == ['shell', 'run-as', 'dev.atlas.coach', 'id']:
     emit('uid=10123(u0_a123) gid=10123(u0_a123)\\n')
 elif serial_args[:4] == ['shell', 'run-as', 'dev.atlas.coach', 'pwd']:
     emit('/data/user/0/dev.atlas.coach\\n')
-elif serial_args[:3] == ['shell', 'df', '-k']:
-    emit('Filesystem 1K-blocks Used Available Use% Mounted on\\n/dev/block/dm-0 1000000 1000 900000 1% /data\\n')
+elif serial_args[:6] == ['shell', 'run-as', 'dev.atlas.coach', 'df', '-k', '.']:
+    emit('Filesystem 1K-blocks Used Available Use% Mounted on\\n/dev/block/dm-45 6082144 1004256 4935676 17% /data/user/0\\n')
 elif serial_args[:4] == ['shell', 'run-as', 'dev.atlas.coach', 'du']:
     emit('2048 .\\n')
 elif serial_args[0] == 'exec-out' and serial_args[1:4] == ['run-as', 'dev.atlas.coach', 'tar']:
@@ -206,6 +206,24 @@ print("package: name='" + os.environ.get('MOCK_APK_PACKAGE', 'dev.atlas.coach') 
         self.assertIn("serial_sha256=", result.stdout)
         self.assertNotIn("atlas-test-01", result.stdout)
         self.assertFalse(any("force-stop" in command or "install" in command for command in self.log_entries()))
+
+    def test_parse_disk_available_uses_run_as_df_available_column(self) -> None:
+        output = (
+            "Filesystem 1K-blocks Used Available Use% Mounted on\n"
+            "/dev/block/dm-45 6082144 1004256 4935676 17% /data/user/0\n"
+        )
+        self.assertEqual(backup_tool.parse_disk_available(output, label="appareil"), 4935676 * 1024)
+
+    def test_preflight_reads_private_data_space_through_run_as_df(self) -> None:
+        result = self.run_tool("preflight", "--serial", "atlas-test-01", "--apk", str(self.apk))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        disk_commands = [command for command in self.log_entries() if "df" in command]
+        self.assertEqual(
+            disk_commands,
+            [["-s", "atlas-test-01", "shell", "run-as", "dev.atlas.coach", "df", "-k", "."]],
+        )
+        self.assertFalse(any(command[2:4] == ["shell", "df"] for command in self.log_entries()))
+        self.assertNotIn(backup_tool.APP_DATA_PATH, disk_commands[0])
 
     def test_preflight_refuses_multiple_devices(self) -> None:
         env = self.env | {"MOCK_DEVICE_LINES": "atlas-test-01 device\natlas-test-02 device"}
