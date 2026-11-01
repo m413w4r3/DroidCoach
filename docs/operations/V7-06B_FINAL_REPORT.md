@@ -271,3 +271,15 @@ produit.
   opérations passent par le garde, le test de gap sans événement est présent et
   vérifie l’absence de proposition ; **aucun P0/P1/P2 ouvert** sur ce point.
   Le parent a mesuré **23/23** ciblés et **371/1** backend complet.
+
+## 14. Limites de reproductibilité
+
+- Le harnais E2E backend (stack isolée, proxy, client Noise) utilisé pour les
+  preuves réelles est un outil de campagne sous `/tmp/atlas-v7-06b-backend`,
+  **non commité**. Les oracles, traces et comptes sont documentés dans ce
+  rapport, `REGISTRY_V7_06B.md` et `V7-06B_OPENCLAW_TRACE.md` ; une reprise
+  exige de rejouer ce harnais ou de l’intégrer dans un ticket séparé.
+- Le harnais Android QA et le runner sont commités ; leur runtime reste
+  `BLOCKED` par l’AVD, donc non reproductible en l’état sur cet hôte.
+- Les cibles `GO_REMOTE_V4_PUBLIC` et `GO_PRODUCT_REMOTE` exigent la recette
+  publique `V7-06C_REMOTE_RECIPE.md`, non exécutée.
