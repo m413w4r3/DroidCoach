@@ -49,6 +49,22 @@ SHA. Aucun push, PR, merge distant ni service live modifié à ce stade.
 des worktrees détachés au `BASE_SHA`. Aucun code n'est modifié avant
 l'établissement de la nécessité des correctifs et de leurs invariants.
 
+## 2bis. Recontrôle live en lecture seule (2026-11-01)
+
+Aucune écriture, aucun redémarrage, aucun ADB. Vérifications :
+
+| Ressource | Constat lecture seule |
+|---|---|
+| Connecteur `~/.local/state/atlas-relay/devices.json` | 19 entrées ; 17 révoquées ; **2 non révoquées** : `563a01fa…` (14 capabilities, dont V4) et `f4315995…` (6 capabilities V1/V2) |
+| Core live `atlas-core-atlas-core-1` | conteneur `Up 42 hours (healthy)` |
+| `consent_states_v4` | 2 lignes pour `device_ref` `android-9a3f0f75…` : `DAY_PLAN` et `ACTIVITY_STATUS`, `GRANTED`, version 2, `updated_at=2026-10-31T00:23:51Z` |
+| Projections / propositions / ACK live | `day_plan_snapshots_v4=0`, `activity_status_events_v4=0`, `agent_proposals_v4=0`, `agent_proposal_events_v4=0` |
+
+**Décision :** aucune révocation, rotation ou modification live n'est exécutée.
+Une demande d'autorisation ciblée est préparée dans le rapport final pour les deux
+identités connecteur obsolètes ; la rotation du bearer Core reste une décision
+séparée (réappairage/reconfiguration possibles).
+
 ## 3. Tickets
 
 | TASK_ID | Objectif | Dépendance | Statut | Session Paseo | Worktree | Oracle |
@@ -59,17 +75,20 @@ l'établissement de la nécessité des correctifs et de leurs invariants.
 | V7-06D-A3-RELIABILITY-PROVENANCE | Durabilité/corrélation/harnais + traçabilité APK↔SHA | PREFLIGHT | **ACCEPTED (lecture seule)** — aucun P0 ; P1 identité de requête non persistée, P1 attente de gate non bornée avant le timeout, P2 provenance documentaire, P2 403 direct, P2 gate d'instrumentation permissif, P2 timeouts ADB ; design manifeste fourni | `5f2eb93c-cc6c-4e9d-9f36-5db1fc31e3dc` | `/tmp/atlas-v7-06d-a3-proof-ro` | rapport structuré, file:line, champs absents, tests négatifs proposés |
 
 | V7-06D-X-CHAT-CONCURRENCY | Test rouge G↔C, correction verrous/attente bornée, distinction timeout avant/après envoi, traces bornées | A1 | **RUNNING** | `ac0cad8c-1364-498e-b6c9-a0eceb302a71` | `/tmp/atlas-v7-06d-fix-chat` (`fix/v7-06d-chat-concurrency`) | test rouge échoue sur BASE puis vert ; JVM complet ; aucun envoi après refus/timeout pré-envoi |
-| V7-06D-Y-A4-4-REVOCATION | Protocole DEVICE_REVOKED pré-auth, ordre token/révocation, état REVOKED collant, sonde stricte renforcée | A2 | **RUNNING** | `e3d364f5-0545-4692-a02d-46a538d8b0ca` | `/tmp/atlas-v7-06d-fix-a4-4` (`fix/v7-06d-a4-4-revocation`) | test rouge V1→V2, Node complet, JVM policy, probe compilée |
-| V7-06D-Z-APK-PROVENANCE | Manifeste de build embarqué + vérification APK installés + champs proof + tests négatifs | A3 | **RUNNING** | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | `/tmp/atlas-v7-06d-feat-provenance` (`feat/v7-06d-apk-provenance`) | manifeste extrait des deux APK, gate installé→build, tests dirty/mismatch/absent, build QA PASS |
+| V7-06D-Y-A4-4-REVOCATION | Protocole DEVICE_REVOKED pré-auth, ordre token/révocation, état REVOKED collant, sonde stricte renforcée | A2 | **ACCEPTED (code)** — commits `686d437` (rouge), `b822192` (connecteur), `207bea2` (Android) ; test rouge revérifié par le parent (V1 reçu au lieu de V2), Node **114/114 PASS** revérifié, JVM **902/902** rapporté, probe compilée avec `-PqaTestBuildType=qa` | `e3d364f5-0545-4692-a02d-46a538d8b0ca` | `/tmp/atlas-v7-06d-fix-a4-4` (`fix/v7-06d-a4-4-revocation`) | test rouge V1→V2, Node complet, JVM policy, probe compilée |
+| V7-06D-Z-APK-PROVENANCE | Manifeste de build embarqué + vérification APK installés + champs proof + tests négatifs | A3 | **ACCEPTED (code)** — commits `04960c6` (tests), `4c8b691` (implémentation), `49ef354` (suffixe Android) ; intégrés `173dd01`, `8d0aa1c`, `7b0ae5a` ; harnais **25/25 PASS** (parent), builds QA PASS, manifests identiques dans les deux APK (`worktree_clean=true`, `variant=qa`, `compile_sdk=37.2`, `source_sha=49ef354`), gate installé↔construit testé ; aucun run appareil | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | `/tmp/atlas-v7-06d-feat-provenance` (`feat/v7-06d-apk-provenance`) | manifeste extrait des deux APK, gate installé→build, tests dirty/mismatch/absent, build QA PASS |
 
 ## 4. Journal des sessions
 
 | Date | Session | Rôle | Provider/modèle/effort constatés | Résultat |
 |---|---|---|---|---|
 | 2026-11-01 | parent | Pré-vol V7-06D-00 | session parente | `ACCEPTED` lecture seule ; branche créée ; aucun ADB/live |
-| 2026-11-01 | `db85f131-1494-48b8-b227-23dd60ee4f40` | V7-06D-A1 audit concurrence | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | RUNNING — première tentative arrêtée sur auto-vérification du modèle, reprise après vérification parent |
-| 2026-11-01 | `3b0bbe77-4d1b-44db-8da1-16f06f61f854` | V7-06D-A2 audit révocation | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | RUNNING — première tentative arrêtée sur auto-vérification du modèle, reprise après vérification parent |
-| 2026-11-01 | `5f2eb93c-cc6c-4e9d-9f36-5db1fc31e3dc` | V7-06D-A3 audit fiabilité/provenance | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | RUNNING — première tentative arrêtée sur auto-vérification du modèle, reprise après vérification parent |
+| 2026-11-01 | `db85f131-1494-48b8-b227-23dd60ee4f40` | V7-06D-A1 audit concurrence | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | **ACCEPTED** — cycle G↔C complet et atteignable, timeout inopérant, autres hypothèses classées ; aucun fichier modifié |
+| 2026-11-01 | `3b0bbe77-4d1b-44db-8da1-16f06f61f854` | V7-06D-A2 audit révocation | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | **ACCEPTED** — `DEVICE_REVOKED` pré-auth émis en V1 pour client V2, relais 1012, ordre token ; matrice et tests |
+| 2026-11-01 | `5f2eb93c-cc6c-4e9d-9f36-5db1fc31e3dc` | V7-06D-A3 audit fiabilité/provenance | codex / `gpt-6-luna` / `xhigh` (`effectiveThinkingOptionId=xhigh`, `collaborationMode=Plan`) | **ACCEPTED** — identité de requête non persistée, attente de gate non bornée, provenance documentaire ; design et tests négatifs |
+| 2026-11-01 | `e3d364f5-0545-4692-a02d-46a538d8b0ca` | V7-06D-Y correction A4-4 | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — rouge connecteur vérifié, Node 114/114 revérifié, JVM 902/902 rapporté, sonde compilée ; intégré `c6de88f`/`d3619d4`/`c1bb1d1` |
+| 2026-11-01 | `29a8a6fc-ab40-410a-9419-b90839ad6e57` | V7-06D-Z provenance APK | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — harnais 25/25 revérifié, builds QA PASS, manifests APK app/test identiques, `worktree_clean=true` ; intégré `173dd01`/`8d0aa1c`/`7b0ae5a` |
+| 2026-11-01 | `ac0cad8c-1364-498e-b6c9-a0eceb302a71` | V7-06D-X concurrence chat | codex / `gpt-6-luna` / `xhigh` | **RUNNING** — test rouge vérifié sur BASE, tests ciblés verts, JVM complet 903/903 rapporté, lint en cours |
 
 ## 5. Règles de preuve
 
