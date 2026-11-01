@@ -3,8 +3,9 @@
 **Campagne :** V7-06B « Coach Loop »
 **Base :** `b55062e1890ff10139ba5ce4a1384cb729c5c0f1`
 **SHA de campagne :** `fcb5329` (contenu et preuves) ; **snapshots de revue :**
-`23748a2` (revue initiale), `72d5be4` (re-review), `6d35b99` (correctif gap) —
-branche `feat/atlas-v7-06b-coach-loop`, aucun push, PR ou merge distant.
+`23748a2` (revue initiale), `72d5be4` (re-review), `6d35b99` (correctif gap),
+`c6bc84b` (revue finale `ACCEPTED`) — branche
+`feat/atlas-v7-06b-coach-loop`, aucun push, PR ou merge distant.
 **Date :** 2026-11-01
 **Registre :** `docs/operations/REGISTRY_V7_06B.md`
 **Preuve OpenClaw :** `docs/operations/evidence/V7-06B_OPENCLAW_TRACE.md`
@@ -234,8 +235,9 @@ produit.
    ciblé, sauvegarde et opérateur unique ; exécuter APPLY puis REJECT du harnais.
 2. Vérifier indépendamment les états Core (proposition, ACK, plan v3/v2,
    absence de double application, révocation) sur les deux scénarios.
-3. Rejouer la revue indépendante après le correctif P1 `25bfed8` ; le premier
-   verdict était `REJECTED` (voir §13).
+3. Revue indépendante : **ACCEPTED** après les correctifs P1 `25bfed8` et
+   `6d35b99` (voir §13) ; Android reste à exécuter sur un AVD sain ou un Pixel
+   autorisé.
 4. Traiter le P2 400/422 si le contrat l’exige.
 5. Dérouler `V7-06C_REMOTE_RECIPE.md` pour tout verdict public/produit.
 
@@ -263,6 +265,9 @@ produit.
   snapshot `PLANNED` sur un flux incomplet. **Corrigé par `6d35b99`** : contrôle
   déplacé avant le fallback, test « gap sans événement » rouge→vert ; **23/23**
   ciblés, backend **371/1**. Les P2 ACK et SHA restent fermés.
-- **Troisième vérification :** en cours sur le HEAD final après `6d35b99` ; le
-  verdict `REJECTED` de la re-review reste la référence tant qu’elle n’a pas
-  conclu.
+- **Troisième vérification (`c6bc84b`) : `ACCEPTED`.** Agent
+  `79a6fca2-cf64-4ade-aa62-536c7244d71c`, même modèle/effort, sur le HEAD
+  avec `6d35b99` : le contrôle de lacune précède bien le fallback, les deux
+  opérations passent par le garde, le test de gap sans événement est présent et
+  vérifie l’absence de proposition ; **aucun P0/P1/P2 ouvert** sur ce point.
+  Le parent a mesuré **23/23** ciblés et **371/1** backend complet.
