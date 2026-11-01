@@ -89,7 +89,7 @@ séparée (réappairage/reconfiguration possibles).
 | V7-06D-PHYS-PREFLIGHT | Pré-vol physique, autorisation ciblée, sauvegarde app QA | REVIEW3 | **ACCEPTED (lecture seule)** — Pixel 9 Pro XL, Android 17/SDK 37.1, HOME produit inchangé, aucun paquet QA préexistant, aucune donnée QA à sauvegarder | parent | appareil physique | modèle/API/HOME/stockage, aucun test produit |
 | V7-06D-PHYS-A4-4 | Sonde A4-4 stricte sur appareil | PREFLIGHT | **PASS** — `REVOKED`/`REVOKED`, `close_code=null`, aucune nouvelle session authentifiée, erreurs `0→1` | parent | appareil physique | instrumentation `OK (1 test)`, métriques isolées |
 | V7-06D-PHYS-COLD | Série de 5 démarrages froids avec chat | PREFLIGHT | **3 PASS / 2 FAIL** — échecs #2/#3 après réponse chat, zéro proposition après rejet d'outil ; deadlock G↔C non reproduite | parent | appareil physique | 5 preuves/attempts, provenance installée vérifiée |
-| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **OPEN — nouveau ticket requis** ; cause produit non corrigée, parseur `parseToolMetadata` à durcir (`PROPOSAL_MISSING`) | — | — | reproduction, correction, nouvelle série 5+ |
+| V7-06D-PHYS-F1 | Zéro proposition après rejet de `atlas_propose_plan_revision` + parseur de test | PHYS-COLD | **READY — ticket ouvert** (`V7-06D_F1_TICKET.md`) ; cause produit non corrigée, parseur `parseToolMetadata` à durcir (`PROPOSAL_MISSING`) | à lancer | `fix/v7-06d-f1-proposal-missing` | F1a rouge→vert, F1b reproductible, suites, série physique 5+, revue |
 
 ## 4. Journal des sessions
 

@@ -48,8 +48,9 @@ Registre détaillé : `REGISTRY_V7_06D.md`. Rapport final :
   `close_code=null`) ; provenance des APK QA installés **vérifiée**
   (`VERIFIED`) ; série de 5 démarrages froids **3 PASS / 2 FAIL**. Les échecs
   #2/#3 sont des réponses à zéro proposition après rejet de l'outil (F1), pas la
-  deadlock G↔C ; `parseToolMetadata` doit être durci. QA désinstallés, reverse
-  retiré, HOME/produit inchangés, aucun service live.
+  deadlock G↔C ; `parseToolMetadata` doit être durci. Ticket
+  `V7-06D_F1_TICKET.md` **READY** sur `fix/v7-06d-f1-proposal-missing`. QA
+  désinstallés, reverse retiré, HOME/produit inchangés, aucun service live.
 - Verdicts après phase physique : `GO_CHAT_CONCURRENCY` **GO**,
   `GO_REVOKED_DEVICE_SERVER` **GO**, `GO_A4_4_CLIENT` **GO**,
   `GO_APK_PROVENANCE` **GO** (APK QA), `GO_CHAT_RELIABILITY_QA` **NO GO**
