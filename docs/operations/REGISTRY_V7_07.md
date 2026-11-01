@@ -80,17 +80,36 @@ Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
 | Identités Relay | 19 entrées, 2 actives ; un seul bearer Android partagé côté connecteur | **PROVEN ; P1 de séparation** |
 | Core consents | `DAY_PLAN` et `ACTIVITY_STATUS` `GRANTED` v2 pour `android-9a3f0f75…` | **PROVEN** |
 
+## 3bis. Recontrôle final en lecture seule (2026-11-02)
+
+Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
+
+| Ressource | Constat final | Statut |
+|---|---|---|
+| Core | conteneur `running/healthy`, image `00b88ef…`, démarré `2026-10-30T22:16:54Z`, `/health` 200 `mode=openclaw`, 7/7 capabilities, 2 consentements, 0 proposition/ACK | **inchangé** |
+| Gateway | service utilisateur `active`, `openclaw.json` `0600`, mtime `2026-10-30 22:46:57`, hash `8b8d59d1…` | **inchangé** |
+| Connecteur | processus absent, aucun listener 4400/4401 | **inchangé (arrêté)** |
+| Relay | conteneur `atlas-v7-relay` actif sur `127.0.0.1:4402` | **inchangé** |
+| Entrée publique | Funnel 8443 sans backend, `SSL_ERROR_SYSCALL` | **inchangé (indisponible)** |
+| Identités | `devices.json` 19 entrées, 2 actives, hash `c0298ce1…`, mtime `2026-10-30 23:30:54` | **inchangé** |
+| ADB | aucun appareil | **inchangé** |
+| Git | arbre propre, aucun push | **inchangé** |
+
+Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
+
 ## 4. Tickets
 
 | TASK_ID | Objectif | Type | Session Paseo | Worktree | Statut |
 |---|---|---|---|---|---|
 | V7-07-00-PREFLIGHT | SHA, CI, outils, live lecture seule, registre | parent | parent | racine | **ACCEPTED (lecture seule)** |
-| V7-07-A1-PRODUCT-DATA | Modèle de données produit, migrations, backup/restore | audit RO | `d459824a-c98c-4bad-ad34-2b272152f729` | `/tmp/atlas-v7-07-a1-product-ro` | **ACCEPTED (rapport reçu, à intégrer)** |
-| V7-07-A2-LIVE-CONFIG | Core/Gateway/Relay, modèle, outils, config candidate | audit RO | `47a96ff4-6f89-4fdd-98d6-af66dcaabf37` | `/tmp/atlas-v7-07-a2-live-ro` | **ACCEPTED (rapport reçu, à intégrer)** |
-| V7-07-A3-BACKUP-DESIGN | Procédure backup/restore/rollback et essai jetable | audit RO | `42f086e3-2829-4452-9748-c5e401299242` | `/tmp/atlas-v7-07-a3-backup-ro` | **ACCEPTED (rapport reçu, à intégrer)** |
-| V7-07-P2-PARSER-TESTS | Tests P2 parseur F1, sans code produit | implémentation | `f8049778-98a8-4e06-b28a-9722f38bde75` | `/tmp/atlas-v7-07-parser-p2` | **RUNNING** (ciblé vert, suite 915 PASS, commit en cours) |
-| V7-07-CANDIDATE-BUILD | Build APK produit, vérifications, sans installation | build | `e15d44a1-219c-456b-bc5f-7f0857b78b25` | `/tmp/atlas-v7-07-candidate` | **ACCEPTED (build)** — APK `d32efc76…`, JVM 912/912, lint 0 erreur, signature et permissions vérifiées |
-| V7-07-BACKUP-TOOL | Outillage backup/restore sûr + tests hors ligne | implémentation | `20ecbdf6-43be-44c2-8091-1f67df30922c` | `/tmp/atlas-v7-07-backup-tool` | **ACCEPTED (outil)** — commit `2517097`, 15 tests hors ligne PASS |
+| V7-07-A1-PRODUCT-DATA | Modèle de données produit, migrations, backup/restore | audit RO | `d459824a-c98c-4bad-ad34-2b272152f729` | `/tmp/atlas-v7-07-a1-product-ro` | **ACCEPTED (lecture seule)** — 24 SharedPreferences, fichiers, WorkManager, Keystore ; P1 `atlas_core_v4_sync` |
+| V7-07-A2-LIVE-CONFIG | Core/Gateway/Relay, modèle, outils, config candidate | audit RO | `47a96ff4-6f89-4fdd-98d6-af66dcaabf37` | `/tmp/atlas-v7-07-a2-live-ro` | **ACCEPTED (lecture seule)** — plugin natif concurrent, `profile=full`, modèle non qualifié, transport NO-GO |
+| V7-07-A3-BACKUP-DESIGN | Procédure backup/restore/rollback et essai jetable | audit RO | `42f086e3-2829-4452-9748-c5e401299242` | `/tmp/atlas-v7-07-a3-backup-ro` | **ACCEPTED (lecture seule)** — procédure `run-as`, matrice, test AVD, export/import manquant |
+| V7-07-P2-PARSER-TESTS | Tests P2 parseur F1, sans code produit | implémentation | `f8049778-98a8-4e06-b28a-9722f38bde75` | `/tmp/atlas-v7-07-parser-p2` | **ACCEPTED (test-only)** — `fae8caa` + `5412050` (UUID invalide) ; ciblé 8/8, suite 917/917 |
+| V7-07-CANDIDATE-BUILD | Build APK produit, vérifications, sans installation | build | `e15d44a1-219c-456b-bc5f-7f0857b78b25` | `/tmp/atlas-v7-07-candidate` | **ACCEPTED (build)** — APK `d32efc76…`, JVM 912/912, lint 0 erreur, signature et permissions vérifiées ; **à reconstruire après le correctif V4** |
+| V7-07-BACKUP-TOOL | Outillage backup/restore sûr + tests hors ligne | implémentation | `20ecbdf6-43be-44c2-8091-1f67df30922c` | `/tmp/atlas-v7-07-backup-tool` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705` ; 17 tests hors ligne PASS |
+| V7-07-B1-V4-QUARANTINE | Quarantaine fail-closed de l'état V4 invalide | implémentation | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | `/tmp/atlas-v7-07-v4-quarantine` | **RUNNING** |
+| V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | `ed7f0c88-9243-474a-8083-12478df0eb21` | `/tmp/atlas-v7-07-review-ro` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1, 5 P2 ; corrections en cours |
 | V7-07-AVD-RESTORE | Essai AVD jetable : backup, restore, update in-place, HOME | exécution parent | parent (unique opérateur ADB) | AVD API 35 jetable | **PASS (AVD API 35, synthétique)** — backup/restore/verify, HOME, update et rollback ; Keystore NOT_RUN ; Pixel NOT_RUN |
 | V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | à créer après intégration | worktree détaché | **PENDING** |
 
@@ -102,10 +121,42 @@ Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
 | 2026-11-01 | `d459824a-c98c-4bad-ad34-2b272152f729` | A1 produit/données | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED** — 24 SharedPreferences, fichiers, WorkManager, Keystore ; P1 `atlas_core_v4_sync`, restauration non prouvée |
 | 2026-11-01 | `47a96ff4-6f89-4fdd-98d6-af66dcaabf37` | A2 configuration live | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED** — plugin natif concurrent, `profile=full`, modèle personnel non qualifié, transport NO-GO |
 | 2026-11-01 | `42f086e3-2829-4452-9748-c5e401299242` | A3 backup/rollback | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED** — procédure `run-as`, matrice, test AVD, export/import manquant |
-| 2026-11-01 | `f8049778-98a8-4e06-b28a-9722f38bde75` | P2 parseur | codex / `gpt-6-luna` / `xhigh` | **RUNNING** — ciblé 6/6 vert, suite 915 PASS, commit local en cours |
+| 2026-11-01 | `f8049778-98a8-4e06-b28a-9722f38bde75` | P2 parseur | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (test-only)** — `fae8caa` + `5412050` ; ciblé 8/8, suite 917/917 ; aucun code produit |
 | 2026-11-01 | `e15d44a1-219c-456b-bc5f-7f0857b78b25` | Build candidat | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (build)** — `GO_PRODUCT_APK_BUILD`, APK `d32efc76…`, JVM 912/912, lint 0 erreur, provenance `32e7c70` |
 | 2026-11-01 | `20ecbdf6-43be-44c2-8091-1f67df30922c` | Outillage backup | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705` ; 17 tests hors ligne PASS ; aucun ADB |
 | 2026-11-01 | parent | Essai AVD API 35 | ADB isolé `5038`, émulateur jetable | **PASS (synthétique)** — backup/restore/verify, HOME, update in-place, rollback ; nettoyage AVD ; preuve `evidence/V7-07_AVD_BACKUP_RESTORE.md` |
+| 2026-11-02 | `ed7f0c88-9243-474a-8083-12478df0eb21` | Revue indépendante | codex / `gpt-6-luna` / `xhigh`, worktree `a-w` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1 (V4, config, identités, transport, état produit), 5 P2 ; worktree intact, aucun ADB/live |
+| 2026-11-02 | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | Correction V4 | codex / `gpt-6-luna` / `xhigh` | **RUNNING** — quarantaine fail-closed |
+| 2026-11-02 | parent | Suite JVM finale `34c949d` | JVM 915/915 | **PASS** — 120 fichiers, 0 échec/erreur/ignoré |
+
+## 5bis. Revue indépendante
+
+Session `ed7f0c88-9243-474a-8083-12478df0eb21`, `codex/gpt-6-luna`,
+effort effectif `xhigh`, worktree `/tmp/atlas-v7-07-review-ro` détaché à
+`34c949d` et `chmod -R a-w`. Aucun fichier modifié ; aucun ADB réel, aucune
+action live, aucun réseau, aucun Docker.
+
+**Verdict : `ACCEPTED_WITH_LIMITATIONS` — aucun P0.**
+
+P1 confirmés :
+
+1. `atlas_core_v4_sync` : une racine invalide/schéma inconnu est remplacée en
+   mémoire par un état vide, puis une mutation peut écraser l'état persistant.
+2. Configuration Gateway non qualifiée (`profile=full`, plugin natif concurrent,
+   modèle personnel non testé).
+3. Identités/consentements non réconciliés ; bearer Android partagé.
+4. Transport distant indisponible ; `training_plan.read` non qualifié.
+5. État produit Pixel non observé (paquet, données, HOME, permissions).
+
+P2 : statut APK périmé, registre non réconcilié, procédure API 37/API 35
+ambiguë, serials d'émulateur littéraux, cas UUID invalide non couvert.
+
+Recommandations : `GO_SOURCE_AND_CI` GO pour le source candidat `32e7c70` avec
+CI `41350216879` ; `GO_DATA_BACKUP`/`RESTORE`/`HOME_ROLLBACK` GO limités à
+l'AVD API 35 synthétique ; `GO_LIVE_*` NO-GO ; `GO_PRODUCT_APK_CANDIDATE`
+PENDING ; `GO_PRODUCT_INSTALL` et suivants NO-GO. Les corrections P2 et le P1
+V4 sont traités dans la lignée `fix/v7-07-v4-quarantine` et une confirmation
+delta est demandée à la même session.
 
 ## 6. Règles de preuve
 
@@ -124,10 +175,10 @@ Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
 
 | Verdict | État | Portée |
 |---|---|---|
-| `GO_SOURCE_AND_CI` | **GO** | `32e7c70`, CI `success`, arbre propre |
-| `GO_DATA_BACKUP` | **GO (AVD API 35, synthétique) / NOT_RUN Pixel** | outil et archive validés sur AVD ; aucune sauvegarde du produit réel |
-| `GO_DATA_RESTORE` | **GO (AVD API 35, synthétique) / NOT_RUN Pixel** | restauration vérifiée sur AVD ; produit réel non restauré |
-| `GO_HOME_ROLLBACK` | **GO (AVD API 35, synthétique) / NOT_RUN Pixel** | rôle HOME posé/restauré sur AVD ; Settings à rejouer sur Pixel |
+| `GO_SOURCE_AND_CI` | **GO (source candidat `32e7c70`)** | CI `41350216879` `success` ; le HEAD de campagne `34c949d` n'a pas de run CI car il n'est pas poussé ; diff produit vs base vide avant le correctif V4 |
+| `GO_DATA_BACKUP` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | outil et archive validés sur AVD ; aucune sauvegarde du produit réel |
+| `GO_DATA_RESTORE` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | restauration vérifiée sur AVD ; produit réel non restauré |
+| `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | rôle HOME posé/restauré sur AVD ; Settings à rejouer sur Pixel |
 | `GO_LIVE_OPENCLAW_CONFIG` | **NO-GO** | plugin natif concurrent, `profile=full`, modèle non qualifié |
 | `GO_LIVE_SECURITY` | **NO-GO / BLOCKED** | transport distant indisponible ; identités de test actives ; bearer Android partagé |
 | `GO_PRODUCT_APK_CANDIDATE` | **PENDING** | build GO, revue indépendante et décision de risque P1 en attente |

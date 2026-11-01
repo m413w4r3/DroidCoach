@@ -37,16 +37,17 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
   **NOT_RUN** ; Pixel API 37 **NOT_RUN**.
 - P2 parseur F1 : commit test-only `fae8caa`, 6/6 ciblés, **915/915 JVM**.
 - Verdicts : `GO_SOURCE_AND_CI` **GO** ; `GO_DATA_BACKUP`,
-  `GO_DATA_RESTORE`, `GO_HOME_ROLLBACK` **GO (AVD synthétique)** mais
-  **NOT_RUN Pixel** ; `GO_LIVE_OPENCLAW_CONFIG` **NO-GO** (plugin natif
-  concurrent, `profile=full`, modèle non qualifié) ; `GO_LIVE_SECURITY`
-  **NO-GO/BLOCKED** (transport arrêté, identités de test, bearer partagé) ;
-  `GO_PRODUCT_APK_CANDIDATE` **PENDING** (revue indépendante) ;
-  `GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE`, `GO_DAILY_PILOT` **NO-GO**.
-- P1 ouverts : perte potentielle `atlas_core_v4_sync` sur racine invalide ;
-  restauration produit réel non observée ; configuration Gateway non qualifiée ;
-  transport distant indisponible ; identités/bearer non séparés ; training plan
-  incohérent sur projection non vide. Aucun P0.
+  `GO_DATA_RESTORE`, `GO_HOME_ROLLBACK` **GO_WITH_LIMITATIONS (AVD API 35
+  synthétique)** mais **NOT_RUN Pixel** ; `GO_LIVE_OPENCLAW_CONFIG` **NO-GO**
+  (plugin natif concurrent, `profile=full`, modèle non qualifié) ;
+  `GO_LIVE_SECURITY` **NO-GO/BLOCKED** (transport arrêté, identités de test,
+  bearer partagé) ; `GO_PRODUCT_APK_CANDIDATE` **PENDING** (revue indépendante
+  `ACCEPTED_WITH_LIMITATIONS`, P1 V4 en correction) ; `GO_PRODUCT_INSTALL`,
+  `GO_PRODUCT_REMOTE`, `GO_DAILY_PILOT` **NO-GO**.
+- P1 ouverts : perte potentielle `atlas_core_v4_sync` sur racine invalide
+  (correction en cours) ; restauration produit réel non observée ; configuration
+  Gateway non qualifiée ; transport distant indisponible ; identités/bearer non
+  séparés ; training plan incohérent sur projection non vide. Aucun P0.
 
 ## 0bis. Campagne V7-06D — fiabilité remote et révocation A4-4 (2026-11-01)
 

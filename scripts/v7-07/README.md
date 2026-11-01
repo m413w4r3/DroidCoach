@@ -13,10 +13,10 @@ Outil local pour le paquet `dev.atlas.coach` uniquement. Il utilise `run-as` et 
 
 ```sh
 scripts/v7-07/atlas-product-backup.sh preflight \
-  --serial emulator-5554 --apk /chemin/app-debug.apk
+  --serial <serial> --apk /chemin/app-debug.apk
 
 scripts/v7-07/atlas-product-backup.sh backup \
-  --serial emulator-5554 --backup-dir "$HOME/.local/state/atlas-backups/session-01"
+  --serial <serial> --backup-dir "$HOME/.local/state/atlas-backups/session-01"
 
 scripts/v7-07/atlas-product-backup.sh verify \
   --archive "$HOME/.local/state/atlas-backups/session-01/dev.atlas.coach-appdata.tar" \
@@ -24,7 +24,7 @@ scripts/v7-07/atlas-product-backup.sh verify \
 
 ATLAS_CONFIRM_RESTORE='RESTORE dev.atlas.coach' \
   scripts/v7-07/atlas-product-backup.sh restore \
-    --serial emulator-5554 \
+    --serial <serial> \
     --archive "$HOME/.local/state/atlas-backups/session-01/dev.atlas.coach-appdata.tar" \
     --manifest "$HOME/.local/state/atlas-backups/session-01/manifest.json" \
     --confirm-restore

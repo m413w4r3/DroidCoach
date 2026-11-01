@@ -11,7 +11,7 @@ compatibilité de mise à jour sur un environnement **jetable**, avec des donné
 | Élément | Valeur |
 |---|---|
 | AVD | `atlas_v7_07_api35`, image `system-images;android-35;google_apis;x86_64` |
-| Serial ADB | `emulator-5584`, serveur ADB isolé `5038` |
+| Serial ADB | `emulator-<port>` (serial exact non publié), serveur ADB isolé `5038` |
 | SDK | 35 (`x86_64`), 6 Go de partition data |
 | APK historique | `post-install-base.apk`, SHA-256 `0d0ce524f1166690f5399ea7197ab4eb3b39bfa93604d3feb98613d75bc57ca4` |
 | APK candidat | `app-debug.apk`, SHA-256 `d32efc7684c131131101f476f9f7ae186933efe863cb561b2ce0039ddc45e992` |
@@ -168,9 +168,9 @@ la référence.
 
 | Verdict | Résultat | Portée |
 |---|---|---|
-| `GO_DATA_BACKUP` | **GO (AVD API 35, synthétique)** | archive vérifiée, sans cache, manifeste intègre |
-| `GO_DATA_RESTORE` | **GO (AVD API 35, synthétique)** | restauration confirmée, hashes identiques, app démarre |
-| `GO_HOME_ROLLBACK` | **GO (AVD API 35, synthétique)** | rôle HOME posé/restauré sur AVD jetable |
+| `GO_DATA_BACKUP` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique)** | archive vérifiée, sans cache, manifeste intègre |
+| `GO_DATA_RESTORE` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique)** | restauration confirmée, hashes identiques, app démarre |
+| `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique)** | rôle HOME posé/restauré sur AVD jetable |
 | Mise à jour in-place | **PASS (AVD API 35)** | même paquet/signature/versionCode, données conservées |
 | Rollback APK | **PASS (AVD API 35)** | réinstallation historique, données conservées |
 | Keystore / tokens | **NOT_RUN** | aucun token de test configuré ; la conservation in-place reste à qualifier sur le produit |

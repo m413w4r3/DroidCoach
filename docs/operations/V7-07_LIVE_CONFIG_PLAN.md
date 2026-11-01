@@ -200,8 +200,9 @@ Ne pas supprimer `~/.local/state/atlas-relay`.
 
 ### 7.1 Constat
 
-- `pixel-v7` (`563a01fa…`) et `r3c-pixel-final` (`f4315995…`) ne sont pas
-  révoqués.
+- `pixel-v7` et `r3c-pixel-final` ne sont pas révoqués. Leurs UUID exacts se
+  lisent dans `devices.json` au moment de l'action et ne sont pas publiés dans
+  les preuves.
 - Le connecteur utilise le même bearer Android que le Core ;
   `device_ref=android-9a3f0f75…` est partagé par tous les appareils Relay.
 - Le Core conserve `DAY_PLAN` et `ACTIVITY_STATUS` `GRANTED` v2 pour ce
@@ -236,11 +237,11 @@ node "$HOME/.local/lib/atlas-relay/scripts/backup-state.mjs" \
   "$HOME/.config/atlas/relay.env" \
   "$HOME/.local/backups/atlas-relay-before-revocation"
 
-# Révocation ciblée des deux devices
+# Révocation ciblée des deux devices (UUID lus dans devices.json, non publiés)
 node "$HOME/.local/lib/atlas-relay/scripts/run-cli.mjs" \
-  "$HOME/.config/atlas/relay.env" revoke-device 563a01fa-b7a0-4a37-a401-d511499a553a
+  "$HOME/.config/atlas/relay.env" revoke-device <UUID_PIXEL_V7>
 node "$HOME/.local/lib/atlas-relay/scripts/run-cli.mjs" \
-  "$HOME/.config/atlas/relay.env" revoke-device f4315995-0b12-414b-bfbf-369dab43562b
+  "$HOME/.config/atlas/relay.env" revoke-device <UUID_R3C_PIXEL_FINAL>
 
 # Vérification du registre (lecture seule, sans afficher de token)
 node -e '...'   # nombre d entrées, revoked_at non nul, aucun token imprimé

@@ -258,8 +258,9 @@ La préproduction est **partiellement établie** :
   Gateway effective, le transport distant et le parcours produit ne sont **pas**
   qualifiés.
 
-Les gates `GO_DATA_BACKUP`, `GO_DATA_RESTORE` et `GO_HOME_ROLLBACK` sont **GO
-dans le périmètre AVD synthétique** mais **NOT_RUN sur le Pixel physique**.
+Les gates `GO_DATA_BACKUP`, `GO_DATA_RESTORE` et `GO_HOME_ROLLBACK` sont
+**GO_WITH_LIMITATIONS dans le périmètre AVD API 35 synthétique** mais
+**NOT_RUN sur le Pixel physique**.
 `GO_LIVE_OPENCLAW_CONFIG`, `GO_LIVE_SECURITY`, `GO_PRODUCT_APK_CANDIDATE`,
 `GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent
 **NO-GO ou NOT_RUN** à l'issue de cet audit. Aucune installation produit n'est

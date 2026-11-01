@@ -133,9 +133,12 @@ Résultats constatés sur l'APK `d32efc76…` :
 JVM, lint 0 erreur, APK signé compatible, permissions inchangées, provenance
 vérifiée.
 
-`GO_PRODUCT_APK_CANDIDATE` : **PENDING** — la revue indépendante
-sécurité/perte de données et l'essai AVD backup/restore/update ne sont pas
-encore terminés. Le build seul ne suffit pas.
+`GO_PRODUCT_APK_CANDIDATE` : **PENDING / NO-GO pour installation** — l'essai
+AVD API 35 synthétique est **PASS** (backup/restore/update/HOME), mais le Pixel
+API 37 est `NOT_RUN`, la revue indépendante a confirmé un P1 de perte potentielle
+`atlas_core_v4_sync` en cours de correction, et le candidat devra être
+reconstruit après ce correctif. Le build seul ne suffit pas.
 
-`GO_PRODUCT_INSTALL` : **NO-GO** tant que les préconditions §5 ne sont pas
-réunies et que l'autorisation ciblée n'est pas accordée.
+`GO_PRODUCT_INSTALL` : **NO-GO** tant que le P1 V4 n'est pas corrigé et revu,
+que la sauvegarde/restauration du produit réel n'est pas exécutée, et que
+l'autorisation ciblée n'est pas accordée.

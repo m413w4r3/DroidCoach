@@ -222,8 +222,11 @@ autorisation ; la vérification est en lecture seule.
 
 ## 8. Essai obligatoire sur environnement jetable
 
-L'essai se fait sur un AVD API 37 dédié, avec des données synthétiques
-uniquement, jamais sur les données du propriétaire.
+L'essai cible un AVD **API 37** dédié, avec des données synthétiques uniquement,
+jamais sur les données du propriétaire. Si l'image API 37 de l'hôte est instable,
+un AVD jetable d'API inférieure **stable** (API 35) peut être utilisé pour
+qualifier la procédure ; la limite est alors explicite : le Pixel physique
+API 37 reste `NOT_RUN` et aucun verdict produit n'est déduit de l'AVD.
 
 ### 8.0 Résultat de l'essai AVD (2026-11-01)
 
@@ -333,9 +336,9 @@ promesse de sauvegarde utilisateur durable.
 
 | Verdict | État | Motif |
 |---|---|---|
-| `GO_DATA_BACKUP` | **GO (AVD API 35, synthétique)** / **NOT_RUN (Pixel API 37)** | archive vérifiée, sans cache, manifeste intègre ; aucune sauvegarde du produit réel |
-| `GO_DATA_RESTORE` | **GO (AVD API 35, synthétique)** / **NOT_RUN (Pixel API 37)** | round-trip vérifié, hashes identiques, app démarrée ; aucune restauration du produit réel |
-| `GO_HOME_ROLLBACK` | **GO (AVD API 35, synthétique)** / **NOT_RUN (Pixel API 37)** | rôle HOME posé et restauré sur AVD ; procédure Settings à rejouer sur le Pixel |
+| `GO_DATA_BACKUP` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique)** / **NOT_RUN (Pixel API 37)** | archive vérifiée, sans cache, manifeste intègre ; aucune sauvegarde du produit réel |
+| `GO_DATA_RESTORE` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique)** / **NOT_RUN (Pixel API 37)** | round-trip vérifié, hashes identiques, app démarrée ; aucune restauration du produit réel |
+| `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique)** / **NOT_RUN (Pixel API 37)** | rôle HOME posé et restauré sur AVD ; procédure Settings à rejouer sur le Pixel |
 | Update in-place | **PASS (AVD API 35)** / **NOT_RUN (Pixel API 37)** | même paquet/signature/versionCode, données conservées |
 | Rollback APK | **PASS (AVD API 35)** / **NOT_RUN (Pixel API 37)** | réinstallation historique, données conservées |
 | Export/import intégré | **NO-GO / NOT_IMPLEMENTED** | nécessaire pour une sauvegarde utilisateur durable sans ADB |

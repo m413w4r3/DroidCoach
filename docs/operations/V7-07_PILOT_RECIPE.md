@@ -169,7 +169,11 @@ Le pilote exige des scopes indépendants :
   test OpenClaw réel sur l'activité d'essai.
 - **E — Pilote quotidien :** durée, seuils, collecte expurgée.
 
-Si le propriétaire n'autorise qu'une partie, seule cette partie est exécutée.
+**Dépendance des scopes :** le smoke produit (D) exige au minimum A, B et C
+autorisés et GO ; le pilote quotidien (E) exige en plus D GO et une nouvelle
+autorisation explicite de durée. Une autorisation « partielle » ne suffit pas
+à démarrer E : elle limite l'exécution aux seules phases dont les scopes sont
+accordés. Aucun scope n'est implicite par l'accord d'un autre.
 
 ## 8. Verdicts
 
