@@ -24,7 +24,9 @@ import dev.atlas.coach.sync.agent.coach.AgentStatus
 import dev.atlas.coach.sync.agent.inbox.v4.FileInboxV4Storage
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4AckState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ConfirmationMode
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4DeliveryResult
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView
+import dev.atlas.coach.sync.agent.inbox.v4.InboxV4HttpTransport
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4LocalStore
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4Repository
@@ -34,6 +36,7 @@ import dev.atlas.coach.sync.v4.CoreV4ConsentSnapshot
 import dev.atlas.coach.sync.v4.CoreV4ConsentState
 import dev.atlas.coach.sync.v4.CoreV4Diagnostics
 import dev.atlas.coach.sync.v4.CoreV4SyncScheduler
+import dev.atlas.coach.sync.v4.RelayCoreV4HttpTransport
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -444,6 +447,48 @@ class V7_06B_CoachLoopInstrumentedTest {
                     "plan_version=${afterSecondPullPlan.version}",
             )
 
+            val consentBeforeAckReplay = syncStore.consent(CoreV4Category.DAY_PLAN).snapshot
+            assertEquals(CoreV4ConsentState.GRANTED, consentBeforeAckReplay.state)
+            assertEquals(durableAck.consentVersion, consentBeforeAckReplay.version.toLong())
+            val planBeforeAckReplay = planController.plan ?: error("plan missing before ACK replay")
+            assertEquals(finalPlanVersion, planBeforeAckReplay.version)
+            val ackReplayTransport = InboxV4HttpTransport(
+                baseUrl = null,
+                bearerToken = "",
+                consentVersion = consentBeforeAckReplay.version.toLong(),
+                debuggable = true,
+                poster = RelayCoreV4HttpTransport(),
+                sessionAuthenticated = true,
+            )
+            val ackReplayResult = runCatching { ackReplayTransport.ack(durableAck) }
+                .getOrElse { failure -> throw AssertionError("exact durable ACK replay failed", failure) }
+            assertEquals(
+                "Core must deliver the exact durable ACK replay",
+                InboxV4DeliveryResult.Delivered,
+                ackReplayResult,
+            )
+            val afterAckReplayRepository = durableInboxRepository(context)
+            val afterAckReplayEntry = requireNotNull(afterAckReplayRepository.get(proposalIdFromReply))
+            val afterAckReplayPlan = planController.plan ?: error("plan missing after ACK replay")
+            assertEquals("ACK replay must leave exactly one local ACK", 1, afterAckReplayRepository.ackHistory().size)
+            assertEquals(
+                "ACK replay must leave exactly one local ACK for the proposal",
+                1,
+                afterAckReplayRepository.ackHistory(proposalIdFromReply).size,
+            )
+            assertEquals("ACK replay must not change the durable ACK", durableAck,
+                afterAckReplayRepository.ackHistory(proposalIdFromReply).single())
+            assertTrue("ACK replay must leave no pending ACK", afterAckReplayRepository.pendingAcks().isEmpty())
+            assertEquals(expectedProposalState(testAction), afterAckReplayEntry.proposal.state)
+            assertEquals(durableEntry.proposal.state, afterAckReplayEntry.proposal.state)
+            assertEquals("ACK replay must not change the local plan", planBeforeAckReplay, afterAckReplayPlan)
+            assertEquals(finalPlanVersion, afterAckReplayPlan.version)
+            Log.i(
+                LOG_TAG,
+                "step=11 result=PASS ack_replay=identical ack_id=${durableAck.ackId} " +
+                    "ack_state=${durableAck.state} ack_events_local=1 pending_acks=0",
+            )
+
             val dayPlanRevoked = syncStore.setConsent(CoreV4Category.DAY_PLAN, granted = false).snapshot
             val statusRevoked = syncStore.setConsent(CoreV4Category.ACTIVITY_STATUS, granted = false).snapshot
             assertEquals(CoreV4ConsentState.REVOKED, dayPlanRevoked.state)
@@ -466,7 +511,7 @@ class V7_06B_CoachLoopInstrumentedTest {
             val finalStatusConsent = syncStore.consent(CoreV4Category.ACTIVITY_STATUS).snapshot
             Log.i(
                 LOG_TAG,
-                "step=11 result=PASS final_day_plan=${consentDiagnostic(finalDayConsent)} " +
+                "step=12 result=PASS final_day_plan=${consentDiagnostic(finalDayConsent)} " +
                     "final_activity_status=${consentDiagnostic(finalStatusConsent)}",
             )
             Log.i(
