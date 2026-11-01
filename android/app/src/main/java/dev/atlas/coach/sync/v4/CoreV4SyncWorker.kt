@@ -119,7 +119,12 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
         var client: CoreV4SyncClient? = null
         var retryInbox = false
         try {
-            store.recordFailure("RUNNING", "Synchronisation V4 en cours.")
+            // A no-op follow-up pass must not downgrade a completed SYNCED state to
+            // RUNNING/NO_PENDING_SOURCE; that made the user-visible status flap after
+            // a successful sync.
+            if (shouldRecordCoreV4Running(store.presentation().code)) {
+                store.recordFailure("RUNNING", "Synchronisation V4 en cours.")
+            }
             val syncConfig = AndroidSyncStorage.settings(applicationContext).read()
             val debuggable = applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
             val relayMode = AndroidRelaySettingsStore(applicationContext).read().mode
@@ -995,6 +1000,8 @@ private fun isDefinitiveStatusRejection(error: CoreV4SyncException): Boolean = w
     error.httpStatus == 422 -> error.errorCode == "VALIDATION_FAILED"
     else -> false
 }
+
+internal fun shouldRecordCoreV4Running(priorCode: String): Boolean = priorCode != "SYNCED"
 
 private inline fun <T> sendCoreV4WithOneUnavailableRetry(
     shouldStop: () -> Boolean,

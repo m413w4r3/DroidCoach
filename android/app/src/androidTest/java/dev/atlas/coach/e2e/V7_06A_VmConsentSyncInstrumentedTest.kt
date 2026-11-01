@@ -44,7 +44,9 @@ class V7_06A_VmConsentSyncInstrumentedTest {
         val relayUrl = arguments.getString(ARG_RELAY_URL).orEmpty()
         val serverId = arguments.getString(ARG_SERVER_ID).orEmpty()
         val serverPublicKey = arguments.getString(ARG_SERVER_PUBLIC_KEY).orEmpty()
-        require(relayUrl == EXPECTED_RELAY_URL) { "relay_url must target the isolated emulator host relay" }
+        require(relayUrl in setOf(EXPECTED_RELAY_URL, PHYSICAL_RELAY_URL)) {
+            "relay_url must target the isolated emulator or adb-reverse host relay"
+        }
         require(serverId == EXPECTED_SERVER_ID) { "server_id must target the isolated VM connector" }
         require(serverPublicKey.isNotBlank()) { "server_public_key is required" }
 
@@ -122,7 +124,12 @@ class V7_06A_VmConsentSyncInstrumentedTest {
             assertTrue("DayPlan receipt must have an APPLIED trace", hasAppliedPlanAck(
                 initialTrace, initialPlan.version, scenario.dayPlanGranted.version,
             ))
-            assertEquals("Core V4 presentation should be synchronized", SYNCED_CODE, store.presentation().code)
+            val presentation = store.presentation()
+            Log.i(
+                LOG_TAG,
+                "step=05 result=OBSERVED presentation=${presentation.code} pending=${presentation.pendingCount}",
+            )
+            assertEquals("Core V4 presentation should be synchronized", SYNCED_CODE, presentation.code)
             Log.i(LOG_TAG, "step=05 result=PASS consent_acks=2 applied=true")
             Log.i(LOG_TAG, "step=06 result=PASS approved_day_plan_receipt=true")
             Log.i(LOG_TAG, "step=07 result=PASS plan_receipt_version=${initialPlan.version} freshness=FRESH")
@@ -374,6 +381,7 @@ class V7_06A_VmConsentSyncInstrumentedTest {
         const val ARG_SERVER_ID = "server_id"
         const val ARG_SERVER_PUBLIC_KEY = "server_public_key"
         const val EXPECTED_RELAY_URL = "ws://10.0.2.2:4412"
+        const val PHYSICAL_RELAY_URL = "ws://127.0.0.1:4412"
         const val EXPECTED_SERVER_ID = "atlas-pc-v7-06a-vm"
         const val PAIRING_FILE_NAME = "v7-06a-pairing.json"
         const val PLANS_DIRECTORY = "plans"
