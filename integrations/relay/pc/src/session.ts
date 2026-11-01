@@ -78,11 +78,11 @@ export class SessionManager {
       throw new RemoteError("AUTH_FAILED");
     }
     if (!record) throw new RemoteError("AUTH_FAILED");
-    if (record.revoked_at) throw new RemoteError("DEVICE_REVOKED");
     const rawToken = Buffer.from(hello.auth.token, "base64url");
     const suppliedHash = createHash("sha256").update(rawToken).digest();
     const expectedHash = Buffer.from(record.token_sha256, "hex");
     if (expectedHash.length !== suppliedHash.length || !timingSafeEqual(expectedHash, suppliedHash)) throw new RemoteError("AUTH_FAILED");
+    if (record.revoked_at) throw new RemoteError("DEVICE_REVOKED");
     const nonceKey = `${hello.device_id}:${hello.client_nonce}`;
     if (this.nonces.has(nonceKey)) throw new RemoteError("AUTH_FAILED");
     // The device record is authoritative. A newer client may request a capability
@@ -242,7 +242,7 @@ export class PeerSession {
         // Stop backend effects before awaiting the error write; the relay may process
         // several receives concurrently and an in-flight effect must not outlive revocation.
         this.abortInFlightForRevocation();
-        await this.sendError(remoteError, currentRequestId);
+        await this.sendError(remoteError, currentRequestId, incomingProtocol);
         await this.closeForRevocation(remoteError.message);
       } else {
         await this.sendError(remoteError, currentRequestId, incomingProtocol);
