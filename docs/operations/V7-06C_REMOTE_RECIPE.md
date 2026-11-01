@@ -3,9 +3,10 @@
 Date : 2026-11-01
 Statut : **préparation uniquement — aucun test distant exécuté, aucun service
 public modifié.**
-Référence : `V7-06B` démontre un fil rouge local/QA via `adb reverse` et une
-stack isolée. Un succès local ne vaut **pas** `GO_REMOTE_V4_PUBLIC` ni
-`GO_PRODUCT_REMOTE`.
+Référence : `V7-06B` démontre un fil rouge **backend** local via une stack
+isolée (relay loopback, connecteur PC, Core, Gateway et modèle réels) ; le
+runtime Android n’a pas pu être exécuté (AVD API 37 instable). Un succès local
+ne vaut **pas** `GO_REMOTE_V4_PUBLIC` ni `GO_PRODUCT_REMOTE`.
 
 ## 1. Objectif
 

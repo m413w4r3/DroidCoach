@@ -3,7 +3,7 @@
 ## Ticket and scope
 
 - **TASK_ID:** `V7-06B-ANDROID-QA`
-- **Statut:** `REVIEW_REQUIRED` — harnais implémenté, validation parent requise
+- **Statut:** **BLOCKED (environnement AVD)** — harnais implémenté, builds PASS, aucun runtime instrumenté revendiqué. Correctif harnais `b67de16`, intégré `29f9502`.
 - **BASE_SHA:** `b55062e1890ff10139ba5ce4a1384cb729c5c0f1`
 - **Branche/worktree:** `test/v7-06b-android-qa` / `/tmp/atlas-v7-06b-android`
 - **Profil demandé:** `codex:gpt-6-luna` / `xhigh` (les métadonnées de ce profil ne sont pas exposées à cette session)
@@ -54,10 +54,34 @@ n’arrête de services.
 | `:app:assembleQa :app:assembleQaAndroidTest -PqaTestBuildType=qa -PqaSuffix=.qa.v706b.compile --offline` | `PASS` | `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:assembleQa :app:assembleQaAndroidTest -PqaTestBuildType=qa -PqaSuffix=.qa.v706b.compile --offline`; `BUILD SUCCESSFUL` en 2 s, 67 tâches actionable (4 exécutées, dont `compileQaAndroidTestKotlin`) |
 | Présence de `V7_06B_CoachLoopInstrumentedTest` dans l’APK AndroidTest | `PASS` | Scan ZIP de `android/app/build/outputs/apk/androidTest/qa/app-qa-androidTest.apk`: classe trouvée dans `classes7.dex` (12 fichiers DEX); IDs vérifiés: `dev.atlas.coach.qa.v706b.compile` et `.test` |
 | `:app:testDebugUnitTest --offline --rerun-tasks` | `PASS` | `GRADLE_USER_HOME=/tmp/atlas-gradle-home ./gradlew :app:testDebugUnitTest --offline --rerun-tasks`; `BUILD SUCCESSFUL` en 34 s, 24 tâches exécutées |
-| Runtime ADB/AVD APPLY | `NOT_RUN` | Aucun ADB/AVD lancé par cette session |
-| Runtime ADB/AVD REJECT | `NOT_RUN` | Aucun ADB/AVD lancé par cette session |
+| Runtime ADB/AVD APPLY | `NOT_RUN` (BLOCKED) | AVD API 37.2 16 Ko instable : UWB HAL en boucle puis `surfaceflinger` `SIGABRT`, `zygote` redémarré par crash recovery ; aucune instrumentation lancée. Voir § Blocage environnemental. |
+| Runtime ADB/AVD REJECT | `NOT_RUN` (BLOCKED) | Même blocage AVD ; aucun Pixel physique utilisé. |
 | Runner Python (`py_compile`, aide CLI, parser résultat) | `PASS` | Syntaxe compilée; aides CLI valides; simulation de 8 sorties: `INSTRUMENTATION_CODE: -1` et `OK (n test[s])` acceptés, marqueurs d’échec/code retour non nul/sortie sans succès refusés |
+| Durcissement runtime du runner | `PASS (statique)` | `b67de16` / `29f9502` : attente bornée `run-as`, `mkdir -p files`, retries push pairing et install APK ; `py_compile` PASS ; runtime non revendiqué |
 | `git diff --check` | `PASS` | Vérification whitespace du diff final; aucun écart |
+
+## Blocage environnemental AVD (2026-11-01)
+
+L’AVD `atlas_v7_06a_api37` (Android 17 / API 37, x86_64, image
+`google_apis_ps16k`) n’a jamais fourni de fenêtre stable pour lancer
+l’instrumentation :
+
+1. `android.hardware.uwb-service` ouvre `/dev/uwb0` → `ENXIO` ; le service
+   abandonne. `init` le marque `sys.init.updatable_crashing_process_name` et
+   redémarre `zygote`/`system_server` toutes les ~10–15 s.
+2. UWB désactivé à l’émulateur (`-feature -Uwb`, propriété
+   `vendor.qemu.vport.uwb` absente), `surfaceflinger` reçoit `SIGABRT` dans le
+   thread `RegionSampling` ; `init` tue de nouveau `zygote`.
+3. Variantes testées : 3 Go puis 6 Go de RAM, `-wipe-data`, cold boot
+   `-no-snapshot`, `-gpu swiftshader_indirect`, `-gpu off`, `-gpu guest`.
+   Le service `package` apparaît/disparaît avec les redémarrages ; aucun test
+   stable de 20 s.
+4. Le Pixel physique connecté n’a pas été utilisé : aucune autorisation ciblée
+   nouvelle et aucune sauvegarde associée.
+
+Conclusion : le harnais reste prêt, mais le fil rouge Android et les verdicts
+`GO_ANDROID_QA_*` / `GO_QA_COACH_LOOP` restent **NO GO** tant qu’un AVD sain ou
+un Pixel autorisé ne fournit pas le runtime.
 
 ## Limites et reprise
 
