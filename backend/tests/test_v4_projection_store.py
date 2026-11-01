@@ -412,11 +412,12 @@ def proposal_args() -> dict:
 def test_all_six_tools_match_contracts_and_do_not_leak_notes_or_apply_proposal(tmp_path):
     _sqlite_store, projections, clock = make_store(tmp_path)
     projections.save_day_plan_snapshot(DEVICE, plan_snapshot(), consent_version=3, received_at=RECEIVED)
+    service = make_service(projections, clock)
+    proposal_result = service.atlas_propose_plan_revision(DEVICE, proposal_args())
     projections.save_activity_status_event(DEVICE, status_event(), consent_version=3, received_at=RECEIVED)
     projections.save_usage_summary(DEVICE, usage_summary(), consent_version=3, received_at=RECEIVED)
     projections.save_goal_progress_snapshot(DEVICE, goals_snapshot(), consent_version=3, received_at=RECEIVED)
     projections.save_training_snapshot(DEVICE, training_snapshot(), consent_version=3, received_at=RECEIVED)
-    service = make_service(projections, clock)
 
     results = {
         "atlas_get_day_plan_response": service.atlas_get_day_plan(DEVICE, {}),
@@ -428,7 +429,7 @@ def test_all_six_tools_match_contracts_and_do_not_leak_notes_or_apply_proposal(t
         ),
         "atlas_get_goal_progress_response": service.atlas_get_goal_progress(DEVICE, {}),
         "atlas_get_training_plan_response": service.atlas_get_training_plan(DEVICE, {}),
-        "atlas_propose_plan_revision_response": service.atlas_propose_plan_revision(DEVICE, proposal_args()),
+        "atlas_propose_plan_revision_response": proposal_result,
     }
     schema = json.loads((Path(__file__).resolve().parents[2] / "contracts/v4/tool-results.schema.json").read_text())
     for definition, result in results.items():
