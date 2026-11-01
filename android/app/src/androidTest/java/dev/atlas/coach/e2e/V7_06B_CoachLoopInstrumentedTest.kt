@@ -207,7 +207,16 @@ class V7_06B_CoachLoopInstrumentedTest {
             val proposalIdsBefore = planController.inboxEntries.mapTo(mutableSetOf()) { it.proposal.proposalId }
             assertTrue("fresh qa inbox must have no previous proposal IDs", proposalIdsBefore.isEmpty())
             assertTrue("fresh qa package must have no previous chat messages", controller.agentConversation.isEmpty())
-            val message = syntheticCoachMessage(plan, activity, runId, promptIdempotencyKey)
+            val message = V7_06BChatTestSupport.syntheticCoachMessage(
+                localDate = plan.localDate,
+                planId = plan.planId,
+                baseVersion = PLAN_VERSION_APPROVED,
+                activityId = activity.activityId,
+                targetStartMinute = activity.scheduledLocal.startMinute + RESCHEDULE_MINUTES,
+                durationMinutes = activity.scheduledLocal.durationMinutes,
+                runId = runId,
+                promptIdempotencyKey = promptIdempotencyKey,
+            )
             assertTrue("controlled chat message must fit the V4 request limit", message.length <= MAX_CHAT_MESSAGE_LENGTH)
             val assistantCountBefore = controller.agentConversation.count { it.role == AgentMessageRole.ASSISTANT }
             var sent = false
@@ -231,7 +240,7 @@ class V7_06B_CoachLoopInstrumentedTest {
                 .filter { it.role == AgentMessageRole.ASSISTANT }
                 .lastOrNull()
                 ?: error("V4 assistant response is missing")
-            val toolMetadata = parseToolMetadata(assistantResponse.text)
+            val toolMetadata = V7_06BChatTestSupport.parseToolMetadata(assistantResponse.text)
             assertEquals("completed", toolMetadata.toolState)
             assertTrue("V4 response must contain the plan read and proposal tool calls", toolMetadata.toolCallCount >= 2)
             assertEquals("V4 response must return exactly one proposal ID", 1, toolMetadata.proposalIds.size)
@@ -619,41 +628,6 @@ class V7_06B_CoachLoopInstrumentedTest {
         assertEquals(original.scheduledLocal.startMinute + offsetMinutes, moved.scheduledLocal.startMinute)
     }
 
-    private fun syntheticCoachMessage(
-        plan: DayPlan,
-        activity: PlanActivity,
-        runId: String,
-        promptIdempotencyKey: String,
-    ): String = "Décale mon activité de travail de 10 minutes et présente-moi la modification à confirmer. " +
-        "run_id=$runId. Appelle atlas_get_day_plan pour local_date=${plan.localDate}; vérifie exactement " +
-        "plan_id=${plan.planId} et version=${PLAN_VERSION_APPROVED}. Ensuite appelle " +
-        "atlas_propose_plan_revision exactement une fois avec plan_id=${plan.planId}, " +
-        "base_version=${PLAN_VERSION_APPROVED}, activity_id=${activity.activityId}, op=reschedule, " +
-        "target_start_minute=${activity.scheduledLocal.startMinute + RESCHEDULE_MINUTES}, " +
-        "duration_minutes=${activity.scheduledLocal.durationMinutes} (inchangée), " +
-        "idempotency_key=$promptIdempotencyKey. Ne crée aucune autre proposition et n'applique rien."
-
-    private fun parseToolMetadata(text: String): ToolMetadata {
-        val metadataIndex = text.lastIndexOf(TOOLS_PROVENANCE_LABEL)
-        check(metadataIndex >= 0) { "V4 tool metadata is missing from the assistant response" }
-        val suffix = text.substring(metadataIndex).trimEnd()
-        val match = TOOL_METADATA_SUFFIX_PATTERN.matchEntire(suffix)
-            ?: error("V4 tool metadata is not the generated suffix of the assistant response")
-        val proposalCount = match.groupValues[3].toInt()
-        val proposalIds = if (proposalCount == 0) {
-            emptyList()
-        } else {
-            match.groupValues[4].split(',').map(String::trim)
-        }
-        assertEquals("metadata proposal count must match the returned ID list", proposalCount, proposalIds.size)
-        assertTrue("proposal IDs must be canonical UUIDs", proposalIds.all(::isCanonicalUuid))
-        return ToolMetadata(
-            toolState = match.groupValues[1],
-            toolCallCount = match.groupValues[2].toInt(),
-            proposalIds = proposalIds,
-        )
-    }
-
     private fun assertFreshUnknownConsent(category: String, snapshot: CoreV4ConsentSnapshot) {
         assertEquals("fresh qa consent $category must be UNKNOWN", CoreV4ConsentState.UNKNOWN, snapshot.state)
         assertEquals("fresh qa consent $category must be version 1", 1, snapshot.version)
@@ -755,12 +729,6 @@ class V7_06B_CoachLoopInstrumentedTest {
         assertEquals("Core V4 work should stop during cleanup", 0, remaining)
     }
 
-    private data class ToolMetadata(
-        val toolState: String,
-        val toolCallCount: Int,
-        val proposalIds: List<String>,
-    )
-
     private companion object {
         const val LOG_TAG = "ATLAS_V7_06B"
         const val PRODUCT_PACKAGE = "dev.atlas.coach"
@@ -788,7 +756,6 @@ class V7_06B_CoachLoopInstrumentedTest {
         const val CHANGE_TARGET_START = "target_start_minute"
         const val CHANGE_DURATION = "duration_minutes"
         const val CHANGE_AFTER = "after"
-        const val TOOLS_PROVENANCE_LABEL = "État des outils"
         const val MAX_CHAT_MESSAGE_LENGTH = 2_000
         const val PRIVATE_FILE_MODE = 0x180
         const val FILE_MODE_MASK = 0x1FF
@@ -807,13 +774,6 @@ class V7_06B_CoachLoopInstrumentedTest {
         const val MAX_TIMEOUT_DIAGNOSTIC_CHARS = 1_200
         val QA_PACKAGE_PATTERN = Regex("^dev\\.atlas\\.coach\\.qa\\.v706b\\.[A-Za-z0-9._-]+$")
         val SHA256_PATTERN = Regex("^sha256:[0-9a-f]{64}$")
-        val TOOL_METADATA_SUFFIX_PATTERN = Regex(
-            "État des outils\\s*:\\s*([a-z_]+)\\s*\\((\\d+) appel\\(s\\)\\)\\.\\s*" +
-                "Proposition\\(s\\)\\s*\\((\\d+)\\)\\s*—\\s*identifiants\\s*:\\s*" +
-                "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:,\\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*)\\.\\s*" +
-                "Contenu à synchroniser via la boîte de réception\\.",
-            RegexOption.IGNORE_CASE,
-        )
     }
 }
 

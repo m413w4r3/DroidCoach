@@ -153,7 +153,11 @@ android {
     testBuildType = selectedQaTestBuildType
 
     sourceSets {
+        getByName("test") {
+            resources.directories.add("../../contracts/v4")
+        }
         getByName("qa") {
+            java.directories.add("src/debug/java")
             // Reuse the debug-only network security config; the two debug relay
             // helpers are copied into src/qa/java for the QA application variant.
             res.directories.add("src/debug/res")

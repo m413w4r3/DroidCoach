@@ -439,6 +439,123 @@ def test_invalid_proposal_does_not_consume_proposal_quota_or_create_proposal(tmp
     assert json.loads(rows[0]["proposal_json"])["proposal_id"] == response.json()["proposal_ids"][0]
 
 
+def test_structured_proposal_is_accepted_with_backend_owned_idempotency_key(tmp_path, monkeypatch):
+    requests = []
+    dispatches = []
+    sentinel = "00000000-0000-4000-8000-000000000299"
+    proposal_arguments = {
+        "plan_id": PLAN_ID,
+        "base_version": 7,
+        "changes": [{
+            "op": "reschedule",
+            "activity_id": ACTIVITY_ID,
+            "target_start_minute": 660,
+            "duration_minutes": 45,
+        }],
+        "justification": "Ajustement synthétique.",
+    }
+    replies = [
+        response_with_tool_calls(tool_call(
+            "structured-proposal", "atlas_propose_plan_revision", json.dumps(proposal_arguments)
+        )),
+        final_response("Une proposition attend ta revue."),
+    ]
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    original_propose = V4ToolService.atlas_propose_plan_revision
+
+    def observed_propose(service: V4ToolService, device: str, arguments: dict) -> dict:
+        dispatches.append(dict(arguments))
+        return original_propose(service, device, arguments)
+
+    monkeypatch.setattr(V4ToolService, "atlas_propose_plan_revision", observed_propose)
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    seed_day_plan(app)
+    body = chat_body(shared_categories=["DAY_PLAN"])
+    response = post_chat(ASGITestClient(app), body)
+
+    assert response.status_code == 200
+    assert len(response.json()["proposal_ids"]) == 1
+    assert response.json()["tool_state"] == "completed"
+    assert len(requests) == 2
+    model_tool = next(
+        item for item in requests[0]["tools"]
+        if item["function"]["name"] == "atlas_propose_plan_revision"
+    )["function"]["parameters"]
+    assert "idempotency_key" not in model_tool["properties"]
+    assert "idempotency_key" not in model_tool["required"]
+    assert "idempotency_key" not in json.loads(
+        next(call for call in requests[1]["messages"] if call["role"] == "assistant")
+        ["tool_calls"][0]["function"]["arguments"]
+    )
+
+    assert len(dispatches) == 1
+    canonical_body = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    expected_key = str(uuid.uuid5(uuid.UUID(body["request_id"]), device_ref() + "\0" + canonical_body))
+    assert dispatches[0]["idempotency_key"] == expected_key
+    assert dispatches[0]["idempotency_key"] != sentinel
+    assert dispatches[0]["changes"] == proposal_arguments["changes"]
+    with app.state.store.connect() as connection:
+        rows = connection.execute("SELECT proposal_json FROM agent_proposals_v4").fetchall()
+    assert len(rows) == 1
+
+
+def test_legacy_flat_proposal_is_rejected_before_core_dispatch(tmp_path, monkeypatch):
+    requests = []
+    dispatches = []
+    sentinel = "00000000-0000-4000-8000-000000000299"
+    legacy_arguments = {
+        "plan_id": PLAN_ID,
+        "base_version": 7,
+        "activity_id": ACTIVITY_ID,
+        "op": "reschedule",
+        "target_start_minute": 660,
+        "duration_minutes": 45,
+        "idempotency_key": sentinel,
+    }
+    replies = [
+        response_with_tool_calls(tool_call(
+            "legacy-flat-proposal", "atlas_propose_plan_revision", json.dumps(legacy_arguments)
+        )),
+        final_response("Aucune proposition n’a été créée."),
+    ]
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    def observed_propose(_service: V4ToolService, _device: str, arguments: dict) -> dict:
+        dispatches.append(dict(arguments))
+        raise AssertionError("invalid flat arguments must be rejected before Core dispatch")
+
+    monkeypatch.setattr(V4ToolService, "atlas_propose_plan_revision", observed_propose)
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    response = post_chat(ASGITestClient(app), chat_body())
+
+    assert response.status_code == 200
+    assert response.json()["proposal_ids"] == []
+    assert response.json()["tool_call_count"] == 1
+    assert len(requests) == 2
+    model_tool = next(
+        item for item in requests[0]["tools"]
+        if item["function"]["name"] == "atlas_propose_plan_revision"
+    )["function"]["parameters"]
+    assert "idempotency_key" not in model_tool["properties"]
+    assert "idempotency_key" not in model_tool["required"]
+    tool_message = next(item for item in requests[1]["messages"] if item["role"] == "tool")
+    tool_error = json.loads(tool_message["content"])
+    validate("error.schema.json", tool_error)
+    assert tool_error["error"]["code"] == "BAD_REQUEST"
+    assert tool_message["tool_call_id"] == "legacy-flat-proposal"
+    assert dispatches == []
+    with app.state.store.connect() as connection:
+        rows = connection.execute("SELECT proposal_json FROM agent_proposals_v4").fetchall()
+    assert rows == []
+
+
 def test_six_invalid_tool_calls_exhaust_quota_without_inventing_a_final_reply(tmp_path, monkeypatch):
     requests = []
     replies = [
