@@ -491,6 +491,12 @@ class ApkProvenanceTests(unittest.TestCase):
     def test_missing_manifest_fields_and_secret_or_serial_in_scenario_are_rejected(self) -> None:
         manifest = self.valid_manifest()
         expected = dict(manifest)
+        self.assertRegex(
+            run_qa.verify_build_provenance(
+                expected, expected, secrets=("synthetic-token-value", "synthetic-device-serial"),
+            ),
+            r"^[0-9a-f]{64}$",
+        )
         del manifest["source_tree_sha"]
         with self.assertRaises(run_qa.QaError):
             run_qa.verify_build_provenance(manifest, expected)
@@ -505,17 +511,26 @@ class ApkProvenanceTests(unittest.TestCase):
             root = Path(temporary)
             app = root / "app.apk"
             test = root / "test.apk"
-            app.write_bytes(b"not an apk")
-            with self.assertRaises(run_qa.QaError):
+            with self.assertRaisesRegex(run_qa.QaError, "APK_MISSING"):
                 run_qa.read_apk_pair_provenance(app, test)
-            with self.assertRaises(run_qa.QaError):
-                run_qa.read_apk_pair_provenance(app, app)
-
             import zipfile
+            with zipfile.ZipFile(app, "w") as archive:
+                archive.writestr("AndroidManifest.xml", b"manifest")
+                archive.writestr(run_qa.PROVENANCE_ASSET, json.dumps(self.valid_manifest()))
+            with self.assertRaisesRegex(run_qa.QaError, "APK_MISSING"):
+                run_qa.read_apk_pair_provenance(app, test)
+
             for apk in (app, test):
                 with zipfile.ZipFile(apk, "w") as archive:
                     archive.writestr("AndroidManifest.xml", b"manifest")
-            with self.assertRaises(run_qa.QaError):
+            with self.assertRaisesRegex(run_qa.QaError, "APK_PROVENANCE_MISSING_OR_INVALID"):
+                run_qa.read_apk_pair_provenance(app, test)
+
+            for apk, value in ((app, {"scenario_id": "apply"}), (test, {"scenario_id": "reject"})):
+                with zipfile.ZipFile(apk, "w") as archive:
+                    archive.writestr("AndroidManifest.xml", b"manifest")
+                    archive.writestr(run_qa.PROVENANCE_ASSET, json.dumps(value))
+            with self.assertRaisesRegex(run_qa.QaError, "APK_PROVENANCE_PAIR_MISMATCH"):
                 run_qa.read_apk_pair_provenance(app, test)
 
     def test_installed_app_and_test_hashes_and_signing_certificate_must_match(self) -> None:
@@ -527,14 +542,76 @@ class ApkProvenanceTests(unittest.TestCase):
         with self.assertRaises(run_qa.QaError):
             run_qa.verify_signing_certificate("a" * 64, "b" * 64)
 
-    def test_failed_install_verification_never_calls_instrumentation(self) -> None:
-        with patch("run_qa.verify_installed_artifacts", side_effect=run_qa.QaError("APK_HASH_MISMATCH")):
-            instrument = unittest.mock.Mock()
-            with self.assertRaises(run_qa.QaError):
+    def test_complete_proof_gate_rejects_missing_field_before_instrumentation(self) -> None:
+        app_id = "dev.atlas.coach.qa.v706b.v706capply.0123456789ab"
+        provenance = {
+            **self.valid_manifest(),
+            "application_id": app_id,
+            "test_application_id": f"{app_id}.test",
+            "runtime_sdk": 37,
+            "app_apk_sha256": "1" * 64,
+            "android_test_apk_sha256": "2" * 64,
+            "signing_cert_sha256": "3" * 64,
+            "build_provenance_sha256": "4" * 64,
+            "android_manifest_sha256": "5" * 64,
+            "android_test_manifest_sha256": "6" * 64,
+            "network": "local_emulator_bridge",
+            "endpoint": {"scheme": "ws", "host": "10.0.2.2", "port": 4413},
+            "installed_apk_verified": True,
+            "verification_result": "VERIFIED",
+        }
+        run_qa.verify_complete_proof_provenance(provenance)
+        instrument = unittest.mock.Mock()
+
+        def invalid_provenance_start(_installed: dict) -> None:
+            run_qa.verify_complete_proof_provenance(
+                {key: value for key, value in provenance.items() if key != "source_tree_sha"},
+            )
+            instrument()
+
+        with patch("run_qa.verify_installed_artifacts", return_value={"installed_apk_verified": True}):
+            with self.assertRaisesRegex(run_qa.QaError, "PROOF_PROVENANCE_FIELD_MISSING"):
                 run_qa.instrument_after_verification(
-                    "synthetic-serial", "app.apk", "test.apk", {}, "a" * 64, instrument,
+                    "synthetic-device-serial", app_id, f"{app_id}.test",
+                    "app.apk", "test.apk", {}, {"app": "1" * 64, "android_test": "2" * 64},
+                    "3" * 64, invalid_provenance_start,
                 )
-            instrument.assert_not_called()
+        instrument.assert_not_called()
+
+    def test_failed_install_verification_never_calls_instrumentation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            app_apk = Path(temporary) / "app.apk"
+            test_apk = Path(temporary) / "test.apk"
+            app_apk.write_bytes(b"synthetic-app-apk")
+            test_apk.write_bytes(b"synthetic-test-apk")
+            app_id = "dev.atlas.qa"
+            test_id = "dev.atlas.qa.test"
+            manifest = {
+                "application_id": app_id, "test_application_id": test_id,
+                "version_code": 1, "version_name": "0.1.0-qa",
+            }
+            for failure_code, app_version, app_cert, installed_hashes in (
+                ("INSTALLED_PACKAGE_VERSION_MISMATCH", "versionCode=2", None, ("1" * 64, "2" * 64)),
+                ("INSTALLED_APK_HASH_MISMATCH", "versionCode=1", None, ("3" * 64, "2" * 64)),
+                ("SIGNING_CERTIFICATE_MISMATCH", "versionCode=1", "d" * 64, ("1" * 64, "2" * 64)),
+            ):
+                with self.subTest(failure_code=failure_code):
+                    instrument = unittest.mock.Mock()
+
+                    def package_dump(_serial: str, package: str) -> str:
+                        dump = f"Package [{package}]\n {app_version} versionName=0.1.0-qa"
+                        return dump + (f"\n certificate SHA-256 digest: {app_cert}" if app_cert else "")
+
+                    with patch("run_qa._package_dump", side_effect=package_dump), \
+                            patch("run_qa.installed_apk_sha256", side_effect=installed_hashes):
+                        with self.assertRaisesRegex(run_qa.QaError, failure_code):
+                            run_qa.instrument_after_verification(
+                                "synthetic-device-serial", app_id, test_id,
+                                app_apk, test_apk, manifest,
+                                {"app": "1" * 64, "android_test": "2" * 64},
+                                "c" * 64, instrument,
+                            )
+                    instrument.assert_not_called()
 
     def test_instrumentation_requires_exact_test_count_even_with_success_code(self) -> None:
         self.assertEqual(
@@ -554,6 +631,25 @@ class ApkProvenanceTests(unittest.TestCase):
         self.assertIsNone(provenance["android_test_apk_sha256"])
         with self.assertRaises(run_scenario.ScenarioFailure):
             run_scenario.require_pass_provenance(provenance)
+        core = {
+            "ack_event_count": 1, "proposal_id": "synthetic-proposal", "plan_id": "synthetic-plan",
+            "ack_id": "synthetic-ack", "proposal_state": "REJECTED", "base_version": 2,
+            "change_count": 1, "target_start_minute": 610, "duration_minutes": 45,
+            "ack_state": "REJECTED", "ack_result_code": "USER_REJECTED",
+            "applied_plan_version": None, "snapshot_versions": [2], "snapshot_starts": {"2": 600},
+            "consent_states": {}, "consent_event_count": 4, "pending_proposal_count": 0,
+            "snapshot_count": 1,
+        }
+        proof = run_scenario._build_proof(
+            "reject", {}, {"device_id": "synthetic-device-id"}, {"package": "dev.atlas.qa"},
+            "synthetic-runner-marker", core, {}, {}, provenance["endpoint"], provenance["network"],
+            {}, "post_hoc_existing_stack", provenance,
+        )
+        self.assertEqual(proof["status"], "INCONCLUSIVE")
+        run_scenario._assert_no_secret_leak(
+            proof, ["synthetic-token-value"], {"device_id": "synthetic-device-id"},
+            private_values=("synthetic-device-serial",),
+        )
 
 
 if __name__ == "__main__":

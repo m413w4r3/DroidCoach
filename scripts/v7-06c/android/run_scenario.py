@@ -45,6 +45,13 @@ SAFE_TRACE_FIELDS = {
     "request_json_valid", "response_json_valid",
 }
 COMPLETED_OUTCOMES = {"completed", "completed_redacted"}
+PASS_PROVENANCE_FIELDS = {
+    "source_sha", "source_tree_sha", "worktree_clean", "variant", "application_id",
+    "test_application_id", "version_code", "version_name", "compile_sdk", "runtime_sdk",
+    "app_apk_sha256", "android_test_apk_sha256", "signing_cert_sha256",
+    "build_provenance_sha256", "android_manifest_sha256", "android_test_manifest_sha256",
+    "scenario_id", "network", "endpoint", "installed_apk_verified", "verification_result",
+}
 SECRET_FIELD_PATTERN = re.compile(r"(?i)\b(?:device_)?token\b\s*[:=]\s*([^\s,}]+)")
 BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[^\s,}]+")
 
@@ -65,6 +72,69 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def require_pass_provenance(provenance: dict) -> None:
+    if not isinstance(provenance, dict) or PASS_PROVENANCE_FIELDS - provenance.keys():
+        raise ScenarioFailure("APK_PROVENANCE_FIELD_MISSING")
+    for field in ("source_sha", "source_tree_sha"):
+        if not isinstance(provenance[field], str) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", provenance[field]):
+            raise ScenarioFailure("APK_PROVENANCE_SOURCE_INVALID")
+    hash_fields = (
+        "app_apk_sha256", "android_test_apk_sha256", "signing_cert_sha256",
+        "build_provenance_sha256", "android_manifest_sha256", "android_test_manifest_sha256",
+    )
+    if any(not isinstance(provenance[field], str) or not re.fullmatch(r"[0-9a-f]{64}", provenance[field])
+           for field in hash_fields):
+        raise ScenarioFailure("APK_PROVENANCE_HASH_MISSING")
+    if (provenance["worktree_clean"] is not True or provenance["variant"] != "qa"
+            or not isinstance(provenance["application_id"], str)
+            or not isinstance(provenance["test_application_id"], str)
+            or not isinstance(provenance["version_code"], int)
+            or isinstance(provenance["version_code"], bool) or provenance["version_code"] < 0
+            or not isinstance(provenance["version_name"], str)
+            or not isinstance(provenance["compile_sdk"], str)
+            or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", provenance["compile_sdk"])
+            or not isinstance(provenance["runtime_sdk"], int)
+            or isinstance(provenance["runtime_sdk"], bool) or provenance["runtime_sdk"] <= 0
+            or not isinstance(provenance["scenario_id"], str) or not provenance["scenario_id"]
+            or not isinstance(provenance["network"], str)
+            or not isinstance(provenance["endpoint"], dict)):
+        raise ScenarioFailure("APK_PROVENANCE_FIELD_INVALID")
+    try:
+        validate_target_package(provenance["application_id"])
+    except ScenarioFailure:
+        raise ScenarioFailure("APK_PROVENANCE_PACKAGE_INVALID") from None
+    if provenance["test_application_id"] != f"{provenance['application_id']}.test":
+        raise ScenarioFailure("APK_PROVENANCE_PACKAGE_MISMATCH")
+    if provenance["installed_apk_verified"] is not True or provenance["verification_result"] != "VERIFIED":
+        raise ScenarioFailure("APK_PROVENANCE_NOT_VERIFIED")
+
+
+def post_hoc_provenance(network: str, endpoint: dict) -> dict:
+    return {
+        "source_sha": None,
+        "source_tree_sha": None,
+        "worktree_clean": None,
+        "variant": None,
+        "application_id": None,
+        "test_application_id": None,
+        "version_code": None,
+        "version_name": None,
+        "compile_sdk": None,
+        "runtime_sdk": None,
+        "app_apk_sha256": None,
+        "android_test_apk_sha256": None,
+        "signing_cert_sha256": None,
+        "build_provenance_sha256": None,
+        "android_manifest_sha256": None,
+        "android_test_manifest_sha256": None,
+        "scenario_id": None,
+        "network": network,
+        "endpoint": endpoint,
+        "installed_apk_verified": False,
+        "verification_result": "INCONCLUSIVE",
+    }
 
 
 def validate_target_package(package: str) -> str:
@@ -573,11 +643,16 @@ def select_ack_attestation(logcat_text: str, ack_id: str, ack_state: str,
 
 
 def _run_runner(serial: str, action: str, stack_path: Path, suffix: str, root: Path,
-                secrets_list: list[str]) -> tuple[str, dict]:
+                secrets_list: list[str], scenario_id: str, runtime_sdk: int,
+                network: str, endpoint: dict) -> tuple[str, dict]:
     package = validate_target_package(f"{PRODUCT_PACKAGE}{suffix}")
     command = [
         sys.executable, str(ANDROID_RUNNER), "run", "--serial", serial,
         "--action", action, "--stack-file", str(stack_path), "--suffix", suffix,
+        "--scenario-id", scenario_id,
+        "--network", network,
+        "--endpoint-json", json.dumps(endpoint, sort_keys=True, separators=(",", ":")),
+        "--expected-runtime-sdk", str(runtime_sdk),
     ]
     try:
         result = subprocess.run(
@@ -608,23 +683,30 @@ def _run_runner(serial: str, action: str, stack_path: Path, suffix: str, root: P
     _check_private_log_text(output, secrets_list, serial, "")
     if f"install_target={serial} package={package} action={action}" not in result.stdout:
         raise ScenarioFailure("ANDROID_RUNNER_PACKAGE_MISMATCH")
-    apks: dict[str, str] = {}
-    for line in result.stdout.splitlines():
-        if line.startswith("app_apk="):
-            apks["app"] = line.partition("=")[2].strip()
-        elif line.startswith("android_test_apk="):
-            apks["android_test"] = line.partition("=")[2].strip()
-    if set(apks) != {"app", "android_test"}:
-        raise ScenarioFailure("ANDROID_APK_PATHS_MISSING")
-    for key, value in apks.items():
-        apk = Path(value).resolve(strict=True)
-        if not apk.is_file() or not apk.is_relative_to(ROOT / "android"):
-            raise ScenarioFailure("ANDROID_APK_PATH_INVALID")
-        apks[key] = sha256_file(apk)
+    provenance_lines = [line.partition("=")[2] for line in result.stdout.splitlines()
+                        if line.startswith("QA_PROVENANCE_JSON=")]
+    if len(provenance_lines) != 1:
+        raise ScenarioFailure("ANDROID_PROVENANCE_ATTESTATION_MISSING")
+    try:
+        provenance = json.loads(provenance_lines[0])
+    except json.JSONDecodeError:
+        raise ScenarioFailure("ANDROID_PROVENANCE_ATTESTATION_INVALID") from None
+    if not isinstance(provenance, dict):
+        raise ScenarioFailure("ANDROID_PROVENANCE_ATTESTATION_INVALID")
+    if provenance.get("scenario_id") != scenario_id:
+        raise ScenarioFailure("ANDROID_PROVENANCE_SCENARIO_MISMATCH")
+    if provenance.get("application_id") != package or provenance.get("test_application_id") != f"{package}.test":
+        raise ScenarioFailure("ANDROID_PROVENANCE_PACKAGE_MISMATCH")
+    if provenance.get("runtime_sdk") != runtime_sdk:
+        raise ScenarioFailure("ANDROID_PROVENANCE_RUNTIME_SDK_MISMATCH")
+    require_pass_provenance({**provenance, "network": "scenario_pending", "endpoint": {}})
+    serialized_provenance = json.dumps(provenance, ensure_ascii=False, sort_keys=True)
+    if any(value and value in serialized_provenance for value in [*secrets_list, serial]):
+        raise ScenarioFailure("ANDROID_PROVENANCE_PRIVATE_VALUE_LEAK")
     return marker, {
         "package": package,
         "runner_log": str(log_path),
-        "apk_sha256": apks,
+        "provenance": provenance,
         "ack_replay_attested": False,
         "logcat_path": str(logcat_path),
         "logcat_sha256": sha256_file(logcat_path),
@@ -659,24 +741,10 @@ def _read_existing_runner(root: Path, action: str, suffix: str, serial: str, dev
     logcat_path = _private_stack_file(Path(logcat_values[0]), root, expected_logcat_name,
                                       "ANDROID_LOGCAT_PATH_INVALID")
 
-    apk_hashes: dict[str, str] = {}
-    apk_paths = {"app": app_apk, "android_test": test_apk}
-    for name, apk_path in apk_paths.items():
-        if apk_path is None:
-            continue
-        if apk_path.is_symlink():
-            raise ScenarioFailure("ANDROID_APK_PATH_INVALID")
-        try:
-            apk = apk_path.resolve(strict=True)
-            if not apk.is_file() or not apk.is_relative_to((ROOT / "android").resolve(strict=True)):
-                raise ScenarioFailure("ANDROID_APK_PATH_INVALID")
-        except OSError:
-            raise ScenarioFailure("ANDROID_APK_PATH_INVALID") from None
-        apk_hashes[name] = sha256_file(apk)
     return marker, {
         "package": package,
         "runner_log": str(runner_path),
-        "apk_sha256": apk_hashes if apk_hashes else None,
+        "apk_sha256": None,
         "ack_replay_attested": False,
         "logcat_path": str(logcat_path),
         "logcat_sha256": sha256_file(logcat_path),
@@ -751,7 +819,7 @@ def _write_evidence(evidence_dir: Path, proof: dict) -> tuple[Path, Path]:
         if proof.get("execution_mode") == "post_hoc_existing_stack" else ""
     )
     summary = (
-        f"V7-06C Android {proof['action'].upper()} — PASS\n"
+        f"V7-06C Android {proof['action'].upper()} — {proof['status']}\n"
         f"{post_hoc_note}"
         f"Runner: V7_06B_RUNTIME_PASS\n"
         f"Core proposal: {proof['proposal_state']} base_version={proof['base_version']}\n"
@@ -780,10 +848,11 @@ def _default_evidence_dir(root: Path, action: str) -> Path:
 
 def _build_proof(action: str, device: dict, pairing: dict, runner: dict, marker: str,
                  core: dict, journal: dict, trace: dict, relay_endpoint: dict,
-                 network: str, adb_reverse_info: dict, execution_mode: str) -> dict:
+                 network: str, adb_reverse_info: dict, execution_mode: str,
+                 provenance: dict) -> dict:
     return {
         "schema_version": 1,
-        "status": "PASS",
+        "status": "PASS" if execution_mode == "normal_run" else "INCONCLUSIVE",
         "action": action,
         "execution_mode": execution_mode,
         "device": device,
@@ -816,6 +885,7 @@ def _build_proof(action: str, device: dict, pairing: dict, runner: dict, marker:
         "tool_trace": trace,
         "network": network,
         "network_endpoint": relay_endpoint,
+        "provenance": provenance,
         "adb_reverse": adb_reverse_info,
     }
 
@@ -848,11 +918,15 @@ def run(args: argparse.Namespace) -> int:
             _adb(args.serial, "reverse", f"tcp:{port}", f"tcp:{port}")
             reverse_added = True
     runner = None
+    scenario_id = args.scenario_id or f"v7-06c-android-{args.action}"
+    network = "public_wss" if relay_mode == "public_wss" else (
+        "local_adb_reverse" if args.adb_reverse is True else "local_emulator_bridge"
+    )
     try:
         assert_android_stack_empty(Path(stack["core_db"]))
         marker, runner = _run_runner(
             args.serial, args.action, stack_file_arg.resolve(strict=True), suffix, root,
-            [*secrets_list, pairing["device_id"]],
+            [*secrets_list, pairing["device_id"]], scenario_id, device["sdk"], network, relay_endpoint,
         )
         core = _read_core_state(Path(stack["core_db"]), args.action)
         logcat_text = Path(runner["logcat_path"]).read_text(encoding="utf-8", errors="replace")
@@ -863,14 +937,19 @@ def run(args: argparse.Namespace) -> int:
         runner["ack_replay_attested"] = True
         journal = verify_operation_journal(Path(stack["connector_state_dir"]), args.action, core)
         trace = verify_tool_trace(Path(stack["proxy_trace"]), str(stack.get("gateway_agent", "")))
+        provenance = {
+            **runner["provenance"],
+            "network": network,
+            "endpoint": relay_endpoint,
+        }
+        require_pass_provenance(provenance)
         proof = _build_proof(
             args.action, device, pairing, runner, marker, core, journal, trace,
             relay_endpoint,
-            "public_wss" if relay_mode == "public_wss" else (
-                "local_adb_reverse" if args.adb_reverse is True else "local_emulator_bridge"
-            ),
+            network,
             {"requested": args.adb_reverse is True, "added_by_wrapper": reverse_added},
             "normal_run",
+            provenance,
         )
         _assert_no_secret_leak(proof, secrets_list, pairing, private_values=(args.serial,))
     finally:
@@ -926,13 +1005,14 @@ def verify_existing(args: argparse.Namespace) -> int:
         {"requested": "not_observed", "added_by_wrapper": "not_applicable_post_hoc",
          "state_restored": "not_checked_post_hoc"},
         "post_hoc_existing_stack",
+        post_hoc_provenance(network, relay_endpoint),
     )
     _assert_no_secret_leak(proof, secrets_list, pairing, private_values=(args.serial,))
     evidence_dir = args.evidence_dir if args.evidence_dir is not None else _default_evidence_dir(root, args.action)
     if evidence_dir.resolve(strict=False).is_relative_to(root.resolve(strict=True)):
         raise ScenarioFailure("EVIDENCE_DIR_INSIDE_STACK")
     proof_path, summary_path = _write_evidence(evidence_dir, proof)
-    print(f"V7_06C_EXISTING_RUNTIME_PASS action={args.action} proof={proof_path} summary={summary_path}")
+    print(f"V7_06C_EXISTING_RUNTIME_INCONCLUSIVE action={args.action} proof={proof_path} summary={summary_path}")
     return 0
 
 
@@ -980,6 +1060,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--relay-url", help="optional assertion matching stack.json relay_url_android")
     parser.add_argument("--require-api", type=int, default=37)
     parser.add_argument("--evidence-dir", type=Path)
+    parser.add_argument("--scenario-id", help="non-sensitive label bound into the QA APKs")
     args = parser.parse_args(argv)
     args.execution_mode = "normal_run"
     return args

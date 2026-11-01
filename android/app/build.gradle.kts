@@ -1,9 +1,109 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.util.TreeMap
+
+abstract class GenerateAtlasBuildProvenance : DefaultTask() {
+    @get:Input abstract val variantName: Property<String>
+    @get:Input abstract val applicationId: Property<String>
+    @get:Input abstract val testApplicationId: Property<String>
+    @get:Input abstract val versionCode: Property<Int>
+    @get:Input abstract val versionName: Property<String>
+    @get:Input abstract val compileSdk: Property<String>
+    @get:Input abstract val minSdk: Property<Int>
+    @get:Input abstract val targetSdk: Property<Int>
+    @get:Input abstract val scenarioId: Property<String>
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val repository = project.rootProject.projectDir.parentFile
+
+        fun git(vararg arguments: String): String {
+            val result = ProcessBuilder(listOf("git", *arguments))
+                .directory(repository)
+                .redirectErrorStream(true)
+                .start()
+            val output = result.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }.trim()
+            if (result.waitFor() != 0) {
+                throw GradleException("Cannot resolve Git provenance metadata: git ${arguments.firstOrNull() ?: "command"} failed")
+            }
+            return output
+        }
+
+        val sourceSha = git("rev-parse", "HEAD")
+        val sourceTreeSha = git("rev-parse", "HEAD^{tree}")
+        val status = git("status", "--porcelain", "--untracked-files=all", "--", ".", ":!**/build/**")
+        val scenario = scenarioId.get()
+        if (!Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,79}").matches(scenario)
+            || Regex("(?i)(token|secret|serial|bearer)").containsMatchIn(scenario)
+            || System.getenv().any { (name, value) ->
+                Regex("(?i)(token|secret|serial|bearer)").containsMatchIn(name)
+                    && value.isNotBlank() && (scenario == value || value.contains(scenario))
+            }) {
+            throw GradleException("atlasScenarioId must be a non-sensitive scenario label")
+        }
+        if (!Regex("[0-9a-f]{40}|[0-9a-f]{64}").matches(sourceSha)
+            || !Regex("[0-9a-f]{40}|[0-9a-f]{64}").matches(sourceTreeSha)) {
+            throw GradleException("Git returned an invalid source revision")
+        }
+
+        val manifest = TreeMap<String, Any>()
+        manifest["application_id"] = applicationId.get()
+        manifest["compile_sdk"] = compileSdk.get()
+        manifest["min_sdk"] = minSdk.get()
+        manifest["scenario_id"] = scenario
+        manifest["source_sha"] = sourceSha
+        manifest["source_tree_sha"] = sourceTreeSha
+        manifest["target_sdk"] = targetSdk.get()
+        manifest["test_application_id"] = testApplicationId.get()
+        manifest["variant"] = variantName.get()
+        manifest["version_code"] = versionCode.get()
+        manifest["version_name"] = versionName.get()
+        manifest["worktree_clean"] = status.isEmpty()
+
+        fun jsonValue(value: Any): String = when (value) {
+            is Boolean, is Number -> value.toString()
+            else -> buildString {
+                append('"')
+                value.toString().forEach { character ->
+                    when (character) {
+                        '"' -> append("\\\"")
+                        '\\' -> append("\\\\")
+                        '\b' -> append("\\b")
+                        '\u000c' -> append("\\f")
+                        '\n' -> append("\\n")
+                        '\r' -> append("\\r")
+                        '\t' -> append("\\t")
+                        else -> if (character.code < 0x20) append("\\u%04x".format(character.code)) else append(character)
+                    }
+                }
+                append('"')
+            }
+        }
+
+        val json = manifest.entries.joinToString(prefix = "{\n", postfix = "\n}\n", separator = ",\n") {
+            "  \"${it.key}\": ${jsonValue(it.value)}"
+        }
+        val assets = outputDirectory.get().asFile
+        assets.mkdirs()
+        File(assets, "atlas-build-provenance.json").writeText(json, StandardCharsets.UTF_8)
+    }
+}
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val selectedQaTestBuildType = (project.findProperty("qaTestBuildType") as String?) ?: "debug"
 
 android {
     namespace = "dev.atlas.coach"
@@ -47,16 +147,77 @@ android {
         animationsDisabled = true
     }
 
-    // The physical QA test APK targets the isolated QA applicationId when
-    // requested; the default stays debug so the standard test tasks are unchanged.
-    testBuildType = (project.findProperty("qaTestBuildType") as String?) ?: "debug"
+    // Preserve the existing debug test target by default. The QA harness opts
+    // into qa explicitly; a task alias below exposes that same target in the
+    // required plain offline build command.
+    testBuildType = selectedQaTestBuildType
 
     sourceSets {
         getByName("qa") {
             // Reuse the debug-only network security config; the two debug relay
             // helpers are copied into src/qa/java for the QA application variant.
-            res.srcDirs("src/debug/res")
+            res.directories.add("src/debug/res")
         }
+    }
+}
+
+val atlasScenarioId = providers.gradleProperty("atlasScenarioId")
+    .orElse(providers.environmentVariable("ATLAS_SCENARIO_ID"))
+    .orElse("unspecified")
+
+androidComponents {
+    onVariants { variant ->
+        val output = variant.outputs.singleOrNull()
+            ?: throw GradleException("ATLAS provenance requires a single APK output for ${variant.name}")
+        val compileSdkValue = android.compileSdk?.let { api ->
+            android.compileSdkMinor?.let { minor -> "$api.$minor" } ?: api.toString()
+        } ?: android.compileSdkPreview
+            ?: throw GradleException("ATLAS provenance cannot resolve compileSdk")
+        val testApplicationIdProvider = variant.androidTest?.applicationId
+            ?: variant.applicationId.map { "$it.test" }
+        val provenanceTask = tasks.register<GenerateAtlasBuildProvenance>(
+            "generate${variant.name.replaceFirstChar(Char::uppercase)}AtlasBuildProvenance",
+        ) {
+            variantName.set(variant.name)
+            applicationId.set(variant.applicationId)
+            this.testApplicationId.set(testApplicationIdProvider)
+            versionCode.set(output.versionCode)
+            versionName.set(output.versionName)
+            compileSdk.set(compileSdkValue)
+            minSdk.set(variant.minSdk.apiLevel)
+            targetSdk.set(variant.targetSdk.apiLevel)
+            scenarioId.set(atlasScenarioId)
+            outputDirectory.set(layout.buildDirectory.dir("generated/atlasProvenance/${variant.name}/assets"))
+            outputs.upToDateWhen { false }
+        }
+
+        val appAssets = variant.sources.assets
+            ?: throw GradleException("ATLAS provenance requires an assets source for ${variant.name}")
+        appAssets.addGeneratedSourceDirectory(provenanceTask, GenerateAtlasBuildProvenance::outputDirectory)
+        variant.androidTest?.let { androidTest ->
+            val testAssets = androidTest.sources.assets
+                ?: throw GradleException("ATLAS provenance requires AndroidTest assets for ${variant.name}")
+            testAssets.addGeneratedSourceDirectory(provenanceTask, GenerateAtlasBuildProvenance::outputDirectory)
+        }
+    }
+}
+
+if (selectedQaTestBuildType != "qa") {
+    tasks.register<org.gradle.api.tasks.Exec>("assembleQaAndroidTest") {
+        group = "build"
+        description = "Builds the isolated QA AndroidTest APK using the qa test build type."
+        dependsOn("assembleQa")
+        val suffix = (project.findProperty("qaSuffix") as String?) ?: ".qa"
+        val scenario = atlasScenarioId.get()
+        commandLine(
+            project.rootProject.projectDir.resolve("gradlew").absolutePath,
+            "-PqaTestBuildType=qa",
+            "-PqaSuffix=$suffix",
+            "-PatlasScenarioId=$scenario",
+            ":app:assembleQaAndroidTest",
+            "--offline",
+        )
+        workingDir(project.rootProject.projectDir)
     }
 }
 

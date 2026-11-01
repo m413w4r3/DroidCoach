@@ -1,6 +1,6 @@
 # Harnais E2E V7-06C
 
-Ce harnais prépare des stacks isolées pour les scénarios backend et Android V7-06B. Il réutilise `scripts/v7-06b/android/run_qa.py` sans le modifier. Les scénarios Android APPLY et REJECT doivent utiliser chacun une stack neuve.
+Ce harnais prépare des stacks isolées pour les scénarios backend et Android V7-06B. Les scénarios Android APPLY et REJECT doivent utiliser chacun une stack neuve.
 
 ## Prérequis
 
@@ -50,7 +50,37 @@ python3 scripts/v7-06c/android/run_scenario.py \
 
 Pour un téléphone local utilisant `adb reverse`, démarrer avec `--android-relay-host 127.0.0.1` et passer `--adb-reverse` au runner. Le wrapper mémorise les reverse existants et ne retire que le mapping qu’il a lui-même ajouté.
 
-Le suffixe QA est généré avec 12 caractères hexadécimaux minuscules; une valeur explicite de 8 à 12 caractères est acceptée si elle porte l’action demandée. Le package cible reste dans `dev.atlas.coach.qa.v706b.v706c{apply|reject}.<suffix>`. Le package produit `dev.atlas.coach` est refusé. Le runner V7-06B doit retourner `V7_06B_RUNTIME_PASS`, et le logcat privé doit contenir l’attestation `step=11 result=PASS ack_replay=identical` émise par le test instrumenté.
+Le suffixe QA est généré avec 12 caractères hexadécimaux minuscules; une valeur explicite de 8 à 12 caractères est acceptée si elle porte l’action demandée. Le package cible reste dans `dev.atlas.coach.qa.v706b.v706c{apply|reject}.<suffix>`. Le package produit `dev.atlas.coach` est refusé. Avant `am instrument`, le runner vérifie le manifeste embarqué des deux APK, leur identifiant et leur version, le certificat de signature, puis compare les SHA-256 des APK installés à ceux des APK construits. Le test doit aussi produire exactement `OK (1 test)`; le seul code `INSTRUMENTATION_CODE: -1` ne suffit plus. Le logcat privé doit contenir l’attestation `step=11 result=PASS ack_replay=identical` émise par le test instrumenté.
+
+Le JSON `assets/atlas-build-provenance.json` est généré au build, trié par clé et sans horodatage. Il lie chaque APK à `git rev-parse HEAD`, à l’arbre Git, à l’état propre du worktree, à la variante, aux IDs, aux versions et aux niveaux SDK. Les sorties `build/` sont exclues du calcul de propreté. Un run V7-06C exige un worktree propre; un manifeste marqué sale est refusé avant installation ou instrumentation. Le scénario est fourni au build par `-PatlasScenarioId=...` (ou `ATLAS_SCENARIO_ID`); les runs APPLY/REJECT utilisent `v7-06c-android-apply` et `v7-06c-android-reject`.
+
+Chaque preuve normale contient un objet `provenance`. Exemple synthétique (toutes les valeurs sont fictives):
+
+```json
+{
+  "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_tree_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "worktree_clean": true,
+  "variant": "qa",
+  "application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab",
+  "test_application_id": "dev.atlas.coach.qa.v706b.v706capply.0123456789ab.test",
+  "version_code": 1,
+  "version_name": "0.1.0-qa",
+  "compile_sdk": "37.2",
+  "runtime_sdk": 37,
+  "app_apk_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "android_test_apk_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "signing_cert_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "build_provenance_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "android_manifest_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+  "android_test_manifest_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+  "scenario_id": "v7-06c-android-apply",
+  "network": "local_emulator_bridge",
+  "endpoint": {"scheme": "ws", "host": "10.0.2.2", "port": 4413},
+  "installed_apk_verified": true,
+  "verification_result": "VERIFIED"
+}
+```
 
 L’oracle lit ensuite SQLite en mode lecture seule, le journal `operations.json` du connecteur et la trace de métadonnées du proxy. Il exige les cardinalités ACK/proposition/snapshots, les versions et horaires attendus, les consentements révoqués, les outils autorisés et la corrélation des tool calls. Le rejeu ACK n’est pas lancé par ce wrapper: il est attesté par le test Android avant révocation. La preuve indique `ack_replay=ATTESTED_BY_ANDROID_TEST`, un événement ACK et `ack_body_hash_match=not_applicable`.
 
@@ -74,7 +104,7 @@ python3 scripts/v7-06c/android/run_scenario.py verify-existing \
   --suffix .qa.v706b.v706creject.b4d9e602
 ```
 
-Le logcat peut conserver les attestations de plusieurs exécutions. Le vérificateur relie la ligne `step=11 result=PASS ack_replay=identical` à l’`ack_id` et à l’état lus dans l’ACK Core courant; une ancienne ligne APPLY ne peut donc pas attester un REJECT ultérieur. Il exige aussi le marqueur `V7_06B_RUNTIME_PASS` dans le runner log. La preuve porte `execution_mode=post_hoc_existing_stack` et le résumé indique explicitement qu’aucune nouvelle exécution n’a eu lieu. Les hashes APK restent `null` sauf si `--app-apk` et/ou `--test-apk` sont fournis.
+Le logcat peut conserver les attestations de plusieurs exécutions. Le vérificateur relie la ligne `step=11 result=PASS ack_replay=identical` à l’`ack_id` et à l’état lus dans l’ACK Core courant; une ancienne ligne APPLY ne peut donc pas attester un REJECT ultérieur. Il exige aussi le marqueur `V7_06B_RUNTIME_PASS` dans le runner log. La preuve porte `execution_mode=post_hoc_existing_stack`, `status=INCONCLUSIVE`, `verification_result=INCONCLUSIVE` et `installed_apk_verified=false`; les champs de provenance APK restent `null`, même si des chemins APK sont fournis, car ils ne démontrent pas ce qui était installé. Aucune preuve historique n’est réécrite.
 
 ## Recette publique `wss`
 
