@@ -81,11 +81,11 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
 | TASK_ID | Objectif | Dépendance | Statut | Session Paseo | Worktree | Oracle |
 |---|---|---|---|---|---|---|
 | V7-06C-00-PREFLIGHT | SHA, CI, services live, ressources, harnais, identités | — | **ACCEPTED (lecture seule)** | parent | racine | SHA local=distant, inventaire complet, aucun service modifié |
-| V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **RUNNING** | `3b012d9f-efaf-424f-9668-52c42be6cefc` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; runtime parent ensuite |
-| V7-06C-02-ANDROID-RUNTIME | Pré-vol physique, installation QA, Keystore/WorkManager | PREFLIGHT + autorisation | **READY** (autorisation accordée) | parent opérateur unique | racine | device boot/services stables, APK QA installé, package produit intact |
-| V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **ACCEPTED (code)** — commit `69feb5c`, merge `f7e6441` ; compilation QA `compile3` PASS, classe présente ; runtime pending | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | compilation QA, `ack_replay=identical` attendu au runtime, 1 seul ACK local, aucun second effet |
-| V7-06C-03-APPLY | DayPlan v2→v3 par Android, ACK APPLIED durable, rejeu sans second effet | 01 + 02 + 03B | **READY** | parent opérateur | racine | runner PASS + oracle Core/journal/trace outils indépendants |
-| V7-06C-03-REJECT | Refus explicite sans modification du plan, ACK REJECTED durable | 01 + 02 + 03B | **READY** | parent opérateur | racine | runner PASS + plan v2 intact + aucun v3 + oracle Core |
+| V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **ACCEPTED (code + runtime backend)** — commit `64020d7`, intégré `b4db8da` ; 12/12 tests harnais, backend positif et négatif PASS depuis le dépôt | `3b012d9f-efaf-424f-9668-52c42be6cefc` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; backend réel PASS |
+| V7-06C-02-ANDROID-RUNTIME | Pré-vol physique, installation QA, Keystore/WorkManager | PREFLIGHT + autorisation | **ACCEPTED (runtime)** — Pixel 9 Pro XL API 37, deux paquets QA installés, Keystore/WorkManager exercés, produit intact | parent opérateur unique | racine | device stable, runner PASS, produit/HOME inchangés |
+| V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **ACCEPTED (code + runtime)** — commit `69feb5c`, merge `f7e6441` ; APPLY et REJECT ont émis `ack_replay=identical` | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | compilation QA, runtime APPLY + REJECT |
+| V7-06C-03-APPLY | DayPlan v2→v3 par Android, ACK APPLIED durable, rejeu sans second effet | 01 + 02 + 03B | **ACCEPTED (runtime)** — runner PASS 12 étapes / 19,387 s ; oracle Core indépendant PASS | parent opérateur | racine | proof `v7-06c-apply-a49e3a3aa819.json` |
+| V7-06C-03-REJECT | Refus explicite sans modification du plan, ACK REJECTED durable | 01 + 02 + 03B | **CORRECTION_REQUIRED (harnais)** — test runner PASS 12 étapes / 21,214 s, Core REJECTED/v2 sans v3 ; wrapper a refusé le logcat multi-runs (`ANDROID_ACK_REPLAY_ATTESTATION_MISSING`), correctif attestation↔ack_id et oracle post-hoc en cours | parent opérateur | racine | runner PASS + oracle Core direct PASS ; proof automatique à régénérer |
 | V7-06C-04-WSS-PUBLIC | Même parcours via WSS public, réseau extérieur, sans `adb reverse` | 03 + endpoint public autorisé | **BLOCKED_NETWORK** | — | — | TLS/Noise/auth/révocation + fil rouge complet |
 | V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–03 | **PENDING** | à créer | worktree détaché | grille P0/P1/P2, aucun P0 ouvert |
 
@@ -94,11 +94,60 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
 | Date | Session | Rôle | Provider/modèle/effort constatés | Résultat |
 |---|---|---|---|---|
 | 2026-11-01 | parent | Pré-vol V7-06C-00 | session parente | `ACCEPTED` lecture seule ; aucune modification live |
-| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `RUNNING` |
-| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK test | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `69feb5c`, compilé, intégré `f7e6441` |
-| 2026-11-01 | parent + autorisation propriétaire | QA physique APPLY+REJECT | — | autorisation ciblée accordée ; aucune installation avant harnais prêt |
+| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `64020d7`, intégré `b4db8da` ; 12/12 tests |
+| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK test | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code + runtime)` — `69feb5c`, intégré `f7e6441` |
+| 2026-11-01 | parent + autorisation propriétaire | QA physique APPLY+REJECT | — | autorisation ciblée accordée ; produit/HOME/Keystore non touchés |
+| 2026-11-01 | parent | Backend reproductible positif | DeepSeek réel isolé | **PASS** — 3 tours proxy, 2 outils corrélés, 1 proposition A0, ACK APPLIED v3 |
+| 2026-11-01 | parent | Backend reproductible négatif | DeepSeek réel isolé | **PASS** — stale/unknown/terminal/injection/consent révoqué ; 0 proposition/ACK |
+| 2026-11-01 | parent | Android APPLY physique | Pixel 9 Pro XL, API 37, paquet QA `…v706capply.a7f3c21e` | **PASS** — 12 étapes / 19,387 s, v2→v3, ACK APPLIED v3, rejeu identique |
+| 2026-11-01 | parent | Android REJECT physique | Pixel 9 Pro XL, API 37, paquet QA `…v706creject.b4d9e602` | **runner PASS** — 12 étapes / 21,214 s, plan v2, ACK REJECTED ; wrapper harnais à corriger (logcat multi-runs) |
 
-## 5. Décisions et limites
+## 5. Résultats runtime (2026-11-01)
+
+### 5.1 Harnais backend reproductible — PASS
+
+Commit intégré `b4db8da`. Stacks neuves, DeepSeek réel isolé, aucune identité live.
+
+| Scénario | Résultat | Oracles |
+|---|---|---|
+| Backend positif | **PASS** | 3 enregistrements proxy ; modèle `openclaw/<agent>` → `deepseek/deepseek-chat` ; 6 outils client ; `atlas_get_day_plan` + `atlas_propose_plan_revision` corrélés ; `finish_reason=stop` ; 1 proposition `base_version=2`, `A0_USER_REVIEW`, `NONE_AT_CORE`, +10 min ; 1 ACK `APPLIED`, `applied_plan_version=3` ; snapshots v2 (600) et v3 (610) ; rejeu Relay/Core identique sans nouvel appel modèle ; 1 ligne de cache chat |
+| Backend négatif | **PASS** | `STALE_VERSION` ; projection `STALE`/`UNKNOWN` → `STALE_DATA` ; activité terminale `VALIDATION_FAILED` (HTTP 400 observé) ; injection : 1 appel modèle réel, aucun fichier sentinelle ; consentement révoqué `CONSENT_REQUIRED` ; **0 proposition, 0 ACK** persistés |
+
+Nettoyage : chaque stack a été arrêtée par identité propriétaire (processus, conteneur,
+racine) ; aucune ressource `atlas-v7-06c` résiduelle.
+
+### 5.2 Android APPLY physique — PASS
+
+| Élément | Valeur |
+|---|---|
+| Appareil | Pixel 9 Pro XL, API 37, arm64-v8a ; série hashée `f2e9258b…` |
+| Paquet QA | `dev.atlas.coach.qa.v706b.v706capply.a7f3c21e` |
+| APK app / test | `8441a5da…56224d` / `c97427fb…337d8` (conformes à l’autorisation) |
+| Runner | `OK (1 test)`, 19,387 s, 12 étapes PASS |
+| Modèle | `openclaw/v706c_android-apply_…` → `deepseek/deepseek-chat`, 3 tours proxy, 2 outils corrélés |
+| Proposition | `71b80fea-…`, `APPLIED`, `base_version=2`, `A0_USER_REVIEW`, `NONE_AT_CORE`, reschedule 610, durée 45 |
+| ACK | `3f67edb5-…`, `APPLIED`, `applied_plan_version=3`, 1 seul événement |
+| Plan Core | v2 start=600, v3 start=610, `current_revision_id` v3 = `revision_id` ACK `3ea92f60-…` |
+| Rejeu ACK | `ack_replay=identical`, 1 ACK local, aucun second effet |
+| Consentements | `DAY_PLAN` et `ACTIVITY_STATUS` `REVOKED` v3, 4 événements |
+| Reverse ADB | ajouté puis retiré, état initial restauré |
+| Produit/HOME | inchangés (`lastUpdateTime=2026-10-31 00:18:13`, rôle HOME identique) |
+
+### 5.3 Android REJECT physique — runner PASS, preuve automatique en correction
+
+Le test a réellement exécuté les 12 étapes en 21,214 s : proposition `7512ea09-…`
+`REJECTED`, plan resté v2 (start 600, durée 45), ACK `c22d1829-…` `REJECTED`
+`applied_plan_version=NULL`, un seul événement ACK, rejeu `ack_replay=identical`,
+consentements `REVOKED` v3, aucune ligne v3 dans SQLite.
+
+Le wrapper a refusé la preuve avec `ANDROID_ACK_REPLAY_ATTESTATION_MISSING` parce que
+le buffer logcat contenait aussi l’attestation APPLY du run précédent et exigeait
+« exactement une » ligne. C’est un défaut du harnais, pas du produit ni du test. Le
+correctif lie l’attestation à l’`ack_id`/état ACK du Core et ajoute un oracle post-hoc
+en lecture seule ; le verdict REJECT reste `CORRECTION_REQUIRED` jusqu’à régénération
+de la preuve.
+
+## 6. Décisions et limites
 
 - Le harnais V7-06B sous `/tmp` est audité comme source de reprise ; sa version
   minimale reproductible est portée sous `scripts/v7-06c/` par le ticket 01.
@@ -107,7 +156,8 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
   harnais ; le namespace de paquet reste `dev.atlas.coach.qa.v706b.*`.
 - Le paquet produit `dev.atlas.coach` n’est ni installé, ni remplacé, ni effacé,
   ni instrumenté.
-- Le rejeu du même ACK est prévu côté harnais à partir de l’enveloppe reconstruite
-  et vérifiée par `content_hash` ; le test Android n’est pas modifié pour cette
-  preuve.
+- Le rejeu du même ACK est exécuté par le test Android avant révocation, avec
+  l’enveloppe `InboxV4Ack` exacte ; le harnais vérifie l’attestation logcat liée à
+  l’`ack_id` et l’unicité de l’événement Core. Le rejeu backend V7-06B reste une
+  preuve distincte.
 - Aucun verdict GO n’est prononcé avant exécution réelle et oracle indépendant.
