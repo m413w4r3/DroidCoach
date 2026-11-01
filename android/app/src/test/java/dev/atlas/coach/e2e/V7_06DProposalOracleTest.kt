@@ -55,6 +55,16 @@ class V7_06DProposalOracleTest {
     }
 
     @Test
+    fun nonCanonicalProposalIdIsRejectedWithAnExplicitCode() {
+        assertParserError("PROPOSAL_ID_INVALID", proposalMetadata("completed", 1, "not-a-uuid"))
+    }
+
+    @Test
+    fun invalidIdPrecedesDuplicateDetectionWhenTheCountMatches() {
+        assertParserError("PROPOSAL_ID_INVALID", proposalMetadata("completed", 2, "not-a-uuid, not-a-uuid"))
+    }
+
+    @Test
     fun syntheticPromptMatchesProposalContractWithoutBackendOwnedKey() {
         val schemaText = javaClass.getResourceAsStream("/tool-requests.schema.json")!!
             .bufferedReader()
