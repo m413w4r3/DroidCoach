@@ -13,7 +13,12 @@ import java.util.concurrent.locks.ReentrantLock
 class AgentConsentGate {
     private val lock = ReentrantLock()
 
+    /** Test seam for observing a thread immediately before it waits for the gate. */
+    @Volatile
+    internal var beforeLockAttemptForTest: (() -> Unit)? = null
+
     fun <T> withLock(block: () -> T): T {
+        beforeLockAttemptForTest?.invoke()
         lock.lock()
         try {
             return block()
