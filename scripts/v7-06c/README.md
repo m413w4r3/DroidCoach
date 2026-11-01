@@ -67,6 +67,8 @@ Chaque preuve normale contient un objet `provenance`. Exemple synthétique (tout
   "version_code": 1,
   "version_name": "0.1.0-qa",
   "compile_sdk": "37.2",
+  "min_sdk": 26,
+  "target_sdk": 36,
   "runtime_sdk": 37,
   "app_apk_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
   "android_test_apk_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
@@ -107,7 +109,7 @@ python3 scripts/v7-06c/android/run_scenario.py verify-existing \
   --suffix .qa.v706b.v706creject.b4d9e602
 ```
 
-Le logcat peut conserver les attestations de plusieurs exécutions. Le vérificateur relie la ligne `step=11 result=PASS ack_replay=identical` à l’`ack_id` et à l’état lus dans l’ACK Core courant; une ancienne ligne APPLY ne peut donc pas attester un REJECT ultérieur. Il exige aussi le marqueur `V7_06B_RUNTIME_PASS` dans le runner log. La preuve porte `execution_mode=post_hoc_existing_stack`, `status=INCONCLUSIVE`, `verification_result=INCONCLUSIVE` et `installed_apk_verified=false`; les champs de provenance APK restent `null`, même si des chemins APK sont fournis, car ils ne démontrent pas ce qui était installé. Aucune preuve historique n’est réécrite.
+Le logcat peut conserver les attestations de plusieurs exécutions. Le vérificateur relie la ligne `step=11 result=PASS ack_replay=identical` à l’`ack_id` et à l’état lus dans l’ACK Core courant; une ancienne ligne APPLY ne peut donc pas attester un REJECT ultérieur. Il exige aussi le marqueur `V7_06B_RUNTIME_PASS` dans le runner log. La preuve porte `execution_mode=post_hoc_existing_stack`, `status=INCONCLUSIVE`, `verification_result=INCONCLUSIVE` et `installed_apk_verified=false`; les champs de provenance APK, dont `installed_apk_sha256`, restent `null`, même si des chemins APK sont fournis, car ils ne démontrent pas ce qui était installé. Aucune preuve historique n’est réécrite.
 
 ## Recette publique `wss`
 

@@ -47,7 +47,8 @@ SAFE_TRACE_FIELDS = {
 COMPLETED_OUTCOMES = {"completed", "completed_redacted"}
 PASS_PROVENANCE_FIELDS = {
     "source_sha", "source_tree_sha", "worktree_clean", "variant", "application_id",
-    "test_application_id", "version_code", "version_name", "compile_sdk", "runtime_sdk",
+    "test_application_id", "version_code", "version_name", "compile_sdk", "min_sdk",
+    "target_sdk", "runtime_sdk",
     "app_apk_sha256", "android_test_apk_sha256", "signing_cert_sha256",
     "build_provenance_sha256", "android_manifest_sha256", "android_test_manifest_sha256",
     "scenario_id", "network", "endpoint", "installed_apk_verified", "installed_apk_sha256",
@@ -78,6 +79,8 @@ def sha256_file(path: Path) -> str:
 def require_pass_provenance(provenance: dict) -> None:
     if not isinstance(provenance, dict) or PASS_PROVENANCE_FIELDS - provenance.keys():
         raise ScenarioFailure("APK_PROVENANCE_FIELD_MISSING")
+    if provenance.keys() - PASS_PROVENANCE_FIELDS:
+        raise ScenarioFailure("APK_PROVENANCE_FIELD_UNKNOWN")
     for field in ("source_sha", "source_tree_sha"):
         if not isinstance(provenance[field], str) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", provenance[field]):
             raise ScenarioFailure("APK_PROVENANCE_SOURCE_INVALID")
@@ -105,6 +108,10 @@ def require_pass_provenance(provenance: dict) -> None:
             or not isinstance(provenance["version_name"], str)
             or not isinstance(provenance["compile_sdk"], str)
             or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", provenance["compile_sdk"])
+            or not isinstance(provenance["min_sdk"], int)
+            or isinstance(provenance["min_sdk"], bool) or provenance["min_sdk"] <= 0
+            or not isinstance(provenance["target_sdk"], int)
+            or isinstance(provenance["target_sdk"], bool) or provenance["target_sdk"] <= 0
             or not isinstance(provenance["runtime_sdk"], int)
             or isinstance(provenance["runtime_sdk"], bool) or provenance["runtime_sdk"] <= 0
             or not isinstance(provenance["scenario_id"], str) or not provenance["scenario_id"]
@@ -132,6 +139,8 @@ def post_hoc_provenance(network: str, endpoint: dict) -> dict:
         "version_code": None,
         "version_name": None,
         "compile_sdk": None,
+        "min_sdk": None,
+        "target_sdk": None,
         "runtime_sdk": None,
         "app_apk_sha256": None,
         "android_test_apk_sha256": None,
@@ -143,6 +152,7 @@ def post_hoc_provenance(network: str, endpoint: dict) -> dict:
         "network": network,
         "endpoint": endpoint,
         "installed_apk_verified": False,
+        "installed_apk_sha256": None,
         "verification_result": "INCONCLUSIVE",
     }
 

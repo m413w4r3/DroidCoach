@@ -739,6 +739,7 @@ class ApkProvenanceTests(unittest.TestCase):
         provenance = run_scenario.post_hoc_provenance(
             "public_wss", {"scheme": "wss", "host": "synthetic.example", "port": 8443},
         )
+        self.assertEqual(set(provenance), run_scenario.PASS_PROVENANCE_FIELDS)
         self.assertEqual(provenance["verification_result"], "INCONCLUSIVE")
         self.assertFalse(provenance["installed_apk_verified"])
         self.assertIsNone(provenance["app_apk_sha256"])
