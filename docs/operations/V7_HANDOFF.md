@@ -59,11 +59,16 @@ touché.**
 - **P2 parseur F1** : commits test-only `fae8caa` + `5412050` sur
   `test/v7-07-parser-p2`, ciblé **8/8**, suite **917/917** avant V4, aucun code
   produit ni contrat modifié.
-- **Prochaines actions :** confirmation delta de la revue sur le SHA final,
-  puis demande d'autorisation ciblée A–E. Les documents produits sont
-  `V7-07_READINESS_AUDIT.md`, `V7-07_BACKUP_AND_ROLLBACK.md`,
-  `V7-07_LIVE_CONFIG_PLAN.md`, `V7-07_PRODUCT_APK_CANDIDATE.md`,
-  `V7-07_PILOT_RECIPE.md`, `REGISTRY_V7_07.md`.
+- **Revue delta** : `ACCEPTED` sur `cd45015` (même session
+  `ed7f0c88…`, provider `codex`, modèle `gpt-6-luna`, effort effectif
+  `xhigh`, statut Paseo vérifié) — P1 provenance fermé, P2 HEAD documentaire
+  qualifié d'état intermédiaire, aucun P0/P1/P2 ouvert, aucun ADB/live.
+- **Prochaine action :** demande d'autorisation ciblée A–E. Aucun scope n'est
+  exécuté sans accord explicite ; voir `V7-07_PILOT_RECIPE.md` §7. Les
+  documents produits sont `V7-07_READINESS_AUDIT.md`,
+  `V7-07_BACKUP_AND_ROLLBACK.md`, `V7-07_LIVE_CONFIG_PLAN.md`,
+  `V7-07_PRODUCT_APK_CANDIDATE.md`, `V7-07_PILOT_RECIPE.md`,
+  `REGISTRY_V7_07.md`.
 
 ## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
 

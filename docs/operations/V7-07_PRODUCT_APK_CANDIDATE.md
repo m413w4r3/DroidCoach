@@ -153,9 +153,10 @@ inchangées, provenance `worktree_clean=true` vérifiée.
 `GO_PRODUCT_APK_CANDIDATE` : **GO_WITH_LIMITATIONS** — l'artefact final est
 intègre et l'essai AVD API 35 synthétique est **PASS** (backup/restore/update/
 HOME), avec le correctif V4 `dd343c2`. Limites : Pixel API 37 `NOT_RUN`,
-Keystore/tokens `NOT_RUN`, restauration du produit réel non exécutée, et
-confirmation delta de la revue indépendante en attente. Ces limites sont des
-conditions d'installation, pas des défauts cachés.
+Keystore/tokens `NOT_RUN`, restauration du produit réel non exécutée. La
+confirmation delta de la revue indépendante est **ACCEPTED** sur `cd45015`
+(P1 provenance fermé, P2 documentaire corrigé, aucun P0/P1/P2 ouvert). Ces
+limites sont des conditions d'installation, pas des défauts cachés.
 
 `GO_PRODUCT_INSTALL` : **NO-GO** tant que la sauvegarde/restauration du produit
 réel n'est pas exécutée, que le Pixel n'est pas connecté/observé et que

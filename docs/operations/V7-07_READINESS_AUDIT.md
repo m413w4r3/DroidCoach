@@ -275,7 +275,10 @@ La préproduction est **partiellement établie** :
 Les gates `GO_DATA_BACKUP`, `GO_DATA_RESTORE` et `GO_HOME_ROLLBACK` sont
 **GO_WITH_LIMITATIONS dans le périmètre AVD API 35 synthétique** mais
 **NOT_RUN sur le Pixel physique**.
-`GO_LIVE_OPENCLAW_CONFIG`, `GO_LIVE_SECURITY`, `GO_PRODUCT_APK_CANDIDATE`,
-`GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent
+`GO_PRODUCT_APK_CANDIDATE` est **GO_WITH_LIMITATIONS** (artefact final revu,
+AVD synthétique PASS, revue delta `ACCEPTED` ; Pixel/Keystore/restauration
+réelle NOT_RUN). `GO_LIVE_OPENCLAW_CONFIG`, `GO_LIVE_SECURITY`,
+`GO_PRODUCT_INSTALL`, `GO_PRODUCT_LOCAL_SMOKE`, `GO_PRODUCT_REMOTE_CHAT`,
+`GO_PRODUCT_PLAN_REVISION`, `GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent
 **NO-GO ou NOT_RUN** à l'issue de cet audit. Aucune installation produit n'est
 autorisée par ce document.

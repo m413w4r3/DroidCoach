@@ -8,14 +8,15 @@ réversible, sans installer ni modifier le produit avant autorisation ciblée.
 vérifié le 2026-11-01).
 **Branche de campagne :** `feat/atlas-v7-07-preproduction` (aucun push, PR ou
 merge distant).
-**Date :** 2026-11-01.
+**Date :** 2026-11-01 (mise à jour 2026-11-02).
 **Environnement cible de clôture :** Pixel physique Android 17 / API 37 ; aucun
 appareil connecté au lancement (`adb devices` vide).
 
-**Statut global :** `PRÉPARATION EN COURS`. Aucune installation produit, aucune
-modification live, aucun ADB sur le Pixel, aucune révocation, aucune rotation de
-secret. Les gates de données, de configuration live et de pilote restent ouverts
-tant que les preuves correspondantes ne sont pas exécutées.
+**Statut global :** `PRÉPARATION AVANCÉE — PRÊTE POUR DEMANDE D'AUTORISATION
+CIBLÉE`. Aucune installation produit, aucune modification live, aucun ADB sur le
+Pixel, aucune révocation, aucune rotation de secret. Les gates de données, de
+configuration live et de pilote restent ouverts tant que les preuves
+correspondantes ne sont pas exécutées.
 
 ## 1. Contraintes d'exécution
 
@@ -118,7 +119,7 @@ Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 | V7-07-B1-V4-QUARANTINE | Quarantaine fail-closed de l'état V4 invalide | implémentation | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | `/tmp/atlas-v7-07-v4-quarantine` | **ACCEPTED (code)** — `dd343c2`, rouge→vert, JVM 920/920, lint 0 erreur, assemble PASS ; intégré `b9f17f4` |
 | V7-07-AVD-RESTORE | Essai AVD jetable : backup, restore, update in-place, HOME | exécution parent | parent (unique opérateur ADB) | AVD API 35 jetable | **PASS (AVD API 35, synthétique)** — backup/restore/verify, HOME, update et rollback ; Keystore NOT_RUN ; Pixel NOT_RUN |
 | V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | `ed7f0c88-9243-474a-8083-12478df0eb21` | `/tmp/atlas-v7-07-review-ro` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1, 5 P2 ; corrections appliquées |
-| V7-07-REVIEW-DELTA | Confirmation delta du SHA final | revue RO | même session `ed7f0c88…` | à créer | **PENDING** |
+| V7-07-REVIEW-DELTA | Confirmation delta du SHA final | revue RO | même session `ed7f0c88…` | `0203257` → `cd45015` | **ACCEPTED** — P1 provenance fermé ; P2 HEAD documentaire qualifié d'état intermédiaire ; aucun P0/P1/P2 ouvert ; aucun ADB/live |
 
 ## 5. Journal des sessions
 
@@ -137,7 +138,7 @@ Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 | 2026-11-02 | `30d078f8-bc51-437a-8aa4-80d1bfcd51f9` | Build final tentative 1 | codex / `gpt-6-luna` / `xhigh` | **REJECTED (provenance)** — APK `dba3509…` avec `worktree_clean=false` (log dans le worktree) ; rebuild propre demandé |
 | 2026-11-02 | `30d078f8-bc51-437a-8aa4-80d1bfcd51f9` | Build final propre | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (build)** — APK `c7b0f71f…`, test `36adef05…`, JVM 922/922, lint 0 erreur, provenance `b9f17f4`/`worktree_clean=true` |
 | 2026-11-02 | parent | AVD final après V4 | ADB isolé `5038`, AVD API 35 jetable | **PASS (synthétique)** — update final, backup/verify `d3d9fb91…`, restauration `30b3f045…`, HOME, rollback ; Keystore/Pixel NOT_RUN |
-| 2026-11-02 | parent | Suite JVM finale `34c949d` | JVM 915/915 | **PASS** — 120 fichiers, 0 échec/erreur/ignoré |
+| 2026-11-02 | parent | Suite JVM intermédiaire `34c949d` | JVM 915/915 | **PASS (superseded par le build final 922/922)** — 120 fichiers, 0 échec/erreur/ignoré |
 
 ## 5bis. Revue indépendante
 
@@ -161,14 +162,24 @@ P1 confirmés :
 P2 : statut APK périmé, registre non réconcilié, procédure API 37/API 35
 ambiguë, serials d'émulateur littéraux, cas UUID invalide non couvert.
 
-Recommandations : `GO_SOURCE_AND_CI` GO pour le source candidat `32e7c70` avec
-CI `41350216879` ; `GO_DATA_BACKUP`/`RESTORE`/`HOME_ROLLBACK` GO limités à
-l'AVD API 35 synthétique ; `GO_LIVE_*` NO-GO ; `GO_PRODUCT_APK_CANDIDATE`
-initialement PENDING, puis **GO_WITH_LIMITATIONS** après le build final
-`c7b0f71f…` et la revalidation AVD, sous réserve de la confirmation delta ;
-`GO_PRODUCT_INSTALL` et suivants NO-GO. Les corrections P2 et le P1 V4 sont
-traitées dans la lignée `fix/v7-07-v4-quarantine` et une confirmation delta est
-demandée à la même session.
+Recommandations : `GO_SOURCE_AND_CI` **GO_WITH_LIMITATIONS** pour la base
+`32e7c70` (CI `41350216879` verte) et le SHA final `b9f17f4` (JVM/lint/build
+locaux, sans run CI car non poussé) ; `GO_DATA_BACKUP`/`RESTORE`/
+`HOME_ROLLBACK` GO limités à l'AVD API 35 synthétique ; `GO_LIVE_*` NO-GO ;
+`GO_PRODUCT_APK_CANDIDATE` **GO_WITH_LIMITATIONS** après le build final
+`c7b0f71f…`, la revalidation AVD et la confirmation delta `ACCEPTED` sur
+`cd45015` ; `GO_PRODUCT_INSTALL` et suivants NO-GO. Les corrections P2 et le
+P1 V4 sont traitées dans la lignée `fix/v7-07-v4-quarantine` ; la revue delta
+finale ne laisse aucun P0/P1/P2 ouvert.
+
+**Confirmation delta (2026-11-02).** Même session
+`ed7f0c88-9243-474a-8083-12478df0eb21`, provider `codex`, modèle
+`gpt-6-luna`, effort effectif `xhigh` (statut Paseo parent vérifié). Revue du
+commit `0203257` : P1 de provenance fermé, P2 de HEAD documentaire signalé puis
+corrigé en `cd45015` (référence qualifiée d'état intermédiaire) ; spot-check
+`ACCEPTED`. Les hashes APK/AndroidTest, la signature, les 16 permissions et les
+manifestes de provenance ont été revérifiés sur les artefacts conservés. Aucun
+fichier modifié, aucun ADB/Docker/live.
 
 ## 6. Règles de preuve
 
@@ -187,13 +198,13 @@ demandée à la même session.
 
 | Verdict | État | Portée |
 |---|---|---|
-| `GO_SOURCE_AND_CI` | **GO (source candidat `32e7c70`)** | CI `41350216879` `success` ; le HEAD de campagne `34c949d` n'a pas de run CI car il n'est pas poussé ; diff produit vs base vide avant le correctif V4 |
+| `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** | CI `41350216879` `success` sur la base `32e7c70` ; le SHA final `b9f17f4` n'a pas de run CI car il n'est pas poussé ; JVM **922/922**, lint 0 erreur, build PASS localement ; diff produit vs base limité au correctif V4 `dd343c2` |
 | `GO_DATA_BACKUP` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | outil et archive validés sur AVD ; aucune sauvegarde du produit réel |
 | `GO_DATA_RESTORE` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | restauration vérifiée sur AVD ; produit réel non restauré |
 | `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | rôle HOME posé/restauré sur AVD ; Settings à rejouer sur Pixel |
 | `GO_LIVE_OPENCLAW_CONFIG` | **NO-GO** | plugin natif concurrent, `profile=full`, modèle non qualifié |
 | `GO_LIVE_SECURITY` | **NO-GO / BLOCKED** | transport distant indisponible ; identités de test actives ; bearer Android partagé |
-| `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS (delta review pending)** | APK final `c7b0f71f…`, JVM 922/922, provenance `b9f17f4` propre, AVD final PASS ; Pixel/Keystore/restauration produit NOT_RUN |
+| `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS (delta ACCEPTED)** | APK final `c7b0f71f…`, JVM 922/922, provenance `b9f17f4` propre, AVD final PASS, revue delta `ACCEPTED` ; Pixel/Keystore/restauration produit NOT_RUN |
 | `GO_PRODUCT_INSTALL` | **NO-GO** | aucune autorisation, backup/restore non démontré |
 | `GO_PRODUCT_LOCAL_SMOKE` | **NO-GO / NOT_RUN** | produit non installé/testé |
 | `GO_PRODUCT_REMOTE_CHAT` | **NO-GO / NOT_RUN** | produit non appairé ; transport arrêté |
