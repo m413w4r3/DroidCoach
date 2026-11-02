@@ -35,6 +35,7 @@ restauration : l'essai sur environnement jetable reste obligatoire.
 | Objectifs, habitudes, Focus, routines, conversations, propositions | oui (état local JSON) | oui | lecture stricte `schemaVersion=1` ; quarantaine si invalide |
 | Mémoire locale (`files/memory/memory-facts.json`) | oui si présente | oui | schéma strict v1 |
 | Inbox/effets agent, outbox sync, inbox V4 | oui si présents | oui | certains stores n'ont pas de quarantaine |
+| État V4 (`atlas_core_v4_sync`) | oui | oui, avec clés de quarantaine | correctif `dd343c2` : valeur brute mise en quarantaine, écriture refusée si la quarantaine échoue |
 | Calendrier local ATLAS | **non** | **non** | vit dans `CalendarProvider`/`AccountManager`, hors bac de l'app |
 | Permissions Android / AppOps | **non** | à réaccorder | gérées par Android |
 | Rôle HOME | **non** | via Settings | géré par Android ; préférence `atlas_launcher_exit` seule |
@@ -248,6 +249,13 @@ synthétiques, puis nettoyé. Preuve détaillée :
 | Rollback APK candidat → historique | **PASS** — données conservées, app rendue |
 | Keystore/tokens | **NOT_RUN** — aucun token configuré |
 | Pixel physique API 37 | **NOT_RUN / BLOCKED_DEVICE_ABSENT** |
+
+**Revalidation finale après correctif V4 (2026-11-02) :** AVD API 35 jetable,
+candidat `c7b0f71f…` (source `b9f17f4`). Update in-place **PASS** (données
+conservées), backup candidat `d3d9fb91…` **PASS**, restauration de l'archive
+historique `30b3f045…` **PASS**, HOME et rollback **PASS**. Keystore/tokens et
+Pixel API 37 restent `NOT_RUN`. L'outil refuse désormais une archive dont le
+hash de serial diffère de l'appareil cible (18 tests hors ligne).
 
 ### 8.1 Préparation
 

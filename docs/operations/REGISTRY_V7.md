@@ -35,19 +35,32 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
 - AVD API 35 : backup/restore/verify **PASS**, HOME **PASS**, hors ligne
   **PASS**, update in-place **PASS**, rollback APK **PASS**. Keystore/tokens
   **NOT_RUN** ; Pixel API 37 **NOT_RUN**.
-- P2 parseur F1 : commit test-only `fae8caa`, 6/6 ciblés, **915/915 JVM**.
+- Revue indépendante `ed7f0c88…` : **ACCEPTED_WITH_LIMITATIONS**, aucun P0,
+  cinq P1 et cinq P2. Correctif P1 V4 `dd343c2` (quarantaine brute,
+  fail-closed, rouge→vert, JVM **920/920**, lint 0 erreur) intégré `b9f17f4` ;
+  outil backup lié au serial de l'archive (`acd765b`, 18 tests) ; parseur
+  delta UUID invalide (`5412050`, 8/8, JVM 917/917 avant V4).
+- HEAD de campagne après intégrations : `b9f17f4…`. Candidat final reconstruit :
+  APK `c7b0f71f…`, test `36adef05…`, JVM **922/922**, lint 0 erreur,
+  provenance `b9f17f4`/`worktree_clean=true`, signature `da301466…eeee`,
+  permissions identiques à l'historique. AVD final : update, backup/verify,
+  restauration, HOME et rollback **PASS** ; Keystore/Pixel **NOT_RUN**.
+- P2 parseur F1 : commits test-only `fae8caa` + `5412050` (UUID invalide),
+  ciblé **8/8**, suite **917/917** avant V4.
 - Verdicts : `GO_SOURCE_AND_CI` **GO** ; `GO_DATA_BACKUP`,
   `GO_DATA_RESTORE`, `GO_HOME_ROLLBACK` **GO_WITH_LIMITATIONS (AVD API 35
   synthétique)** mais **NOT_RUN Pixel** ; `GO_LIVE_OPENCLAW_CONFIG` **NO-GO**
   (plugin natif concurrent, `profile=full`, modèle non qualifié) ;
   `GO_LIVE_SECURITY` **NO-GO/BLOCKED** (transport arrêté, identités de test,
-  bearer partagé) ; `GO_PRODUCT_APK_CANDIDATE` **PENDING** (revue indépendante
-  `ACCEPTED_WITH_LIMITATIONS`, P1 V4 en correction) ; `GO_PRODUCT_INSTALL`,
-  `GO_PRODUCT_REMOTE`, `GO_DAILY_PILOT` **NO-GO**.
-- P1 ouverts : perte potentielle `atlas_core_v4_sync` sur racine invalide
-  (correction en cours) ; restauration produit réel non observée ; configuration
-  Gateway non qualifiée ; transport distant indisponible ; identités/bearer non
-  séparés ; training plan incohérent sur projection non vide. Aucun P0.
+  bearer partagé) ; `GO_PRODUCT_APK_CANDIDATE` **GO_WITH_LIMITATIONS** (APK
+  final `c7b0f71f…`, revue initiale `ACCEPTED_WITH_LIMITATIONS`, confirmation
+  delta en attente) ; `GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE`,
+  `GO_DAILY_PILOT` **NO-GO**.
+- P1 `atlas_core_v4_sync` **corrigé** (`dd343c2`, quarantaine fail-closed,
+  JVM 920/920, intégré `b9f17f4`). P1 restants : restauration produit réel non
+  observée ; configuration Gateway non qualifiée ; transport distant
+  indisponible ; identités/bearer non séparés ; training plan incohérent sur
+  projection non vide. Aucun P0.
 
 ## 0bis. Campagne V7-06D — fiabilité remote et révocation A4-4 (2026-11-01)
 

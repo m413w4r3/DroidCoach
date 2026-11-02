@@ -28,33 +28,40 @@ touché.**
   - **A3** : procédure `run-as`/tar, matrice de restaurabilité, rollback,
     export/import intégré nécessaire pour une sauvegarde durable.
 - Outillage : `scripts/v7-07/atlas-product-backup.sh` (branche
-  `feat/v7-07-backup-tool`, commits `2517097`, `30f1d63`, `2d49705`) ; 17 tests
-  hors ligne, deux corrections issues d'essais réels (composant explicite,
-  `df` via `run-as`).
+  `feat/v7-07-backup-tool`, commits `2517097`, `30f1d63`, `2d49705`,
+  `acd765b`) ; **18 tests hors ligne**, corrections issues d'essais réels
+  (composant explicite, `df` via `run-as`, refus d'une archive d'un autre
+  serial).
 - **Essai AVD API 35 jetable, données synthétiques** :
   préflight/backup/verify/restore **PASS** (archive `ec88d1a2…`, 11 fichiers,
   zéro cache) ; HOME ATLAS et retour Nexus **PASS** ; hors ligne **PASS** ;
   update in-place APK historique → candidat **PASS** ; rollback candidat →
   historique **PASS**. Keystore/tokens **NOT_RUN**. Pixel API 37 **NOT_RUN**.
-  Preuve : `evidence/V7-07_AVD_BACKUP_RESTORE.md`.
-- **Candidat APK** : build propre sur `32e7c70`, JVM **912/912**, lint 0 erreur,
-  APK `d32efc7684c131131101f476f9f7ae186933efe863cb561b2ce0039ddc45e992`,
-  signature `da301466…eeee`, permissions identiques à l'historique,
-  provenance `worktree_clean=true`. Conservé en privé sous
-  `~/.local/state/atlas-v7-07/candidate/`. Aucune installation produit.
-- **P2 parseur F1** : commit test-only `fae8caa` sur
-  `test/v7-07-parser-p2`, 6/6 ciblés, **915/915 JVM**, aucun code produit ni
-  contrat modifié.
-- Revue indépendante finale et demande d'autorisation ciblée A–E restent à
-  faire. Les documents produits sont `V7-07_READINESS_AUDIT.md`,
-  `V7-07_BACKUP_AND_ROLLBACK.md`, `V7-07_LIVE_CONFIG_PLAN.md`,
-  `V7-07_PRODUCT_APK_CANDIDATE.md`, `V7-07_PILOT_RECIPE.md`,
-  `REGISTRY_V7_07.md`.
-- **Prochaines actions :** revue indépendante lecture seule du SHA final ;
-  soumettre au propriétaire les scopes A (sécurité live), B (Gateway/Core),
-  C (APK produit), D (appairage/recette distante), E (pilote quotidien).
-  Ne pas installer, révoquer, tourner le bearer ou modifier le Gateway sans
-  autorisation ciblée.
+  Preuve : `evidence/V7-07_AVD_BACKUP_RESTORE.md`. **Revalidation finale après
+  V4** : update `c7b0f71f…` **PASS** (données conservées), backup/verify
+  `d3d9fb91…`, restauration `30b3f045…` **PASS**, HOME et rollback **PASS**.
+- **Revue indépendante** `ed7f0c88…` (`codex/gpt-6-luna`/`xhigh`, worktree
+  `a-w`) : **ACCEPTED_WITH_LIMITATIONS**, aucun P0, cinq P1 et cinq P2.
+  Corrections : P1 V4 `dd343c2` (quarantaine brute, refus d'écriture si la
+  quarantaine échoue, rouge→vert, JVM **920/920**, lint 0 erreur), outil backup
+  lié au serial (`acd765b`), parseur delta UUID invalide (`5412050`), statuts
+  et hygiène documentaire. HEAD de campagne `b9f17f4`.
+- **Candidat APK final** : build propre sur `b9f17f4` (V4 inclus), JVM
+  **922/922**, lint 0 erreur, APK
+  `c7b0f71f43680f4bb45d8c9e6b808713ea09ff5f826fd79db31acce8ff4355a0`, test
+  `36adef05…`, signature `da301466…eeee`, permissions identiques à
+  l'historique, provenance `worktree_clean=true`. Conservé en privé sous
+  `~/.local/state/atlas-v7-07/candidate-final/`. Aucune installation sur le
+  Pixel. Le premier rebuild `dba3509…` a été rejeté (`worktree_clean=false`) ;
+  seul `c7b0f71f…` est le candidat final.
+- **P2 parseur F1** : commits test-only `fae8caa` + `5412050` sur
+  `test/v7-07-parser-p2`, ciblé **8/8**, suite **917/917** avant V4, aucun code
+  produit ni contrat modifié.
+- **Prochaines actions :** confirmation delta de la revue sur le SHA final,
+  puis demande d'autorisation ciblée A–E. Les documents produits sont
+  `V7-07_READINESS_AUDIT.md`, `V7-07_BACKUP_AND_ROLLBACK.md`,
+  `V7-07_LIVE_CONFIG_PLAN.md`, `V7-07_PRODUCT_APK_CANDIDATE.md`,
+  `V7-07_PILOT_RECIPE.md`, `REGISTRY_V7_07.md`.
 
 ## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
 

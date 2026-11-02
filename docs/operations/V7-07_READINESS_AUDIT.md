@@ -32,6 +32,14 @@ Légende : `PROVEN` = établi par code, configuration ou lecture live ;
 `NOT_RUN` = non exécuté ; `BLOCKED` = dépendance indisponible ;
 `FAIL` = défaut ou indisponibilité constatée.
 
+**Note de lignée :** la base mission reste `32e7c70`. Après la revue indépendante,
+la campagne a intégré localement le correctif produit V4 `dd343c2` (quarantaine
+fail-closed) et les deltas test-only/tooling ; le HEAD de campagne est
+`b9f17f4`. Le seul changement de code produit vs `32e7c70` est
+`AndroidSyncStorage.kt` (correctif V4) ; les tests, scripts et documents
+n'affectent pas l'APK. Le candidat final doit donc être reconstruit depuis
+`b9f17f4`.
+
 ## 2. Application produit et données
 
 ### 2.1 Identité et signature
@@ -55,7 +63,7 @@ L'application n'utilise pas Room. Elle persiste :
 | Store | Contenu | Version / lecture |
 |---|---|---|
 | `shared_prefs/atlas_local_state.xml` | état principal : objectifs, habitudes, Focus, routines, coach, règles, capacités, épingles launcher, conversation agent, propositions appliquées, état proactif | JSON `schemaVersion=1`, lecture stricte ; quarantaine si invalide |
-| `shared_prefs/atlas_core_v4_sync.xml` | consentements V4, projections en attente, reçus, fraîcheur, idempotence | JSON `state_v4`, schéma 1 ; **P1 : une racine invalide peut être remplacée par un état vide à la prochaine mutation** |
+| `shared_prefs/atlas_core_v4_sync.xml` | consentements V4, projections en attente, reçus, fraîcheur, idempotence | JSON `state_v4`, schéma 1 ; **P1 corrigé** : une racine invalide est mise en quarantaine avant remplacement, et les écritures sont refusées si la quarantaine échoue |
 | `shared_prefs/atlas_relay_configuration.xml` | URL, serverId, clé publique Noise, deviceId, dernier contact, token Relay chiffré | token AES-GCM, clé Keystore `atlas_relay_device_v1` |
 | `shared_prefs/atlas_sync_configuration.xml` | token bearer backend chiffré | AES-GCM, clé Keystore `atlas_backend_bearer_v1` |
 | `shared_prefs/atlas_sync_preferences.xml` | URL backend, catégories consenties | sans version explicite |
@@ -217,11 +225,14 @@ Aucun P0 confirmé dans cette phase préparatoire.
    sont validés sur AVD API 35 avec des données synthétiques ; le Pixel API 37
    et les données du propriétaire n'ont pas été restaurés. `allowBackup=false`
    et `adb backup` restent inutilisables ; `run-as` est la voie app-only.
-2. **État Core V4 fragile.** Une racine `atlas_core_v4_sync` invalide ou de
-   schéma inconnu peut être remplacée par un état vide à la prochaine mutation
-   (`AndroidSyncStorage.kt`) : perte possible de consentements/projections en
-   attente. Une sauvegarde préalable et une correction de quarantaine sont
-   requises avant pilote.
+2. **État Core V4 (P1 corrigé).** Une racine `atlas_core_v4_sync` invalide ou de
+   schéma inconnu était remplacée par un état vide à la prochaine mutation
+   (`AndroidSyncStorage.kt`), avec perte possible des consentements, projections
+   et reçus en attente. Le correctif `dd343c2` (`fix/v7-07-v4-quarantine`,
+   intégré `b9f17f4`) met la valeur brute en quarantaine avant tout remplacement
+   et refuse toute écriture si la quarantaine échoue ; tests JVM dédiés
+   (rouge→vert). La sauvegarde préalable reste requise comme défense en
+   profondeur.
 3. **Configuration Gateway non qualifiée.** Plugin natif concurrent, `profile=full`,
    outils effectifs non lus, modèle personnel non testé sur les propositions.
 4. **Transport distant indisponible.** Connecteur arrêté, Funnel sans listener.

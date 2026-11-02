@@ -27,34 +27,47 @@ même versionCode. Une livraison ultérieure devra incrémenter le versionCode.
 ## 2. Build et tests
 
 Le build est exécuté hors ligne dans un worktree détaché au SHA exact, sans
-installation, sans ADB et sans réseau. Résultats constatés le 2026-11-01
-(session `e15d44a1-219c-456b-bc5f-7f0857b78b25`, `codex/gpt-6-luna/xhigh`) et
-revérifiés par le parent :
+installation, sans ADB et sans réseau. Le **build final de campagne** est
+exécuté depuis `b9f17f4` (correctif V4 `dd343c2` inclus) ; les résultats de
+l'ancien build `32e7c70` (`d32efc76…`) sont conservés comme historique et sont
+**superseded** par les artefacts finaux, consignés après le build. Les lignes
+912/912 et `d32efc76…` ci-dessous décrivent l'ancien build historique
+`32e7c70` ; elles ne doivent pas être lues comme le build final `b9f17f4`.
 
-| Oracle | Résultat | Preuve |
+| Oracle | Résultat attendu | Résultat constaté (build final `b9f17f4`) |
 |---|---|---|
-| `:app:testDebugUnitTest --offline --rerun-tasks` | **PASS 912/912**, 120 fichiers, 0 échec/erreur/ignoré | rapports XML du build |
-| `:app:lintDebug --offline` | **PASS**, 0 erreur, 78 avertissements | `lint-results-debug.*` |
-| `:app:assembleDebug` | **PASS** | `BUILD SUCCESSFUL`, 84 tâches |
-| `:app:assembleDebugAndroidTest` | **PASS** (compilation/empaquetage, aucune exécution) | APK test produit |
-| `git diff --check` / worktree propre hors build | **PASS** | seul `artifacts/` non suivi |
-| Provenance `worktree_clean=true` | **PASS** | manifeste embarqué |
+| `:app:testDebugUnitTest --offline --rerun-tasks` | PASS, compteur exact | **PASS 922/922**, 121 fichiers, 0 échec/erreur/ignoré ; quarantaine V4 5/5, parseur 8/8 |
+| `:app:lintDebug --offline` | 0 erreur | **PASS**, 0 erreur, 80 avertissements |
+| `:app:assembleDebug` | PASS | **PASS**, 84/84 tâches, 1 min 43 s |
+| `:app:assembleDebugAndroidTest` | PASS (compilation) | **PASS** (empaquetage seulement, aucune exécution) |
+| `git diff --check` / worktree propre hors build | PASS | **PASS**, `worktree_clean=true` dans la provenance |
+| Provenance `worktree_clean=true` | PASS | **PASS** |
 
 ### Artefacts
 
 | Artefact | SHA-256 | Taille |
 |---|---|---:|
-| `app-debug.apk` | `d32efc7684c131131101f476f9f7ae186933efe863cb561b2ce0039ddc45e992` | 15 806 203 |
-| `app-debug-androidTest.apk` | `8f6376be9b9bfc2bf6c8c004d0bf7cbb770a55936af0e8aeab2378014a194795` | 1 568 240 |
-| `atlas-build-provenance.json` | `e367fe3616f4e955ccd2468a63342bffbc8192b6120e1ad3855173d4617ceabb` | 406 |
-| Manifeste canonique trié | `9647b6b8507d9a1d195f3e1cfdb1b76ea284698cc4d3c12e635c676600e89e6e` | — |
+| `app-debug.apk` | `c7b0f71f43680f4bb45d8c9e6b808713ea09ff5f826fd79db31acce8ff4355a0` | 15 806 203 |
+| `app-debug-androidTest.apk` | `36adef05792dc69a5bedcd7d6c25c330b1861e2ab0060d48d724fde775eb5533` | 1 568 272 |
+| `atlas-build-provenance.json` | `82bd38c7d0554d68dc7fa26951b11b332b81b6042e946ffe69d6c79e030499b6` | 406 |
+| Manifeste canonique trié | `310b180a89d56920da20160d674b9de033ae343f0f461a4fe6abe400b861828c` | — |
 
-`zipalign -c -v 4` et `apksigner verify` passent sur les deux APK. Les
-artefacts sont conservés dans un répertoire de build privé, hors dépôt.
+Provenance : `source_sha=b9f17f4…`, `source_tree_sha=6b1a6c43…`,
+`worktree_clean=true`, `variant=debug`, `application_id=dev.atlas.coach`,
+`version_code=1`, `version_name=0.1.0`, `compile_sdk=37.2`,
+`test_application_id=dev.atlas.coach.test`. `zipalign -c -v 4` et
+`apksigner verify` passent sur les deux APK. Les artefacts finaux sont
+conservés en privé sous `~/.local/state/atlas-v7-07/candidate-final/`.
+
+**Note :** l'ancien build `d32efc76…` (source `32e7c70`) ne contient pas le
+correctif V4 et ne doit pas être installé. Une première tentative de rebuild
+`dba3509…` a été rejetée car `worktree_clean=false` ; elle n'a livré aucun
+artefact. Seul `c7b0f71f…` est le candidat final.
 
 ## 3. Vérifications de l'APK
 
-Résultats constatés sur l'APK `d32efc76…` :
+Résultats constatés sur l'APK final `c7b0f71f…` (source `b9f17f4`, correctif
+V4 inclus) :
 
 - `applicationId=dev.atlas.coach`, `versionCode=1`, `versionName=0.1.0`,
   `minSdk=26`, `targetSdk=36`, `compileSdk=37.2` ;
@@ -96,7 +109,9 @@ Résultats constatés sur l'APK `d32efc76…` :
 | Même certificat | `da301466…eeee` | **PROVEN (historique)** |
 | Même versionCode | 1 | **PROVEN (historique)** |
 | `adb install -r` déjà réussi sur ce paquet | preuve V7_INTEGRATION | **PROVEN (historique)** |
-| Conservation réelle des données | état actuel inconnu | **NOT_RUN / BLOCKED_DEVICE_ABSENT** |
+| Update in-place final `c7b0f71f…` sur APK historique | AVD API 35 synthétique | **PASS** — données conservées, app COLD, UI rendue |
+| Restauration app-only après update | AVD API 35 synthétique | **PASS** — outil final, archive vérifiée |
+| Conservation réelle des données sur le Pixel | état actuel inconnu | **NOT_RUN / BLOCKED_DEVICE_ABSENT** |
 | Rôle HOME actuel | inconnu | **NOT_RUN** |
 | Permissions actuelles | inconnues | **NOT_RUN** |
 | Migration état local/plans | code compatible | **PROVEN (statique)** |
@@ -129,16 +144,17 @@ Résultats constatés sur l'APK `d32efc76…` :
 
 ## 7. Verdict
 
-`GO_PRODUCT_APK_BUILD` : **GO** — build reproductible au SHA exact, 912/912
-JVM, lint 0 erreur, APK signé compatible, permissions inchangées, provenance
-vérifiée.
+`GO_PRODUCT_APK_BUILD` : **GO** — build reproductible au SHA `b9f17f4`,
+**922/922** JVM, lint 0 erreur, APK `c7b0f71f…` signé compatible, permissions
+inchangées, provenance `worktree_clean=true` vérifiée.
 
-`GO_PRODUCT_APK_CANDIDATE` : **PENDING / NO-GO pour installation** — l'essai
-AVD API 35 synthétique est **PASS** (backup/restore/update/HOME), mais le Pixel
-API 37 est `NOT_RUN`, la revue indépendante a confirmé un P1 de perte potentielle
-`atlas_core_v4_sync` en cours de correction, et le candidat devra être
-reconstruit après ce correctif. Le build seul ne suffit pas.
+`GO_PRODUCT_APK_CANDIDATE` : **GO_WITH_LIMITATIONS** — l'artefact final est
+intègre et l'essai AVD API 35 synthétique est **PASS** (backup/restore/update/
+HOME), avec le correctif V4 `dd343c2`. Limites : Pixel API 37 `NOT_RUN`,
+Keystore/tokens `NOT_RUN`, restauration du produit réel non exécutée, et
+confirmation delta de la revue indépendante en attente. Ces limites sont des
+conditions d'installation, pas des défauts cachés.
 
-`GO_PRODUCT_INSTALL` : **NO-GO** tant que le P1 V4 n'est pas corrigé et revu,
-que la sauvegarde/restauration du produit réel n'est pas exécutée, et que
+`GO_PRODUCT_INSTALL` : **NO-GO** tant que la sauvegarde/restauration du produit
+réel n'est pas exécutée, que le Pixel n'est pas connecté/observé et que
 l'autorisation ciblée n'est pas accordée.

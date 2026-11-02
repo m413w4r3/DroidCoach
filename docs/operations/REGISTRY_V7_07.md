@@ -60,6 +60,12 @@ tant que les preuves correspondantes ne sont pas exécutées.
 tickets d'implémentation sont limités à trois : tests P2 du parseur, outillage
 backup/restore, build du candidat sans installation.
 
+**Lignée post-revue :** la branche de campagne intègre localement l'outillage
+backup (`4046f1a`), le parseur delta UUID (`cc47e5c`) et le correctif V4
+`dd343c2` (merge `b9f17f4`). Le seul changement de code produit vs `32e7c70`
+est `AndroidSyncStorage.kt` (quarantaine V4) ; les tests, scripts et documents
+n'affectent pas l'APK. Le candidat final est reconstruit depuis `b9f17f4`.
+
 ## 3. Faits live vérifiés par le parent (lecture seule)
 
 Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
@@ -106,12 +112,13 @@ Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 | V7-07-A2-LIVE-CONFIG | Core/Gateway/Relay, modèle, outils, config candidate | audit RO | `47a96ff4-6f89-4fdd-98d6-af66dcaabf37` | `/tmp/atlas-v7-07-a2-live-ro` | **ACCEPTED (lecture seule)** — plugin natif concurrent, `profile=full`, modèle non qualifié, transport NO-GO |
 | V7-07-A3-BACKUP-DESIGN | Procédure backup/restore/rollback et essai jetable | audit RO | `42f086e3-2829-4452-9748-c5e401299242` | `/tmp/atlas-v7-07-a3-backup-ro` | **ACCEPTED (lecture seule)** — procédure `run-as`, matrice, test AVD, export/import manquant |
 | V7-07-P2-PARSER-TESTS | Tests P2 parseur F1, sans code produit | implémentation | `f8049778-98a8-4e06-b28a-9722f38bde75` | `/tmp/atlas-v7-07-parser-p2` | **ACCEPTED (test-only)** — `fae8caa` + `5412050` (UUID invalide) ; ciblé 8/8, suite 917/917 |
-| V7-07-CANDIDATE-BUILD | Build APK produit, vérifications, sans installation | build | `e15d44a1-219c-456b-bc5f-7f0857b78b25` | `/tmp/atlas-v7-07-candidate` | **ACCEPTED (build)** — APK `d32efc76…`, JVM 912/912, lint 0 erreur, signature et permissions vérifiées ; **à reconstruire après le correctif V4** |
-| V7-07-BACKUP-TOOL | Outillage backup/restore sûr + tests hors ligne | implémentation | `20ecbdf6-43be-44c2-8091-1f67df30922c` | `/tmp/atlas-v7-07-backup-tool` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705` ; 17 tests hors ligne PASS |
-| V7-07-B1-V4-QUARANTINE | Quarantaine fail-closed de l'état V4 invalide | implémentation | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | `/tmp/atlas-v7-07-v4-quarantine` | **RUNNING** |
-| V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | `ed7f0c88-9243-474a-8083-12478df0eb21` | `/tmp/atlas-v7-07-review-ro` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1, 5 P2 ; corrections en cours |
+| V7-07-CANDIDATE-BUILD | Build APK produit, vérifications, sans installation | build | `e15d44a1-219c-456b-bc5f-7f0857b78b25` | `/tmp/atlas-v7-07-candidate` | **SUPERSEDED** — ancien APK `d32efc76…` (source `32e7c70`, sans V4), non installable |
+| V7-07-CANDIDATE2-BUILD | Rebuild final depuis `b9f17f4` (V4 inclus) | build | `30d078f8-bc51-437a-8aa4-80d1bfcd51f9` | `/tmp/atlas-v7-07-candidate2` | **ACCEPTED (build)** — `c7b0f71f…`, JVM 922/922, lint 0 erreur, provenance `worktree_clean=true`, source `b9f17f4` ; premier APK `dba3509…` rejeté (`worktree_clean=false`) |
+| V7-07-BACKUP-TOOL | Outillage backup/restore sûr + tests hors ligne | implémentation | `20ecbdf6-43be-44c2-8091-1f67df30922c` | `/tmp/atlas-v7-07-backup-tool` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705`, `acd765b` ; 18 tests hors ligne PASS ; refus cross-serial |
+| V7-07-B1-V4-QUARANTINE | Quarantaine fail-closed de l'état V4 invalide | implémentation | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | `/tmp/atlas-v7-07-v4-quarantine` | **ACCEPTED (code)** — `dd343c2`, rouge→vert, JVM 920/920, lint 0 erreur, assemble PASS ; intégré `b9f17f4` |
 | V7-07-AVD-RESTORE | Essai AVD jetable : backup, restore, update in-place, HOME | exécution parent | parent (unique opérateur ADB) | AVD API 35 jetable | **PASS (AVD API 35, synthétique)** — backup/restore/verify, HOME, update et rollback ; Keystore NOT_RUN ; Pixel NOT_RUN |
-| V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | à créer après intégration | worktree détaché | **PENDING** |
+| V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | `ed7f0c88-9243-474a-8083-12478df0eb21` | `/tmp/atlas-v7-07-review-ro` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1, 5 P2 ; corrections appliquées |
+| V7-07-REVIEW-DELTA | Confirmation delta du SHA final | revue RO | même session `ed7f0c88…` | à créer | **PENDING** |
 
 ## 5. Journal des sessions
 
@@ -123,10 +130,13 @@ Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 | 2026-11-01 | `42f086e3-2829-4452-9748-c5e401299242` | A3 backup/rollback | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED** — procédure `run-as`, matrice, test AVD, export/import manquant |
 | 2026-11-01 | `f8049778-98a8-4e06-b28a-9722f38bde75` | P2 parseur | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (test-only)** — `fae8caa` + `5412050` ; ciblé 8/8, suite 917/917 ; aucun code produit |
 | 2026-11-01 | `e15d44a1-219c-456b-bc5f-7f0857b78b25` | Build candidat | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (build)** — `GO_PRODUCT_APK_BUILD`, APK `d32efc76…`, JVM 912/912, lint 0 erreur, provenance `32e7c70` |
-| 2026-11-01 | `20ecbdf6-43be-44c2-8091-1f67df30922c` | Outillage backup | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705` ; 17 tests hors ligne PASS ; aucun ADB |
+| 2026-11-01 | `20ecbdf6-43be-44c2-8091-1f67df30922c` | Outillage backup | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705`, `acd765b` ; 18 tests hors ligne PASS ; aucun ADB |
 | 2026-11-01 | parent | Essai AVD API 35 | ADB isolé `5038`, émulateur jetable | **PASS (synthétique)** — backup/restore/verify, HOME, update in-place, rollback ; nettoyage AVD ; preuve `evidence/V7-07_AVD_BACKUP_RESTORE.md` |
 | 2026-11-02 | `ed7f0c88-9243-474a-8083-12478df0eb21` | Revue indépendante | codex / `gpt-6-luna` / `xhigh`, worktree `a-w` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1 (V4, config, identités, transport, état produit), 5 P2 ; worktree intact, aucun ADB/live |
-| 2026-11-02 | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | Correction V4 | codex / `gpt-6-luna` / `xhigh` | **RUNNING** — quarantaine fail-closed |
+| 2026-11-02 | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | Correction V4 | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (code)** — `dd343c2`, quarantaine fail-closed, rouge→vert, JVM 920/920, lint 0 erreur, assemble PASS ; intégré `b9f17f4` |
+| 2026-11-02 | `30d078f8-bc51-437a-8aa4-80d1bfcd51f9` | Build final tentative 1 | codex / `gpt-6-luna` / `xhigh` | **REJECTED (provenance)** — APK `dba3509…` avec `worktree_clean=false` (log dans le worktree) ; rebuild propre demandé |
+| 2026-11-02 | `30d078f8-bc51-437a-8aa4-80d1bfcd51f9` | Build final propre | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (build)** — APK `c7b0f71f…`, test `36adef05…`, JVM 922/922, lint 0 erreur, provenance `b9f17f4`/`worktree_clean=true` |
+| 2026-11-02 | parent | AVD final après V4 | ADB isolé `5038`, AVD API 35 jetable | **PASS (synthétique)** — update final, backup/verify `d3d9fb91…`, restauration `30b3f045…`, HOME, rollback ; Keystore/Pixel NOT_RUN |
 | 2026-11-02 | parent | Suite JVM finale `34c949d` | JVM 915/915 | **PASS** — 120 fichiers, 0 échec/erreur/ignoré |
 
 ## 5bis. Revue indépendante
@@ -154,9 +164,11 @@ ambiguë, serials d'émulateur littéraux, cas UUID invalide non couvert.
 Recommandations : `GO_SOURCE_AND_CI` GO pour le source candidat `32e7c70` avec
 CI `41350216879` ; `GO_DATA_BACKUP`/`RESTORE`/`HOME_ROLLBACK` GO limités à
 l'AVD API 35 synthétique ; `GO_LIVE_*` NO-GO ; `GO_PRODUCT_APK_CANDIDATE`
-PENDING ; `GO_PRODUCT_INSTALL` et suivants NO-GO. Les corrections P2 et le P1
-V4 sont traités dans la lignée `fix/v7-07-v4-quarantine` et une confirmation
-delta est demandée à la même session.
+initialement PENDING, puis **GO_WITH_LIMITATIONS** après le build final
+`c7b0f71f…` et la revalidation AVD, sous réserve de la confirmation delta ;
+`GO_PRODUCT_INSTALL` et suivants NO-GO. Les corrections P2 et le P1 V4 sont
+traitées dans la lignée `fix/v7-07-v4-quarantine` et une confirmation delta est
+demandée à la même session.
 
 ## 6. Règles de preuve
 
@@ -181,7 +193,7 @@ delta est demandée à la même session.
 | `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | rôle HOME posé/restauré sur AVD ; Settings à rejouer sur Pixel |
 | `GO_LIVE_OPENCLAW_CONFIG` | **NO-GO** | plugin natif concurrent, `profile=full`, modèle non qualifié |
 | `GO_LIVE_SECURITY` | **NO-GO / BLOCKED** | transport distant indisponible ; identités de test actives ; bearer Android partagé |
-| `GO_PRODUCT_APK_CANDIDATE` | **PENDING** | build GO, revue indépendante et décision de risque P1 en attente |
+| `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS (delta review pending)** | APK final `c7b0f71f…`, JVM 922/922, provenance `b9f17f4` propre, AVD final PASS ; Pixel/Keystore/restauration produit NOT_RUN |
 | `GO_PRODUCT_INSTALL` | **NO-GO** | aucune autorisation, backup/restore non démontré |
 | `GO_PRODUCT_LOCAL_SMOKE` | **NO-GO / NOT_RUN** | produit non installé/testé |
 | `GO_PRODUCT_REMOTE_CHAT` | **NO-GO / NOT_RUN** | produit non appairé ; transport arrêté |

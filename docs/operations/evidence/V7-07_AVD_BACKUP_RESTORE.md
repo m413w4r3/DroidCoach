@@ -195,3 +195,34 @@ la référence.
   Settings du Pixel.
 - Aucun chat distant, aucune proposition A0, aucun ACK Core n'a été exécuté.
 - Aucun test de batterie, de veille longue ou de reconnexion réseau réelle.
+
+## 12. Revalidation finale après correctif V4 (2026-11-02)
+
+Un second AVD API 35 jetable a été créé pour revalider le candidat final
+reconstruit après le correctif V4. Aucune donnée personnelle, aucun appareil
+physique.
+
+- APK historique installé : `post-install-base.apk`, hash `0d0ce524…`.
+- APK final : `c7b0f71f43680f4bb45d8c9e6b808713ea09ff5f826fd79db31acce8ff4355a0`,
+  source `b9f17f4`, `worktree_clean=true`, certificat `da301466…eeee`.
+- Sauvegarde de l'état historique (`session-01`) : archive
+  `30b3f0453b9da1f4d0c56135d77d084de31429965bf9a608b9c185dabdfc8da6`,
+  10 fichiers.
+- Prise en charge par l'outil : `PREFLIGHT_OK`, `BACKUP_OK`, `VERIFY_OK`,
+  refus cross-serial couvert par les tests hors ligne.
+- Mise à jour in-place `adb install -r` du candidat final : **Success**,
+  `versionCode=1`, `versionName=0.1.0`, hashes du plan et du marqueur
+  inchangés (`ad43e0e8…`, `a80dec73…`), application COLD et UI rendue.
+- Sauvegarde du candidat (`session-02`) : archive
+  `d3d9fb91fd228ef9df2e789c2fb29fede8ab67feaafa237356513e068465af04`,
+  10 fichiers, `VERIFY_OK`.
+- Altération du marqueur (`e3ea5d35…`), puis restauration de `session-01` :
+  `RESTORE_OK`, marqueur revenu à `a80dec73…`, plan à `ad43e0e8…`, application
+  relancée.
+- HOME : `dev.atlas.coach` titulaire, `LauncherActivity` affichée (« ATLAS »,
+  « Pause »), launcher Nexus restauré et vérifié.
+- Rollback APK vers l'historique : **Success**, données inchangées, application
+  relancée.
+- Keystore/tokens : **NOT_RUN** ; Pixel API 37 : **NOT_RUN**.
+- Nettoyage : paquet désinstallé, émulateur arrêté, AVD et sauvegardes
+  synthétiques supprimés après conservation des hashes.
