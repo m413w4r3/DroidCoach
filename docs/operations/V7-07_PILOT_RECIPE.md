@@ -2,8 +2,10 @@
 
 **Date :** 2026-11-01
 **BASE_SHA :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
-**Statut :** recette préparée, **non exécutée**. Aucune installation produit,
-aucun appairage, aucune proposition réelle, aucune modification live.
+**Statut :** recette préparée. **Exécution 2026-11-02 :** installation produit
+et smoke local ciblé PASS ; scope D **BLOCKED** par le DNS/TLS public du
+Funnel ; aucun chat/proposition produit distant, aucune période quotidienne.
+Détail : `V7-07_PHYSICAL_EXECUTION.md`.
 
 ## 1. Principe
 

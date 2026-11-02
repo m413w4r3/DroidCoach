@@ -12,11 +12,11 @@ merge distant).
 **Environnement cible de clôture :** Pixel physique Android 17 / API 37 ; aucun
 appareil connecté au lancement (`adb devices` vide).
 
-**Statut global :** `PRÉPARATION AVANCÉE — PRÊTE POUR DEMANDE D'AUTORISATION
-CIBLÉE`. Aucune installation produit, aucune modification live, aucun ADB sur le
-Pixel, aucune révocation, aucune rotation de secret. Les gates de données, de
-configuration live et de pilote restent ouverts tant que les preuves
-correspondantes ne sont pas exécutées.
+**Statut global :** `A+B+C EXÉCUTÉS SUR PIXEL PHYSIQUE ; D BLOQUÉ TRANSPORT
+PUBLIC ; E NON AUTORISÉ`. L'application `dev.atlas.coach` a été mise à jour
+in-place après sauvegarde vérifiée ; le smoke local ciblé est PASS. Le DNS/TLS
+public du Funnel est indisponible, donc aucun chat/proposition produit distant
+n'a été exécuté. Aucun push, PR ou merge distant.
 
 ## 1. Contraintes d'exécution
 
@@ -67,7 +67,7 @@ backup (`4046f1a`), le parseur delta UUID (`cc47e5c`) et le correctif V4
 est `AndroidSyncStorage.kt` (quarantaine V4) ; les tests, scripts et documents
 n'affectent pas l'APK. Le candidat final est reconstruit depuis `b9f17f4`.
 
-## 3. Faits live vérifiés par le parent (lecture seule)
+## 3. Faits live initiaux vérifiés par le parent (lecture seule, 2026-11-01)
 
 Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
 
@@ -104,6 +104,28 @@ Aucune écriture, aucun redémarrage, aucun ADB, aucun `docker compose`.
 
 Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 
+## 3ter. Exécution physique autorisée A+B+C, puis blocage D (2026-11-02)
+
+Pixel 9 Pro XL connecté en USB, Android 17 / API 37.1, serial hash
+`f2e9258b…`, un seul opérateur ADB.
+
+| Étape | Résultat |
+|---|---|
+| A — sauvegarde live | **PASS** — identities/devices/secrets/DB/consents vérifiés, `SHA256SUMS` OK |
+| A — révocation | **PASS** — `r3c-pixel-final` révoquée ; `pixel-v7` préservée car utilisée par l'app produit ; aucune autre identité modifiée |
+| A — bearer/consents | **NON MODIFIÉS** — rotation refusée ; 2 anciens `GRANTED v2` conservés comme historique, non réutilisés |
+| B — Gateway | **PASS** — `profile=minimal`, plugin natif désactivé, `allow` supprimé, deny étendu ; Gateway redémarré sain |
+| B — outils effectifs | **PASS** — 66/66 outils natifs exclus, aucun `atlas_*` natif |
+| B — modèle réel | **PASS** — `gpt-6-luna`/`openai`, six outils, 3 appels provider, une proposition A0 à 10:10, `NONE_AT_CORE`, rejeu sans double effet |
+| C — gates | **PASS** — identité/signature/version/permissions/HOME, backup réel `5969966b…` (17 fichiers, `VERIFY_OK`), APK précédent `0d0ce524…` |
+| C — installation | **PASS** — `adb install -r` `c7b0f71f…`, données clés identiques, signature/HOME/permissions inchangés |
+| C — smoke local | **PASS ciblé** — COLD, HOME, apps, Plan, Focus, Coach, hors ligne, pause d'urgence, aucun crash |
+| D — transport public | **BLOCKED** — DNS `NXDOMAIN` (1.1.1.1, 8.8.8.8, Pixel), TLS Funnel en échec ; aucun `adb reverse` |
+| D — parcours produit | **NOT_RUN** — aucun réappairage, consentement, chat, proposition, APPLY/REJECT/ACK |
+| Nettoyage D | proxy/connecteur arrêtés ; identité D créée puis révoquée ; 1 seule identité active (`pixel-v7`) |
+
+Preuve détaillée : `V7-07_PHYSICAL_EXECUTION.md`.
+
 ## 4. Tickets
 
 | TASK_ID | Objectif | Type | Session Paseo | Worktree | Statut |
@@ -118,6 +140,8 @@ Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 | V7-07-BACKUP-TOOL | Outillage backup/restore sûr + tests hors ligne | implémentation | `20ecbdf6-43be-44c2-8091-1f67df30922c` | `/tmp/atlas-v7-07-backup-tool` | **ACCEPTED (outil)** — commits `2517097`, `30f1d63`, `2d49705`, `acd765b` ; 18 tests hors ligne PASS ; refus cross-serial |
 | V7-07-B1-V4-QUARANTINE | Quarantaine fail-closed de l'état V4 invalide | implémentation | `c6cf7e09-f832-4769-a488-efb298f6f7ac` | `/tmp/atlas-v7-07-v4-quarantine` | **ACCEPTED (code)** — `dd343c2`, rouge→vert, JVM 920/920, lint 0 erreur, assemble PASS ; intégré `b9f17f4` |
 | V7-07-AVD-RESTORE | Essai AVD jetable : backup, restore, update in-place, HOME | exécution parent | parent (unique opérateur ADB) | AVD API 35 jetable | **PASS (AVD API 35, synthétique)** — backup/restore/verify, HOME, update et rollback ; Keystore NOT_RUN ; Pixel NOT_RUN |
+| V7-07-PHYSICAL-ABC | Scopes A+B+C sur Pixel réel | exécution parent | parent (unique opérateur ADB) | Pixel 9 Pro XL API 37.1 | **PASS avec limites** — révocation ciblée, Gateway minimal + modèle réel A0, backup réel, install in-place, smoke local ; détails `V7-07_PHYSICAL_EXECUTION.md` |
+| V7-07-PHYSICAL-D | Appairage et recette distante | exécution parent | parent | Pixel réel + relay | **BLOCKED** — DNS public `NXDOMAIN`, TLS Funnel en échec ; proxy/connecteur arrêtés, aucun chat/proposition produit |
 | V7-07-REVIEW | Revue indépendante sécurité/perte de données | revue RO | `ed7f0c88-9243-474a-8083-12478df0eb21` | `/tmp/atlas-v7-07-review-ro` | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; 5 P1, 5 P2 ; corrections appliquées |
 | V7-07-REVIEW-DELTA | Confirmation delta du SHA final | revue RO | même session `ed7f0c88…` | `0203257` → `cd45015` | **ACCEPTED** — P1 provenance fermé ; P2 HEAD documentaire qualifié d'état intermédiaire ; aucun P0/P1/P2 ouvert ; aucun ADB/live |
 
@@ -139,6 +163,10 @@ Ce recontrôle confirme que la préparation n'a modifié aucune ressource live.
 | 2026-11-02 | `30d078f8-bc51-437a-8aa4-80d1bfcd51f9` | Build final propre | codex / `gpt-6-luna` / `xhigh` | **ACCEPTED (build)** — APK `c7b0f71f…`, test `36adef05…`, JVM 922/922, lint 0 erreur, provenance `b9f17f4`/`worktree_clean=true` |
 | 2026-11-02 | parent | AVD final après V4 | ADB isolé `5038`, AVD API 35 jetable | **PASS (synthétique)** — update final, backup/verify `d3d9fb91…`, restauration `30b3f045…`, HOME, rollback ; Keystore/Pixel NOT_RUN |
 | 2026-11-02 | parent | Suite JVM intermédiaire `34c949d` | JVM 915/915 | **PASS (superseded par le build final 922/922)** — 120 fichiers, 0 échec/erreur/ignoré |
+| 2026-11-02 | parent (ADB unique) | Scope A Pixel | Pixel 9 Pro XL API 37.1 | **PASS avec limites** — backup live, `r3c-pixel-final` révoquée, `pixel-v7` préservée, bearer non tourné |
+| 2026-11-02 | parent | Scope B Gateway/Core | Gateway live + harnais Core isolé | **PASS** — config minimale, 66/66 outils natifs exclus, appel modèle réel `gpt-6-luna`, proposition A0 sans double effet |
+| 2026-11-02 | parent (ADB unique) | Scope C Pixel | Pixel 9 Pro XL API 37.1 | **PASS avec limites** — backup réel `5969966b…`, install `c7b0f71f…`, données/signature/HOME/permissions conservés, smoke local ciblé |
+| 2026-11-02 | parent | Scope D transport | Funnel/Relay | **BLOCKED** — DNS `NXDOMAIN`, TLS en échec ; proxy/connecteur arrêtés, aucun `adb reverse` |
 
 ## 5bis. Revue indépendante
 
@@ -162,7 +190,8 @@ P1 confirmés :
 P2 : statut APK périmé, registre non réconcilié, procédure API 37/API 35
 ambiguë, serials d'émulateur littéraux, cas UUID invalide non couvert.
 
-Recommandations : `GO_SOURCE_AND_CI` **GO_WITH_LIMITATIONS** pour la base
+Recommandations initiales de la revue (avant exécution A+B+C) :
+`GO_SOURCE_AND_CI` **GO_WITH_LIMITATIONS** pour la base
 `32e7c70` (CI `41350216879` verte) et le SHA final `b9f17f4` (JVM/lint/build
 locaux, sans run CI car non poussé) ; `GO_DATA_BACKUP`/`RESTORE`/
 `HOME_ROLLBACK` GO limités à l'AVD API 35 synthétique ; `GO_LIVE_*` NO-GO ;
@@ -199,18 +228,18 @@ fichier modifié, aucun ADB/Docker/live.
 | Verdict | État | Portée |
 |---|---|---|
 | `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** | CI `41350216879` `success` sur la base `32e7c70` ; le SHA final `b9f17f4` n'a pas de run CI car il n'est pas poussé ; JVM **922/922**, lint 0 erreur, build PASS localement ; diff produit vs base limité au correctif V4 `dd343c2` |
-| `GO_DATA_BACKUP` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | outil et archive validés sur AVD ; aucune sauvegarde du produit réel |
-| `GO_DATA_RESTORE` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | restauration vérifiée sur AVD ; produit réel non restauré |
-| `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (AVD API 35, synthétique) / NOT_RUN Pixel** | rôle HOME posé/restauré sur AVD ; Settings à rejouer sur Pixel |
-| `GO_LIVE_OPENCLAW_CONFIG` | **NO-GO** | plugin natif concurrent, `profile=full`, modèle non qualifié |
-| `GO_LIVE_SECURITY` | **NO-GO / BLOCKED** | transport distant indisponible ; identités de test actives ; bearer Android partagé |
-| `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS (delta ACCEPTED)** | APK final `c7b0f71f…`, JVM 922/922, provenance `b9f17f4` propre, AVD final PASS, revue delta `ACCEPTED` ; Pixel/Keystore/restauration produit NOT_RUN |
-| `GO_PRODUCT_INSTALL` | **NO-GO** | aucune autorisation, backup/restore non démontré |
-| `GO_PRODUCT_LOCAL_SMOKE` | **NO-GO / NOT_RUN** | produit non installé/testé |
-| `GO_PRODUCT_REMOTE_CHAT` | **NO-GO / NOT_RUN** | produit non appairé ; transport arrêté |
-| `GO_PRODUCT_PLAN_REVISION` | **NO-GO / NOT_RUN** | produit non testé |
-| `GO_PRODUCT_REMOTE` | **NO-GO** | aucun parcours produit |
-| `GO_DAILY_PILOT` | **NO-GO** | gate de données et de configuration non franchi |
+| `GO_DATA_BACKUP` | **GO_WITH_LIMITATIONS (backup réel Pixel PASS / restore in-situ NOT_RUN)** | archive réelle `5969966b…`, 17 fichiers, `VERIFY_OK`, extraction 17/17 hashes ; Keystore non exportable |
+| `GO_DATA_RESTORE` | **GO_WITH_LIMITATIONS (outil AVD + archive réelle vérifiée / in-situ NOT_RUN)** | restauration validée sur AVD synthétique et archive réelle extraite ; pas de réinjection sur les données personnelles |
+| `GO_HOME_ROLLBACK` | **GO_WITH_LIMITATIONS (Pixel HOME conservé / rollback APK AVD)** | HOME `dev.atlas.coach` conservé après install ; APK précédent `0d0ce524…` conservé ; rollback testé sur AVD |
+| `GO_LIVE_OPENCLAW_CONFIG` | **GO_WITH_LIMITATIONS (B PASS / transport produit BLOCKED)** | `profile=minimal`, plugin natif désactivé, 66/66 outils exclus, appel modèle réel `gpt-6-luna` et A0 sans double effet |
+| `GO_LIVE_SECURITY` | **GO_WITH_LIMITATIONS / P1 bearer** | `r3c-pixel-final` révoquée, `pixel-v7` préservée, aucune autre identité ; rotation bearer refusée, séparation Core incomplète |
+| `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS (delta ACCEPTED, installé)** | APK `c7b0f71f…`, JVM 922/922, provenance `b9f17f4`, revue `ACCEPTED` ; installé in-place sur Pixel, données conservées |
+| `GO_PRODUCT_INSTALL` | **GO_WITH_LIMITATIONS** | installation réelle PASS ; restauration in-situ/Keystore non testés |
+| `GO_PRODUCT_LOCAL_SMOKE` | **GO_WITH_LIMITATIONS** | smoke ciblé Pixel PASS (HOME, apps, Plan, Focus, Coach, hors ligne, pause) ; smoke complet 16 points non exécuté |
+| `GO_PRODUCT_REMOTE_CHAT` | **BLOCKED** | DNS public `NXDOMAIN`, TLS Funnel en échec ; aucun chat produit réel |
+| `GO_PRODUCT_PLAN_REVISION` | **BLOCKED** | aucun APPLY/REJECT/ACK produit distant |
+| `GO_PRODUCT_REMOTE` | **NO-GO / BLOCKED** | aucun parcours produit distant |
+| `GO_DAILY_PILOT` | **NO-GO** | D bloqué, E non autorisé |
 
 Ces verdicts seront mis à jour uniquement sur preuve exécutée, jamais par
 assimilation.

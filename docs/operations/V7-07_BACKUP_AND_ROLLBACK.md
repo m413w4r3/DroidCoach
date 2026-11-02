@@ -248,7 +248,7 @@ synthétiques, puis nettoyé. Preuve détaillée :
 | Update in-place historique → candidat | **PASS** — installation `-r`, hashes conservés, app COLD rendue |
 | Rollback APK candidat → historique | **PASS** — données conservées, app rendue |
 | Keystore/tokens | **NOT_RUN** — aucun token configuré |
-| Pixel physique API 37 | **NOT_RUN / BLOCKED_DEVICE_ABSENT** |
+| Pixel physique API 37 | **PASS backup/install (section 7bis)** ; restauration in-situ **NOT_RUN** |
 
 **Revalidation finale après correctif V4 (2026-11-02) :** AVD API 35 jetable,
 candidat `c7b0f71f…` (source `b9f17f4`). Update in-place **PASS** (données
@@ -256,6 +256,30 @@ conservées), backup candidat `d3d9fb91…` **PASS**, restauration de l'archive
 historique `30b3f045…` **PASS**, HOME et rollback **PASS**. Keystore/tokens et
 Pixel API 37 restent `NOT_RUN`. L'outil refuse désormais une archive dont le
 hash de serial diffère de l'appareil cible (18 tests hors ligne).
+
+### 7bis. Sauvegarde et mise à jour réelles du Pixel (2026-11-02)
+
+Exécution sur le Pixel 9 Pro XL Android 17/API 37.1, serial hash
+`f2e9258b…` :
+
+| Oracle | Résultat |
+|---|---|
+| Préflight Pixel | **PASS** — paquet/version/certificat, `run-as`, espace, HOME |
+| APK précédent conservé | **PASS** — hash `0d0ce524…` |
+| Sauvegarde app-only réelle | **PASS** — archive `5969966b…`, 590 848 octets, 17 fichiers |
+| `verify` | **PASS** — 17 hashes de manifeste, aucun cache |
+| Extraction et contrôle | **PASS** — 17/17 hashes, XML valides, plans v3/v4, WorkManager `integrity_check=ok` |
+| Keystore | **NON EXPORTÉ** — conservé par mise à jour in-place, perdu en cas de désinstallation |
+| Restauration in-situ | **NOT_RUN** — volontairement non exécutée sur les données réelles |
+| Mise à jour in-place | **PASS** — `adb install -r` candidat `c7b0f71f…`, données clés inchangées |
+| Rollback APK | **PASS (AVD)** ; APK précédent conservé pour le Pixel |
+| HOME | **PASS** — rôle et `LauncherActivity` inchangés |
+
+L'archive réelle et son manifeste restent privés, sous
+`~/.local/state/atlas-v7-07/pixel-preupdate-20261102T084646Z/appdata-backup`,
+mode `0700`/`0600`. Aucun contenu personnel n'est publié. La restauration réelle
+n'a pas été exécutée : l'outil a été validé sur AVD synthétique et l'archive
+réelle a été extraite et vérifiée sans réinjection.
 
 ### 8.1 Préparation
 

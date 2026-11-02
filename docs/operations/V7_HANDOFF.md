@@ -7,9 +7,11 @@ Aucun push, PR ou merge distant effectué.
 
 ## V7-07 — Préproduction et pilote quotidien (2026-11-01/02)
 
-**Statut global : PRÉPARATION AVANCÉE — aucun `GO_PRODUCT_INSTALL`, aucun
-`GO_PRODUCT_REMOTE`, aucun `GO_DAILY_PILOT`. Le produit physique n'a pas été
-touché.**
+**Statut global : A+B+C EXÉCUTÉS SUR LE PIXEL PHYSIQUE ; D BLOQUÉ PAR LE
+TRANSPORT PUBLIC ; E NON AUTORISÉ.** `GO_PRODUCT_INSTALL` et
+`GO_PRODUCT_LOCAL_SMOKE` sont **GO_WITH_LIMITATIONS** ; le chat distant, la
+proposition/APPLY/REJECT/ACK et le parcours produit sont **BLOCKED** par le
+DNS/TLS public du Funnel. Détail : `V7-07_PHYSICAL_EXECUTION.md`.
 
 - Branche locale `feat/atlas-v7-07-preproduction`, base
   `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d` (= `origin/main`, CI `41350216879`
@@ -53,9 +55,28 @@ touché.**
   `c7b0f71f43680f4bb45d8c9e6b808713ea09ff5f826fd79db31acce8ff4355a0`, test
   `36adef05…`, signature `da301466…eeee`, permissions identiques à
   l'historique, provenance `worktree_clean=true`. Conservé en privé sous
-  `~/.local/state/atlas-v7-07/candidate-final/`. Aucune installation sur le
-  Pixel. Le premier rebuild `dba3509…` a été rejeté (`worktree_clean=false`) ;
-  seul `c7b0f71f…` est le candidat final.
+  `~/.local/state/atlas-v7-07/candidate-final/`. Le premier rebuild `dba3509…`
+  a été rejeté (`worktree_clean=false`) ; seul `c7b0f71f…` est le candidat
+  final.
+- **Exécution physique 2026-11-02** :
+  - **A** : sauvegarde privée identities/secrets/DB/consents vérifiée ;
+    `r3c-pixel-final` révoquée, `pixel-v7` préservée car identité de
+    l'application produit ; rotation bearer non exécutée ; 1 seule identité
+    active en fin de scope.
+  - **B** : `profile=minimal`, plugin natif `atlas_core_tools` désactivé,
+    `allow` supprimé, deny étendu ; Gateway redémarré ; 66/66 outils natifs
+    exclus ; appel modèle réel `gpt-6-luna`/`openai` avec les six outils,
+    une proposition A0 à 10:10, `NONE_AT_CORE`, rejeu sans double effet.
+  - **C** : sauvegarde réelle `5969966b…` (17 fichiers, `VERIFY_OK`), APK
+    précédent `0d0ce524…` conservé, `adb install -r` **Success**, données
+    clés inchangées, signature/permissions/HOME inchangés ; smoke local
+    HOME/Plan/Focus/Coach/apps/hors ligne/pause **PASS**.
+  - **D** : **BLOCKED** — `all.taildc7886.ts.net` est `NXDOMAIN` (1.1.1.1,
+    8.8.8.8 et Pixel) et la terminaison TLS Funnel échoue ; proxy/connecteur
+    testés puis arrêtés ; aucun `adb reverse`, aucun chat/proposition produit.
+- **Prochaine action :** autorisation distincte pour réparer le transport
+  public Tailscale (DNS/certificat Funnel), puis reprise de D. E reste non
+  autorisé. Voir `V7-07_PHYSICAL_EXECUTION.md` et `V7-07_PILOT_RECIPE.md` §7.
 - **P2 parseur F1** : commits test-only `fae8caa` + `5412050` sur
   `test/v7-07-parser-p2`, ciblé **8/8**, suite **917/917** avant V4, aucun code
   produit ni contrat modifié.
@@ -63,12 +84,13 @@ touché.**
   `ed7f0c88…`, provider `codex`, modèle `gpt-6-luna`, effort effectif
   `xhigh`, statut Paseo vérifié) — P1 provenance fermé, P2 HEAD documentaire
   qualifié d'état intermédiaire, aucun P0/P1/P2 ouvert, aucun ADB/live.
-- **Prochaine action :** demande d'autorisation ciblée A–E. Aucun scope n'est
-  exécuté sans accord explicite ; voir `V7-07_PILOT_RECIPE.md` §7. Les
-  documents produits sont `V7-07_READINESS_AUDIT.md`,
-  `V7-07_BACKUP_AND_ROLLBACK.md`, `V7-07_LIVE_CONFIG_PLAN.md`,
-  `V7-07_PRODUCT_APK_CANDIDATE.md`, `V7-07_PILOT_RECIPE.md`,
-  `REGISTRY_V7_07.md`.
+- **Prochaine action :** autorisation distincte pour réparer le transport
+  public Tailscale (DNS/certificat Funnel), puis reprise de D. Aucun scope E
+  n'est autorisé ; voir `V7-07_PHYSICAL_EXECUTION.md` et
+  `V7-07_PILOT_RECIPE.md` §7. Les documents produits sont
+  `V7-07_READINESS_AUDIT.md`, `V7-07_BACKUP_AND_ROLLBACK.md`,
+  `V7-07_LIVE_CONFIG_PLAN.md`, `V7-07_PRODUCT_APK_CANDIDATE.md`,
+  `V7-07_PILOT_RECIPE.md`, `REGISTRY_V7_07.md`.
 
 ## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
 

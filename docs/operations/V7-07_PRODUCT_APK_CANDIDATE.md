@@ -4,8 +4,10 @@
 **BASE_SHA mission :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
 **Build final :** `b9f17f4fb1da930eeabfcb85cffd58c3929acd35` (correctif V4
 `dd343c2` inclus)
-**Statut :** **CANDIDAT FINAL CONSTRUIT / NON INSTALLÉ SUR LE PIXEL**. Ce
-document prépare un candidat ; il ne vaut pas autorisation d'installation.
+**Statut :** **INSTALLÉ IN-PLACE SUR LE PIXEL LE 2026-11-02 / SMOKE LOCAL
+CIBLÉ PASS / PARCOURS DISTANT BLOQUÉ**. L'installation a été exécutée après
+sauvegarde réelle vérifiée ; la recette distante D est bloquée par le transport
+public. Détail : `V7-07_PHYSICAL_EXECUTION.md`.
 
 ## 1. Identité vérifiée
 
@@ -113,13 +115,16 @@ V4 inclus) :
 | `adb install -r` déjà réussi sur ce paquet | preuve V7_INTEGRATION | **PROVEN (historique)** |
 | Update in-place final `c7b0f71f…` sur APK historique | AVD API 35 synthétique | **PASS** — données conservées, app COLD, UI rendue |
 | Restauration app-only après update | AVD API 35 synthétique | **PASS** — outil final, archive vérifiée |
-| Conservation réelle des données sur le Pixel | état actuel inconnu | **NOT_RUN / BLOCKED_DEVICE_ABSENT** |
+| Conservation réelle des données sur le Pixel | hashes avant/après | **PASS (2026-11-02)** — état local, V4 sync, plans et WorkManager identiques |
 | Rôle HOME actuel | inconnu | **NOT_RUN** |
 | Permissions actuelles | inconnues | **NOT_RUN** |
 | Migration état local/plans | code compatible | **PROVEN (statique)** |
 | Rollback vers l'APK précédent | même signature/versionCode | **PASS (AVD API 35 synthétique)** ; Pixel API 37 NOT_RUN |
 
-## 5. Préconditions d'installation (non exécutées)
+## 5. Préconditions d'installation
+
+Toutes les conditions ci-dessous ont été vérifiées avant l'installation du
+2026-11-02 ; la restauration in-situ du produit réel n'a pas été exécutée.
 
 1. Autorisation ciblée du propriétaire pour le scope « APK produit ».
 2. Appareil Pixel connecté et identifié sans ambiguïté (un seul opérateur ADB).
@@ -136,13 +141,14 @@ V4 inclus) :
 
 ## 6. Ce que ce candidat ne prouve pas
 
-- Il ne prouve pas que l'application produit actuellement installée se met à
-  jour sans perte.
-- Il ne prouve pas le rôle HOME, les permissions, le calendrier ou les alarmes.
-- Il ne prouve pas le chat distant, la proposition ou l'ACK sur le produit.
+- Il ne prouve pas la restauration in-situ de l'archive réelle, ni la
+  conservation des tokens Keystore après désinstallation/réinstallation.
+- Il ne prouve pas le rôle HOME après un changement de launcher, ni les
+  permissions après une révocation.
+- Il ne prouve pas le chat distant, la proposition ou l'ACK sur le produit :
+  le transport public est bloqué.
 - Il ne prouve pas la fiabilité quotidienne.
-- Il ne vaut ni `GO_PRODUCT_INSTALL`, ni `GO_PRODUCT_REMOTE`, ni
-  `GO_DAILY_PILOT`.
+- Il ne vaut ni `GO_PRODUCT_REMOTE`, ni `GO_DAILY_PILOT`.
 
 ## 7. Verdict
 
@@ -158,6 +164,7 @@ confirmation delta de la revue indépendante est **ACCEPTED** sur `cd45015`
 (P1 provenance fermé, P2 documentaire corrigé, aucun P0/P1/P2 ouvert). Ces
 limites sont des conditions d'installation, pas des défauts cachés.
 
-`GO_PRODUCT_INSTALL` : **NO-GO** tant que la sauvegarde/restauration du produit
-réel n'est pas exécutée, que le Pixel n'est pas connecté/observé et que
-l'autorisation ciblée n'est pas accordée.
+`GO_PRODUCT_INSTALL` : **GO_WITH_LIMITATIONS** — installation in-place réelle
+PASS le 2026-11-02, données conservées, signature/permissions/HOME inchangés ;
+restauration in-situ et Keystore restent des limites documentées. Le parcours
+distant est **BLOCKED** par le transport public.

@@ -31,8 +31,9 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
   synthétiques, refus cross-serial inclus.
 - Candidat produit final : build `b9f17f4`, JVM **922/922**, lint 0 erreur, APK
   `c7b0f71f…`, test `36adef05…`, provenance `worktree_clean=true`, signature
-  `da301466…eeee`, permissions identiques à l'historique. Aucune installation
-  produit.
+  `da301466…eeee`, permissions identiques à l'historique. **Installé in-place
+  sur le Pixel le 2026-11-02**, après backup réel `5969966b…` et conservation
+  de l'APK précédent `0d0ce524…`.
 - AVD API 35 : backup/restore/verify **PASS**, HOME **PASS**, hors ligne
   **PASS**, update in-place **PASS**, rollback APK **PASS**. Keystore/tokens
   **NOT_RUN** ; Pixel API 37 **NOT_RUN**.
@@ -48,20 +49,27 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
   restauration, HOME et rollback **PASS** ; Keystore/Pixel **NOT_RUN**.
 - P2 parseur F1 : commits test-only `fae8caa` + `5412050` (UUID invalide),
   ciblé **8/8**, suite **917/917** avant V4.
-- Verdicts : `GO_SOURCE_AND_CI` **GO** ; `GO_DATA_BACKUP`,
-  `GO_DATA_RESTORE`, `GO_HOME_ROLLBACK` **GO_WITH_LIMITATIONS (AVD API 35
-  synthétique)** mais **NOT_RUN Pixel** ; `GO_LIVE_OPENCLAW_CONFIG` **NO-GO**
-  (plugin natif concurrent, `profile=full`, modèle non qualifié) ;
-  `GO_LIVE_SECURITY` **NO-GO/BLOCKED** (transport arrêté, identités de test,
-  bearer partagé) ; `GO_PRODUCT_APK_CANDIDATE` **GO_WITH_LIMITATIONS** (APK
-  final `c7b0f71f…`, revue initiale `ACCEPTED_WITH_LIMITATIONS`, confirmation
-  delta en attente) ; `GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE`,
-  `GO_DAILY_PILOT` **NO-GO**.
+- Exécution physique A+B+C (2026-11-02) : `r3c-pixel-final` révoquée,
+  `pixel-v7` préservée ; Gateway `profile=minimal`, plugin natif désactivé,
+  66/66 outils natifs exclus, appel modèle réel `gpt-6-luna` et proposition A0
+  sans double effet ; installation Pixel et smoke local ciblé **PASS**.
+  Preuve : `V7-07_PHYSICAL_EXECUTION.md`.
+- Scope D **BLOCKED** : `all.taildc7886.ts.net` est `NXDOMAIN` (1.1.1.1,
+  8.8.8.8 et Pixel) et la terminaison TLS Funnel échoue ; proxy/connecteur
+  arrêtés, aucun `adb reverse`, aucun chat/proposition produit.
+- Verdicts : `GO_SOURCE_AND_CI` **GO_WITH_LIMITATIONS** ;
+  `GO_DATA_BACKUP`/`RESTORE`/`HOME_ROLLBACK` **GO_WITH_LIMITATIONS** (backup
+  réel Pixel, restauration in-situ non exécutée) ; `GO_LIVE_OPENCLAW_CONFIG`
+  **GO_WITH_LIMITATIONS** (B qualifié, transport produit bloqué) ;
+  `GO_LIVE_SECURITY` **GO_WITH_LIMITATIONS / P1 bearer** ;
+  `GO_PRODUCT_APK_CANDIDATE`, `GO_PRODUCT_INSTALL` et
+  `GO_PRODUCT_LOCAL_SMOKE` **GO_WITH_LIMITATIONS** ;
+  `GO_PRODUCT_REMOTE_CHAT`, `GO_PRODUCT_PLAN_REVISION` et
+  `GO_PRODUCT_REMOTE` **BLOCKED** ; `GO_DAILY_PILOT` **NO-GO**.
 - P1 `atlas_core_v4_sync` **corrigé** (`dd343c2`, quarantaine fail-closed,
-  JVM 920/920, intégré `b9f17f4`). P1 restants : restauration produit réel non
-  observée ; configuration Gateway non qualifiée ; transport distant
-  indisponible ; identités/bearer non séparés ; training plan incohérent sur
-  projection non vide. Aucun P0.
+  JVM 920/920, intégré `b9f17f4`). P1 restants : restauration in-situ non
+  exécutée ; transport public DNS/TLS indisponible ; bearer Android partagé
+  non tourné ; training plan incohérent sur projection non vide. Aucun P0.
 
 ## 0bis. Campagne V7-06D — fiabilité remote et révocation A4-4 (2026-11-01)
 

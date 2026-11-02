@@ -2,9 +2,10 @@
 
 **Date :** 2026-11-01
 **BASE_SHA :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
-**Statut :** plan préparé, **aucune commande live exécutée**. Toute action
-ci-dessous exige une autorisation ciblée séparée, avec sauvegarde, vérification
-et rollback.
+**Statut :** plan préparé ; **scope B exécuté le 2026-11-02** (configuration
+minimale, plugin natif désactivé, appel modèle réel PASS). Le transport public
+D est **BLOCKED** par le DNS/TLS Funnel ; aucun chat produit distant. Détail :
+`V7-07_PHYSICAL_EXECUTION.md`.
 
 ## 1. Architecture retenue
 
@@ -24,7 +25,7 @@ une proposition ou exécuter un outil hors du contrôle Core/Android.
 Le Core et le Gateway restent en loopback. Seul le proxy filtrant est publié par
 le Funnel Tailscale existant.
 
-## 2. État live constaté (lecture seule)
+## 2. État live initial (lecture seule, 2026-11-01)
 
 | Élément | Actuel | Problème |
 |---|---|---|
@@ -302,3 +303,16 @@ autorisation A et sauvegarde vérifiée.
   arrêt d'urgence.
 
 Aucune de ces autorisations n'est implicite. Le plan seul n'exécute rien.
+
+## 11. Exécution B du 2026-11-02
+
+La configuration candidate du §4 a été appliquée après sauvegarde et dry-run.
+`profile=minimal`, `allow` supprimé, deny étendu et plugin
+`atlas_core_tools` désactivé ; `openclaw-gateway.service` redémarré et sain.
+`tools.effective` exclut 66/66 outils natifs et aucun outil `atlas_*` natif
+n'est chargé. Un harnais Core isolé a réalisé un appel modèle réel
+`gpt-6-luna`/`openai` : six outils, lecture DayPlan, proposition A0 à 10:10,
+`NONE_AT_CORE`, rejeu sans double effet. D n'a pas pu utiliser ce chemin
+jusqu'au produit, le transport public Funnel étant indisponible (DNS
+`NXDOMAIN`, TLS en échec). La rotation du bearer et les consentements n'ont
+pas été modifiés. Voir `V7-07_PHYSICAL_EXECUTION.md`.

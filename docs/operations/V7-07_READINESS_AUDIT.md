@@ -17,15 +17,15 @@ observation actuelle.
 
 | Élément | Vérification | Statut | Preuve / limite |
 |---|---|---|---|
-| **1. Application produit** | Version, signature, données persistées, rôle HOME | **PROVEN_HISTORICAL / BLOCKED_DEVICE_ABSENT** | APK archivé `post-install-base.apk` : `dev.atlas.coach`, versionCode 1, versionName 0.1.0, `debuggable=true`, certificat `da301466…eeee` ; hash `0d0ce524…` ; aucune observation de l'état installé actuel, des données ou du rôle HOME |
-| **2. Code courant** | SHA, provenance, versionCode/Name | **PROVEN** | `HEAD=32e7c70`, `origin/main=32e7c70`, CI `41350216879` `success`, arbre propre ; `applicationId=dev.atlas.coach`, versionCode 1, versionName 0.1.0 ; manifeste de provenance généré au build |
-| **3. Compatibilité** | Mise à jour in-place sans perte | **PROVEN (statique) / PASS AVD API 35 / NOT_RUN Pixel API 37** | Même paquet, même certificat debug ; `adb install -r` historique et AVD PASS ; schémas lus : état local v1 strict, plans v3/v4/v5, proactif v1→v2, mandat/inbox agent v1→v2 ; données synthétiques conservées sur AVD, produit réel non observé |
-| **4. Android 17** | Launcher, Focus, notifications, permissions, Keystore | **PROVEN (code) / PASS AVD API 35 / BLOCKED_DEVICE_ABSENT (Pixel API 37)** | `LauncherActivity` HOME présent ; permissions et canaux déclarés ; deux alias Keystore non exportables ; HOME et mode hors ligne testés sur AVD API 35 ; preuves Pixel API 37.1 V7-06D existantes mais sur paquets QA, pas sur le produit |
+| **1. Application produit** | Version, signature, données persistées, rôle HOME | **PROVEN (Pixel 2026-11-02)** | Paquet réel `dev.atlas.coach`, versionCode 1, versionName 0.1.0, `debuggable=true`, certificat `da301466…eeee`, APK initial `0d0ce524…`, APK final installé `c7b0f71f…` ; rôle HOME `LauncherActivity` ; sauvegarde réelle 17 fichiers hashée et vérifiée ; données clés inchangées après mise à jour |
+| **2. Code courant** | SHA, provenance, versionCode/Name | **PROVEN** | `HEAD=32e7c70` historique, code final `b9f17f4`, CI `41350216879` `success` sur la base, JVM 922/922 et build local sur le final ; `applicationId=dev.atlas.coach`, versionCode 1, versionName 0.1.0 ; provenance `worktree_clean=true` |
+| **3. Compatibilité** | Mise à jour in-place sans perte | **PASS Pixel API 37 (2026-11-02)** | Même paquet, même certificat, même versionCode ; `adb install -r` du candidat final **Success** ; hashes état local/V4/plans/WorkManager identiques au manifeste de sauvegarde ; AVD API 35 également PASS |
+| **4. Android 17** | Launcher, Focus, notifications, permissions, Keystore | **PASS ciblé Pixel API 37 / NOT_RUN notifications-Keystore** | HOME ATLAS, lancement à froid, Plan, Focus, Coach, hors ligne et pause d'urgence testés sur Pixel 17/37.1 ; permissions runtime inchangées (calendrier/notifications/localisation refusés) ; alias Keystore non exportés et non inspectés |
 | **5. Core live** | Image, santé, SQLite, capabilities V4 | **PROVEN** | Conteneur `atlas-core-atlas-core-1`, image `00b88ef…`, `healthy`, network host, DB `/data/atlas.sqlite3` ; `/health` 200 `mode=openclaw` ; 7 capabilities `true` ; 2 consentements, 0 projection/proposition/ACK |
-| **6. Gateway live** | Modèle réel, agent Atlas, outils effectifs, restrictions | **PROVEN (statique) / NOT_RUN (effectif)** | Modèle primaire `openai/gpt-6-luna`, agent `atlas`, plugin `atlas_core_tools` → `127.0.0.1:8100`, six outils déclarés, `profile=full`, `allow=[atlas_core_tools]`, deny `exec/process/code_execution/wait/gateway/session_status/presence`, `codeMode=false` ; outils effectifs et trajectoire réelle non exécutés |
-| **7. Relay** | Connexion publique, Noise, appairage, révocation | **FAIL (disponibilité) / PROVEN (état)** | Relay `atlas-v7-relay` sain sur `127.0.0.1:4402` ; connecteur PC absent, PID obsolète, aucun listener 4400 ; Funnel `8443→4400` sans backend ; sonde TLS `/health` en échec ; 19 devices, 2 actifs |
-| **8. Sécurité** | Identités obsolètes, consentements résiduels, secrets | **PROVEN (état) / P1 (séparation)** | Tokens Android/outil/Gateway distincts ; plugin = token outil (hash identique) ; 2 devices actifs ; 2 consentements Core `GRANTED` v2 ; un seul bearer Android partagé entre devices Relay, donc pas de séparation Core par appareil |
-| **9. Exploitation** | Démarrage auto, reprise, sauvegardes, monitoring | **PARTIAL / NOT_RUN** | Core `restart: unless-stopped` ; Gateway en service utilisateur actif ; Relay conteneur actif ; connecteur non supervisé et arrêté ; pas de sauvegarde automatisée ; pas de rotation de logs observée ; reboot hôte et panne PC non testés |
+| **6. Gateway live** | Modèle réel, agent Atlas, outils effectifs, restrictions | **PASS (B, 2026-11-02)** | `profile=minimal`, plugin natif `atlas_core_tools` désactivé, `allow` supprimé, deny groupes fs/runtime/web/sessions/nodes/ui ; `tools.effective` : 66/66 outils natifs exclus, aucun `atlas_*` ; appel modèle réel `gpt-6-luna`/`openai`, six outils client, une proposition A0, aucun double effet |
+| **7. Relay** | Connexion publique, Noise, appairage, révocation | **FAIL (transport public) / PASS local** | Relay `4402` sain ; proxy `4400` et connecteur testés (`relay_connected:true`) puis arrêtés ; Funnel déclaré `8443→4400` mais DNS public `NXDOMAIN` (1.1.1.1/8.8.8.8) et TLS public en échec ; 20 devices, **1 seule active** (`pixel-v7`) |
+| **8. Sécurité** | Identités obsolètes, consentements résiduels, secrets | **PARTIAL / P1 séparation** | `r3c-pixel-final` révoquée ; `pixel-v7` préservée car identité produit actuelle ; identité D créée puis révoquée après blocage ; 2 consentements Core `GRANTED` v2 historiques, non réutilisés ; bearer Android partagé non tourné (refusé) |
+| **9. Exploitation** | Démarrage auto, reprise, sauvegardes, monitoring | **PARTIAL / NOT_RUN** | Core `restart: unless-stopped` ; Gateway service utilisateur actif ; Relay actif ; connecteur/proxy arrêtés après D ; pas de sauvegarde automatisée ; reboot hôte et panne PC non testés |
 
 Légende : `PROVEN` = établi par code, configuration ou lecture live ;
 `PROVEN_HISTORICAL` = établi sur un artefact daté, pas sur l'état actuel ;
@@ -57,7 +57,8 @@ reconstruit depuis `b9f17f4` : APK `c7b0f71f…`, JVM **922/922**, provenance
   n'a pas été exportée.
 - **Conséquence :** un APK debug construit sur cet hôte avec le même
   `applicationId` est compatible en signature pour une mise à jour in-place. La
-  compatibilité de signature est **PROVEN** ; l'installation réelle ne l'est pas.
+  compatibilité de signature et l'installation in-place réelle sont **PROVEN /
+  PASS (2026-11-02)** ; la restauration in-situ ne l'est pas.
 
 ### 2.2 Stockage local inventorié
 
@@ -236,17 +237,23 @@ Aucun P0 confirmé dans cette phase préparatoire.
    et refuse toute écriture si la quarantaine échoue ; tests JVM dédiés
    (rouge→vert). La sauvegarde préalable reste requise comme défense en
    profondeur.
-3. **Configuration Gateway non qualifiée.** Plugin natif concurrent, `profile=full`,
-   outils effectifs non lus, modèle personnel non testé sur les propositions.
-4. **Transport distant indisponible.** Connecteur arrêté, Funnel sans listener.
-5. **Identités de campagne actives et bearer partagé.** `pixel-v7` et
-   `r3c-pixel-final` ne sont pas révoqués ; le bearer Android unique ne permet
-   pas une identité Core produit distincte.
+3. **Configuration Gateway initiale non qualifiée.** Plugin natif concurrent,
+   `profile=full`, outils effectifs non lus, modèle personnel non testé sur les
+   propositions. Le scope B du 2026-11-02 a appliqué `profile=minimal`, désactivé
+   le plugin natif et qualifié un appel modèle réel `gpt-6-luna` ; le parcours
+   produit via le transport public reste à qualifier.
+4. **Transport distant indisponible.** DNS public `NXDOMAIN` et TLS Funnel en
+   échec ; proxy/connecteur arrêtés après le blocage D.
+5. **Identités de campagne et bearer partagé.** `r3c-pixel-final` est révoquée
+   et `pixel-v7` préservée car utilisée par l'app produit ; le bearer Android
+   unique ne permet pas une identité Core produit distincte. Rotation non
+   autorisée.
 6. **Training plan.** Écart de schéma relevé par A2 entre sync et résultat
    (champs `slot_id`/`routine_id`/`source`), avec un HTTP 500 historique V7-01B ;
    `atlas_get_training_plan` n'est pas qualifié sur projection non vide.
-7. **Aucune observation actuelle du produit.** Appareil absent : version,
-   données, HOME et permissions actuels sont `BLOCKED_DEVICE_ABSENT`.
+7. **Produit observé et installé, limites restantes.** Version, données, HOME
+   et permissions ont été vérifiés le 2026-11-02 ; la restauration in-situ, le
+   Keystore et le parcours distant ne sont pas prouvés.
 
 ### P2
 
@@ -263,22 +270,26 @@ Aucun P0 confirmé dans cette phase préparatoire.
 
 La préproduction est **partiellement établie** :
 
-- le code source, la CI, l'identité de paquet et la compatibilité de signature
-  sont prouvés ;
+- le code source, la CI de la base, l'identité de paquet, la compatibilité de
+  signature et le build final sont prouvés ;
 - le Core live est sain et ses capabilities V4 sont actives ;
-- la procédure backup/restore, le retour HOME et la mise à jour in-place sont
-  prouvés sur AVD API 35 avec des données synthétiques ;
-- l'observation du produit réel, la qualification Keystore, la configuration
-  Gateway effective, le transport distant et le parcours produit ne sont **pas**
-  qualifiés.
+- la configuration Gateway B est appliquée et un appel modèle réel
+  `gpt-6-luna` a produit une proposition A0 sans double effet ;
+- la sauvegarde app-only, la mise à jour in-place et le smoke local ciblé sont
+  **PASS sur le Pixel physique API 37.1** ; la restauration in-situ et le
+  Keystore restent non exécutés ;
+- le transport public Relay est **BLOCKED** : DNS public `NXDOMAIN` et TLS
+  Funnel indisponible ; le parcours produit distant et le pilote quotidien ne
+  sont pas qualifiés.
 
 Les gates `GO_DATA_BACKUP`, `GO_DATA_RESTORE` et `GO_HOME_ROLLBACK` sont
-**GO_WITH_LIMITATIONS dans le périmètre AVD API 35 synthétique** mais
-**NOT_RUN sur le Pixel physique**.
-`GO_PRODUCT_APK_CANDIDATE` est **GO_WITH_LIMITATIONS** (artefact final revu,
-AVD synthétique PASS, revue delta `ACCEPTED` ; Pixel/Keystore/restauration
-réelle NOT_RUN). `GO_LIVE_OPENCLAW_CONFIG`, `GO_LIVE_SECURITY`,
-`GO_PRODUCT_INSTALL`, `GO_PRODUCT_LOCAL_SMOKE`, `GO_PRODUCT_REMOTE_CHAT`,
-`GO_PRODUCT_PLAN_REVISION`, `GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent
-**NO-GO ou NOT_RUN** à l'issue de cet audit. Aucune installation produit n'est
-autorisée par ce document.
+**GO_WITH_LIMITATIONS** : backup réel Pixel vérifié, restauration outil validée
+sur AVD synthétique et archive réelle extraite/vérifiée, mais restauration
+in-situ non exécutée.
+`GO_PRODUCT_INSTALL` et `GO_PRODUCT_LOCAL_SMOKE` sont
+**GO_WITH_LIMITATIONS** ; `GO_PRODUCT_REMOTE_CHAT` et
+`GO_PRODUCT_PLAN_REVISION` sont **BLOCKED** par le transport public ;
+`GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent **NO-GO**. Aucun pilote
+quotidien n'est autorisé par ce document.
+
+Détail d'exécution : `V7-07_PHYSICAL_EXECUTION.md`.
