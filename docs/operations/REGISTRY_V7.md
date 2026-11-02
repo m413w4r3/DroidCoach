@@ -25,11 +25,12 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
 - Audits A1/A2/A3 lecture seule (`codex/gpt-6-luna`, `xhigh`) : données produit
   et migrations ; Gateway/plugin/outils/modèle ; procédure backup/restore et
   rollback.
-- Outil `scripts/v7-07/atlas-product-backup.sh` : commit `2d49705` (branche
-  `feat/v7-07-backup-tool`), 17 tests hors ligne ; préflight/backup/verify/
-  restore validés sur AVD API 35 avec données synthétiques.
-- Candidat produit : build `32e7c70`, JVM **912/912**, lint 0 erreur, APK
-  `d32efc76…`, test `8f6376be…`, provenance `worktree_clean=true`, signature
+- Outil `scripts/v7-07/atlas-product-backup.sh` : commits `2d49705` puis
+  `acd765b` (branche `feat/v7-07-backup-tool`), **18 tests hors ligne** ;
+  préflight/backup/verify/restore validés sur AVD API 35 avec données
+  synthétiques, refus cross-serial inclus.
+- Candidat produit final : build `b9f17f4`, JVM **922/922**, lint 0 erreur, APK
+  `c7b0f71f…`, test `36adef05…`, provenance `worktree_clean=true`, signature
   `da301466…eeee`, permissions identiques à l'historique. Aucune installation
   produit.
 - AVD API 35 : backup/restore/verify **PASS**, HOME **PASS**, hors ligne

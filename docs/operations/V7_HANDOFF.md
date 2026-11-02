@@ -13,7 +13,8 @@ touché.**
 
 - Branche locale `feat/atlas-v7-07-preproduction`, base
   `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d` (= `origin/main`, CI `41350216879`
-  `success`). Aucun push/PR/merge distant.
+  `success`). Aucun push/PR/merge distant. HEAD code produit `b9f17f4` ;
+  HEAD documentaire de campagne `1c55446`.
 - Pré-vol : Pixel non connecté (`adb devices` vide) ; Core live sain,
   `mode=openclaw`, 7 capabilities ; Gateway live actif ; Relay sain sur 4402 ;
   **connecteur PC arrêté**, Funnel `8443→4400` sans listener ; 2 devices actifs

@@ -226,3 +226,8 @@ physique.
 - Keystore/tokens : **NOT_RUN** ; Pixel API 37 : **NOT_RUN**.
 - Nettoyage : paquet désinstallé, émulateur arrêté, AVD et sauvegardes
   synthétiques supprimés après conservation des hashes.
+- **Limite de reproductibilité :** les archives synthétiques finales ont été
+  supprimées avec l'AVD après relevé des hashes. Les valeurs ci-dessus sont
+  consignées, mais ne peuvent pas être recalculées depuis un artefact conservé.
+  Une revalidation future devra conserver les archives ou rejouer intégralement
+  l'essai sur un AVD jetable.

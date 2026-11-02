@@ -35,10 +35,11 @@ Légende : `PROVEN` = établi par code, configuration ou lecture live ;
 **Note de lignée :** la base mission reste `32e7c70`. Après la revue indépendante,
 la campagne a intégré localement le correctif produit V4 `dd343c2` (quarantaine
 fail-closed) et les deltas test-only/tooling ; le HEAD de campagne est
-`b9f17f4`. Le seul changement de code produit vs `32e7c70` est
-`AndroidSyncStorage.kt` (correctif V4) ; les tests, scripts et documents
-n'affectent pas l'APK. Le candidat final doit donc être reconstruit depuis
-`b9f17f4`.
+`b9f17f4` pour le code, puis `1c55446` pour les documents. Le seul changement
+de code produit vs `32e7c70` est `AndroidSyncStorage.kt` (correctif V4) ; les
+tests, scripts et documents n'affectent pas l'APK. Le candidat final a été
+reconstruit depuis `b9f17f4` : APK `c7b0f71f…`, JVM **922/922**, provenance
+`worktree_clean=true`.
 
 ## 2. Application produit et données
 

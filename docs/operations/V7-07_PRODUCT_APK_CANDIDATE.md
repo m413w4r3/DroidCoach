@@ -1,24 +1,26 @@
 # ATLAS V7-07 — Candidat APK produit
 
-**Date :** 2026-11-01
-**BASE_SHA :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
-**Statut :** **EN COURS DE CONSTRUCTION / NON INSTALLÉ**. Ce document prépare un
-candidat ; il ne vaut pas autorisation d'installation.
+**Date :** 2026-11-02
+**BASE_SHA mission :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
+**Build final :** `b9f17f4fb1da930eeabfcb85cffd58c3929acd35` (correctif V4
+`dd343c2` inclus)
+**Statut :** **CANDIDAT FINAL CONSTRUIT / NON INSTALLÉ SUR LE PIXEL**. Ce
+document prépare un candidat ; il ne vaut pas autorisation d'installation.
 
-## 1. Identité attendue
+## 1. Identité vérifiée
 
-| Élément | Valeur attendue | Statut |
+| Élément | Valeur | Statut |
 |---|---|---|
-| `applicationId` | `dev.atlas.coach` | à vérifier sur l'APK construit |
-| `versionCode` | `1` | à vérifier |
-| `versionName` | `0.1.0` | à vérifier |
-| Variante | `debug` (pas `qa`) | à vérifier |
-| Signature | certificat debug SHA-256 `da301466…eeee` | à vérifier |
-| `minSdk` / `targetSdk` / `compileSdk` | `26` / `36` / `37.2` | à vérifier |
-| Manifeste de provenance | `source_sha=32e7c70…`, `worktree_clean=true` | à vérifier |
-| Activité HOME | `dev.atlas.coach.app.LauncherActivity` | à vérifier |
-| `allowBackup` | `false` | à vérifier |
-| `debuggable` | `true` (identique au produit installé historique) | à vérifier |
+| `applicationId` | `dev.atlas.coach` | **vérifié** |
+| `versionCode` | `1` | **vérifié** |
+| `versionName` | `0.1.0` | **vérifié** |
+| Variante | `debug` (pas `qa`) | **vérifié** |
+| Signature | certificat debug SHA-256 `da301466…eeee` | **vérifié** |
+| `minSdk` / `targetSdk` / `compileSdk` | `26` / `36` / `37.2` | **vérifié** |
+| Manifeste de provenance | `source_sha=b9f17f4…`, `worktree_clean=true` | **vérifié** |
+| Activité HOME | `dev.atlas.coach.app.LauncherActivity` | **vérifié** |
+| `allowBackup` | `false` | **vérifié** |
+| `debuggable` | `true` (identique au produit installé historique) | **vérifié** |
 
 Le candidat doit conserver `versionCode=1` pour permettre une mise à jour
 `adb install -r` sur le paquet existant et un rollback vers l'APK précédent de
@@ -30,9 +32,9 @@ Le build est exécuté hors ligne dans un worktree détaché au SHA exact, sans
 installation, sans ADB et sans réseau. Le **build final de campagne** est
 exécuté depuis `b9f17f4` (correctif V4 `dd343c2` inclus) ; les résultats de
 l'ancien build `32e7c70` (`d32efc76…`) sont conservés comme historique et sont
-**superseded** par les artefacts finaux, consignés après le build. Les lignes
-912/912 et `d32efc76…` ci-dessous décrivent l'ancien build historique
-`32e7c70` ; elles ne doivent pas être lues comme le build final `b9f17f4`.
+**superseded** par les artefacts finaux consignés ci-dessous. Le tableau
+ci-dessous décrit exclusivement le build final `b9f17f4` ; l'ancien build
+`32e7c70` n'est rappelé qu'à titre historique dans la note ci-après.
 
 | Oracle | Résultat attendu | Résultat constaté (build final `b9f17f4`) |
 |---|---|---|
@@ -78,7 +80,7 @@ V4 inclus) :
 - `LauncherActivity` avec `MAIN` + `HOME` + `DEFAULT` ; `MainActivity` pour
   `LAUNCHER` ;
 - aucun `AccessibilityService`, Device Admin/Device Owner, kiosque ou root ;
-- manifeste de provenance : `source_sha=32e7c70…`, `worktree_clean=true`,
+- manifeste de provenance : `source_sha=b9f17f4…`, `worktree_clean=true`,
   `variant=debug`, `test_application_id=dev.atlas.coach.test` ;
 - `zipalign` et `apksigner verify` PASS sur les deux APK.
 
@@ -115,7 +117,7 @@ V4 inclus) :
 | Rôle HOME actuel | inconnu | **NOT_RUN** |
 | Permissions actuelles | inconnues | **NOT_RUN** |
 | Migration état local/plans | code compatible | **PROVEN (statique)** |
-| Rollback vers l'APK précédent | même signature/versionCode | **PROVEN (statique)** ; test AVD requis |
+| Rollback vers l'APK précédent | même signature/versionCode | **PASS (AVD API 35 synthétique)** ; Pixel API 37 NOT_RUN |
 
 ## 5. Préconditions d'installation (non exécutées)
 
