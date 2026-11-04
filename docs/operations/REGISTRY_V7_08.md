@@ -29,13 +29,13 @@ Le SHA de référence documentaire `9380445` cité par la mission est un ancêtr
 | Relay | `atlas-v7-relay` actif, `127.0.0.1:4402` |
 | Proxy public `4400` | arrêté (état V7-07) |
 | Funnel Tailscale | `tcp://all.taildc7886.ts.net:8443 → 127.0.0.1:4400` |
-| Pixel ADB | `45301FDAS001QT`, Pixel 9 Pro XL, Android 17 / SDK 37.1 |
+| Pixel ADB | un seul appareil, Pixel 9 Pro XL, Android 17 / SDK 37.1 (série et empreinte non publiées) |
 | `dev.atlas.coach` | versionCode 1, versionName 0.1.0, HOME `LauncherActivity` |
 | Quota Core au démarrage | `daily_tokens=102062 / 100000`, `limited=true` |
 | Snapshot plan Core | `plan_version=4`, `consent_version=4`, observé `2026-11-04T16:22:01Z` |
 | Consentements Core | `DAY_PLAN v4 GRANTED`, `ACTIVITY_STATUS v3 REVOKED` |
 | Propositions Core | 0 |
-| Conversation locale | `agentConversationId` hash `eea09c4751a6f2fa…`, 13 messages |
+| Conversation locale | UUID rotationné, valeur et hash non publiés ; 13 messages |
 
 ## 3. Équipe Luna (Paseo)
 
@@ -81,8 +81,8 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 
 | Élément | Emplacement privé | État |
 |---|---|---|
-| Config Compose pré-déploiement | `~/.local/state/atlas-v7-08/core-backup/20261104T164105Z/` | créé, `SHA256SUMS` |
-| Base Core pré-déploiement | `…/20261104T164105Z/atlas.sqlite3.bak` | `integrity_check=ok`, 3 snapshots, 2 consentements, 0 proposition |
+| Config Compose pré-déploiement | répertoire privé hors dépôt, horodaté | créé, `SHA256SUMS` |
+| Base Core pré-déploiement | copie privée hors dépôt | `integrity_check=ok`, 3 snapshots, 2 consentements, 0 proposition |
 | Secrets Core | non copiés dans le dépôt | préservés |
 | Image Core courante | `atlas-core-atlas-core:v7-07-live` = `00b88ef90466` | tag de rollback créé avant rebuild |
 | Rollback quota | `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=true` + image `v7-07-live` | à documenter |
@@ -112,7 +112,7 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | 2026-11-04T16:41Z | Sauvegarde config Compose avant tout déploiement | réversibilité |
 | 2026-11-04T16:44Z | Pas de réinitialisation manuelle du compteur quota | preuve par tests + config, pas de contournement |
 | 2026-11-04T17:55Z | A1 accepté et cherry-pické sur `feat/atlas-v7-08-core-quota-and-a0` (`56705da`) | diff minimal, 101 ciblés + 388 suite backend PASS |
-| 2026-11-04T17:56Z | Plan synthétique déplacé à 21:00–21:45, A1 `PERSONNEL` déverrouillée, plan local v5 | activité future du jour, sauvegarde app-only `90098635…` |
+| 2026-11-04T17:56Z | Plan synthétique déplacé à 21:00–21:45, A1 `PERSONNEL` déverrouillée, plan local v5 | activité future du jour, sauvegarde app-only privée vérifiée |
 | 2026-11-04T18:02Z | `compose.openclaw.yaml` active explicitement `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=false` | environnement personnel, mesure conservée, rollback par `true` |
 
 Les mises à jour de ce registre sont append-only ; chaque verdict final doit
