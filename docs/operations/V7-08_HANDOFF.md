@@ -79,7 +79,7 @@
 
 1. Rétablir le transport :
    ```sh
-   cd /home/nill/perso/AndroCoach/atlas-preparation
+   cd <repo ATLAS>
    nohup node integrations/relay/proxy/src/server.mjs >/tmp/atlas-proxy.log 2>&1 &
    cd integrations/relay/pc
    nohup node scripts/run-cli.mjs "$HOME/.config/atlas/relay.env" start >/tmp/atlas-connector.log 2>&1 &
@@ -115,7 +115,7 @@
 
 ## 5. Commandes utiles (lecture seule)
 
-- Statut Core : `TOKEN=$(cat ~/.local/state/atlas-core/secrets/compose/atlas-core.token); curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8100/v2/agent/status`
+- Statut Core : `TOKEN=$(cat "$ATLAS_TOKEN_FILE"); curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8100/v2/agent/status` (chemin du secret privé hors dépôt)
 - Snapshot plan : requête SQL `day_plan_snapshots_v4` (voir ci-dessus).
 - Propositions/ACK : `agent_proposals_v4`, `agent_proposal_events_v4`.
 - Logs Gateway : `journalctl --user -u openclaw-gateway.service --since "10 minutes ago"`.
