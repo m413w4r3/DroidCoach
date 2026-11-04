@@ -131,7 +131,19 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | `GO_MAIN_INTEGRATION` | **GO_WITH_LIMITATIONS** — merge ff-only sous dérogation propriétaire ; A5 strict NO-GO sur le P1 bearer préexistant |
 | `GO_DAILY_PILOT` | **NO-GO** (E non autorisé, REJECT incomplet) |
 
-## 7. Journal des décisions
+## 7. Livraison Git finale
+
+| Élément | Valeur |
+|---|---|
+| Base `main` initiale | `cbdf0e2fb26190015a0d529a3ef713ed4b4379ef` |
+| Branche V7-08 finale | `f3b2a892b426a68009beee46895580d60157b079` |
+| Mode de merge | fast-forward, sans réécriture ni force-push |
+| `origin/main` après push | `f3b2a892b426a68009beee46895580d60157b079` |
+| Vérification | `main == origin/main`, arbre propre |
+| Commits V7-08 | 12 commits de `cbdf0e2` à `f3b2a89` |
+| Commit documentaire post-merge | docs-only, SHA visible dans l'historique |
+
+## 8. Journal des décisions
 
 | Date (UTC) | Décision | Motif |
 |---|---|---|
@@ -149,6 +161,7 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | 2026-11-04T19:29Z | Clôture demandée par le propriétaire ; REJECT non exécuté, handoff préparé | téléphone à restaurer |
 | 2026-11-04T19:41Z | Transport proxy/connecteur arrêté, Wi-Fi restauré, HOME ATLAS, aucune réinstallation | état final sûr |
 | 2026-11-04T19:45Z | A5 : Git/tests PASS, aucun P0/P1 nouveau, NO-GO strict à cause du P1 bearer préexistant ; merge demandé par le propriétaire | dérogation P1 consignée, risque non masqué |
+| 2026-11-04T19:50Z | Merge fast-forward `main` `cbdf0e2`→`f3b2a89` et push `origin/main` | publication ciblée, aucun force-push ; vérification `main == origin/main` |
 
 Les mises à jour de ce registre sont append-only ; chaque verdict final doit
 référencer un SHA exact et une commande reproductible.

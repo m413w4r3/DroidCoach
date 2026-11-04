@@ -210,8 +210,14 @@ préservés.
   est consignée ; aucun nouveau P1 n'est introduit par V7-08.
 - Merge : fast-forward de `cbdf0e2` vers le SHA de la branche
   `feat/atlas-v7-08-core-quota-and-a0`, puis push `origin/main`.
-- Le SHA final exact et la vérification `origin/main` sont consignés dans le
-  commit documentaire post-merge.
+- Merge effectué : fast-forward `cbdf0e2` → `f3b2a89` (branche
+  `feat/atlas-v7-08-core-quota-and-a0`).
+- Push `origin/main` : `f3b2a89`. Vérification : `git rev-parse main
+  origin/main` = `f3b2a89`, arbre propre, aucun force-push, aucune
+  réécriture d'historique.
+- Ce paragraphe est mis à jour par un commit documentaire post-merge ; son
+  SHA est visible dans l'historique de `main` et ne change pas le code
+  qualifié `2392e51`.
 
 ## 13. Verdicts et risques
 
