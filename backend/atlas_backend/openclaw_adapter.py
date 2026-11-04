@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import stat
@@ -31,11 +32,36 @@ from .plan_agent_v3 import (
     PlanRevisionQuotaLimited,
 )
 
+def _env_float(
+    name: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """Read a bounded finite float; absent means the historical default."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number") from exc
+    if not math.isfinite(value) or not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
 FALLBACK_REPLY = "Le service de propositions est indisponible. Aucune action n'a été proposée."
 CHAT_V4_FALLBACK_REPLY = "Le service de conversation est indisponible. Aucune action Android n'a été exécutée."
 CHAT_V4_TOOL_LIMIT = 6
 CHAT_V4_PROPOSAL_LIMIT = 1
-CHAT_V4_DEADLINE_SECONDS = 20.0
+# Total turn budget. The 20 s historical default is preserved; personal Core
+# deployments can raise it for a sequential tool round without changing the
+# provider request timeout (OPENCLAW_TIMEOUT_S) or the relay TTL.
+CHAT_V4_DEADLINE_SECONDS = _env_float(
+    "ATLAS_CHAT_V4_DEADLINE_S", 20.0, minimum=1.0, maximum=50.0
+)
 CHAT_V4_MAX_RESPONSE_BYTES = 262_144
 CHAT_V4_MAX_REQUEST_BYTES = 65_536
 CHAT_V4_TOOL_ARGUMENTS = {

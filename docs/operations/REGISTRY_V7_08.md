@@ -76,6 +76,14 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
    `test_agent_v2.py` + `test_chat_orchestration_v4.py` (101 passed, 1 skipped
    sur le SHA intégré), suite backend complète **388 passed, 1 skipped** sur
    `56705da`.
+8. **Quota live prouvé** : après déploiement, `daily_token_limit_enforced=false`,
+   `daily_tokens=54207` mesurés lors d'un tour V4 réel, `limited=false` ; aucun
+   `429` local.
+9. **504 mesuré** le 2026-11-04 : première complétion provider 16,36 s,
+   seconde complétion coupée après 3,25 s par le budget total de 20 s ; HTTP
+   504, `agent_proposals_v4=0`. Correctif minimal : `ATLAS_CHAT_V4_DEADLINE_S`
+   (défaut 20 s conservé, valeur personnelle 40 s), tests dédiés, suite
+   **407 passed, 1 skipped**.
 
 ## 5. Sauvegardes et rollback
 
@@ -114,6 +122,7 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | 2026-11-04T17:55Z | A1 accepté et cherry-pické sur `feat/atlas-v7-08-core-quota-and-a0` (`56705da`) | diff minimal, 101 ciblés + 388 suite backend PASS |
 | 2026-11-04T17:56Z | Plan synthétique déplacé à 21:00–21:45, A1 `PERSONNEL` déverrouillée, plan local v5 | activité future du jour, sauvegarde app-only privée vérifiée |
 | 2026-11-04T18:02Z | `compose.openclaw.yaml` active explicitement `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=false` | environnement personnel, mesure conservée, rollback par `true` |
+| 2026-11-04T18:20Z | Correctif deadline `ATLAS_CHAT_V4_DEADLINE_S` (défaut 20 s, live 40 s) | 504 mesuré : 16,36 s + seconde complétion > 3,25 s ; revue A6 requise avant déploiement |
 
 Les mises à jour de ce registre sont append-only ; chaque verdict final doit
 référencer un SHA exact et une commande reproductible.

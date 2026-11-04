@@ -5,6 +5,10 @@ services:
       OPENCLAW_BASE_URL: http://127.0.0.1:18789
       OPENCLAW_AGENT_ID: atlas
       OPENCLAW_TIMEOUT_S: "30"
+      # Total V4 turn budget for the sequential plan-tool round. Historical
+      # default is 20 s; this personal deployment uses 40 s, still below the
+      # Android relay timeout. Set to "20" or remove to roll back.
+      ATLAS_CHAT_V4_DEADLINE_S: "40"
       # Personal ATLAS Core: keep token accounting, but do not let the local
       # daily ceiling alone block the Coach. Set to "true" (or remove) to
       # restore the historical hard stop; see docs/operations/V7-08_QUOTA_POLICY.md.
