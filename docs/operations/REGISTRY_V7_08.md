@@ -28,7 +28,7 @@ Le SHA de référence documentaire `9380445` cité par la mission est un ancêtr
 | Gateway OpenClaw | `openclaw-gateway.service` actif, `127.0.0.1:18789` |
 | Relay | `atlas-v7-relay` actif, `127.0.0.1:4402` |
 | Proxy public `4400` | arrêté (état V7-07) |
-| Funnel Tailscale | `tcp://all.taildc7886.ts.net:8443 → 127.0.0.1:4400` |
+| Funnel Tailscale | Funnel public TLS actif (nom d'hôte public non reproduit dans ce registre) |
 | Pixel ADB | un seul appareil, Pixel 9 Pro XL, Android 17 / SDK 37.1 (série et empreinte non publiées) |
 | `dev.atlas.coach` | versionCode 1, versionName 0.1.0, HOME `LauncherActivity` |
 | Quota Core au démarrage | `daily_tokens=102062 / 100000`, `limited=true` |
@@ -39,12 +39,13 @@ Le SHA de référence documentaire `9380445` cité par la mission est un ancêtr
 
 ## 3. Équipe Luna (Paseo)
 
-| Tâche | Agent ID | Modèle effectif | Effort effectif | Worktree | Statut |
+| Tâche | Session Paseo | Modèle effectif | Effort effectif | Worktree | Statut |
 |---|---|---|---|---|---|
-| A1 quota | `db38370c-b557-41af-b932-df865cc1cbda` | `codex/gpt-6-luna` | `xhigh` | `v7-08-a1-quota` | ACCEPTED — sortie `60f926a`, intégrée `56705da` |
-| A2 diagnostic 504/400 | `36257e6e-f71d-43a6-877b-80f7809de4ad` | `codex/gpt-6-luna` | `xhigh` | `v7-08-a2-diag` | RUNNING |
-| A3 QA protocole A0 | `a77e26b2-1a1a-47cc-b6b3-2abcb885b3fa` | `codex/gpt-6-luna` | `xhigh` | `v7-08-a3-qa` | RUNNING |
-| A4 revue sécurité | à lancer après A1 | `codex/gpt-6-luna` | `xhigh` | lecture seule | PENDING |
+| A1 quota | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | `v7-08-a1-quota` | ACCEPTED — sortie `60f926a`, intégrée `56705da` |
+| A2 diagnostic 504/400 | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | `v7-08-a2-diag` | ACCEPTED — rapport `8228922`, intégré `67cbf61` |
+| A3 QA protocole A0 | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | `v7-08-a3-qa` | ACCEPTED — tests `610634c`, intégrés `8833da7` |
+| A4 revue sécurité | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | lecture seule | GO_WITH_LIMITATIONS, P2 traités |
+| A6 revue deadline | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | lecture seule | GO_WITH_LIMITATIONS, P2 traités |
 | A5 revue intégration/Git | à lancer avant publication | `codex/gpt-6-luna` | `xhigh` | lecture seule | PENDING |
 
 Règles appliquées : aucun push, aucun merge, aucun ADB par les enfants ; un
@@ -84,6 +85,11 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
    504, `agent_proposals_v4=0`. Correctif minimal : `ATLAS_CHAT_V4_DEADLINE_S`
    (défaut 20 s conservé, valeur personnelle 40 s), tests dédiés, suite
    **407 passed, 1 skipped**.
+10. **Rotation 2** : après le 504, le `conversation_id` a été tourné une
+    seconde fois de façon non destructive (`1e8381ce…` → `f95596c7…`, hash
+    `3ca7cc6e…`), avec sauvegarde app-only préalable, 16 messages et tous les
+    autres champs préservés. Le plan local est en v9, A1 `PERSONNEL`
+    déverrouillée pour l'activité planifiée.
 
 ## 5. Sauvegardes et rollback
 
@@ -92,8 +98,10 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | Config Compose pré-déploiement | répertoire privé hors dépôt, horodaté | créé, `SHA256SUMS` |
 | Base Core pré-déploiement | copie privée hors dépôt | `integrity_check=ok`, 3 snapshots, 2 consentements, 0 proposition |
 | Secrets Core | non copiés dans le dépôt | préservés |
-| Image Core courante | `atlas-core-atlas-core:v7-07-live` = `00b88ef90466` | tag de rollback créé avant rebuild |
-| Rollback quota | `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=true` + image `v7-07-live` | à documenter |
+| Image Core courante | `atlas-core-atlas-core:v7-08-quota-only` = `89d921fee385` | tag de rollback créé avant le rebuild deadline |
+| Image Core initiale | `atlas-core-atlas-core:v7-07-live` = `00b88ef90466` | rollback complet pré-V7-08 |
+| Rollback deadline | `ATLAS_CHAT_V4_DEADLINE_S=20` ou suppression + redémarrage | documenté dans `V7-08_CHAT_DEADLINE.md`, non exécuté live |
+| Rollback quota | `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=true` + image de rollback | documenté dans `V7-08_QUOTA_POLICY.md`, test de retour à `true` PASS ; non exécuté live |
 
 ## 6. Gates
 

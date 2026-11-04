@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,6 +11,7 @@ import httpx
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
+from atlas_backend import v4_router
 from atlas_backend.main import MAX_REQUEST_BYTES, create_app
 
 
@@ -334,6 +336,18 @@ def test_sync_snapshots_and_six_fixed_tool_routes_match_contracts(tmp_path, monk
     assert response.status_code == 200, response.text
     validate("capability-negotiation.schema.json", response.json())
     assert response.json()["capabilities"]["day_plan.read"] is True
+    assert response.json()["limits"]["chat_timeout_seconds"] == max(
+        1, math.ceil(v4_router.CHAT_V4_DEADLINE_SECONDS)
+    )
+    original_deadline = v4_router.CHAT_V4_DEADLINE_SECONDS
+    v4_router.CHAT_V4_DEADLINE_SECONDS = 40.5
+    try:
+        overridden = client.get("/internal/v4/capabilities", headers=headers)
+    finally:
+        v4_router.CHAT_V4_DEADLINE_SECONDS = original_deadline
+    assert overridden.status_code == 200, overridden.text
+    validate("capability-negotiation.schema.json", overridden.json())
+    assert overridden.json()["limits"]["chat_timeout_seconds"] == 41
 
     tool_calls = [
         ("day_plan.read", "/internal/v4/day-plan?local_date=" + day_plan()["local_date"]),

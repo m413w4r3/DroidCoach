@@ -9,6 +9,7 @@ import hmac
 import ipaddress
 import json
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -857,7 +858,7 @@ def create_v4_router(
                 "max_usage_window_days": 14,
                 "max_payload_bytes": 65_536,
                 "max_response_bytes": 262_144,
-                "chat_timeout_seconds": 20,
+                "chat_timeout_seconds": max(1, math.ceil(CHAT_V4_DEADLINE_SECONDS)),
             },
         }
         if not _validate(_CAPABILITY_SCHEMA, response):

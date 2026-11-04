@@ -39,7 +39,7 @@ def test_invalid_deadline_fails_explicitly(monkeypatch, invalid):
         _env_float("ATLAS_CHAT_V4_DEADLINE_S", 20.0, minimum=1.0, maximum=50.0)
 
 
-def _deadline_from_fresh_process(configured: str | None) -> subprocess.CompletedProcess[str]:
+def _deadline_from_fresh_process(configured: str | None, module: str = "atlas_backend.openclaw_adapter") -> subprocess.CompletedProcess[str]:
     environment = {key: value for key, value in os.environ.items() if key != "ATLAS_CHAT_V4_DEADLINE_S"}
     if configured is not None:
         environment["ATLAS_CHAT_V4_DEADLINE_S"] = configured
@@ -47,7 +47,7 @@ def _deadline_from_fresh_process(configured: str | None) -> subprocess.Completed
         [
             sys.executable,
             "-c",
-            "import atlas_backend.openclaw_adapter as m; print(m.CHAT_V4_DEADLINE_SECONDS)",
+            f"import {module} as m; print(m.CHAT_V4_DEADLINE_SECONDS)",
         ],
         cwd=BACKEND_ROOT,
         env=environment,
@@ -66,6 +66,12 @@ def test_module_constant_defaults_to_twenty_in_fresh_process():
 
 def test_module_constant_reads_personal_override_in_fresh_process():
     result = _deadline_from_fresh_process("40")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "40.0"
+
+
+def test_router_imports_the_overridden_deadline_in_fresh_process():
+    result = _deadline_from_fresh_process("40", module="atlas_backend.v4_router")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "40.0"
 
