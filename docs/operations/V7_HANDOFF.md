@@ -92,6 +92,12 @@ proposition A0 outillée fiable ; aucun APPLY/REJECT/ACK. Détail :
   proposition. Causes : délai Core 20 s, contexte de conversation persistant,
   fraîcheur 5 min, absence de nouvelle conversation, saisie ADB non Unicode.
   Aucun APPLY/REJECT/ACK. Voir `V7-07_D_RESUME.md`.
+- **Seconde reprise diagnostique (2026-11-04)** : rotation locale du
+  `conversation_id` prouvée (0 session Gateway avant chat, 12 messages et
+  données préservés), plan futur 18:00–18:45 synchronisé frais (v4). Une seule
+  demande produit : **429**, 1 outil appelé, aucune proposition. Cause exacte :
+  quota journalier Core **102062/100000**, `limited=true` ; pas un timeout, pas
+  DNS/TLS, pas `STALE_DATA`. Aucun retry ; verdicts distants **NO-GO**.
 - **Prochaine action :** autorisation ciblée pour une rotation locale non
   destructive du `conversation_id` ou une modification produit bornée, puis
   nouvelle tentative D. E reste non autorisé.

@@ -135,3 +135,79 @@ bearer :
 
 Sans accord, le résultat reste **NO-GO distant précisément documenté** ; E ne
 doit pas être lancé.
+
+## 8. Reprise diagnostique bornée du 2026-11-04 (rotation + quota)
+
+Une seconde reprise a été autorisée pour isoler l'effet du contexte persistant
+et de la fraîcheur, sans modification produit ni nouveau build.
+
+### 8.1 Rotation locale vérifiée
+
+- Le `conversation_id` est stocké dans `atlas_local_state.xml` (`state_v1`,
+  clé `agentConversationId`), transmis dans le corps V4, puis transformé par
+  Core en `provider_user = "atlas-" + sha256(conversation_id)` et utilisé comme
+  session Gateway (`agent:atlas:openai-user:…`).
+- Avant rotation : 1 session Gateway existait pour l'ancien identifiant
+  (`4e6b56ec…`), modèle `gpt-6-luna` / `openai`.
+- Sauvegarde pré-rotation complète : archive `82d75615…`, 20 fichiers,
+  `VERIFY_OK` ; état `atlas_local_state.xml` hashé
+  (`26077022…`).
+- Rotation : arrêt propre, sauvegarde, génération d'un nouvel UUID, écriture
+  atomique via `run-as`, vérification octet pour octet. Un seul champ a changé
+  (`agentConversationId`) ; les 12 messages, les plans, les consentements,
+  l'identité `pixel-v7`, les clés et le HOME ont été préservés.
+- Nouvel identifiant : `eea09c47…` ; **0 session Gateway** avant le chat,
+  contre 1 pour l'ancien. La rotation crée donc bien une nouvelle session.
+- Rollback : fichier `atlas_local_state.before.xml` et archive pré-rotation
+  conservés en privé.
+
+### 8.2 Scénario futur
+
+Le worker V4 Android ne synchronise que le plan du jour
+(`readTodayPlan`/`todayPlanFile`, date système). Un plan du 5 novembre ne peut
+donc pas être projeté dans Core sans modification produit. Conformément à
+l'autorisation d'adapter la date, l'activité synthétique a été déplacée au
+**2026-11-04 18:00–18:45** (future au moment du test), en conservant le titre
+« Test ATLAS - seance Focus ». Plan v4 synchronisé avec
+`observed_at=2026-11-04T16:22:01Z`, consentement v4.
+
+### 8.3 Tentative unique et résultat
+
+Une seule demande a été envoyée depuis le Coach produit, sur une nouvelle
+conversation, avec le message (corrigé par le clavier) :
+
+> « Pour le 4 novembre 2026 décalé l'activité Test ATLAS - seance Focus de
+> 10 minutes et proposez-moi la modification a confirmer. Ne l'applique pas
+> automatiquement. »
+
+Résultat : **HTTP 429**, `tool_call_count=1`, `tool_state=completed`, aucune
+proposition. Les logs Gateway montrent le catalogue des 6 outils et un run
+terminé en `tool_calls` ; Core a ensuite refusé la poursuite.
+
+Cause exacte, lue via `/v2/agent/status` :
+
+- `adapter=openclaw`, `connected=true`, `breaker=closed` ;
+- `daily_tokens=102062`, `daily_token_limit=100000`, `limited=true`.
+
+Il s'agit du **quota journalier local du Core**, pas d'un timeout de 20 s, ni
+d'un problème DNS/TLS, ni d'une preuve de `STALE_DATA`. Aucun retry n'a été
+effectué, conformément à la consigne. Aucun APPLY/REJECT/ACK, aucune
+proposition.
+
+### 8.4 Conclusion de la reprise
+
+- La rotation de conversation est **prouvée** et réversible ; le nouveau
+  contexte n'a aucune session Gateway antérieure.
+- Le plan futur est frais et synchronisé.
+- La tentative a bien appelé un outil avant d'être arrêtée par le quota
+  journalier du Core. Elle ne permet donc pas de conclure sur la proposition
+  A0.
+- `GO_PRODUCT_REMOTE_CHAT`, `GO_PRODUCT_PLAN_REVISION` et
+  `GO_PRODUCT_REMOTE` restent **NO-GO**.
+- Aucune suppression de données synthétiques ou de consentements n'a été
+  effectuée, conformément à l'autorisation.
+- Transport arrêté, application hors ligne, Wi-Fi restauré.
+
+Pour une nouvelle tentative, il faudra attendre la réinitialisation du quota
+journalier ou obtenir une autorisation distincte pour ajuster ce quota. Aucun
+changement de modèle, de timeout, de bearer ou de code n'a été effectué.

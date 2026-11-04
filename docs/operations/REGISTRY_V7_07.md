@@ -154,6 +154,18 @@ Après reprise : app Hors ligne, proxy/connecteur arrêtés, Wi-Fi restauré, pl
 synthétique et consentements conservés pour une éventuelle reprise autorisée.
 Aucune modification Tailscale/Core/Gateway/secrets/bearer pendant cette reprise.
 
+**Reprise diagnostique bornée (2026-11-04) :** rotation locale du
+`conversation_id` prouvée (1 session Gateway ancienne, 0 pour le nouveau,
+12 messages et toutes les données préservés ; archive pré-rotation
+`82d75615…`) ; plan synthétique futur 18:00–18:45 synchronisé frais
+(`plan_version=4`, `observed_at=2026-11-04T16:22:01Z`). Une seule demande
+produit a été envoyée : **429**, `tool_call_count=1`, `tool_state=completed`,
+aucune proposition. Cause exacte : quota journalier Core
+`102062/100000`, `limited=true`, breaker `closed`, adapter `openclaw`
+connecté — pas un timeout, pas un DNS/TLS, pas une preuve de `STALE_DATA`.
+Aucun retry ; verdicts distants inchangés **NO-GO**. Détail :
+`V7-07_D_RESUME.md` §8.
+
 ## 4. Tickets
 
 | TASK_ID | Objectif | Type | Session Paseo | Worktree | Statut |
