@@ -84,12 +84,24 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
    seconde complétion coupée après 3,25 s par le budget total de 20 s ; HTTP
    504, `agent_proposals_v4=0`. Correctif minimal : `ATLAS_CHAT_V4_DEADLINE_S`
    (défaut 20 s conservé, valeur personnelle 40 s), tests dédiés, suite
-   **407 passed, 1 skipped**.
-10. **Rotation 2** : après le 504, le `conversation_id` a été tourné une
-    seconde fois de façon non destructive (`1e8381ce…` → `f95596c7…`, hash
-    `3ca7cc6e…`), avec sauvegarde app-only préalable, 16 messages et tous les
-    autres champs préservés. Le plan local est en v9, A1 `PERSONNEL`
-    déverrouillée pour l'activité planifiée.
+   **408 passed, 1 skipped**.
+10. **Rotations de conversation** : après le 504, trois rotations
+    supplémentaires non destructives ont été exécutées (valeurs et hashes non
+    publiés), chacune avec sauvegarde app-only préalable et vérification que
+    seul `agentConversationId` changeait. Messages, plans, consentements,
+    identité Relay et clés préservés. Le plan local final est en **v16** avec
+    une seule activité `PLANNED` (« Test ATLAS - seance Focus », 22:55–23:40,
+    `target_start_minute=1375`) et cinq entrées `POSTPONED` synthétiques.
+11. **A0 produit prouvé** : proposition `e867c13c-2327-4f04-905e-51de965e2876`,
+    `base_version=15`, `A0_USER_REVIEW`, `NONE_AT_CORE`, déplacement
+    22:45→22:55, créée `2026-11-04T19:25:05Z`. APPLY explicite dans Android :
+    plan v15→v16, ACK durable `APPLIED` (`ack_id=49f0f982…`, séquence 1,
+    `applied_plan_version=16`). Rejeu du même ACK : un seul événement
+    `agent_proposal_events_v4`, aucune double mutation.
+12. **REJECT non terminé** : seconde proposition
+    `2da9c5e2-57ed-4bac-8f5f-01eb0e4b780e` (`base_version=16`, 22:55→23:05,
+    `PENDING_ANDROID`, créée `19:28:58Z`) non tirée dans l'application et non
+    refusée. Aucun ACK `REJECTED`. Voir le handoff V7-08 pour la reprise.
 
 ## 5. Sauvegardes et rollback
 
@@ -107,17 +119,17 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 
 | Gate | État |
 |---|---|
-| `GO_CORE_QUOTA_POLICY` | PENDING |
-| `GO_CORE_ROLLBACK` | PENDING |
-| `GO_LIVE_OPENCLAW_CONFIG` | PENDING |
-| `GO_PRODUCT_LOCAL_SMOKE` | PENDING (héritage V7-07 GO_WITH_LIMITATIONS) |
-| `GO_PRODUCT_REMOTE_CHAT` | PENDING |
-| `GO_PRODUCT_PLAN_REVISION` | PENDING |
-| `GO_PRODUCT_REMOTE` | PENDING |
-| `GO_LIVE_SECURITY` | PENDING |
-| `GO_SOURCE_AND_CI` | PENDING |
-| `GO_MAIN_INTEGRATION` | PENDING |
-| `GO_DAILY_PILOT` | **NO-GO** (E non autorisé) |
+| `GO_CORE_QUOTA_POLICY` | **GO_WITH_LIMITATIONS** — mesure live sans `429`, seuil >100000 prouvé par tests |
+| `GO_CORE_ROLLBACK` | **GO_WITH_LIMITATIONS** — documenté/testé, non exécuté live |
+| `GO_LIVE_OPENCLAW_CONFIG` | **GO_WITH_LIMITATIONS** — Gateway/modèle/secrets/Tailscale inchangés |
+| `GO_PRODUCT_LOCAL_SMOKE` | **GO_WITH_LIMITATIONS** (héritage V7-07, non rejoué) |
+| `GO_PRODUCT_REMOTE_CHAT` | **GO_WITH_LIMITATIONS** — A0 outillé réel obtenu ; un tour antérieur sans outil |
+| `GO_PRODUCT_PLAN_REVISION` | **GO_WITH_LIMITATIONS** — APPLY + ACK APPLIED + rejeu idempotent ; REJECT NOT_RUN |
+| `GO_PRODUCT_REMOTE` | **GO_WITH_LIMITATIONS** — REJECT incomplet, P1 bearer |
+| `GO_LIVE_SECURITY` | **GO_WITH_LIMITATIONS** — aucun P0/P1 nouveau, P1 bearer ouvert |
+| `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** — backend 408/1, Android JVM/lint NOT_RUN |
+| `GO_MAIN_INTEGRATION` | PENDING (A5 + merge) |
+| `GO_DAILY_PILOT` | **NO-GO** (E non autorisé, REJECT incomplet) |
 
 ## 7. Journal des décisions
 
@@ -131,6 +143,11 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | 2026-11-04T17:56Z | Plan synthétique déplacé à 21:00–21:45, A1 `PERSONNEL` déverrouillée, plan local v5 | activité future du jour, sauvegarde app-only privée vérifiée |
 | 2026-11-04T18:02Z | `compose.openclaw.yaml` active explicitement `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=false` | environnement personnel, mesure conservée, rollback par `true` |
 | 2026-11-04T18:20Z | Correctif deadline `ATLAS_CHAT_V4_DEADLINE_S` (défaut 20 s, live 40 s) | 504 mesuré : 16,36 s + seconde complétion > 3,25 s ; revue A6 requise avant déploiement |
+| 2026-11-04T19:25Z | Proposition A0 `e867c13c…` créée (base v15, 22:45→22:55, A0_USER_REVIEW, NONE_AT_CORE) | modèle et outils réels, aucune application Core |
+| 2026-11-04T19:27Z | APPLY explicite Android : plan v16, ACK `APPLIED` durable (`applied_plan_version=16`) | preuve produit réelle |
+| 2026-11-04T19:28Z | Rejeu ACK : un seul événement ; seconde proposition `2da9c5e2…` créée (base v16, 22:55→23:05) | idempotence APPLIED prouvée ; REJECT à reprendre |
+| 2026-11-04T19:29Z | Clôture demandée par le propriétaire ; REJECT non exécuté, handoff préparé | téléphone à restaurer |
+| 2026-11-04T19:41Z | Transport proxy/connecteur arrêté, Wi-Fi restauré, HOME ATLAS, aucune réinstallation | état final sûr |
 
 Les mises à jour de ce registre sont append-only ; chaque verdict final doit
 référencer un SHA exact et une commande reproductible.
