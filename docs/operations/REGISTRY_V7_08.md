@@ -46,7 +46,7 @@ Le SHA de référence documentaire `9380445` cité par la mission est un ancêtr
 | A3 QA protocole A0 | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | `v7-08-a3-qa` | ACCEPTED — tests `610634c`, intégrés `8833da7` |
 | A4 revue sécurité | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | lecture seule | GO_WITH_LIMITATIONS, P2 traités |
 | A6 revue deadline | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | lecture seule | GO_WITH_LIMITATIONS, P2 traités |
-| A5 revue intégration/Git | à lancer avant publication | `codex/gpt-6-luna` | `xhigh` | lecture seule | PENDING |
+| A5 revue intégration/Git | ID privé non reproduit | `codex/gpt-6-luna` | `xhigh` | lecture seule | Git/tests PASS ; NO-GO strict P1 bearer préexistant ; dérogation propriétaire pour le merge |
 
 Règles appliquées : aucun push, aucun merge, aucun ADB par les enfants ; un
 propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants et
@@ -128,7 +128,7 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | `GO_PRODUCT_REMOTE` | **GO_WITH_LIMITATIONS** — REJECT incomplet, P1 bearer |
 | `GO_LIVE_SECURITY` | **GO_WITH_LIMITATIONS** — aucun P0/P1 nouveau, P1 bearer ouvert |
 | `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** — backend 408/1, Android JVM/lint NOT_RUN |
-| `GO_MAIN_INTEGRATION` | PENDING (A5 + merge) |
+| `GO_MAIN_INTEGRATION` | **GO_WITH_LIMITATIONS** — merge ff-only sous dérogation propriétaire ; A5 strict NO-GO sur le P1 bearer préexistant |
 | `GO_DAILY_PILOT` | **NO-GO** (E non autorisé, REJECT incomplet) |
 
 ## 7. Journal des décisions
@@ -148,6 +148,7 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | 2026-11-04T19:28Z | Rejeu ACK : un seul événement ; seconde proposition `2da9c5e2…` créée (base v16, 22:55→23:05) | idempotence APPLIED prouvée ; REJECT à reprendre |
 | 2026-11-04T19:29Z | Clôture demandée par le propriétaire ; REJECT non exécuté, handoff préparé | téléphone à restaurer |
 | 2026-11-04T19:41Z | Transport proxy/connecteur arrêté, Wi-Fi restauré, HOME ATLAS, aucune réinstallation | état final sûr |
+| 2026-11-04T19:45Z | A5 : Git/tests PASS, aucun P0/P1 nouveau, NO-GO strict à cause du P1 bearer préexistant ; merge demandé par le propriétaire | dérogation P1 consignée, risque non masqué |
 
 Les mises à jour de ce registre sont append-only ; chaque verdict final doit
 référencer un SHA exact et une commande reproductible.

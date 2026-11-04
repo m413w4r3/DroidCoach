@@ -201,9 +201,17 @@ préservés.
 
 ## 12. Mise à jour de `main`
 
-À compléter après la revue A5 et le merge : SHA final de la branche, mode de
-merge, SHA de `origin/main`, vérification de synchronisation. Le merge est
-autorisé par la mission, sous réserve des gates.
+- Revue A5 sur `883e92a` : Git PASS, aucun P0/P1 nouveau, tests backend
+  **408 passed, 1 skipped** sur une copie exacte ; verdict strict
+  `GO_MAIN_INTEGRATION = NO-GO` en raison du P1 bearer Android partagé,
+  **préexistant et hors du diff V7-08**.
+- Décision propriétaire : le propriétaire a explicitement demandé le merge et
+  la clôture le 2026-11-04, en connaissance du P1 documenté. La dérogation P1
+  est consignée ; aucun nouveau P1 n'est introduit par V7-08.
+- Merge : fast-forward de `cbdf0e2` vers le SHA de la branche
+  `feat/atlas-v7-08-core-quota-and-a0`, puis push `origin/main`.
+- Le SHA final exact et la vérification `origin/main` sont consignés dans le
+  commit documentaire post-merge.
 
 ## 13. Verdicts et risques
 
@@ -218,7 +226,7 @@ autorisé par la mission, sous réserve des gates.
 | `GO_PRODUCT_REMOTE` | **GO_WITH_LIMITATIONS** | transport/chat/apply réels ; REJECT incomplet, P1 bearer |
 | `GO_LIVE_SECURITY` | **GO_WITH_LIMITATIONS** | aucun P0/P1 nouveau ; P1 bearer Android partagé toujours ouvert |
 | `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** | backend 408/1, Android lint/JVM NOT_RUN |
-| `GO_MAIN_INTEGRATION` | à compléter après A5/merge | |
+| `GO_MAIN_INTEGRATION` | **GO_WITH_LIMITATIONS** | merge ff-only sous dérogation propriétaire ; A5 strict NO-GO sur le P1 bearer préexistant |
 | `GO_DAILY_PILOT` | **NO-GO** | E non autorisé, REJECT incomplet |
 
 **Risques ouverts**
