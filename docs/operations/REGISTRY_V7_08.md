@@ -84,7 +84,8 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | Config Compose pré-déploiement | `~/.local/state/atlas-v7-08/core-backup/20261104T164105Z/` | créé, `SHA256SUMS` |
 | Base Core pré-déploiement | `…/20261104T164105Z/atlas.sqlite3.bak` | `integrity_check=ok`, 3 snapshots, 2 consentements, 0 proposition |
 | Secrets Core | non copiés dans le dépôt | préservés |
-| Rollback quota | `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=true` + image précédente | à documenter |
+| Image Core courante | `atlas-core-atlas-core:v7-07-live` = `00b88ef90466` | tag de rollback créé avant rebuild |
+| Rollback quota | `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=true` + image `v7-07-live` | à documenter |
 
 ## 6. Gates
 
@@ -112,6 +113,7 @@ propriétaire par fichier ; Paseo seul intégrateur ; concurrence ≤ 6 enfants 
 | 2026-11-04T16:44Z | Pas de réinitialisation manuelle du compteur quota | preuve par tests + config, pas de contournement |
 | 2026-11-04T17:55Z | A1 accepté et cherry-pické sur `feat/atlas-v7-08-core-quota-and-a0` (`56705da`) | diff minimal, 101 ciblés + 388 suite backend PASS |
 | 2026-11-04T17:56Z | Plan synthétique déplacé à 21:00–21:45, A1 `PERSONNEL` déverrouillée, plan local v5 | activité future du jour, sauvegarde app-only `90098635…` |
+| 2026-11-04T18:02Z | `compose.openclaw.yaml` active explicitement `ATLAS_AGENT_DAILY_TOKENS_ENFORCED=false` | environnement personnel, mesure conservée, rollback par `true` |
 
 Les mises à jour de ce registre sont append-only ; chaque verdict final doit
 référencer un SHA exact et une commande reproductible.

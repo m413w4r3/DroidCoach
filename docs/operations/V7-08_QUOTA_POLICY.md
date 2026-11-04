@@ -43,8 +43,13 @@ ATLAS_AGENT_DAILY_TOKENS_ENFORCED: "false"
 Apply the environment change through the deployment's normal Core restart
 procedure. Confirm `daily_token_limit_enforced` in the running adapter status,
 and check that `daily_tokens` continues to increase while requests remain
-subject to the other limits above. The commented entry in
-`compose.openclaw.yaml` shows the setting; it leaves the default active.
+subject to the other limits above.
+
+In this personal deployment, `compose.openclaw.yaml` sets
+`ATLAS_AGENT_DAILY_TOKENS_ENFORCED: "false"` explicitly. The Core still reports
+usage, but the local daily ceiling no longer rejects the Coach. Reverting that
+line to `"true"` (or removing it) restores the historical hard stop; see the
+rollback section below.
 
 This change is code and documentation only. It does not modify or restart a
 live Core.
