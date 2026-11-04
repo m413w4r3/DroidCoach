@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -14,6 +15,7 @@ from atlas_backend.openclaw_adapter import (
     ChatOrchestrationFailure,
     OpenClawAgentAdapter,
 )
+from atlas_backend.plan_agent_v3 import PlanRevisionModelOutputV3, PlanRevisionQuotaLimited
 
 
 def successful_response(request: httpx.Request) -> httpx.Response:
@@ -69,6 +71,79 @@ def chat(adapter: OpenClawAgentAdapter):
             "version": 1,
             "allowed_actions": ["focus.propose"],
         }),
+    )
+
+
+def plan_revision_arguments():
+    plan_id = "8f9a9146-38ca-4bf6-9822-e1e57c5c2f70"
+    activity_id = "2672ef77-1b16-4f39-97e4-389cafaf7080"
+    local_date = "2026-10-26"
+    timezone_name = "Europe/Paris"
+    return {
+        "conversation_id": "conversation-fixture-001",
+        "message": "Peux-tu déplacer mon bloc de révision ?",
+        "plan": {
+            "plan_id": plan_id,
+            "local_date": local_date,
+            "timezone": timezone_name,
+            "version": 4,
+            "state": "DRAFT",
+            "activities": [{
+                "activity_id": activity_id,
+                "kind": "FOCUS",
+                "title": "Réviser les notes",
+                "start_minute": 480,
+                "duration_minutes": 50,
+                "priority": "IMPORTANT",
+                "goal_id": None,
+            }],
+        },
+        "mandate": MandateSummary.model_validate({
+            "id": "mandate-fixture",
+            "version": 2,
+            "allowed_actions": ["focus.propose"],
+        }),
+    }
+
+
+def valid_plan_revision_response(request: httpx.Request) -> httpx.Response:
+    content = {
+        "reply": "Je propose de déplacer le bloc de révision.",
+        "proposal": {
+            "action_type": "plan.revise_day",
+            "reason": "Le créneau proposé correspond à la demande.",
+            "parameters": {
+                "plan_id": "8f9a9146-38ca-4bf6-9822-e1e57c5c2f70",
+                "base_version": 4,
+                "local_date": "2026-10-26",
+                "timezone": "Europe/Paris",
+                "summary": "Replacer le bloc de révision.",
+                "activities": [{
+                    "client_ref": "focus-main",
+                    "activity_id": "2672ef77-1b16-4f39-97e4-389cafaf7080",
+                    "kind": "FOCUS",
+                    "title": "Réviser le chapitre",
+                    "local_date": "2026-10-26",
+                    "start_minute": 540,
+                    "duration_minutes": 50,
+                    "timezone": "Europe/Paris",
+                    "priority": "IMPORTANT",
+                    "goal_id": None,
+                    "sub_goal_id": None,
+                    "focus": None,
+                    "training_ref": None,
+                    "notes": None,
+                }],
+            },
+        },
+    }
+    return httpx.Response(
+        200,
+        json={
+            "choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}],
+            "usage": {"prompt_tokens": 30, "completion_tokens": 20},
+        },
+        request=request,
     )
 
 
@@ -132,6 +207,48 @@ def test_false_allows_provider_above_daily_limit_and_keeps_usage_accounting(monk
     assert status["daily_tokens"] == 100_050
     assert status["daily_token_limit"] == 100_000
     assert status["limited"] is False
+
+
+def test_false_allows_plan_revision_above_daily_limit_and_accounts_usage(monkeypatch):
+    calls = []
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return valid_plan_revision_response(request)
+
+    adapter = make_adapter(monkeypatch, provider, enforced="false")
+    adapter._daily_tokens = 100_001
+
+    output = adapter.propose_plan_revision(**plan_revision_arguments())
+
+    assert isinstance(output, PlanRevisionModelOutputV3)
+    assert output.proposal is not None
+    status = adapter.status().quota
+    assert len(calls) == 1
+    assert status["daily_token_limit_enforced"] is False
+    assert status["daily_tokens"] == 100_051
+    assert status["daily_tokens"] > status["daily_token_limit"]
+    assert status["limited"] is False
+
+
+def test_true_blocks_plan_revision_above_daily_limit_before_provider(monkeypatch):
+    calls = []
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return valid_plan_revision_response(request)
+
+    adapter = make_adapter(monkeypatch, provider, enforced="true")
+    adapter._daily_tokens = 100_001
+
+    with pytest.raises(PlanRevisionQuotaLimited):
+        adapter.propose_plan_revision(**plan_revision_arguments())
+
+    status = adapter.status().quota
+    assert calls == []
+    assert status["daily_token_limit_enforced"] is True
+    assert status["daily_tokens"] == 100_001
+    assert status["limited"] is True
 
 
 def test_false_keeps_rpm_limit_active(monkeypatch):
