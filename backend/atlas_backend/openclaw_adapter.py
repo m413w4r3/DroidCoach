@@ -516,6 +516,18 @@ def _setting_int(name: str, default: int, minimum: int = 1) -> int:
         return default
 
 
+def _setting_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    value = raw_value.strip().lower()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise ValueError(f"{name} must be 'true' or 'false'")
+
+
 class OpenClawAgentAdapter(AgentAdapter):
     """Calls the OpenAI-compatible chat endpoint with fixed, bounded ATLAS tools."""
 
@@ -542,6 +554,7 @@ class OpenClawAgentAdapter(AgentAdapter):
         self.timeout_s = timeout_s if timeout_s is not None else self._timeout_setting()
         self.rpm = rpm if rpm is not None else _setting_int("ATLAS_AGENT_RPM", 30)
         self.daily_token_limit = daily_tokens if daily_tokens is not None else _setting_int("ATLAS_AGENT_DAILY_TOKENS", 100_000)
+        self.daily_token_limit_enforced = _setting_bool("ATLAS_AGENT_DAILY_TOKENS_ENFORCED", True)
         self.payload_limit = _setting_int("ATLAS_AGENT_MAX_PAYLOAD_BYTES", 16_384)
         self.output_token_limit = _setting_int("ATLAS_AGENT_MAX_OUTPUT_TOKENS", 1200)
         self.max_retries = 2
@@ -1047,9 +1060,13 @@ class OpenClawAgentAdapter(AgentAdapter):
                     "calls_per_minute_limit": self.rpm,
                     "daily_tokens": self._daily_tokens,
                     "daily_token_limit": self.daily_token_limit,
+                    "daily_token_limit_enforced": self.daily_token_limit_enforced,
                     "limited": (
                         len(self._calls) >= self.rpm
-                        or self._daily_tokens >= self.daily_token_limit
+                        or (
+                            self.daily_token_limit_enforced
+                            and self._daily_tokens >= self.daily_token_limit
+                        )
                         or self._quota_blocked
                     ),
                 },
@@ -1063,7 +1080,10 @@ class OpenClawAgentAdapter(AgentAdapter):
             breaker = self._breaker_state()
             if breaker == "open" or (breaker == "half_open" and self._half_open_probe):
                 return False
-            if len(self._calls) >= self.rpm or self._daily_tokens + estimated_tokens > self.daily_token_limit:
+            if len(self._calls) >= self.rpm or (
+                self.daily_token_limit_enforced
+                and self._daily_tokens + estimated_tokens > self.daily_token_limit
+            ):
                 self._quota_blocked = True
                 return False
             self._quota_blocked = False
