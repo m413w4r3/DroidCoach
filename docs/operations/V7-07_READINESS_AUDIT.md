@@ -23,7 +23,7 @@ observation actuelle.
 | **4. Android 17** | Launcher, Focus, notifications, permissions, Keystore | **PASS ciblé Pixel API 37 / NOT_RUN notifications-Keystore** | HOME ATLAS, lancement à froid, Plan, Focus, Coach, hors ligne et pause d'urgence testés sur Pixel 17/37.1 ; permissions runtime inchangées (calendrier/notifications/localisation refusés) ; alias Keystore non exportés et non inspectés |
 | **5. Core live** | Image, santé, SQLite, capabilities V4 | **PROVEN** | Conteneur `atlas-core-atlas-core-1`, image `00b88ef…`, `healthy`, network host, DB `/data/atlas.sqlite3` ; `/health` 200 `mode=openclaw` ; 7 capabilities `true` ; 2 consentements, 0 projection/proposition/ACK |
 | **6. Gateway live** | Modèle réel, agent Atlas, outils effectifs, restrictions | **PASS (B, 2026-11-02)** | `profile=minimal`, plugin natif `atlas_core_tools` désactivé, `allow` supprimé, deny groupes fs/runtime/web/sessions/nodes/ui ; `tools.effective` : 66/66 outils natifs exclus, aucun `atlas_*` ; appel modèle réel `gpt-6-luna`/`openai`, six outils client, une proposition A0, aucun double effet |
-| **7. Relay** | Connexion publique, Noise, appairage, révocation | **FAIL (transport public) / PASS local** | Relay `4402` sain ; proxy `4400` et connecteur testés (`relay_connected:true`) puis arrêtés ; Funnel déclaré `8443→4400` mais DNS public `NXDOMAIN` (1.1.1.1/8.8.8.8) et TLS public en échec ; 20 devices, **1 seule active** (`pixel-v7`) |
+| **7. Relay** | Connexion publique, Noise, appairage, révocation | **PASS transport (2026-11-04) / NO-GO proposition** | Relay `4402` sain ; DNS public, TLS SNI, health public 200, app connectée en LTE sans Wi-Fi/Tailscale, session Noise active ; mais aucun tour outillé fiable et aucune proposition A0 |
 | **8. Sécurité** | Identités obsolètes, consentements résiduels, secrets | **PARTIAL / P1 séparation** | `r3c-pixel-final` révoquée ; `pixel-v7` préservée car identité produit actuelle ; identité D créée puis révoquée après blocage ; 2 consentements Core `GRANTED` v2 historiques, non réutilisés ; bearer Android partagé non tourné (refusé) |
 | **9. Exploitation** | Démarrage auto, reprise, sauvegardes, monitoring | **PARTIAL / NOT_RUN** | Core `restart: unless-stopped` ; Gateway service utilisateur actif ; Relay actif ; connecteur/proxy arrêtés après D ; pas de sauvegarde automatisée ; reboot hôte et panne PC non testés |
 
@@ -242,8 +242,11 @@ Aucun P0 confirmé dans cette phase préparatoire.
    propositions. Le scope B du 2026-11-02 a appliqué `profile=minimal`, désactivé
    le plugin natif et qualifié un appel modèle réel `gpt-6-luna` ; le parcours
    produit via le transport public reste à qualifier.
-4. **Transport distant indisponible.** DNS public `NXDOMAIN` et TLS Funnel en
-   échec ; proxy/connecteur arrêtés après le blocage D.
+4. **Parcours outillé non qualifié.** Le transport public est désormais PASS,
+   mais les tours réels n’ont pas produit de proposition A0 fiable : 504 avec
+   un outil, puis 200 sans appel d’outil, 400 partiel, 200 sans outil. Délai
+   Core 20 s, contexte de conversation persistant et fraîcheur 5 min sont les
+   causes constatées/probables ; voir `V7-07_D_RESUME.md`.
 5. **Identités de campagne et bearer partagé.** `r3c-pixel-final` est révoquée
    et `pixel-v7` préservée car utilisée par l'app produit ; le bearer Android
    unique ne permet pas une identité Core produit distincte. Rotation non
@@ -278,18 +281,17 @@ La préproduction est **partiellement établie** :
 - la sauvegarde app-only, la mise à jour in-place et le smoke local ciblé sont
   **PASS sur le Pixel physique API 37.1** ; la restauration in-situ et le
   Keystore restent non exécutés ;
-- le transport public Relay est **BLOCKED** : DNS public `NXDOMAIN` et TLS
-  Funnel indisponible ; le parcours produit distant et le pilote quotidien ne
-  sont pas qualifiés.
+- le transport public Relay est **PASS** (DNS, TLS, WSS, Noise, app connectée
+  en LTE) mais le parcours outillé et la proposition A0 restent **NO-GO** ;
+  le pilote quotidien n'est pas qualifié.
 
 Les gates `GO_DATA_BACKUP`, `GO_DATA_RESTORE` et `GO_HOME_ROLLBACK` sont
 **GO_WITH_LIMITATIONS** : backup réel Pixel vérifié, restauration outil validée
 sur AVD synthétique et archive réelle extraite/vérifiée, mais restauration
 in-situ non exécutée.
 `GO_PRODUCT_INSTALL` et `GO_PRODUCT_LOCAL_SMOKE` sont
-**GO_WITH_LIMITATIONS** ; `GO_PRODUCT_REMOTE_CHAT` et
-`GO_PRODUCT_PLAN_REVISION` sont **BLOCKED** par le transport public ;
-`GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent **NO-GO**. Aucun pilote
-quotidien n'est autorisé par ce document.
+**GO_WITH_LIMITATIONS** ; `GO_PRODUCT_REMOTE_CHAT` et `GO_PRODUCT_PLAN_REVISION` sont **NO-GO** malgré
+le transport public PASS ; `GO_PRODUCT_REMOTE` et `GO_DAILY_PILOT` restent
+**NO-GO**. Aucun pilote quotidien n'est autorisé par ce document.
 
 Détail d'exécution : `V7-07_PHYSICAL_EXECUTION.md`.

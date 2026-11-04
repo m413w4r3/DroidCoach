@@ -4,8 +4,8 @@
 **BASE_SHA :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
 **Statut :** plan préparé ; **scope B exécuté le 2026-11-02** (configuration
 minimale, plugin natif désactivé, appel modèle réel PASS). Le transport public
-D est **BLOCKED** par le DNS/TLS Funnel ; aucun chat produit distant. Détail :
-`V7-07_PHYSICAL_EXECUTION.md`.
+D est **PASS depuis le 2026-11-04** ; la proposition A0 produit reste
+**NO-GO** (voir `V7-07_D_RESUME.md`).
 
 ## 1. Architecture retenue
 
@@ -312,7 +312,8 @@ La configuration candidate du §4 a été appliquée après sauvegarde et dry-ru
 `tools.effective` exclut 66/66 outils natifs et aucun outil `atlas_*` natif
 n'est chargé. Un harnais Core isolé a réalisé un appel modèle réel
 `gpt-6-luna`/`openai` : six outils, lecture DayPlan, proposition A0 à 10:10,
-`NONE_AT_CORE`, rejeu sans double effet. D n'a pas pu utiliser ce chemin
-jusqu'au produit, le transport public Funnel étant indisponible (DNS
-`NXDOMAIN`, TLS en échec). La rotation du bearer et les consentements n'ont
-pas été modifiés. Voir `V7-07_PHYSICAL_EXECUTION.md`.
+`NONE_AT_CORE`, rejeu sans double effet. La reprise D du 2026-11-04 a qualifié
+le transport public (DNS/TLS/WSS/Noise) et la synchronisation V4, mais aucun
+tour outillé fiable n'a produit de proposition A0 ; voir
+`V7-07_D_RESUME.md`. La rotation du bearer et les consentements n'ont pas été
+modifiés.

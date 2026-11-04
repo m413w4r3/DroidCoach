@@ -9,6 +9,9 @@ distant)
 **Appareil :** Pixel 9 Pro XL, Android 17 / API 37.1, serial hash
 `f2e9258b85327628c8d25b1652b00601e698f9ccb2a8b23fb1e913ff355a5946`
 **Périmètre autorisé :** scopes A+B+C+D, exécutés dans l'ordre ; E non autorisé.
+**Mise à jour 2026-11-04 :** le transport public a été rétabli et D a été
+repris ; DNS/TLS/WSS et appairage **PASS**, mais aucune proposition A0 n'a été
+obtenue. Voir `V7-07_D_RESUME.md`.
 
 ## 1. Scope A — sécurité live
 
@@ -175,7 +178,7 @@ Après installation :
 Le smoke complet 16 points de la recette pilote n'est pas exécuté : les points
 distants (Relay, chat réel, proposition, APPLY/REJECT/ACK) dépendent de D.
 
-## 4. Scope D — appairage et recette distante : BLOCKED
+## 4. Scope D — blocage initial du transport (2026-11-02), levé le 2026-11-04
 
 ### 4.1 Préparation effectuée
 
@@ -219,17 +222,16 @@ locale, URL IP avec certificat incompatible) n'a été utilisé.
 | `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS** | APK `c7b0f71f…` revu, provenance `b9f17f4`, installé in-place ; limites Pixel/Keystore/restauration |
 | `GO_PRODUCT_INSTALL` | **GO_WITH_LIMITATIONS** | installation in-place réelle PASS, données conservées, signature/permissions/HOME inchangés ; restauration réelle non exécutée, Keystore non exportable |
 | `GO_PRODUCT_LOCAL_SMOKE` | **GO_WITH_LIMITATIONS** | smoke local ciblé PASS ; smoke complet 16 points non exécuté |
-| `GO_PRODUCT_REMOTE_CHAT` | **BLOCKED** | DNS public NXDOMAIN, TLS Funnel indisponible ; aucun chat produit réel |
-| `GO_PRODUCT_PLAN_REVISION` | **BLOCKED** | aucune proposition produit APPLY/REJECT/ACK réelle |
-| `GO_PRODUCT_REMOTE` | **NO-GO / BLOCKED** | aucun parcours produit distant |
+| `GO_PRODUCT_REMOTE_CHAT` | **NO-GO** | transport public PASS le 2026-11-04, mais aucun tour réussi avec outils fiables |
+| `GO_PRODUCT_PLAN_REVISION` | **NO-GO** | aucune proposition A0, aucun APPLY/REJECT/ACK |
+| `GO_PRODUCT_REMOTE` | **NO-GO** | parcours produit distant incomplet |
 | `GO_DAILY_PILOT` | **NO-GO** | D non franchi ; E non autorisé |
 
 ## 6. Limites et prochaine action
 
-1. **Transport public à réparer** : DNS/TLS Funnel Tailscale. Une action
-   privilégiée ou une modification de la configuration Tailscale est requise
-   (certificat HTTPS, DNS public, opérateur `tailscale`). Elle n'entre pas dans
-   l'autorisation D actuelle et n'a pas été exécutée.
+1. **Transport public :** DNS/TLS/WSS **PASS** depuis le 2026-11-04 ; le
+   problème restant est le parcours outillé/proposition (`V7-07_D_RESUME.md`),
+   pas le Funnel.
 2. **Restauration réelle non exécutée** : l'archive a été extraite et vérifiée,
    et l'outil a été validé sur AVD synthétique. Une restauration sur le produit
    réel modifierait ses données ; elle reste à autoriser si le propriétaire
@@ -243,6 +245,7 @@ locale, URL IP avec certificat incompatible) n'a été utilisé.
 5. **Consentements** : les anciens `GRANTED v2` n'ont pas été utilisés comme
    consentement produit ; aucun nouveau consentement n'a été créé.
 
-**Conclusion :** A, B et C sont exécutés et prouvés dans leurs limites ; D est
-bloqué avant tout appairage ou chat produit par l'indisponibilité du transport
-public. Le pilote quotidien E n'est ni autorisé ni proposé en l'état.
+**Conclusion :** A, B et C sont exécutés et prouvés dans leurs limites ; le
+transport public D a été rétabli le 2026-11-04 et l’appairage fonctionne, mais
+la recette de proposition A0 reste **NO-GO**. Le pilote quotidien E n'est ni
+autorisé ni proposé en l'état.

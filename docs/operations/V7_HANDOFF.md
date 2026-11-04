@@ -7,11 +7,11 @@ Aucun push, PR ou merge distant effectué.
 
 ## V7-07 — Préproduction et pilote quotidien (2026-11-01/02)
 
-**Statut global : A+B+C EXÉCUTÉS SUR LE PIXEL PHYSIQUE ; D BLOQUÉ PAR LE
-TRANSPORT PUBLIC ; E NON AUTORISÉ.** `GO_PRODUCT_INSTALL` et
-`GO_PRODUCT_LOCAL_SMOKE` sont **GO_WITH_LIMITATIONS** ; le chat distant, la
-proposition/APPLY/REJECT/ACK et le parcours produit sont **BLOCKED** par le
-DNS/TLS public du Funnel. Détail : `V7-07_PHYSICAL_EXECUTION.md`.
+**Statut global : A+B+C EXÉCUTÉS ; D TRANSPORT PUBLIC PASS MAIS PLAN REVISION
+NO-GO ; E NON AUTORISÉ.** Le DNS/TLS/WSS public, l’appairage `pixel-v7` et la
+synchronisation V4 sont qualifiés. Les tours de chat réels n’ont pas produit de
+proposition A0 outillée fiable ; aucun APPLY/REJECT/ACK. Détail :
+`V7-07_PHYSICAL_EXECUTION.md` et `V7-07_D_RESUME.md`.
 
 - Branche locale `feat/atlas-v7-07-preproduction`, base
   `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d` (= `origin/main`, CI `41350216879`
@@ -71,12 +71,12 @@ DNS/TLS public du Funnel. Détail : `V7-07_PHYSICAL_EXECUTION.md`.
     précédent `0d0ce524…` conservé, `adb install -r` **Success**, données
     clés inchangées, signature/permissions/HOME inchangés ; smoke local
     HOME/Plan/Focus/Coach/apps/hors ligne/pause **PASS**.
-  - **D** : **BLOCKED** — `all.taildc7886.ts.net` est `NXDOMAIN` (1.1.1.1,
-    8.8.8.8 et Pixel) et la terminaison TLS Funnel échoue ; proxy/connecteur
-    testés puis arrêtés ; aucun `adb reverse`, aucun chat/proposition produit.
-- **Prochaine action :** autorisation distincte pour réparer le transport
-  public Tailscale (DNS/certificat Funnel), puis reprise de D. E reste non
-  autorisé. Voir `V7-07_PHYSICAL_EXECUTION.md` et `V7-07_PILOT_RECIPE.md` §7.
+  - **D** : transport public **PASS le 2026-11-04** (DNS, TLS, WSS, Noise,
+    app connectée en LTE sans Wi-Fi ni Tailscale, aucun `adb reverse`) ;
+    `pixel-v7` conservée, `DAY_PLAN` **GRANTED v4**, `ACTIVITY_STATUS`
+    **REVOKED v3**, plan synthétique v3 à 10:00–10:45 synchronisé. Les tours
+    réels n'ont pas produit de proposition A0 fiable ; **GO_PRODUCT_REMOTE_CHAT**
+    et **GO_PRODUCT_PLAN_REVISION** sont **NO-GO**. Voir `V7-07_D_RESUME.md`.
 - **P2 parseur F1** : commits test-only `fae8caa` + `5412050` sur
   `test/v7-07-parser-p2`, ciblé **8/8**, suite **917/917** avant V4, aucun code
   produit ni contrat modifié.
@@ -84,13 +84,17 @@ DNS/TLS public du Funnel. Détail : `V7-07_PHYSICAL_EXECUTION.md`.
   `ed7f0c88…`, provider `codex`, modèle `gpt-6-luna`, effort effectif
   `xhigh`, statut Paseo vérifié) — P1 provenance fermé, P2 HEAD documentaire
   qualifié d'état intermédiaire, aucun P0/P1/P2 ouvert, aucun ADB/live.
-- **Prochaine action :** autorisation distincte pour réparer le transport
-  public Tailscale (DNS/certificat Funnel), puis reprise de D. Aucun scope E
-  n'est autorisé ; voir `V7-07_PHYSICAL_EXECUTION.md` et
-  `V7-07_PILOT_RECIPE.md` §7. Les documents produits sont
-  `V7-07_READINESS_AUDIT.md`, `V7-07_BACKUP_AND_ROLLBACK.md`,
-  `V7-07_LIVE_CONFIG_PLAN.md`, `V7-07_PRODUCT_APK_CANDIDATE.md`,
-  `V7-07_PILOT_RECIPE.md`, `REGISTRY_V7_07.md`.
+- **Reprise D (2026-11-04)** : DNS/TLS/WSS public **PASS**, app connectée en
+  LTE sans Wi-Fi ni Tailscale, aucun `adb reverse`. `pixel-v7` conservée ;
+  `DAY_PLAN` **GRANTED v4**, `ACTIVITY_STATUS` **REVOKED v3** ; plan synthétique
+  v3 à 10:00–10:45 synchronisé frais. Quatre tours réels : 504 avec 1 outil,
+  200 avec 0 outil, 400 avec 2 outils partiels, 200 avec 0 outil ; aucune
+  proposition. Causes : délai Core 20 s, contexte de conversation persistant,
+  fraîcheur 5 min, absence de nouvelle conversation, saisie ADB non Unicode.
+  Aucun APPLY/REJECT/ACK. Voir `V7-07_D_RESUME.md`.
+- **Prochaine action :** autorisation ciblée pour une rotation locale non
+  destructive du `conversation_id` ou une modification produit bornée, puis
+  nouvelle tentative D. E reste non autorisé.
 
 ## V7-06D — Fiabilité remote et révocation A4-4 (2026-11-01)
 

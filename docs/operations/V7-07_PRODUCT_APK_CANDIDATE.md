@@ -158,13 +158,15 @@ inchangées, provenance `worktree_clean=true` vérifiée.
 
 `GO_PRODUCT_APK_CANDIDATE` : **GO_WITH_LIMITATIONS** — l'artefact final est
 intègre et l'essai AVD API 35 synthétique est **PASS** (backup/restore/update/
-HOME), avec le correctif V4 `dd343c2`. Limites : Pixel API 37 `NOT_RUN`,
-Keystore/tokens `NOT_RUN`, restauration du produit réel non exécutée. La
+HOME), avec le correctif V4 `dd343c2`. Limites : smoke ciblé Pixel API 37
+**PASS**, Keystore/tokens `NOT_RUN`, restauration in-situ `NOT_RUN`. La
 confirmation delta de la revue indépendante est **ACCEPTED** sur `cd45015`
 (P1 provenance fermé, P2 documentaire corrigé, aucun P0/P1/P2 ouvert). Ces
 limites sont des conditions d'installation, pas des défauts cachés.
 
 `GO_PRODUCT_INSTALL` : **GO_WITH_LIMITATIONS** — installation in-place réelle
 PASS le 2026-11-02, données conservées, signature/permissions/HOME inchangés ;
-restauration in-situ et Keystore restent des limites documentées. Le parcours
-distant est **BLOCKED** par le transport public.
+restauration in-situ et Keystore restent des limites documentées.
+`GO_PRODUCT_REMOTE` : **NO-GO** — le transport public est PASS depuis le
+2026-11-04, mais aucun parcours outillé fiable ni proposition A0 produit n'a
+été obtenu. Voir `V7-07_D_RESUME.md`.

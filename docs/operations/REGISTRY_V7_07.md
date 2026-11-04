@@ -12,11 +12,11 @@ merge distant).
 **Environnement cible de clôture :** Pixel physique Android 17 / API 37 ; aucun
 appareil connecté au lancement (`adb devices` vide).
 
-**Statut global :** `A+B+C EXÉCUTÉS SUR PIXEL PHYSIQUE ; D BLOQUÉ TRANSPORT
-PUBLIC ; E NON AUTORISÉ`. L'application `dev.atlas.coach` a été mise à jour
-in-place après sauvegarde vérifiée ; le smoke local ciblé est PASS. Le DNS/TLS
-public du Funnel est indisponible, donc aucun chat/proposition produit distant
-n'a été exécuté. Aucun push, PR ou merge distant.
+**Statut global :** `A+B+C EXÉCUTÉS ; D TRANSPORT PUBLIC PASS MAIS PLAN REVISION
+NO-GO ; E NON AUTORISÉ`. Le DNS/TLS/WSS public, l’appairage `pixel-v7` et la
+synchronisation V4 fonctionnent. Les tours de chat réels n’ont pas produit de
+proposition A0 outillée fiable ; aucun APPLY/REJECT/ACK. Détail :
+`V7-07_D_RESUME.md`. Aucun push, PR ou merge distant.
 
 ## 1. Contraintes d'exécution
 
@@ -125,6 +125,34 @@ Pixel 9 Pro XL connecté en USB, Android 17 / API 37.1, serial hash
 | Nettoyage D | proxy/connecteur arrêtés ; identité D créée puis révoquée ; 1 seule identité active (`pixel-v7`) |
 
 Preuve détaillée : `V7-07_PHYSICAL_EXECUTION.md`.
+
+## 3quater. Reprise D après correction Tailscale (2026-11-04)
+
+Pixel 9 Pro XL API 37.1, APK `c7b0f71f…`, un seul opérateur ADB. DNS public,
+TLS SNI, health public `200`, proxy/connecteur et session WSS/Noise **PASS** ;
+Pixel en LTE, Wi-Fi désactivé, Tailscale Android arrêté, aucun `adb reverse`.
+
+Identité `pixel-v7` conservée. Consentements V4 explicites : `DAY_PLAN`
+`GRANTED v4`, `ACTIVITY_STATUS` `REVOKED v3`. Plan synthétique du 2026-11-04
+(« Test ATLAS - seance Focus », 10:00–10:45) synchronisé en v3 avec
+`observed_at=2026-11-04T15:52:00Z`.
+
+| Tentative chat | Résultat |
+|---|---|
+| Message demandé (normalisé ASCII pour ADB) | **504** après 20 s, 1 outil appelé (`atlas_get_day_plan`), aucune proposition |
+| Clarification | **200**, 0 outil, question sur l’heure passée |
+| Demande explicite des deux outils | **400**, 2 outils, `partial`, aucune proposition (cause exacte non exposée ; `STALE_DATA` probable) |
+| Après reconnexion + plan v3 frais | **200**, 0 outil, réponse basée sur un contexte ancien, aucune proposition |
+
+`agent_proposals_v4 = 0` ; aucun APPLY/REJECT/ACK ; aucun double effet. Causes
+constatées/probables : délai Core de 20 s, contexte de conversation/Gateway
+persistant, fraîcheur de projection 5 min, absence de contrôle « nouvelle
+conversation », saisie ADB non Unicode. Détail et demande d’autorisation :
+`V7-07_D_RESUME.md`.
+
+Après reprise : app Hors ligne, proxy/connecteur arrêtés, Wi-Fi restauré, plan
+synthétique et consentements conservés pour une éventuelle reprise autorisée.
+Aucune modification Tailscale/Core/Gateway/secrets/bearer pendant cette reprise.
 
 ## 4. Tickets
 
@@ -236,10 +264,10 @@ fichier modifié, aucun ADB/Docker/live.
 | `GO_PRODUCT_APK_CANDIDATE` | **GO_WITH_LIMITATIONS (delta ACCEPTED, installé)** | APK `c7b0f71f…`, JVM 922/922, provenance `b9f17f4`, revue `ACCEPTED` ; installé in-place sur Pixel, données conservées |
 | `GO_PRODUCT_INSTALL` | **GO_WITH_LIMITATIONS** | installation réelle PASS ; restauration in-situ/Keystore non testés |
 | `GO_PRODUCT_LOCAL_SMOKE` | **GO_WITH_LIMITATIONS** | smoke ciblé Pixel PASS (HOME, apps, Plan, Focus, Coach, hors ligne, pause) ; smoke complet 16 points non exécuté |
-| `GO_PRODUCT_REMOTE_CHAT` | **BLOCKED** | DNS public `NXDOMAIN`, TLS Funnel en échec ; aucun chat produit réel |
-| `GO_PRODUCT_PLAN_REVISION` | **BLOCKED** | aucun APPLY/REJECT/ACK produit distant |
-| `GO_PRODUCT_REMOTE` | **NO-GO / BLOCKED** | aucun parcours produit distant |
-| `GO_DAILY_PILOT` | **NO-GO** | D bloqué, E non autorisé |
+| `GO_PRODUCT_REMOTE_CHAT` | **NO-GO** | transport public PASS et chat réel atteint, mais aucun tour réussi n’appelle les outils de façon fiable ; `tool_call_count=0` sur les tours 200 |
+| `GO_PRODUCT_PLAN_REVISION` | **NO-GO** | aucune proposition A0, aucun APPLY/REJECT/ACK ; voir `V7-07_D_RESUME.md` |
+| `GO_PRODUCT_REMOTE` | **NO-GO** | parcours produit distant incomplet |
+| `GO_DAILY_PILOT` | **NO-GO** | D plan revision NO-GO, E non autorisé |
 
 Ces verdicts seront mis à jour uniquement sur preuve exécutée, jamais par
 assimilation.

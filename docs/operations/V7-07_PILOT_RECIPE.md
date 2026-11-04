@@ -2,10 +2,11 @@
 
 **Date :** 2026-11-01
 **BASE_SHA :** `32e7c70c78fbe295f66f67d6be50dc797a3f6e6d`
-**Statut :** recette préparée. **Exécution 2026-11-02 :** installation produit
-et smoke local ciblé PASS ; scope D **BLOCKED** par le DNS/TLS public du
-Funnel ; aucun chat/proposition produit distant, aucune période quotidienne.
-Détail : `V7-07_PHYSICAL_EXECUTION.md`.
+**Statut :** recette préparée. **Exécution 2026-11-04 :** installation produit
+et smoke local ciblé PASS ; transport public WSS/Noise PASS et synchronisation
+V4 PASS, mais aucun tour outillé fiable ni proposition A0 ; `GO_PRODUCT_REMOTE_CHAT`
+et `GO_PRODUCT_PLAN_REVISION` sont **NO-GO**. Aucune période quotidienne.
+Détail : `V7-07_D_RESUME.md`.
 
 ## 1. Principe
 

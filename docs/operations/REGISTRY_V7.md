@@ -54,9 +54,12 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
   66/66 outils natifs exclus, appel modèle réel `gpt-6-luna` et proposition A0
   sans double effet ; installation Pixel et smoke local ciblé **PASS**.
   Preuve : `V7-07_PHYSICAL_EXECUTION.md`.
-- Scope D **BLOCKED** : `all.taildc7886.ts.net` est `NXDOMAIN` (1.1.1.1,
-  8.8.8.8 et Pixel) et la terminaison TLS Funnel échoue ; proxy/connecteur
-  arrêtés, aucun `adb reverse`, aucun chat/proposition produit.
+- Reprise D (2026-11-04) : transport public **PASS** (DNS, TLS, WSS, Noise,
+  app connectée en LTE sans Wi-Fi/Tailscale, aucun `adb reverse`), `pixel-v7`
+  conservée, `DAY_PLAN` **GRANTED v4**, `ACTIVITY_STATUS` **REVOKED v3**, plan
+  synthétique v3 synchronisé. Les tours réels n'ont pas produit de proposition
+  A0 fiable ; `GO_PRODUCT_REMOTE_CHAT` et `GO_PRODUCT_PLAN_REVISION` **NO-GO**,
+  `GO_PRODUCT_REMOTE` **NO-GO**. Voir `V7-07_D_RESUME.md`.
 - Verdicts : `GO_SOURCE_AND_CI` **GO_WITH_LIMITATIONS** ;
   `GO_DATA_BACKUP`/`RESTORE`/`HOME_ROLLBACK` **GO_WITH_LIMITATIONS** (backup
   réel Pixel, restauration in-situ non exécutée) ; `GO_LIVE_OPENCLAW_CONFIG`
