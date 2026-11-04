@@ -243,10 +243,13 @@ Aucun P0 confirmé dans cette phase préparatoire.
    le plugin natif et qualifié un appel modèle réel `gpt-6-luna` ; le parcours
    produit via le transport public reste à qualifier.
 4. **Parcours outillé non qualifié.** Le transport public est désormais PASS,
-   mais les tours réels n’ont pas produit de proposition A0 fiable : 504 avec
-   un outil, puis 200 sans appel d’outil, 400 partiel, 200 sans outil. Délai
-   Core 20 s, contexte de conversation persistant et fraîcheur 5 min sont les
-   causes constatées/probables ; voir `V7-07_D_RESUME.md`.
+   et la rotation locale de conversation a été vérifiée (nouvelle session
+   Gateway vide, historique préservé), mais les tours réels n’ont pas produit de
+   proposition A0 fiable : 504 avec un outil, puis 200 sans appel d’outil, 400
+   partiel, 200 sans outil, puis **429 quota journalier Core 102062/100000**
+   sur une tentative unique avec plan futur frais. Délai Core 20 s, contexte
+   de conversation persistant, fraîcheur 5 min et quota sont les causes
+   constatées/probables ; voir `V7-07_D_RESUME.md`.
 5. **Identités de campagne et bearer partagé.** `r3c-pixel-final` est révoquée
    et `pixel-v7` préservée car utilisée par l'app produit ; le bearer Android
    unique ne permet pas une identité Core produit distincte. Rotation non

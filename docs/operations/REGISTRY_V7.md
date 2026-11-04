@@ -57,9 +57,13 @@ Registre détaillé : `REGISTRY_V7_07.md`. Audit :
 - Reprise D (2026-11-04) : transport public **PASS** (DNS, TLS, WSS, Noise,
   app connectée en LTE sans Wi-Fi/Tailscale, aucun `adb reverse`), `pixel-v7`
   conservée, `DAY_PLAN` **GRANTED v4**, `ACTIVITY_STATUS` **REVOKED v3**, plan
-  synthétique v3 synchronisé. Les tours réels n'ont pas produit de proposition
-  A0 fiable ; `GO_PRODUCT_REMOTE_CHAT` et `GO_PRODUCT_PLAN_REVISION` **NO-GO**,
-  `GO_PRODUCT_REMOTE` **NO-GO**. Voir `V7-07_D_RESUME.md`.
+  synthétique synchronisé. La rotation locale du `conversation_id` a été
+  vérifiée (0 session Gateway avant chat, 12 messages et données préservés) et
+  un plan futur 18:00–18:45 a été synchronisé frais (v4). La tentative produit
+  unique a été arrêtée par le **quota journalier Core 102062/100000** (`429`,
+  1 outil appelé, aucune proposition). `GO_PRODUCT_REMOTE_CHAT` et
+  `GO_PRODUCT_PLAN_REVISION` **NO-GO**, `GO_PRODUCT_REMOTE` **NO-GO**.
+  Voir `V7-07_D_RESUME.md`.
 - Verdicts : `GO_SOURCE_AND_CI` **GO_WITH_LIMITATIONS** ;
   `GO_DATA_BACKUP`/`RESTORE`/`HOME_ROLLBACK` **GO_WITH_LIMITATIONS** (backup
   réel Pixel, restauration in-situ non exécutée) ; `GO_LIVE_OPENCLAW_CONFIG`

@@ -10,8 +10,10 @@ distant)
 `f2e9258b85327628c8d25b1652b00601e698f9ccb2a8b23fb1e913ff355a5946`
 **Périmètre autorisé :** scopes A+B+C+D, exécutés dans l'ordre ; E non autorisé.
 **Mise à jour 2026-11-04 :** le transport public a été rétabli et D a été
-repris ; DNS/TLS/WSS et appairage **PASS**, mais aucune proposition A0 n'a été
-obtenue. Voir `V7-07_D_RESUME.md`.
+repris ; DNS/TLS/WSS et appairage **PASS**, la rotation locale du
+`conversation_id` a été vérifiée et un plan futur frais a été synchronisé.
+La tentative produit unique a été arrêtée par le quota journalier Core
+(`429`, 102062/100000), sans proposition A0. Voir `V7-07_D_RESUME.md`.
 
 ## 1. Scope A — sécurité live
 
