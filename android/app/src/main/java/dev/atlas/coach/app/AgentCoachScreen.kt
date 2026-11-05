@@ -1,6 +1,7 @@
 package dev.atlas.coach.app
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -35,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -55,12 +60,18 @@ import dev.atlas.coach.sync.agent.AgentMode
 import dev.atlas.coach.sync.agent.ProposalState
 import dev.atlas.coach.sync.agent.coach.AgentMessageRole
 import dev.atlas.coach.sync.agent.coach.AgentChatSendState
+import dev.atlas.coach.sync.agent.coach.AgentConversationArchive
 import dev.atlas.coach.sync.agent.coach.AgentStatus
 import dev.atlas.coach.sync.agent.inbox.AgentInboxEntry
 import dev.atlas.coach.sync.agent.dispatch.AgentEffectRecord
 import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import dev.atlas.coach.sync.agent.context.AgentContextCategory
 import dev.atlas.coach.app.ui.AtlasRule
+import kotlinx.coroutines.launch
 
 private val actionLabels = linkedMapOf(
     "home.set_directive" to "Modifier la directive HOME",
@@ -119,6 +130,7 @@ private fun readableContextCategories(contextSources: List<String>): String? {
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 internal fun AgentCoachScreen(
     controller: AtlasController,
     pullOnOpen: Boolean = true,
@@ -128,6 +140,10 @@ internal fun AgentCoachScreen(
     var message by rememberSaveable { mutableStateOf("") }
     var editing by remember { mutableStateOf<AgentInboxEntry?>(null) }
     var showTechnicalConnectionDetail by rememberSaveable { mutableStateOf(false) }
+    var showConversationHistory by rememberSaveable { mutableStateOf(false) }
+    var selectedArchiveId by rememberSaveable { mutableStateOf<String?>(null) }
+    val composerBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val bringIntoViewScope = rememberCoroutineScope()
     val pendingProposals = remember(controller, revision) { controller.visibleAgentProposals }
     val notificationProposal = remember(controller, revision) {
         controller.highlightedProactiveProposalId?.let { id -> controller.agentInbox.firstOrNull { it.id == id } }
@@ -192,6 +208,10 @@ internal fun AgentCoachScreen(
         if (pullOnOpen) controller.pullAgentInbox()
     }
 
+    LaunchedEffect(controller.agentConversation.lastOrNull()?.id, controller.agentChatSendState) {
+        if (controller.agentConversation.isNotEmpty()) composerBringIntoViewRequester.bringIntoView()
+    }
+
     DisposableEffect(controller) {
         onDispose(controller::clearUnavailableProactiveNotificationState)
     }
@@ -242,10 +262,10 @@ internal fun AgentCoachScreen(
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Conversation V4", style = MaterialTheme.typography.labelLarge)
                     Text(
-                        if (controller.relaySettings.v4ChatEnabled) {
-                            "Route V4 uniquement. En cas d'indisponibilité, aucun repli V2 ne sera tenté."
-                        } else {
-                            "Désactivée par défaut. Le chat utilise la route V2."
+                        when {
+                            !controller.relaySettings.v4ChatEnabled -> "Désactivée. Le chat utilise la route V2."
+                            controller.relaySettings.v4ChatNegotiated -> "Demandée et négociée pour cette session relayée."
+                            else -> "Demandée mais non négociée. Aucun message ne sera envoyé et aucun repli V2 ne sera tenté."
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
@@ -258,15 +278,51 @@ internal fun AgentCoachScreen(
                 )
             }
         }
-        TextButton(
-            modifier = Modifier.sizeIn(minHeight = 48.dp).testTag("agent_refresh"),
-            onClick = controller::pullAgentInbox,
-        ) { Text("Actualiser") }
+        CoreV4SyncNowAction(
+            controller = controller,
+            onOpenSettings = { controller.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) },
+            testTag = "agent_refresh",
+        )
         if (conversationAvailability.localCoachEnabled) {
             CoachQuickActions(controller)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Conversation", style = MaterialTheme.typography.titleLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Conversation", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(
+                    modifier = Modifier.testTag("agent_new_conversation"),
+                    enabled = controller.agentChatSendState != AgentChatSendState.SENDING,
+                    onClick = {
+                        if (controller.startNewAgentConversation()) {
+                            message = ""
+                            selectedArchiveId = null
+                        }
+                    },
+                ) { Text("Nouvelle conversation") }
+            }
+            if (controller.agentConversationArchives.isNotEmpty()) {
+                TextButton(
+                    modifier = Modifier.testTag("agent_conversation_history_toggle"),
+                    onClick = { showConversationHistory = !showConversationHistory },
+                ) {
+                    Text(if (showConversationHistory) "Masquer l’historique" else "Historique (${controller.agentConversationArchives.size})")
+                }
+            }
+            if (showConversationHistory) {
+                controller.agentConversationArchives.asReversed().forEach { archive ->
+                    ConversationArchiveCard(
+                        archive = archive,
+                        expanded = selectedArchiveId == archive.archiveId,
+                        onToggle = {
+                            selectedArchiveId = if (selectedArchiveId == archive.archiveId) null else archive.archiveId
+                        },
+                    )
+                }
+            }
             if (controller.agentConversation.isEmpty()) {
                 Text(
                     if (controller.relaySettings.mode == dev.atlas.coach.sync.relay.RelayTransportMode.OFFLINE) {
@@ -278,6 +334,7 @@ internal fun AgentCoachScreen(
             }
             controller.agentConversation.forEach { entry ->
                 val isUser = entry.role == AgentMessageRole.USER
+                var detailsExpanded by rememberSaveable(entry.id) { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -301,6 +358,20 @@ internal fun AgentCoachScreen(
                                 else MaterialTheme.colorScheme.primary,
                             )
                             Text(readableConversationMessage(entry.text), style = MaterialTheme.typography.bodyLarge)
+                            if (!isUser && !entry.diagnosticDetails.isNullOrBlank()) {
+                                TextButton(
+                                    modifier = Modifier.testTag("agent_message_details_${entry.id}"),
+                                    onClick = { detailsExpanded = !detailsExpanded },
+                                ) { Text(if (detailsExpanded) "Masquer les détails" else "Détails") }
+                                if (detailsExpanded) {
+                                    Text(
+                                        entry.diagnosticDetails,
+                                        modifier = Modifier.testTag("agent_message_diagnostics_${entry.id}"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                             if (!isUser) {
                                 Text(
                                     readableMessageSourceLabel(entry.contextSources, latestProvenance),
@@ -318,7 +389,14 @@ internal fun AgentCoachScreen(
             OutlinedTextField(
                 value = message,
                 onValueChange = { if (it.length <= AtlasController.MAX_AGENT_MESSAGE_LENGTH) message = it },
-                modifier = Modifier.fillMaxWidth().testTag("agent_message_input"),
+                modifier = Modifier.fillMaxWidth()
+                    .onFocusChanged { focus ->
+                        if (focus.isFocused) {
+                            bringIntoViewScope.launch { composerBringIntoViewRequester.bringIntoView() }
+                        }
+                    }
+                    .bringIntoViewRequester(composerBringIntoViewRequester)
+                    .testTag("agent_message_input"),
                 label = { Text("Message au coach") },
                 supportingText = { Text("2 000 caractères maximum · Envoyer transmet le message.") },
                 minLines = 2,
@@ -930,6 +1008,47 @@ private fun EffectHistoryPanel(entries: List<AgentEffectRecord>) {
         }
     }
 }
+
+@Composable
+private fun ConversationArchiveCard(
+    archive: AgentConversationArchive,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("agent_archive_${archive.archiveId}"),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Conversation du ${archive.archivedAtLocalLabel()}", style = MaterialTheme.typography.titleSmall)
+            Text("${archive.messages.size} messages", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = onToggle) { Text(if (expanded) "Masquer" else "Consulter") }
+            if (expanded) {
+                archive.messages.forEach { entry ->
+                    var detailsExpanded by rememberSaveable(archive.archiveId, entry.id) { mutableStateOf(false) }
+                    Text(
+                        "${if (entry.role == AgentMessageRole.USER) "Vous" else "Coach"} · ${readableConversationMessage(entry.text)}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (entry.role == AgentMessageRole.ASSISTANT && !entry.diagnosticDetails.isNullOrBlank()) {
+                        TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
+                            Text(if (detailsExpanded) "Masquer les détails" else "Détails")
+                        }
+                        if (detailsExpanded) {
+                            Text(entry.diagnosticDetails, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun AgentConversationArchive.archivedAtLocalLabel(): String = DateTimeFormatter
+    .ofLocalizedDateTime(FormatStyle.MEDIUM)
+    .withZone(ZoneId.systemDefault())
+    .format(Instant.ofEpochMilli(archivedAtUtcMillis))
 
 private fun proposalStateLabel(entry: AgentInboxEntry): String = when (entry.proposal.state) {
     ProposalState.PROPOSED -> "Proposée"

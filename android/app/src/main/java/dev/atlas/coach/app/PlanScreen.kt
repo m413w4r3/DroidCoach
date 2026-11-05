@@ -65,9 +65,12 @@ import dev.atlas.coach.sync.agent.inbox.v4.InboxV4EntryView
 import dev.atlas.coach.sync.agent.inbox.v4.InboxV4ProposalState
 import dev.atlas.coach.focus.android.AndroidFocusNotifications
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -323,6 +326,14 @@ internal fun PlanScreen(sourceController: PlanController, atlasController: Atlas
             onSelectProposal = { reviewingInboxProposalId = it },
             onDismissReview = { reviewingInboxProposalId = null },
         )
+
+        atlasController?.let { coachController ->
+            CoreV4SyncNowAction(
+                controller = coachController,
+                onOpenSettings = { coachController.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) },
+                testTag = "plan_sync_now",
+            )
+        }
 
         nextActivity?.let { PlanNextActivityCard(it) }
 
@@ -983,6 +994,7 @@ private fun PlanInboxSection(
 ) {
     if (!enabled) return
     val context = LocalContext.current.applicationContext
+    var technicalDetailsProposalId by rememberSaveable { mutableStateOf<String?>(null) }
     val entries = controller.inboxEntries.filter { entry ->
         val state = entry.proposal.state
         (state in setOf(
@@ -1021,21 +1033,32 @@ private fun PlanInboxSection(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        "Proposition ${entry.proposal.proposalId.take(8)} · ${inboxModeLabel(entry.proposal.confirmationMode)}",
+                        "Proposition reçue · ${inboxModeLabel(entry.proposal.confirmationMode)}",
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(entry.proposal.justification, style = MaterialTheme.typography.bodyMedium)
+                    Text("Expire le ${inboxExpiryLocal(entry.proposal.expiresAt)}", style = MaterialTheme.typography.bodySmall)
+                    TextButton(
+                        modifier = Modifier.testTag("inbox_proposal_details_${entry.proposal.proposalId}"),
+                        onClick = {
+                            technicalDetailsProposalId = if (technicalDetailsProposalId == entry.proposal.proposalId) {
+                                null
+                            } else entry.proposal.proposalId
+                        },
+                    ) { Text(if (technicalDetailsProposalId == entry.proposal.proposalId) "Masquer les détails" else "Détails") }
+                    if (technicalDetailsProposalId == entry.proposal.proposalId) {
+                        Text(
+                            "Proposition ${entry.proposal.proposalId} · programme ${entry.proposal.planId} · version de base ${entry.proposal.baseVersion} · expiration UTC ${entry.proposal.expiresAt}",
+                            modifier = Modifier.testTag("inbox_proposal_technical_details_${entry.proposal.proposalId}"),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     when (entry.proposal.state) {
                         InboxV4ProposalState.UNCERTAIN -> AtlasStatus(
                             "Résultat incertain. Aucun effet ne sera rejoué sans preuve locale.",
                             AtlasStatusKind.UNAVAILABLE,
                         )
                         else -> {
-                            Text(
-                                "Programme v${entry.proposal.baseVersion} · expire ${entry.proposal.expiresAt}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                             AtlasSecondaryButton("Examiner les changements", onClick = {
                                 onSelectProposal(entry.proposal.proposalId)
                             })
@@ -1048,6 +1071,7 @@ private fun PlanInboxSection(
 
     selected?.let { entry ->
         val proposal = entry.proposal
+        var dialogTechnicalDetailsExpanded by rememberSaveable(proposal.proposalId) { mutableStateOf(false) }
         val isA1 = proposal.confirmationMode == InboxV4ConfirmationMode.A1_ANDROID_ELIGIBLE_TO_CHECK
         val a1Review = remember(controller, controller.revision, proposal.proposalId) {
             if (isA1) controller.inspectA1InboxProposal(proposal.proposalId) else null
@@ -1065,7 +1089,7 @@ private fun PlanInboxSection(
         }
         AlertDialog(
             onDismissRequest = onDismissReview,
-            title = { Text("Revoir la proposition ${proposal.proposalId.take(8)}") },
+            title = { Text("Revoir la proposition") },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -1082,10 +1106,18 @@ private fun PlanInboxSection(
                             "Cette proposition A2 requiert votre confirmation spécifique avant toute application.",
                         )
                     }
-                    Text(
-                        "Programme ${proposal.planId.take(8)} · version de base ${proposal.baseVersion}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Text("Expire le ${inboxExpiryLocal(proposal.expiresAt)}", style = MaterialTheme.typography.bodySmall)
+                    TextButton(
+                        modifier = Modifier.testTag("inbox_review_details_toggle"),
+                        onClick = { dialogTechnicalDetailsExpanded = !dialogTechnicalDetailsExpanded },
+                    ) { Text(if (dialogTechnicalDetailsExpanded) "Masquer les détails" else "Détails") }
+                    if (dialogTechnicalDetailsExpanded) {
+                        Text(
+                            "Proposition ${proposal.proposalId} · programme ${proposal.planId} · version de base ${proposal.baseVersion} · expiration UTC ${proposal.expiresAt}",
+                            modifier = Modifier.testTag("inbox_review_technical_details"),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     if (isA1) {
                         A1InboxReviewDetails(controller.plan, a1Review)
                     } else {
@@ -1468,7 +1500,7 @@ private fun inboxModeLabel(mode: InboxV4ConfirmationMode): String = when (mode) 
     InboxV4ConfirmationMode.A2_USER_CONFIRMATION -> "A2 · confirmation spécifique"
 }
 
-private fun renderInboxChange(change: Map<String, Any?>, currentPlan: dev.atlas.coach.plan.DayPlan?): String {
+internal fun renderInboxChange(change: Map<String, Any?>, currentPlan: dev.atlas.coach.plan.DayPlan?): String {
     val op = change["op"] as? String ?: "changement"
     return when (op) {
         "reschedule" -> {
@@ -1477,9 +1509,14 @@ private fun renderInboxChange(change: Map<String, Any?>, currentPlan: dev.atlas.
             val target = (change["target_start_minute"] as? Number)?.toInt()
             val start = activity?.scheduledLocal?.startMinute?.let { PlanController.timeLabel(it) } ?: "?"
             val destination = target?.let { PlanController.timeLabel(it) } ?: "?"
-            val duration = (change["duration_minutes"] as? Number)?.toInt()
-                ?: activity?.scheduledLocal?.durationMinutes
-            "déplacer « ${activity?.title ?: activityId?.take(8) ?: "activité"} » de $start à $destination · ${duration ?: "?"} min"
+            val delta = activity?.scheduledLocal?.startMinute?.let { from -> target?.minus(from) }
+            val deltaLabel = when {
+                delta == null -> "delta indisponible"
+                delta > 0 -> "+$delta min"
+                delta < 0 -> "−${-delta} min"
+                else -> "aucun décalage"
+            }
+            "« ${activity?.title ?: "activité"} » : $start → $destination · $deltaLabel"
         }
         "create_activity" -> {
             val start = (change["start_minute"] as? Number)?.toInt()?.let { PlanController.timeLabel(it) } ?: "?"
@@ -1489,11 +1526,17 @@ private fun renderInboxChange(change: Map<String, Any?>, currentPlan: dev.atlas.
             val activityId = change["activity_id"] as? String
             val title = currentPlan?.activities?.firstOrNull { it.activityId == activityId }?.title
             val fields = change.filterKeys { it != "op" && it != "activity_id" }
-            "modifier « ${title ?: activityId?.take(8) ?: "activité"} » · $fields"
+            "modifier « ${title ?: "activité"} » · $fields"
         }
-        else -> "$op · $change"
+        else -> "changement de type inconnu"
     }
 }
+
+internal fun inboxExpiryLocal(value: Instant): String = runCatching {
+    DateTimeFormatter.ofPattern("d MMM yyyy 'à' HH:mm", Locale.getDefault())
+        .withZone(ZoneId.systemDefault())
+        .format(value)
+}.getOrDefault("date d’expiration indisponible")
 
 private data class ActivityDraft(
     val editing: PlanActivity?,

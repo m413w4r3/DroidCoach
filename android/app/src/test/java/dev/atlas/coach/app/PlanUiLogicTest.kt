@@ -17,6 +17,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
+import java.util.Locale
+import java.util.TimeZone
 
 class PlanUiLogicTest {
     @Test
@@ -164,6 +167,41 @@ class PlanUiLogicTest {
         assertFalse(displayed.contains(ID_1))
         assertFalse(displayed.contains("activity_id"))
         assertFalse(displayed.startsWith("{"))
+    }
+
+    @Test
+    fun inboxRescheduleShowsLocalBeforeAfterAndMinuteDeltaWithoutRawIdentifiers() {
+        val currentPlan = dayPlan(listOf(activity(ID_1, "Lecture", start = 23 * 60)))
+
+        val displayed = renderInboxChange(
+            mapOf(
+                "op" to "reschedule",
+                "activity_id" to ID_1,
+                "target_start_minute" to 23 * 60 + 10,
+                "duration_minutes" to 45,
+            ),
+            currentPlan,
+        )
+
+        assertEquals("« Lecture » : 23:00 → 23:10 · +10 min", displayed)
+        assertFalse(displayed.contains(ID_1))
+        assertFalse(displayed.contains("activity_id"))
+    }
+
+    @Test
+    fun inboxExpiryUsesLocalTimeAndHidesTheRawUtcTimestamp() {
+        val originalZone = TimeZone.getDefault()
+        val originalLocale = Locale.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("Europe/Paris"))
+            Locale.setDefault(Locale.FRANCE)
+            val displayed = inboxExpiryLocal(Instant.parse("2026-11-06T21:00:57Z"))
+            assertTrue(displayed.contains("22:00"))
+            assertFalse(displayed.contains("T21:00:57Z"))
+        } finally {
+            TimeZone.setDefault(originalZone)
+            Locale.setDefault(originalLocale)
+        }
     }
 
     @Test
