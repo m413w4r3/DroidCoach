@@ -43,6 +43,10 @@ class AckValidationError(V4ProjectionError):
     code = "VALIDATION_FAILED"
 
 
+class ProposalOwnershipError(V4ProjectionError):
+    code = "NOT_FOUND"
+
+
 class SequenceGap(V4ProjectionError):
     code = "STALE_DATA"
 
@@ -706,39 +710,50 @@ class V4ProjectionStore:
         self,
         proposal: dict[str, Any],
         *,
+        device_ref: str,
         idempotency_key: str,
         body_hash: str,
     ) -> tuple[dict[str, Any], bool]:
+        if not device_ref:
+            raise ValueError("device_ref requis pour une nouvelle proposition")
         proposal_json = canonical_json(proposal)
         with self.store.connect() as connection:
             self.store.begin_immediate(connection)
             existing = connection.execute(
-                "SELECT body_hash,proposal_json,state FROM agent_proposals_v4 WHERE idempotency_key=?",
+                "SELECT device_ref,body_hash,proposal_json,state FROM agent_proposals_v4 WHERE idempotency_key=?",
                 (idempotency_key,),
             ).fetchone()
             if existing is not None:
+                if existing["device_ref"] != device_ref:
+                    raise IdempotencyConflict("idempotency_key déjà utilisée")
                 if existing["body_hash"] != body_hash:
                     raise IdempotencyConflict("idempotency_key réutilisée avec un autre corps")
                 value = json.loads(existing["proposal_json"])
                 value["state"] = existing["state"]
                 return value, False
             connection.execute(
-                "INSERT INTO agent_proposals_v4(proposal_id,idempotency_key,body_hash,plan_id,base_version,capability,created_at,expires_at,state,proposal_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO agent_proposals_v4(proposal_id,idempotency_key,body_hash,plan_id,base_version,capability,created_at,expires_at,state,proposal_json,device_ref) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     proposal["proposal_id"], idempotency_key, body_hash, proposal["plan_id"],
                     proposal["base_version"], proposal["capability"], proposal["created_at"],
-                    proposal["expires_at"], proposal["state"], proposal_json,
+                    proposal["expires_at"], proposal["state"], proposal_json, device_ref,
                 ),
             )
         return proposal, True
 
-    def proposal_by_idempotency_key(self, idempotency_key: str) -> dict[str, Any] | None:
+    def proposal_by_idempotency_key(
+        self,
+        idempotency_key: str,
+        *,
+        device_ref: str,
+        allow_legacy_null: bool = False,
+    ) -> dict[str, Any] | None:
         with self.store.connect() as connection:
             row = connection.execute(
-                "SELECT proposal_json,state FROM agent_proposals_v4 WHERE idempotency_key=?",
+                "SELECT proposal_json,state,device_ref FROM agent_proposals_v4 WHERE idempotency_key=?",
                 (idempotency_key,),
             ).fetchone()
-        if row is None:
+        if row is None or (row["device_ref"] != device_ref and not (allow_legacy_null and row["device_ref"] is None)):
             return None
         proposal = json.loads(row["proposal_json"])
         proposal["state"] = row["state"]
@@ -748,6 +763,8 @@ class V4ProjectionStore:
         self,
         ack: dict[str, Any],
         *,
+        device_ref: str,
+        allow_legacy_null: bool = False,
         received_at: str | None = None,
         schema_version: int = 4,
     ) -> WriteReceipt:
@@ -770,6 +787,14 @@ class V4ProjectionStore:
         replayed = False
         with self.store.connect() as connection:
             self.store.begin_immediate(connection)
+            proposal_owner = connection.execute(
+                "SELECT device_ref FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+            ).fetchone()
+            if proposal_owner is None or (
+                proposal_owner["device_ref"] != device_ref
+                and not (allow_legacy_null and proposal_owner["device_ref"] is None)
+            ):
+                raise ProposalOwnershipError("proposition inconnue")
             existing = connection.execute(
                 "SELECT body_hash FROM agent_proposal_events_v4 WHERE ack_id=?", (ack_id,)
             ).fetchone()
@@ -780,10 +805,13 @@ class V4ProjectionStore:
             else:
                 self._validate_proposal_ack(ack, state, result_code)
                 proposal = connection.execute(
-                    "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+                    "SELECT state,device_ref FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
                 ).fetchone()
-                if proposal is None:
-                    raise V4ProjectionError("proposition V4 inconnue")
+                if proposal is None or (
+                    proposal["device_ref"] != device_ref
+                    and not (allow_legacy_null and proposal["device_ref"] is None)
+                ):
+                    raise ProposalOwnershipError("proposition inconnue")
                 latest = connection.execute(
                     "SELECT MAX(sequence) AS sequence FROM agent_proposal_events_v4 WHERE proposal_id=?",
                     (proposal_id,),

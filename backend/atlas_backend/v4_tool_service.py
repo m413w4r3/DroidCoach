@@ -91,6 +91,7 @@ class V4ToolService:
         request_id_factory: Callable[[], str] | None = None,
         cursor_secret: bytes | None = None,
         proposal_ttl: timedelta = timedelta(hours=24),
+        allow_legacy_null_proposals: bool = False,
     ) -> None:
         self.projections = projections
         self.clock = clock or projections.store.store.clock
@@ -99,8 +100,15 @@ class V4ToolService:
         self.request_id_factory = request_id_factory or (lambda: str(uuid.uuid4()))
         self.cursor_secret = cursor_secret or secrets.token_bytes(32)
         self.proposal_ttl = proposal_ttl
+        self.allow_legacy_null_proposals = allow_legacy_null_proposals
 
-    def atlas_get_day_plan(self, device_ref: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def atlas_get_day_plan(
+        self,
+        device_ref: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        cursor_scope: str = "",
+    ) -> dict[str, Any]:
         capability = "day_plan.read"
         args = self._arguments(arguments or {}, {"local_date", "page_size", "cursor"}, capability)
         page_size = self._page_size(args.get("page_size", 32), 32, capability)
@@ -121,7 +129,7 @@ class V4ToolService:
         if not can_read:
             return self._empty_result(capability, freshness)
         activities = [self._clean_activity(activity) for activity in projection.get("activities", [])]
-        binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{args.get('local_date', '')}"
+        binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{args.get('local_date', '')}|{cursor_scope}"
         offset = self._decode_cursor(args.get("cursor"), binding, capability) if args.get("cursor") else 0
         page = activities[offset : offset + page_size]
         end = offset + len(page)
@@ -262,7 +270,13 @@ class V4ToolService:
             last_synced_at=row["received_at"],
         )
 
-    def atlas_get_goal_progress(self, device_ref: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def atlas_get_goal_progress(
+        self,
+        device_ref: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        cursor_scope: str = "",
+    ) -> dict[str, Any]:
         capability = "goal_progress.read"
         args = self._arguments(arguments or {}, {"page_size", "cursor", "include_subgoals"}, capability)
         page_size = self._page_size(args.get("page_size", 20), 20, capability)
@@ -306,7 +320,7 @@ class V4ToolService:
             if args.get("include_subgoals", True) is False:
                 clean["subgoals"] = []
             goals.append(clean)
-        binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{bool(args.get('include_subgoals', True))}"
+        binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{bool(args.get('include_subgoals', True))}|{cursor_scope}"
         offset = self._decode_cursor(args.get("cursor"), binding, capability) if args.get("cursor") else 0
         page = goals[offset : offset + page_size]
         end = offset + len(page)
@@ -322,7 +336,13 @@ class V4ToolService:
             last_synced_at=row["received_at"],
         )
 
-    def atlas_get_training_plan(self, device_ref: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def atlas_get_training_plan(
+        self,
+        device_ref: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        cursor_scope: str = "",
+    ) -> dict[str, Any]:
         capability = "training_plan.read"
         args = self._arguments(
             arguments or {}, {"local_date", "include_results", "page_size", "cursor"}, capability
@@ -346,7 +366,7 @@ class V4ToolService:
             item for item in projection.get("sessions", [])
             if args.get("local_date") is None or item.get("scheduled_date") in (None, args.get("local_date"))
         ]
-        binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{args.get('local_date', '')}"
+        binding = f"{device_ref}|{capability}|{row['snapshot_hash']}|{args.get('local_date', '')}|{cursor_scope}"
         offset = self._decode_cursor(args.get("cursor"), binding, capability) if args.get("cursor") else 0
         page = sessions[offset : offset + page_size]
         end = offset + len(page)
@@ -378,7 +398,15 @@ class V4ToolService:
             last_synced_at=row["received_at"],
         )
 
-    def atlas_propose_plan_revision(self, device_ref: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def atlas_propose_plan_revision(
+        self,
+        device_ref: str,
+        arguments: dict[str, Any],
+        *,
+        allow_legacy_null: bool | None = None,
+    ) -> dict[str, Any]:
+        if allow_legacy_null is None:
+            allow_legacy_null = self.allow_legacy_null_proposals
         capability = "plan_revision.propose"
         allowed = {"plan_id", "base_version", "changes", "justification", "idempotency_key"}
         args = self._arguments(arguments, allowed, capability, required=allowed)
@@ -391,7 +419,9 @@ class V4ToolService:
             "justification": args["justification"],
         }
         body_hash = content_hash(body)
-        existing = self.projections.proposal_by_idempotency_key(args["idempotency_key"])
+        existing = self.projections.proposal_by_idempotency_key(
+            args["idempotency_key"], device_ref=device_ref, allow_legacy_null=allow_legacy_null
+        )
         if existing is not None:
             if existing.get("body_hash") != body_hash:
                 raise V4ToolError("IDEMPOTENCY_CONFLICT", "idempotency_key réutilisée avec un autre corps", capability=capability)
@@ -486,7 +516,8 @@ class V4ToolService:
         }
         try:
             saved, _inserted = self.projections.create_agent_proposal(
-                proposal, idempotency_key=args["idempotency_key"], body_hash=body_hash
+                proposal, device_ref=device_ref,
+                idempotency_key=args["idempotency_key"], body_hash=body_hash
             )
         except IdempotencyConflict as exc:
             raise V4ToolError("IDEMPOTENCY_CONFLICT", str(exc), capability=capability) from exc
