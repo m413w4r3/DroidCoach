@@ -340,3 +340,10 @@
 | 2026-11-01 | Le P1 de perte potentielle `atlas_core_v4_sync` (racine invalide remplacée par un état vide) n'est pas corrigé en V7-07. | Il est documenté comme condition à traiter ou accepter explicitement avant `GO_PRODUCT_INSTALL` ; la sauvegarde préalable est la mitigation immédiate. |
 | 2026-11-01 | Le P2 parseur F1 est traité par un commit test-only `fae8caa` sur `test/v7-07-parser-p2`. | Couverture `oneOf` par contenu, statut non terminé, compteurs/identifiants incohérents, priorité des erreurs ; aucun contrat métier ni code produit modifié. |
 | 2026-11-02 | Aucun `GO_PRODUCT_INSTALL`, `GO_PRODUCT_REMOTE` ou `GO_DAILY_PILOT` n'est prononcé. | Les gates live, identité, Keystore et Pixel physique restent ouverts ; une autorisation ciblée doit précéder toute action. |
+
+## V7-10 A1 — import legacy et capabilities APK
+
+- **Décision:** l’outil offline `legacy-import` exige `--grant-defaults`; l’import accorde explicitement les capabilities V4 de compatibilité définies par l’allowlist canonique, avec événements d’audit. La création simple d’un principal continue sans grants.
+- **Raison:** préserver l’usage direct de l’APK installé pendant `dual` sans créer une capability par défaut pour les nouveaux principaux.
+- **Réversibilité:** retirer un grant par `capability set` ou révoquer le credential/principal. Le mode `principal` refuse toujours les credentials `LEGACY`.
+- **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md`.
