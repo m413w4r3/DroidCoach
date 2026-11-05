@@ -80,6 +80,64 @@ def content_hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def expire_due_proposals(
+    connection: sqlite3.Connection,
+    *,
+    now: str,
+    batch_size: int,
+    source: str,
+    proposal_id: str | None = None,
+) -> int:
+    """Expire one deterministic batch and append its server audit atomically.
+
+    The caller may provide an existing BEGIN IMMEDIATE transaction. Otherwise
+    this helper acquires and commits its own immediate transaction. If an
+    insert fails, the state update and audit insert both roll back.
+    """
+    if not isinstance(now, str) or not now:
+        raise ValueError("now doit être un horodatage UTC non vide")
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 1 <= batch_size <= 500:
+        raise ValueError("batch_size doit être compris entre 1 et 500")
+    if source not in _PROPOSAL_EXPIRATION_SOURCES:
+        raise ValueError("source d’expiration invalide")
+
+    owns_transaction = not connection.in_transaction
+    if owns_transaction:
+        connection.execute("BEGIN IMMEDIATE")
+    expired_count = 0
+    try:
+        candidates = connection.execute(
+            "SELECT proposal_id,state,expires_at FROM agent_proposals_v4 "
+            "WHERE state IN ('PENDING_ANDROID','RECEIVED','AWAITING_USER') AND expires_at<=? "
+            "AND (? IS NULL OR proposal_id=?) "
+            "ORDER BY expires_at,proposal_id LIMIT ?",
+            (now, proposal_id, proposal_id, batch_size),
+        ).fetchall()
+        for candidate in candidates:
+            updated = connection.execute(
+                "UPDATE agent_proposals_v4 SET state='EXPIRED' "
+                "WHERE proposal_id=? AND state IN ('PENDING_ANDROID','RECEIVED','AWAITING_USER') "
+                "AND expires_at<=?",
+                (candidate["proposal_id"], now),
+            )
+            if updated.rowcount != 1:
+                continue
+            connection.execute(
+                "INSERT INTO agent_proposal_expiration_events_v4 "
+                "(proposal_id,from_state,to_state,expires_at,occurred_at,source,event_version) "
+                "VALUES(?,?,'EXPIRED',?,?,?,1)",
+                (candidate["proposal_id"], candidate["state"], candidate["expires_at"], now, source),
+            )
+            expired_count += 1
+        if owns_transaction:
+            connection.commit()
+        return expired_count
+    except BaseException:
+        if owns_transaction:
+            connection.rollback()
+        raise
+
+
 _CONSENT_CATEGORIES = frozenset({
     "DAY_PLAN", "ACTIVITY_STATUS", "USAGE_SUMMARY", "GOAL_PROGRESS", "TRAINING_PLAN",
 })
@@ -784,48 +842,9 @@ class V4ProjectionStore:
         this helper acquires and commits its own immediate transaction. If an
         insert fails, the state update and audit insert both roll back.
         """
-        if not isinstance(now, str) or not now:
-            raise ValueError("now doit être un horodatage UTC non vide")
-        if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 1 <= batch_size <= 500:
-            raise ValueError("batch_size doit être compris entre 1 et 500")
-        if source not in _PROPOSAL_EXPIRATION_SOURCES:
-            raise ValueError("source d’expiration invalide")
-
-        owns_transaction = not connection.in_transaction
-        if owns_transaction:
-            self.store.begin_immediate(connection)
-        expired_count = 0
-        try:
-            candidates = connection.execute(
-                "SELECT proposal_id,state,expires_at FROM agent_proposals_v4 "
-                "WHERE state IN ('PENDING_ANDROID','RECEIVED','AWAITING_USER') AND expires_at<=? "
-                "AND (? IS NULL OR proposal_id=?) "
-                "ORDER BY expires_at,proposal_id LIMIT ?",
-                (now, proposal_id, proposal_id, batch_size),
-            ).fetchall()
-            for candidate in candidates:
-                updated = connection.execute(
-                    "UPDATE agent_proposals_v4 SET state='EXPIRED' "
-                    "WHERE proposal_id=? AND state IN ('PENDING_ANDROID','RECEIVED','AWAITING_USER') "
-                    "AND expires_at<=?",
-                    (candidate["proposal_id"], now),
-                )
-                if updated.rowcount != 1:
-                    continue
-                connection.execute(
-                    "INSERT INTO agent_proposal_expiration_events_v4 "
-                    "(proposal_id,from_state,to_state,expires_at,occurred_at,source,event_version) "
-                    "VALUES(?,?,'EXPIRED',?,?,?,1)",
-                    (candidate["proposal_id"], candidate["state"], candidate["expires_at"], now, source),
-                )
-                expired_count += 1
-            if owns_transaction:
-                connection.commit()
-            return expired_count
-        except BaseException:
-            if owns_transaction:
-                connection.rollback()
-            raise
+        return expire_due_proposals(
+            connection, now=now, batch_size=batch_size, source=source, proposal_id=proposal_id
+        )
 
     def append_proposal_ack(
         self,
