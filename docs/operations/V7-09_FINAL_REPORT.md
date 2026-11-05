@@ -79,6 +79,19 @@ sans conflit.
 
 Détails complets : `V7-09_REJECT_QA.md`.
 
+### Écarts de procédure assumés
+
+- La sauvegarde app-only a été prise **après** la création de la fixture du
+  jour, mais **avant** les mutations réseau/inbox. L'état pré-fixture (aucun
+  plan du jour, puis plan vide v1) est documenté ; la fixture a été supprimée
+  par le parcours normal et aucune restauration d'archive n'a été nécessaire.
+- Les gestes UI ont été exécutés par Paseo via ADB (`input tap` / `input
+  text`), conformément au rôle d'unique opérateur ADB. Aucun sous-agent n'a
+  touché au Pixel.
+- L'arrêt temporaire de l'app pour la rotation de conversation a utilisé
+  `am force-stop` en arrière-plan, sans `pm clear`, désinstallation ni
+  modification d'un autre champ.
+
 ## 5. Tests réellement exécutés
 
 | Suite | Commande | Résultat |

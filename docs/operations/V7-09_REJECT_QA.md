@@ -275,6 +275,10 @@ Résultat :
 - proposition toujours `REJECTED` ;
 - plan local et snapshot Core toujours v2 / 1380.
 
+Le journal Core de la fenêtre contient exactement **deux** `POST
+/v4/agent/proposals/2a29a35f…/ack` en 200 : la livraison initiale et le rejeu
+contrôlé. Aucun troisième POST n'a été émis.
+
 Ce rejeu est un rejeu du **corps ACK réel persisté**, pas un ACK fabriqué et
 pas un ACK antidaté. Il prouve l'idempotence Core ; il ne prétend pas que le
 worker Android a renvoyé spontanément un ACK déjà livré.
@@ -290,7 +294,7 @@ worker Android a renvoyé spontanément un ACK déjà livré.
 | Doublon de proposition | aucun (`GROUP BY idempotency_key` vide) |
 | Cache chat | 1 proposition, 2 appels d'outils, `tool_state=completed` |
 | Consentements | `DAY_PLAN v4 GRANTED`, `ACTIVITY_STATUS v3 REVOKED` inchangés |
-| Crash / ANR | aucun `FATAL EXCEPTION` ni `ANR in dev.atlas.coach` dans logcat |
+| Crash / ANR | aucun `FATAL EXCEPTION` ni `ANR in dev.atlas.coach` observé dans la fenêtre logcat contrôlée |
 | HOME | `dev.atlas.coach/.app.LauncherActivity` |
 | Plan / Coach / Focus | écrans fonctionnels, pas de régression observée |
 
