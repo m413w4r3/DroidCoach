@@ -129,8 +129,11 @@ class E2eV63Test {
         val response = client.chat("synthetic-conversation", "synthetic request", mandate, snapshot,
             "00000000-0000-4000-8000-000000000702")
         assertEquals("connected", response.status.wireValue)
-        assertTrue(response.reply.contains("État des outils : completed (1 appel(s))"))
-        assertTrue(response.reply.contains(proposalId))
+        assertEquals("Proposition prête à revoir.", response.reply)
+        assertFalse(response.reply.contains("État des outils"))
+        assertFalse(response.reply.contains(proposalId))
+        assertTrue(requireNotNull(response.diagnosticDetails).contains("État des outils : completed (1 appel(s))"))
+        assertTrue(requireNotNull(response.diagnosticDetails).contains(proposalId))
         assertEquals("v4.coach.chat.request", operations.single())
         val requestBody = payloads.single()
         assertEquals(4, requestBody.getInt("contract_version"))

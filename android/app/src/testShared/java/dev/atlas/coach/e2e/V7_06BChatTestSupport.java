@@ -42,12 +42,13 @@ public final class V7_06BChatTestSupport {
                 + "\"Décaler cette activité de 10 minutes.\". Ne crée aucune autre proposition et n'applique rien.";
     }
 
-    public static ToolMetadata parseToolMetadata(String text) {
-        int metadataIndex = text.lastIndexOf(TOOLS_PROVENANCE_LABEL);
-        if (metadataIndex < 0) {
-            throw new IllegalStateException("V4 tool metadata is missing from the assistant response");
+    /** Parses the dedicated diagnostic field; user-visible assistant text contains no tool metadata. */
+    public static ToolMetadata parseToolMetadata(String diagnosticDetails) {
+        if (diagnosticDetails == null || diagnosticDetails.isBlank()
+                || !diagnosticDetails.contains(TOOLS_PROVENANCE_LABEL)) {
+            throw new IllegalStateException("V4 tool metadata is missing from diagnostic details");
         }
-        String suffix = text.substring(metadataIndex).stripTrailing();
+        String suffix = diagnosticDetails.stripTrailing();
         String toolState;
         int toolCallCount;
         int proposalCount;
@@ -62,7 +63,7 @@ public final class V7_06BChatTestSupport {
         } else {
             Matcher match = TOOL_METADATA_SUFFIX_PATTERN.matcher(suffix);
             if (!match.matches()) {
-                throw new IllegalStateException("V4 tool metadata is not the generated suffix of the assistant response");
+                throw new IllegalStateException("V4 diagnostic tool metadata is malformed");
             }
             toolState = match.group(1);
             toolCallCount = Integer.parseInt(match.group(2));

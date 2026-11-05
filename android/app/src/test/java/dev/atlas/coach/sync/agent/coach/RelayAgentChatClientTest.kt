@@ -542,15 +542,49 @@ class RelayAgentChatClientTest {
         assertEquals(setOf("DAY_PLAN", "GOAL_PROGRESS"),
             (0 until requireNotNull(sentBody).getJSONArray("shared_categories").length())
                 .map { sentBody!!.getJSONArray("shared_categories").getString(it) }.toSet())
+        assertEquals("conversation-v4", sentBody?.getString("conversation_id"))
         assertFalse(sentBody?.has("shared_context") == true)
         assertEquals(emptyList<String>(), auditedCategories)
         assertEquals(AgentStatus.CONNECTED, response.status)
-        assertTrue(response.reply.contains("État des outils : partial (6 appel(s))"))
-        assertTrue(response.reply.contains("$proposalId"))
-        assertTrue(response.reply.contains("Contenu à synchroniser via la boîte de réception"))
-        assertFalse(response.reply.contains("pour le détail"))
+        assertEquals("A V4 next step.", response.reply)
+        assertFalse(response.reply.contains("État des outils"))
+        assertFalse(response.reply.contains(proposalId))
+        assertTrue(requireNotNull(response.diagnosticDetails).contains("État des outils : partial (6 appel(s))"))
+        assertTrue(requireNotNull(response.diagnosticDetails).contains(proposalId))
+        assertTrue(requireNotNull(response.diagnosticDetails).contains("Contenu à synchroniser via la boîte de réception"))
         assertTrue(response.proposals.isEmpty())
         assertTrue(response.reply.length <= 4_000)
+    }
+
+    @Test
+    fun staleDataIsSafeTypedConflictAndNeverFallsBackToV2() {
+        val mandate = AgentMandate.default()
+        val context = context(mandate, 1_800_000_000_000L, emptyMap())
+        val operations = mutableListOf<String>()
+        val client = RelayAgentChatClient(
+            executor = RelayChatRequestExecutor { operation, _, _, _, _, _ ->
+                operations += operation
+                RelayCallResult.RemoteError(
+                    code = "STALE_DATA",
+                    message = "secret arguments must stay hidden",
+                    retryable = false,
+                    httpStatus = 409,
+                )
+            },
+            freshRequestContext = { requestContext(mandate, context, 1_800_000_000_000L) },
+            onContextWritten = { true },
+            v4ChatEnabled = true,
+        )
+
+        val failure = runCatching {
+            client.chat(UUID.randomUUID().toString(), "synthetic", mandate, context, UUID.randomUUID().toString())
+        }.exceptionOrNull() as? AgentChatException ?: throw AssertionError("Expected typed conflict")
+
+        assertEquals(AgentChatFailureKind.CONFLICT, failure.kind)
+        assertEquals("STALE_DATA", failure.remoteCode)
+        assertEquals("Les données du programme ont changé. Actualisez-les puis réessayez manuellement.", failure.message)
+        assertFalse(requireNotNull(failure.message).contains("secret"))
+        assertEquals(listOf(RelayAgentChatClient.V4_CHAT_OPERATION), operations)
     }
 
     @Test

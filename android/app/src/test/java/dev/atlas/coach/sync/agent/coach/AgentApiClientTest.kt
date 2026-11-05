@@ -24,8 +24,56 @@ import java.nio.charset.StandardCharsets
 import java.util.Collections
 import java.util.UUID
 import java.net.SocketTimeoutException
+import java.util.concurrent.atomic.AtomicInteger
 
 class AgentApiClientTest {
+    @Test
+    fun staleDataHttpErrorMapsToSafeConflictWithoutRetry() {
+        val requests = AtomicInteger()
+        val mandate = AgentMandate.default()
+        val context = AgentContextAssembler().assemble(
+            mandate,
+            emptyMap(),
+            AgentContextDomainViews(),
+            1_800_000_000_000L,
+        )
+        ServerSocket(0).use { server ->
+            server.soTimeout = 8_000
+            val fixture = Thread {
+                server.accept().use { socket ->
+                    requests.incrementAndGet()
+                    val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.ISO_8859_1))
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        if (line.isEmpty()) break
+                    }
+                    val body = """{"error":{"code":"STALE_DATA","message":"private arguments must not surface"}}"""
+                        .toByteArray(StandardCharsets.UTF_8)
+                    socket.getOutputStream().apply {
+                        write("HTTP/1.1 409 Conflict\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.ISO_8859_1))
+                        write(body)
+                        flush()
+                    }
+                }
+            }.apply { isDaemon = true; start() }
+            val client = AgentApiClient(
+                baseUrl = "http://127.0.0.1:${server.localPort}",
+                tokenProvider = BearerTokenProvider { "test-token" },
+            )
+
+            val failure = runCatching {
+                client.chat("new-conversation-id", "synthetic", mandate, context, "request-id")
+            }.exceptionOrNull() as? AgentChatException ?: throw AssertionError("Expected a typed conflict")
+
+            fixture.join(8_000)
+            assertEquals(AgentChatFailureKind.CONFLICT, failure.kind)
+            assertEquals("STALE_DATA", failure.remoteCode)
+            assertEquals(AgentApiClient.STALE_DATA_SAFE_MESSAGE, failure.message)
+            assertFalse(requireNotNull(failure.message).contains("private"))
+            assertEquals(1, requests.get())
+        }
+    }
+
     @Test
     fun revokedFreshContextBlocksPlanBeforeRequestBodyIsWritten() {
         var written = false

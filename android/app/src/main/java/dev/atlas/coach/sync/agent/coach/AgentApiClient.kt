@@ -27,6 +27,8 @@ data class AgentChatResponse(
     val status: AgentStatus,
     /** The exact minimized shared_context body written to this request. */
     val sharedContextJson: String? = null,
+    /** Protocol diagnostics are retained for a user-opened details panel, not shown in the reply. */
+    val diagnosticDetails: String? = null,
 )
 
 /** A fresh, read-only authorization and data snapshot assembled immediately before HTTP write. */
@@ -54,7 +56,12 @@ data class AgentRequestContext(
 
 data class AgentInboxResponse(val proposals: List<ProposalV2>, val cursor: String?)
 
-class AgentApiException(message: String, val statusCode: Int? = null, cause: Throwable? = null) : IOException(message, cause)
+class AgentApiException(
+    message: String,
+    val statusCode: Int? = null,
+    cause: Throwable? = null,
+    val remoteCode: String? = null,
+) : IOException(message, cause)
 
 /** HTTP v2 client. It reuses the configured backend URL and Keystore-backed Bearer provider. */
 class AgentApiClient(
@@ -109,7 +116,19 @@ class AgentApiClient(
         mandate: AgentMandate,
         context: AgentContextSnapshot,
         idempotencyKey: String,
-    ): AgentChatResponse = chat(conversationId, message, mandate, context)
+    ): AgentChatResponse = try {
+        chat(conversationId, message, mandate, context)
+    } catch (error: AgentApiException) {
+        if (error.statusCode == 409 && error.remoteCode == STALE_DATA_CODE) {
+            throw AgentChatException(
+                AgentChatFailureKind.CONFLICT,
+                STALE_DATA_SAFE_MESSAGE,
+                remoteCode = STALE_DATA_CODE,
+                cause = error,
+            )
+        }
+        throw error
+    }
 
     fun plan(
         conversationId: String,
@@ -278,7 +297,13 @@ class AgentApiClient(
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) throw AgentApiException("Agent backend returned HTTP $status", status)
+            if (status !in 200..299) {
+                val remoteCode = runCatching {
+                    JSONObject(response).optJSONObject("error")?.optString("code")
+                        ?.takeIf { it.matches(REMOTE_CODE_PATTERN) }
+                }.getOrNull()
+                throw AgentApiException("Agent backend returned HTTP $status", status, remoteCode = remoteCode)
+            }
             if (response.isBlank()) return JSONObject()
             return try { JSONObject(response) } catch (error: Exception) {
                 throw AgentApiException("Agent backend returned invalid JSON", status, error)
@@ -293,6 +318,9 @@ class AgentApiClient(
     }
 
     companion object {
+        const val STALE_DATA_CODE = "STALE_DATA"
+        const val STALE_DATA_SAFE_MESSAGE = "Les données du programme ont changé. Actualisez-les puis réessayez manuellement."
+        private val REMOTE_CODE_PATTERN = Regex("[A-Z0-9_]{1,64}")
         const val DEFAULT_CONNECT_TIMEOUT_MILLIS = 4_000L
         const val DEFAULT_READ_TIMEOUT_MILLIS = 65_000L
         const val DEFAULT_HTTP_TRANSPORT_TIMEOUT_BUDGET_MILLIS =

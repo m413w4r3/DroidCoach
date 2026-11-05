@@ -135,19 +135,14 @@ object AgentChatResponseParser {
             } else {
                 "Proposition(s) (${proposalIds.size}) — identifiants : ${proposalIds.joinToString(", ")}. Contenu à synchroniser via la boîte de réception."
             }
-            val metadata = "\n\nÉtat des outils : $toolState ($toolCallCount appel(s)). $proposalSummary"
-            val replyLimit = (MAX_VISIBLE_REPLY_LENGTH - metadata.length).coerceAtLeast(0)
-            val clipped = reply.length > replyLimit
-            val contentLimit = if (clipped) (replyLimit - 1).coerceAtLeast(0) else replyLimit
-            val visibleReply = reply.take(contentLimit).let { content ->
-                (if (clipped) content.trimEnd() + "…" else content) + metadata
-            }
+            val diagnosticDetails = "État des outils : $toolState ($toolCallCount appel(s)). $proposalSummary"
             val sharedCategories = JSONObject().put("consented_categories", JSONArray(sharing.sharedCategories.sorted()))
             return AgentChatResponse(
-                reply = visibleReply,
+                reply = reply,
                 proposals = emptyList(),
                 status = status,
                 sharedContextJson = sharedCategories.toString(),
+                diagnosticDetails = diagnosticDetails,
             )
         } catch (error: Exception) {
             throw AgentChatException(
@@ -159,7 +154,6 @@ object AgentChatResponseParser {
     }
 
     private const val MAX_REPLY_LENGTH = 4_000
-    private const val MAX_VISIBLE_REPLY_LENGTH = 4_000
     private const val MAX_PROPOSALS = 5
     private val V4_TOOL_STATES = setOf("none", "completed", "partial", "uncertain")
 }
@@ -455,6 +449,8 @@ class RelayAgentChatClient(
             "Le résultat de la requête est incertain. ATLAS ne la renverra pas automatiquement."
         "HTTP_409", "CONFLICT", "IDEMPOTENCY_CONFLICT", "STALE_VERSION" -> AgentChatFailureKind.CONFLICT to
             "Le serveur a détecté un conflit. Aucun nouvel envoi automatique ne sera tenté."
+        "STALE_DATA" -> AgentChatFailureKind.CONFLICT to
+            "Les données du programme ont changé. Actualisez-les puis réessayez manuellement."
         "HTTP_422", "BAD_REQUEST", "INVALID_REQUEST" -> AgentChatFailureKind.INVALID_REQUEST to
             "La requête V4 a été refusée car elle ne respecte pas les données attendues."
         "HTTP_503", "SERVICE_UNAVAILABLE", "BACKEND_UNAVAILABLE", "UPSTREAM_UNAVAILABLE" ->

@@ -237,7 +237,10 @@ class V7_06B_CoachLoopInstrumentedTest {
                 .filter { it.role == AgentMessageRole.ASSISTANT }
                 .lastOrNull()
                 ?: error("V4 assistant response is missing")
-            val toolMetadata = V7_06BChatTestSupport.parseToolMetadata(assistantResponse.text)
+            assertFalse("tool metadata must stay out of the visible reply", assistantResponse.text.contains("État des outils"))
+            val toolMetadata = V7_06BChatTestSupport.parseToolMetadata(
+                assistantResponse.diagnosticDetails ?: error("V4 tool diagnostics are missing"),
+            )
             assertEquals("completed", toolMetadata.toolState)
             assertTrue("V4 response must contain the plan read and proposal tool calls", toolMetadata.toolCallCount >= 2)
             assertEquals("V4 response must return exactly one proposal ID", 1, toolMetadata.proposalIds.size)

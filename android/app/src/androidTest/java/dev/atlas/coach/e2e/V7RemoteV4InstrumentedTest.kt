@@ -230,11 +230,9 @@ class V7RemoteV4InstrumentedTest {
             .filter { it.role == AgentMessageRole.ASSISTANT }
             .lastOrNull()
             ?: error("V4 assistant response is missing")
-        val metadataStart = assistantResponse.text.lastIndexOf(TOOLS_PROVENANCE_LABEL)
-        check(metadataStart >= 0) { "V4 tool metadata is missing from the assistant response" }
-        val metadataSuffix = assistantResponse.text.substring(metadataStart).trimEnd()
-        val toolMetadata = TOOL_METADATA_SUFFIX_PATTERN.matchEntire(metadataSuffix)
-            ?: error("V4 tool metadata is not the generated suffix of the assistant response")
+        assertFalse("protocol details must stay out of the visible reply", assistantResponse.text.contains("État des outils"))
+        val toolMetadata = TOOL_METADATA_SUFFIX_PATTERN.matchEntire(assistantResponse.diagnosticDetails.orEmpty())
+            ?: error("V4 diagnostic metadata is missing or malformed")
         val toolState = toolMetadata.groupValues[1]
         val toolCallCount = toolMetadata.groupValues[2].toInt()
         assertEquals("completed", toolState)
@@ -243,14 +241,15 @@ class V7RemoteV4InstrumentedTest {
         // V4 exposes only tool_state and tool_call_count here. Exact tool names are correlated
         // against the parent Core/OpenClaw evidence, never inferred from assistant text.
         val proposalIdFromReply = toolMetadata.groupValues[4]
+        assertFalse("proposal id must stay out of the visible reply", assistantResponse.text.contains(proposalIdFromReply))
         assertFalse(
             "reply proposal id was already present before the chat",
             proposalIdFromReply in proposalIdsBefore,
         )
         Log.i(
             LOG_TAG,
-            "assistant_chars=${assistantResponse.text.length} tool_state=$toolState " +
-                "tool_call_count=$toolCallCount reply_proposal_id=$proposalIdFromReply",
+            "assistant_chars=${assistantResponse.text.length} diagnostic_chars=${assistantResponse.diagnosticDetails.orEmpty().length} " +
+                "tool_state=$toolState tool_call_count=$toolCallCount diagnostic_proposal_id=$proposalIdFromReply",
         )
 
         CoreV4SyncScheduler.schedule(context)
@@ -707,7 +706,6 @@ class V7RemoteV4InstrumentedTest {
         const val MAX_TIMEOUT_DIAGNOSTIC_CHARS = 1_200
         const val MAX_CLEANUP_DIAGNOSTIC_CHARS = 400
         val SERVER_ID_PATTERN = Regex("^atlas-pc-[A-Za-z0-9._-]+$")
-        const val TOOLS_PROVENANCE_LABEL = "État des outils"
         val TOOL_METADATA_SUFFIX_PATTERN = Regex(
             "État des outils\\s*:\\s*([a-z_]+)\\s*\\((\\d+) appel\\(s\\)\\)\\.\\s*" +
                 "Proposition\\(s\\)\\s*\\((\\d+)\\)\\s*—\\s*identifiants\\s*:\\s*" +

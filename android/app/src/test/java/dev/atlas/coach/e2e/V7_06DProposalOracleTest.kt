@@ -19,6 +19,8 @@ class V7_06DProposalOracleTest {
     @Test
     fun oneProposalMetadataParsesAndRemainsEligibleForPassAssertions() {
         val proposalId = "00000000-0000-4000-8000-000000000201"
+        val visibleReply = "La modification est prête à confirmer."
+        assertFalse(visibleReply.contains("État des outils"))
         val metadata = V7_06BChatTestSupport.parseToolMetadata(proposalMetadata("completed", 1, proposalId))
 
         assertEquals("completed", metadata.toolState)
@@ -121,6 +123,11 @@ class V7_06DProposalOracleTest {
             failure
         }
         assertEquals(expectedCode, failure.message)
+    }
+
+    @Test
+    fun visibleReplyIsNotAcceptedAsToolDiagnostics() {
+        assertParserError("V4 tool metadata is missing from diagnostic details", "La modification est prête à confirmer.")
     }
 
     private fun zeroProposalMetadata(toolState: String): String =
