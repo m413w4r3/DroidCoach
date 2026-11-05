@@ -38,7 +38,7 @@ défaut de cycle de vie P1 documenté, non contourné.
 | A2 QA assertions | `2dde10c` — `docs/operations/evidence/V7-09_A2_QA_ASSERTIONS.md` |
 | A3 sécurité | `9741903` — `docs/operations/evidence/V7-09_A3_SECURITY_READINESS.md` |
 | Documents V7-09 | `7788d23`, `ae17409`, `eb38ae7` puis commit de clôture (`git log -1`) |
-| A4 revue indépendante | `ae17409` examiné ; **GO_WITH_LIMITATIONS** — `docs/operations/evidence/V7-09_A4_INDEPENDENT_REVIEW.md` |
+| A4 revue indépendante | `ae17409` examiné ; **GO_WITH_LIMITATIONS**, delta final **DELTA_ACCEPTED** sur `820cd80` — `docs/operations/evidence/V7-09_A4_INDEPENDENT_REVIEW.md` |
 | Push / PR / merge | **aucun** |
 
 Historique V7-08 préservé ; aucun `reset --hard`, aucun force-push, aucune
@@ -147,8 +147,10 @@ n'a pas eu de journaux Relay/Gateway complets.
 
 Ses P2 de clarté/preuve ont été corrigés : compte de diff exact au SHA revu,
 contrôles Git décrits comme exécutés, bannière historique sur A2,
-clarification du rejeu contrôlé Core et document d'évidence Android. Le
-rapport A4 est dans `evidence/V7-09_A4_INDEPENDENT_REVIEW.md`.
+clarification du rejeu contrôlé Core et document d'évidence Android. A4 a
+ensuite rendu **`DELTA_ACCEPTED`** au SHA
+`820cd802d34f005e35c5efc8499d8108ca2e40cd`, sans blocker restant. Le rapport
+A4 est dans `evidence/V7-09_A4_INDEPENDENT_REVIEW.md`.
 
 ## 7. Risques ouverts
 

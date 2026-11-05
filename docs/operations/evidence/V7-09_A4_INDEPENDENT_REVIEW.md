@@ -85,5 +85,8 @@ Aucun.
 
 A4 recommandait de **différer la publication** du SHA `ae17409` jusqu'à
 correction des P2 ci-dessus. Ces corrections sont intégrées au commit de
-clôture. Le parent propose donc la branche à l'examen du propriétaire, sans
+clôture `820cd802d34f005e35c5efc8499d8108ca2e40cd`. A4 a ensuite rendu
+**`DELTA_ACCEPTED`** sur ce SHA : les six points sont vérifiés, le delta est
+docs-only, sans secret, sans ADB, sans build et sans push, et aucun blocker
+ne reste. Le parent propose donc la branche à l'examen du propriétaire, sans
 push, PR ni merge. Le pilote quotidien reste **NO-GO**.
