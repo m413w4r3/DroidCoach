@@ -265,14 +265,11 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
             v4Presentation.updatedAt?.let {
                 Text("Dernier reçu ou état : $it", style = MaterialTheme.typography.bodySmall)
             }
-            Button(
-                modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).testTag("sync_v4_now"),
-                enabled = controller.syncBaseUrl.isNotBlank() && controller.syncTokenConfigured,
-                onClick = {
-                    CoreV4SyncScheduler.schedule(context)
-                    refreshV4()
-                },
-            ) { Text("Pousser les projections V4") }
+            CoreV4SyncNowAction(
+                controller = controller,
+                onOpenSettings = { controller.navigationState.navigate(AtlasScreenId.RELAY_SETTINGS) },
+                testTag = "sync_v4_now",
+            )
         }
 
         AtlasSecondaryButton(

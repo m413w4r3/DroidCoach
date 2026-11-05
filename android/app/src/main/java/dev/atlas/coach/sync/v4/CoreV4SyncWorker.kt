@@ -2,6 +2,7 @@ package dev.atlas.coach.sync.v4
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.os.SystemClock
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -53,6 +54,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONObject
 
 private const val MAX_PULL_PAGES_PER_RUN = 4
@@ -87,12 +89,21 @@ class CoreV4SyncWorker(context: Context, params: WorkerParameters) : Worker(cont
     @Volatile private var activeInboxTransport: InboxV4HttpTransport? = null
 
     override fun doWork(): Result {
-        if (!CoreV4SyncSingleFlight.beginPass()) return Result.success()
+        val isImmediate = inputData.getString(CoreV4SyncScheduler.WORK_KIND_INPUT) ==
+            CoreV4Diagnostics.WorkKind.IMMEDIATE.name
+        if (!CoreV4SyncSingleFlight.beginPass()) {
+            if (isImmediate) CoreV4SyncScheduler.finishRequestNow()
+            return Result.success()
+        }
         try {
             return doSyncPass()
         } finally {
-            if (CoreV4SyncSingleFlight.finishPass()) {
-                CoreV4SyncScheduler.enqueueImmediate(applicationContext)
+            try {
+                if (CoreV4SyncSingleFlight.finishPass()) {
+                    CoreV4SyncScheduler.enqueueImmediate(applicationContext)
+                }
+            } finally {
+                if (isImmediate) CoreV4SyncScheduler.finishRequestNow()
             }
         }
     }
@@ -1417,6 +1428,8 @@ object CoreV4SyncScheduler {
     const val IMMEDIATE_WORK = "atlas_core_v4_push_now"
     const val PERIODIC_WORK = "atlas_core_v4_push_periodic"
     const val WORK_KIND_INPUT = "atlas_core_v4_work_kind"
+    const val REQUEST_NOW_DEBOUNCE_MILLIS = ManualCoreV4SyncRequestGate.DEBOUNCE_MILLIS
+    private val requestNowGate = ManualCoreV4SyncRequestGate()
 
     fun schedule(context: Context) {
         val appContext = context.applicationContext
@@ -1440,9 +1453,25 @@ object CoreV4SyncScheduler {
         }
     }
 
+    /** Explicit user action. KEEP plus the local gate collapses taps into one immediate pass. */
+    fun requestNow(context: Context): Boolean = requestNowGate.submit {
+        val appContext = context.applicationContext
+        val immediate = immediateRequest()
+        WorkManager.getInstance(appContext)
+            .enqueueUniqueWork(IMMEDIATE_WORK, ExistingWorkPolicy.KEEP, immediate)
+    }
+
+    internal fun isRequestNowBusy(): Boolean = requestNowGate.isBusy
+
+    internal fun finishRequestNow() = requestNowGate.finish()
+
     internal fun enqueueImmediate(context: Context) {
         val appContext = context.applicationContext
-        val immediate = OneTimeWorkRequestBuilder<CoreV4SyncWorker>()
+        WorkManager.getInstance(appContext)
+            .enqueueUniqueWork(IMMEDIATE_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, immediateRequest())
+    }
+
+    private fun immediateRequest() = OneTimeWorkRequestBuilder<CoreV4SyncWorker>()
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -1451,7 +1480,41 @@ object CoreV4SyncScheduler {
             .setInputData(workDataOf(WORK_KIND_INPUT to CoreV4Diagnostics.WorkKind.IMMEDIATE.name))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-        WorkManager.getInstance(appContext)
-            .enqueueUniqueWork(IMMEDIATE_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, immediate)
+}
+
+internal class ManualCoreV4SyncRequestGate(
+    private val nowMillis: () -> Long = { SystemClock.elapsedRealtime() },
+    private val debounceMillis: Long = DEBOUNCE_MILLIS,
+) {
+    private val lastAcceptedAtMillis = AtomicLong(NEVER_ACCEPTED)
+
+    val isBusy: Boolean
+        get() = lastAcceptedAtMillis.get().let { lastAccepted ->
+            lastAccepted != NEVER_ACCEPTED && nowMillis() - lastAccepted < debounceMillis
+        }
+
+    fun submit(enqueue: () -> Unit): Boolean {
+        val now = nowMillis()
+        while (true) {
+            val previous = lastAcceptedAtMillis.get()
+            if (previous != NEVER_ACCEPTED && now - previous < debounceMillis) return false
+            if (lastAcceptedAtMillis.compareAndSet(previous, now)) break
+        }
+        return try {
+            enqueue()
+            true
+        } catch (_: RuntimeException) {
+            lastAcceptedAtMillis.compareAndSet(now, NEVER_ACCEPTED)
+            false
+        }
+    }
+
+    fun finish() {
+        lastAcceptedAtMillis.set(NEVER_ACCEPTED)
+    }
+
+    companion object {
+        private const val NEVER_ACCEPTED = Long.MIN_VALUE
+        const val DEBOUNCE_MILLIS = 750L
     }
 }
