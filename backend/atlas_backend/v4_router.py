@@ -48,6 +48,8 @@ from .v4_projection_store import (
     AckValidationError,
     EventIdConflict,
     IdempotencyConflict,
+    ProposalExpired,
+    ProposalNotExpired,
     ProposalOwnershipError,
     ProjectionConflict,
     SequenceGap,
@@ -299,6 +301,7 @@ def _error_response(
         "ACK_ID_CONFLICT": 409,
         "ACK_CONFLICT": 409,
         "PROPOSAL_EXPIRED": 409,
+        "PROPOSAL_NOT_EXPIRED": 409,
         "REPLAY_PENDING": 409,
         "RESULT_UNCERTAIN": 409,
         "QUOTA_EXCEEDED": 429,
@@ -467,6 +470,10 @@ def _status_from_projection_error(exc: V4ProjectionError) -> tuple[str, int, str
         return "ACK_CONFLICT", 409, "Transition ou séquence ACK en conflit."
     if isinstance(exc, AckValidationError):
         return "VALIDATION_FAILED", 422, "L’ACK ne respecte pas les règles V4."
+    if isinstance(exc, ProposalExpired):
+        return "PROPOSAL_EXPIRED", 409, "La proposition a expiré."
+    if isinstance(exc, ProposalNotExpired):
+        return "PROPOSAL_NOT_EXPIRED", 409, "La proposition n’a pas encore expiré."
     if isinstance(exc, IdempotencyConflict):
         return "IDEMPOTENCY_CONFLICT", 409, "Clé d’idempotence réutilisée avec un autre contenu."
     if isinstance(exc, SequenceGap):
@@ -523,7 +530,15 @@ def create_v4_router(
                 with store.transaction(immediate=True):
                     response = await endpoint(*args, **kwargs)
                     if response.status_code >= 400:
-                        raise _RollbackRouteResponse(response)
+                        if (
+                            response.status_code == 409
+                            and response is getattr(request.state, "v4_commit_on_error_response", None)
+                            and getattr(request.state, "v4_commit_on_error_code", None) == "PROPOSAL_EXPIRED"
+                        ):
+                            del request.state.v4_commit_on_error_response
+                            del request.state.v4_commit_on_error_code
+                        else:
+                            raise _RollbackRouteResponse(response)
                     return response
             except _RollbackRouteResponse as rollback:
                 return rollback.response
@@ -547,6 +562,15 @@ def create_v4_router(
 
     def current_android_token() -> str | None:
         return android_token if android_token is not None else os.getenv("ATLAS_TOKEN")
+
+    def commit_lazy_expiration_error(request: Request, request_id: str) -> JSONResponse:
+        response = _error_response(
+            request, "PROPOSAL_EXPIRED", "La proposition a expiré.", "proposal.ack",
+            status=409, fallback_request_id=request_id,
+        )
+        request.state.v4_commit_on_error_response = response
+        request.state.v4_commit_on_error_code = "PROPOSAL_EXPIRED"
+        return response
 
     def generic_auth_failure(request: Request, capability: str | None, fallback: str | None = None) -> JSONResponse:
         return _error_response(request, "AUTH_REQUIRED", "Authentification V4 requise.", capability,
@@ -1858,14 +1882,33 @@ def create_v4_router(
                 "SELECT body_hash FROM agent_proposal_events_v4 WHERE ack_id=?",
                 (body["ack_id"],),
             ).fetchone()
-        exact_replay = (
-            existing_ack is not None
-            and hmac.compare_digest(existing_ack["body_hash"], content_hash(body))
-        )
-        expired = proposal_row["expires_at"] <= _utc_now(store)
-        if expired and not exact_replay and body["state"] not in {"EXPIRED", "RECONCILED"}:
-            return _error_response(request, "PROPOSAL_EXPIRED", "La proposition a expiré.", capability,
-                                   status=409, fallback_request_id=request_id)
+        request_hash = content_hash(body)
+        exact_replay = existing_ack is not None and hmac.compare_digest(existing_ack["body_hash"], request_hash)
+        if existing_ack is not None and not exact_replay:
+            return _error_response(request, "ACK_ID_CONFLICT", "ack_id réutilisé avec un contenu différent.",
+                                   capability, status=409, fallback_request_id=request_id)
+
+        now = _utc_now(store)
+        with store.connect() as connection:
+            projections.expire_due_proposals(
+                connection, now=now, batch_size=1, source="ACK", proposal_id=path_id
+            )
+            proposal_row = connection.execute(
+                "SELECT state,expires_at,device_ref FROM agent_proposals_v4 WHERE proposal_id=?",
+                (path_id,),
+            ).fetchone()
+        if proposal_row is None or (
+            proposal_row["device_ref"] != device_ref
+            and not (allow_legacy_null and proposal_row["device_ref"] is None)
+        ):
+            return _error_response(request, "NOT_FOUND", "Proposition inconnue.", capability,
+                                   status=404, fallback_request_id=request_id)
+        if not exact_replay:
+            if body["state"] == "EXPIRED" and proposal_row["expires_at"] > now:
+                return _error_response(request, "PROPOSAL_NOT_EXPIRED", "La proposition n’a pas encore expiré.",
+                                       capability, status=409, fallback_request_id=request_id)
+            if body["state"] in {"APPLIED", "REJECTED"} and proposal_row["state"] == "EXPIRED":
+                return commit_lazy_expiration_error(request, request_id)
         consent_failure = require_current_consent(
             device_ref, "DAY_PLAN", body["consent_version"], capability, request
         )

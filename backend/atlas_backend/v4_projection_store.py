@@ -47,6 +47,14 @@ class ProposalOwnershipError(V4ProjectionError):
     code = "NOT_FOUND"
 
 
+class ProposalExpired(V4ProjectionError):
+    code = "PROPOSAL_EXPIRED"
+
+
+class ProposalNotExpired(V4ProjectionError):
+    code = "PROPOSAL_NOT_EXPIRED"
+
+
 class SequenceGap(V4ProjectionError):
     code = "STALE_DATA"
 
@@ -768,6 +776,7 @@ class V4ProjectionStore:
         now: str,
         batch_size: int,
         source: str,
+        proposal_id: str | None = None,
     ) -> int:
         """Expire one deterministic batch and append its server audit atomically.
 
@@ -790,8 +799,9 @@ class V4ProjectionStore:
             candidates = connection.execute(
                 "SELECT proposal_id,state,expires_at FROM agent_proposals_v4 "
                 "WHERE state IN ('PENDING_ANDROID','RECEIVED','AWAITING_USER') AND expires_at<=? "
+                "AND (? IS NULL OR proposal_id=?) "
                 "ORDER BY expires_at,proposal_id LIMIT ?",
-                (now, batch_size),
+                (now, proposal_id, proposal_id, batch_size),
             ).fetchall()
             for candidate in candidates:
                 updated = connection.execute(
@@ -846,7 +856,7 @@ class V4ProjectionStore:
         with self.store.connect() as connection:
             self.store.begin_immediate(connection)
             proposal_owner = connection.execute(
-                "SELECT device_ref FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+                "SELECT device_ref,state,expires_at FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
             ).fetchone()
             if proposal_owner is None or (
                 proposal_owner["device_ref"] != device_ref
@@ -862,26 +872,33 @@ class V4ProjectionStore:
                 replayed = True
             else:
                 self._validate_proposal_ack(ack, state, result_code)
-                proposal = connection.execute(
-                    "SELECT state,device_ref FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
-                ).fetchone()
+                proposal = proposal_owner
                 if proposal is None or (
                     proposal["device_ref"] != device_ref
                     and not (allow_legacy_null and proposal["device_ref"] is None)
                 ):
                     raise ProposalOwnershipError("proposition inconnue")
+                prior_state = str(proposal["state"])
+                if state == "EXPIRED" and prior_state != "EXPIRED":
+                    if str(proposal["expires_at"]) > received_at:
+                        raise ProposalNotExpired("la proposition n’a pas encore expiré")
+                    raise ProposalExpired("la transition système d’expiration doit précéder l’ACK")
+                if state in {"APPLIED", "REJECTED"} and (
+                    prior_state == "EXPIRED" or str(proposal["expires_at"]) <= received_at
+                ):
+                    raise ProposalExpired("une proposition expirée ne peut pas être appliquée")
                 latest = connection.execute(
                     "SELECT MAX(sequence) AS sequence FROM agent_proposal_events_v4 WHERE proposal_id=?",
                     (proposal_id,),
                 ).fetchone()["sequence"]
                 if latest is not None and sequence <= int(latest):
                     raise AckConflict("séquence ACK déjà utilisée par un autre ack_id")
-                prior_state = str(proposal["state"])
                 allowed = {
                     "PENDING_ANDROID": {"RECEIVED", "AWAITING_USER", "APPLIED", "REJECTED", "STALE_VERSION", "EXPIRED", "VALIDATION_REJECTED", "UNCERTAIN"},
                     "RECEIVED": {"AWAITING_USER", "APPLIED", "REJECTED", "STALE_VERSION", "EXPIRED", "VALIDATION_REJECTED", "UNCERTAIN"},
                     "AWAITING_USER": {"APPLIED", "REJECTED", "STALE_VERSION", "EXPIRED", "VALIDATION_REJECTED", "UNCERTAIN"},
                     "UNCERTAIN": {"RECONCILED"},
+                    "EXPIRED": {"EXPIRED"},
                 }
                 if state not in allowed.get(prior_state, set()):
                     raise AckConflict("transition ACK interdite")
@@ -895,10 +912,13 @@ class V4ProjectionStore:
                         received_at, body_hash,
                     ),
                 )
-                connection.execute(
-                    "UPDATE agent_proposals_v4 SET state=? WHERE proposal_id=?",
-                    (state, proposal_id),
-                )
+                if prior_state != state:
+                    updated = connection.execute(
+                        "UPDATE agent_proposals_v4 SET state=? WHERE proposal_id=? AND state=?",
+                        (state, proposal_id, prior_state),
+                    )
+                    if updated.rowcount != 1:
+                        raise AckConflict("état de proposition modifié pendant l’ACK")
         return WriteReceipt(True, replayed, ack_id, body_hash)
 
     @staticmethod
