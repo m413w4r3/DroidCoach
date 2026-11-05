@@ -66,6 +66,7 @@ from .v4_router import (
     cleanup_v4_chat_cache,
     create_v4_router,
 )
+from .v4_projection_store import V4ProjectionStore
 
 MAX_REQUEST_BYTES = 65_536
 API_CONTRACT_VERSION = 1
@@ -74,6 +75,7 @@ V2_PROPOSAL_ADAPTER = TypeAdapter(ProposalV2)
 DEMO_DIRECTIVE_ID = "demo-focus-001"
 DIRECTIVE_CHOICES = ("start", "discuss", "alternative", "postpone", "pause")
 _LOGGER = logging.getLogger(__name__)
+_PROPOSAL_EXPIRY_LOCK_TIMEOUT_SECONDS = 0.25
 CHOICE_ACTIONS = {
     "start": "start_focus_session",
     "discuss": "discuss",
@@ -281,6 +283,36 @@ def create_app(
 ) -> FastAPI:
     database_path = Path(db_path or os.getenv("ATLAS_DB_PATH", BASE_DIR / "data" / "atlas.sqlite3"))
     store = SQLiteStore(database_path)
+
+    def env_flag(name: str, default: bool) -> bool:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError(f"{name} doit être un booléen")
+
+    def bounded_env_int(name: str, default: int, lower: int, upper: int) -> int:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            parsed = int(value)
+        except ValueError:
+            raise ValueError(f"{name} doit être un entier") from None
+        if not lower <= parsed <= upper:
+            raise ValueError(f"{name} doit être compris entre {lower} et {upper}")
+        return parsed
+
+    expiry_sweeper_enabled = env_flag("ATLAS_V4_PROPOSAL_EXPIRY_SWEEPER_ENABLED", True)
+    expiry_interval_seconds = bounded_env_int(
+        "ATLAS_V4_PROPOSAL_EXPIRY_INTERVAL_SECONDS", 30, 1, 3600
+    )
+    expiry_batch_size = bounded_env_int("ATLAS_V4_PROPOSAL_EXPIRY_BATCH_SIZE", 100, 1, 500)
+    expiration_store = V4ProjectionStore(store)
     policy = PolicyEngine(capabilities if capabilities is not None else configured_capabilities())
     if agent is not None:
         active_agent = agent
@@ -297,6 +329,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        stop_expiry_sweeper = asyncio.Event()
+
         async def maintain_chat_cache() -> None:
             while True:
                 try:
@@ -305,10 +339,36 @@ def create_app(
                     _LOGGER.warning("V4 chat cache cleanup failed")
                 await asyncio.sleep(CHAT_CACHE_CLEANUP_INTERVAL_SECONDS)
 
+        def expire_one_batch() -> int:
+            with store.transaction(timeout=_PROPOSAL_EXPIRY_LOCK_TIMEOUT_SECONDS) as connection:
+                return expiration_store.expire_due_proposals(
+                    connection,
+                    now=store.now_iso(),
+                    batch_size=expiry_batch_size,
+                    source="SWEEPER",
+                )
+
+        async def maintain_proposal_expirations() -> None:
+            while not stop_expiry_sweeper.is_set():
+                try:
+                    await asyncio.to_thread(expire_one_batch)
+                except Exception:  # noqa: BLE001 - each failed tick is isolated and contains no row data
+                    _LOGGER.warning("V4 proposal expiration sweep tick failed")
+                try:
+                    await asyncio.wait_for(stop_expiry_sweeper.wait(), timeout=expiry_interval_seconds)
+                except asyncio.TimeoutError:
+                    pass
+
         cleanup_task = asyncio.create_task(maintain_chat_cache())
+        expiry_task = (
+            asyncio.create_task(maintain_proposal_expirations()) if expiry_sweeper_enabled else None
+        )
         try:
             yield
         finally:
+            stop_expiry_sweeper.set()
+            if expiry_task is not None:
+                await expiry_task
             cleanup_task.cancel()
             try:
                 await cleanup_task

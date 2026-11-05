@@ -492,9 +492,9 @@ def create_v4_router(
     if auth_mode != "legacy":
         with store.connect() as connection:
             schema_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            migration = connection.execute("SELECT name FROM schema_migrations WHERE version=4").fetchone()
-        if schema_version < 4 or migration is None:
-            raise ValueError("V4 principal migration is incomplete")
+            migration = connection.execute("SELECT name FROM schema_migrations WHERE version=5").fetchone()
+        if schema_version < 5 or migration is None:
+            raise ValueError("V4 proposal expiration migration is incomplete")
     registry = V4PrincipalRegistry(store)
     cursor_secret_raw = os.getenv("ATLAS_V4_CURSOR_SECRET")
     if cursor_secret_raw is not None and len(cursor_secret_raw) < 32:
@@ -1759,6 +1759,9 @@ def create_v4_router(
                                        status=400, fallback_request_id=request_id)
         now = _utc_now(store)
         with store.connect() as connection:
+            projections.expire_due_proposals(
+                connection, now=now, batch_size=100, source="PULL"
+            )
             rows = connection.execute(
                 "SELECT proposal_json,state,created_at,proposal_id FROM agent_proposals_v4 "
                 "WHERE (device_ref=? OR (?=1 AND device_ref IS NULL)) "

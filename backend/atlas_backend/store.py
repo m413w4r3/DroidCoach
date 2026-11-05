@@ -65,6 +65,12 @@ _V4_MIGRATION_V4_STATEMENTS = (
     "CREATE TRIGGER agent_proposals_v4_owner_immutable BEFORE UPDATE OF device_ref ON agent_proposals_v4 WHEN OLD.device_ref IS NOT NULL AND NEW.device_ref IS NOT OLD.device_ref BEGIN SELECT RAISE(ABORT, 'V4 proposal owner is immutable'); END",
 )
 
+_V4_MIGRATION_V5_STATEMENTS = (
+    "CREATE TABLE agent_proposal_expiration_events_v4 (proposal_id TEXT PRIMARY KEY NOT NULL REFERENCES agent_proposals_v4(proposal_id), from_state TEXT NOT NULL CHECK(from_state IN ('PENDING_ANDROID','RECEIVED','AWAITING_USER')), to_state TEXT NOT NULL CHECK(to_state='EXPIRED'), expires_at TEXT NOT NULL, occurred_at TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('PULL','ACK','SWEEPER','RECONCILIATION')), event_version INTEGER NOT NULL CHECK(event_version=1))",
+    "CREATE TRIGGER agent_proposal_expiration_events_v4_no_update BEFORE UPDATE ON agent_proposal_expiration_events_v4 BEGIN SELECT RAISE(ABORT, 'append-only proposal expiration event'); END",
+    "CREATE TRIGGER agent_proposal_expiration_events_v4_no_delete BEFORE DELETE ON agent_proposal_expiration_events_v4 BEGIN SELECT RAISE(ABORT, 'append-only proposal expiration event'); END",
+)
+
 
 class _BorrowedConnection:
     """Nested store calls borrow an outer transaction without committing it."""
@@ -101,6 +107,7 @@ class SQLiteStore:
             return _BorrowedConnection(active)
         connection = sqlite3.connect(self.path, timeout=5)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout=5000")
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
@@ -110,6 +117,7 @@ class SQLiteStore:
             raise RuntimeError("SQLiteStore transactions cannot be nested")
         connection = sqlite3.connect(self.path, timeout=timeout)
         connection.row_factory = sqlite3.Row
+        connection.execute(f"PRAGMA busy_timeout={max(0, int(timeout * 1000))}")
         connection.execute("PRAGMA foreign_keys=ON")
         try:
             connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
@@ -200,6 +208,7 @@ class SQLiteStore:
             (2, "v4_status_received_at", _V4_MIGRATION_V2_STATEMENTS),
             (3, "v4_explicit_consent_states", _V4_MIGRATION_V3_STATEMENTS),
             (4, "v4_device_principals_and_proposal_owners", _V4_MIGRATION_V4_STATEMENTS),
+            (5, "v4_proposal_expiration_audit", _V4_MIGRATION_V5_STATEMENTS),
         )
         checksums = {
             version: hashlib.sha256(
