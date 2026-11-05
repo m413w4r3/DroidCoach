@@ -1,4 +1,5 @@
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash, createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -499,6 +500,79 @@ describe("closed operations and backend adapter", () => {
     expect(chat?.url).toBe("http://127.0.0.1:8100/v4/agent/chat");
     expect(chat?.url).not.toContain("/v2/agent/chat");
     expect(calls.every((call) => !JSON.parse(call.body ?? "{}").device_id)).toBe(true);
+  });
+
+  it("signs each mapped V4 request with the authenticated Relay identity and fails closed for an unmapped session", async () => {
+    const secret = Buffer.from("synthetic-relay-assertion-key-for-unit-tests-only");
+    const calls: Array<{ path: string; body: string; headers: Headers }> = [];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      v4Enabled: true,
+      pairedDeviceAuth: (relayDeviceId) => relayDeviceId === "relay-session-a"
+        ? { principalId: "principal-a", credential: "synthetic-core-credential-a" }
+        : relayDeviceId === "relay-session-b"
+          ? { principalId: "principal-b", credential: "synthetic-core-credential-b" }
+          : undefined,
+      relayAssertion: { keyId: "test-key-1", secret },
+      fetcher: async (input, init) => {
+        calls.push({
+          path: new URL(String(input)).pathname,
+          body: typeof init?.body === "string" ? init.body : "",
+          headers: new Headers(init?.headers),
+        });
+        return new Response(JSON.stringify({ accepted: true }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    });
+    const example = v4Payloads()[0]!;
+    await backend.execute(example.operation, example.payload, undefined, "relay-session-a");
+    await backend.execute(example.operation, example.payload, undefined, "relay-session-b");
+    expect(calls.map((call) => call.headers.get("authorization"))).toEqual([
+      "Bearer synthetic-core-credential-a", "Bearer synthetic-core-credential-b",
+    ]);
+    expect(calls.map((call) => call.headers.get("x-atlas-relay-device-id"))).toEqual([
+      "relay-session-a", "relay-session-b",
+    ]);
+    for (const call of calls) {
+      const timestamp = call.headers.get("x-atlas-relay-time")!;
+      const nonce = call.headers.get("x-atlas-relay-nonce")!;
+      const relayId = call.headers.get("x-atlas-relay-device-id")!;
+      const canonical = `v1\nPOST\n${call.path}\n${timestamp}\n${nonce}\n${relayId}\n${createHash("sha256").update(call.body).digest("hex")}`;
+      const expected = `v1=${createHmac("sha256", secret).update(canonical).digest("base64url")}`;
+      expect(call.headers.get("x-atlas-relay-key-id")).toBe("test-key-1");
+      expect(call.headers.get("x-atlas-relay-signature")).toBe(expected);
+    }
+    await expect(backend.execute(example.operation, example.payload, undefined, "relay-session-unknown"))
+      .rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE" });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not treat the local principal label as an assertion claim; Core must match the bearer to its Relay binding", async () => {
+    const secret = Buffer.from("synthetic-relay-assertion-key-for-unit-tests-only");
+    const calls: Array<{ authorization: string | null; relayId: string | null; principalHeader: string | null }> = [];
+    const backend = new BackendClient({
+      baseUrl: "http://127.0.0.1:8100",
+      v4Enabled: true,
+      pairedDeviceAuth: (relayDeviceId) => relayDeviceId === "relay-session-a"
+        ? { principalId: "principal-b", credential: "synthetic-core-credential-token-b" }
+        : undefined,
+      relayAssertion: { keyId: "test-key-1", secret },
+      fetcher: async (_input, init) => {
+        const headers = new Headers(init?.headers);
+        calls.push({
+          authorization: headers.get("authorization"),
+          relayId: headers.get("x-atlas-relay-device-id"),
+          principalHeader: headers.get("x-atlas-principal-id"),
+        });
+        return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+      },
+    });
+    const example = v4Payloads()[0]!;
+    await backend.execute(example.operation, example.payload, undefined, "relay-session-a");
+    expect(calls).toEqual([{
+      authorization: "Bearer synthetic-core-credential-token-b",
+      relayId: "relay-session-a",
+      principalHeader: null,
+    }]);
   });
 
   it("uses the private Android bearer for V4 and keeps the service bearer on V2", async () => {

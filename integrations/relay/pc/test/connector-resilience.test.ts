@@ -1,8 +1,8 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configFromEnvironment, createConnector, readPrivateV4AndroidToken, type ConnectorConfig, type ConnectorRuntime } from "../src/connector.js";
+import { configFromEnvironment, createConnector, readPrivateV4AndroidToken, readPrivateV4PrincipalMap, readPrivateV4RelayAssertion, selectV4CredentialMode, type ConnectorConfig, type ConnectorRuntime } from "../src/connector.js";
 import { loadOrCreateIdentity } from "../src/identity.js";
 import { PROTOCOL_V2 } from "../src/protocol.js";
 import { FakeSecureChannel, hello, request } from "./helpers.js";
@@ -18,6 +18,17 @@ afterEach(async () => {
 });
 
 describe("connector restart and configuration resilience", () => {
+  it("uses principal maps only in dual/principal modes and keeps legacy fallback isolated", () => {
+    expect(selectV4CredentialMode("legacy", false, "valid")).toBe("disabled");
+    expect(selectV4CredentialMode("legacy", false, "absent")).toBe("legacy-fallback");
+    expect(selectV4CredentialMode("legacy", true, "absent")).toBe("disabled");
+    expect(selectV4CredentialMode("dual", false, "valid")).toBe("principal-map");
+    expect(selectV4CredentialMode("dual", false, "absent")).toBe("disabled");
+    expect(selectV4CredentialMode("principal", false, "valid")).toBe("principal-map");
+    expect(selectV4CredentialMode("principal", false, "invalid")).toBe("disabled");
+    expect(selectV4CredentialMode("unknown", false, "valid")).toBe("disabled");
+  });
+
   it("keeps its identity and registry across restart and rejects a revoked device after restart", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "atlas-connector-restart-"));
     activeDirectories.push(stateDir);
@@ -120,6 +131,51 @@ describe("connector restart and configuration resilience", () => {
     await rm(tokenFile);
     expect(await readPrivateV4AndroidToken(tokenFile)).toBeUndefined();
     expect(await readPrivateV4AndroidToken(undefined)).toBeUndefined();
+  });
+
+  it("loads only owner-controlled principal maps and credentials without following symlinks", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-principal-map-"));
+    activeDirectories.push(directory);
+    const credentialPath = join(directory, "credential-a");
+    const mapPath = join(directory, "principal-map.json");
+    await writeFile(credentialPath, "synthetic-core-credential-a\n", { mode: 0o600 });
+    await chmod(credentialPath, 0o600);
+    await writeFile(mapPath, JSON.stringify({
+      "relay-device-synthetic-a": { principal_id: "principal-a", credential_file: credentialPath },
+    }), { mode: 0o600 });
+    await chmod(mapPath, 0o600);
+
+    const loaded = await readPrivateV4PrincipalMap(mapPath);
+    expect(loaded.status).toBe("valid");
+    if (loaded.status === "valid") {
+      expect(loaded.credentials.get("relay-device-synthetic-a")).toEqual({
+        principalId: "principal-a", credential: "synthetic-core-credential-a",
+      });
+    }
+
+    await chmod(mapPath, 0o640);
+    expect((await readPrivateV4PrincipalMap(mapPath)).status).toBe("invalid");
+    await chmod(mapPath, 0o600);
+    const linkPath = join(directory, "principal-map-link.json");
+    await symlink(mapPath, linkPath);
+    expect((await readPrivateV4PrincipalMap(linkPath)).status).toBe("invalid");
+    expect((await readPrivateV4PrincipalMap(join(directory, "missing-map.json"))).status).toBe("absent");
+  });
+
+  it("loads a dedicated assertion key from a private file or a test environment value", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-relay-key-"));
+    activeDirectories.push(directory);
+    const key = Buffer.from("synthetic-relay-assertion-key-for-connector-tests");
+    const encoded = key.toString("base64url");
+    const keyPath = join(directory, "assertion-key");
+    await writeFile(keyPath, `${encoded}\n`, { mode: 0o600 });
+    await chmod(keyPath, 0o600);
+    const fromFile = await readPrivateV4RelayAssertion("test-key-1", keyPath, undefined);
+    const fromEnvironment = await readPrivateV4RelayAssertion("test-key-1", undefined, encoded);
+    expect(fromFile?.keyId).toBe("test-key-1");
+    expect(Buffer.from(fromFile?.secret ?? []).equals(key)).toBe(true);
+    expect(Buffer.from(fromEnvironment?.secret ?? []).equals(key)).toBe(true);
+    expect(await readPrivateV4RelayAssertion("test-key-1", keyPath, encoded)).toBeUndefined();
   });
 
   it("sends V4 from an authenticated paired session using the dedicated Android bearer", async () => {

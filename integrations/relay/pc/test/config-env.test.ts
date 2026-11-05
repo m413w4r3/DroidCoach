@@ -52,7 +52,7 @@ describe("restricted relay environment files", () => {
     const result = runScript(directory, "check-config.mjs", "--env-file", envFile);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PASS V4 Android bearer file path is configured (value hidden)");
+    expect(result.stdout).toContain("PASS V4 legacy development bearer file path is configured (value hidden)");
     expect(`${result.stdout}${result.stderr}`).not.toContain(tokenPath);
   });
 

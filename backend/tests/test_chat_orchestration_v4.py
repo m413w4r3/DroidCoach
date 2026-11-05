@@ -440,6 +440,7 @@ def test_invalid_proposal_does_not_consume_proposal_quota_or_create_proposal(tmp
 
 
 def test_structured_proposal_is_accepted_with_backend_owned_idempotency_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
     requests = []
     dispatches = []
     sentinel = "00000000-0000-4000-8000-000000000299"
@@ -499,8 +500,63 @@ def test_structured_proposal_is_accepted_with_backend_owned_idempotency_key(tmp_
     assert dispatches[0]["idempotency_key"] != sentinel
     assert dispatches[0]["changes"] == proposal_arguments["changes"]
     with app.state.store.connect() as connection:
-        rows = connection.execute("SELECT proposal_json FROM agent_proposals_v4").fetchall()
+        rows = connection.execute("SELECT proposal_id,proposal_json,device_ref FROM agent_proposals_v4").fetchall()
     assert len(rows) == 1
+    assert rows[0]["device_ref"] == device_ref()
+
+    consent_body = {
+        "contract_version": 4,
+        "schema_version": 4,
+        "request_id": "00000000-0000-4000-8000-0000000002a1",
+        "capability": "consent.state.write",
+        "sent_at": stamp(),
+        "category": "GOAL_PROGRESS",
+        "consent_version": 1,
+        "state": "GRANTED",
+        "idempotency_key": "00000000-0000-4000-8000-0000000002a2",
+    }
+    consent = ASGITestClient(app).post(
+        "/v4/sync/consent-state",
+        headers={"Authorization": f"Bearer {ANDROID_TOKEN}"},
+        json=consent_body,
+    )
+    assert consent.status_code == 200
+
+    proposal_id = str(rows[0]["proposal_id"])
+    pull = ASGITestClient(app).post(
+        "/v4/agent/proposals/pull",
+        headers={"Authorization": f"Bearer {ANDROID_TOKEN}"},
+        json={
+            "contract_version": 4,
+            "schema_version": 4,
+            "request_id": "00000000-0000-4000-8000-0000000002a3",
+            "capability": "proposal.ack",
+            "consent_version": 1,
+            "page_size": 32,
+            "cursor": None,
+        },
+    )
+    assert pull.status_code == 200
+    assert [proposal["proposal_id"] for proposal in pull.json()["proposals"]] == [proposal_id]
+
+    ack_body = {
+        "contract_version": 4,
+        "schema_version": 4,
+        "ack_id": "00000000-0000-4000-8000-0000000002a4",
+        "capability": "proposal.ack",
+        "proposal_id": proposal_id,
+        "sequence": 1,
+        "state": "REJECTED",
+        "result_code": "USER_REJECTED",
+        "occurred_at": stamp(),
+        "consent_version": 1,
+    }
+    ack = ASGITestClient(app).post(
+        f"/v4/agent/proposals/{proposal_id}/ack",
+        headers={"Authorization": f"Bearer {ANDROID_TOKEN}"},
+        json=ack_body,
+    )
+    assert ack.status_code == 200
 
 
 def test_legacy_flat_proposal_is_rejected_before_core_dispatch(tmp_path, monkeypatch):

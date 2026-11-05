@@ -287,7 +287,7 @@ def test_proposal_idempotency_lookup_and_ack_replay_conflicts(tmp_path):
     service = make_service(projections, clock)
     args = proposal_args()
     response = service.atlas_propose_plan_revision(DEVICE, args)
-    proposal = projections.proposal_by_idempotency_key(UUID_KEY)
+    proposal = projections.proposal_by_idempotency_key(UUID_KEY, device_ref=DEVICE)
     assert proposal is not None
     assert proposal["proposal_id"] == response["data"]["proposal_id"]
     replay = service.atlas_propose_plan_revision(DEVICE, args)
@@ -313,22 +313,36 @@ def test_proposal_idempotency_lookup_and_ack_replay_conflicts(tmp_path):
         "effect_ids": ["PLAN_APPLY:" + UUID_PROPOSAL],
         "consent_version": 3,
     }
-    assert not projections.append_proposal_ack(ack, received_at=RECEIVED).replayed
-    assert projections.append_proposal_ack(ack, received_at=RECEIVED).replayed
+    assert not projections.append_proposal_ack(ack, device_ref=DEVICE, received_at=RECEIVED).replayed
+    assert projections.append_proposal_ack(ack, device_ref=DEVICE, received_at=RECEIVED).replayed
     with sqlite_store.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 1
         assert connection.execute("SELECT state FROM agent_proposals_v4").fetchone()[0] == "APPLIED"
 
     changed_ack = dict(ack, result_code="STALE_VERSION")
     with pytest.raises(AckIdConflict):
-        projections.append_proposal_ack(changed_ack, received_at=RECEIVED)
+        projections.append_proposal_ack(changed_ack, device_ref=DEVICE, received_at=RECEIVED)
     new_ack_same_sequence = dict(ack, ack_id=UUID_EVENT)
     with pytest.raises(AckConflict):
-        projections.append_proposal_ack(new_ack_same_sequence, received_at=RECEIVED)
+        projections.append_proposal_ack(new_ack_same_sequence, device_ref=DEVICE, received_at=RECEIVED)
 
 
 def test_proposal_ack_requires_complete_application_proof_and_rejects_proof_without_application(tmp_path):
     _sqlite_store, projections, _clock = make_store(tmp_path)
+    projections.create_agent_proposal(
+        {
+            "proposal_id": UUID_PROPOSAL,
+            "plan_id": UUID_PLAN,
+            "base_version": 7,
+            "capability": "plan_revision.propose",
+            "created_at": STAMP,
+            "expires_at": "2026-10-30T08:02:00Z",
+            "state": "PENDING_ANDROID",
+        },
+        device_ref=DEVICE,
+        idempotency_key=UUID_KEY,
+        body_hash="sha256:" + "a" * 64,
+    )
     valid_applied = {
         "ack_id": UUID_ACK,
         "capability": "proposal.ack",
@@ -375,7 +389,7 @@ def test_proposal_ack_requires_complete_application_proof_and_rejects_proof_with
         reconciled_without_proof,
     ):
         with pytest.raises(AckValidationError):
-            projections.append_proposal_ack(invalid_ack, received_at=RECEIVED)
+            projections.append_proposal_ack(invalid_ack, device_ref=DEVICE, received_at=RECEIVED)
 
 
 def make_service(projections, clock, *, consent_state: str = "GRANTED", consent_version: int | None = 3,
