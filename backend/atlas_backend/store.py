@@ -46,6 +46,25 @@ _V4_MIGRATION_V3_STATEMENTS = (
     "CREATE TRIGGER IF NOT EXISTS consent_state_events_v4_no_delete BEFORE DELETE ON consent_state_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 consent events are immutable'); END",
 )
 
+_V4_MIGRATION_V4_STATEMENTS = (
+    "CREATE TABLE principals_v4 (principal_id TEXT PRIMARY KEY, device_ref TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('ANDROID','TOOL','LEGACY')), state TEXT NOT NULL CHECK(state IN ('ACTIVE','REVOKED')), created_at TEXT NOT NULL, revoked_at TEXT)",
+    "CREATE TABLE credentials_v4 (credential_id TEXT PRIMARY KEY, principal_id TEXT NOT NULL REFERENCES principals_v4(principal_id), token_hash TEXT NOT NULL UNIQUE, hash_algorithm TEXT NOT NULL CHECK(hash_algorithm='SHA-256'), audience TEXT NOT NULL CHECK(audience IN ('DIRECT','RELAY','TOOL','LEGACY')), state TEXT NOT NULL CHECK(state IN ('ACTIVE','REVOKED')), created_at TEXT NOT NULL, revoked_at TEXT, replaced_by TEXT REFERENCES credentials_v4(credential_id))",
+    "CREATE INDEX credentials_v4_principal_idx ON credentials_v4(principal_id,state,audience)",
+    "CREATE TABLE principal_capabilities_v4 (principal_id TEXT NOT NULL REFERENCES principals_v4(principal_id), capability TEXT NOT NULL CHECK(capability IN ('day_plan.read','activity_status.read','plan_revision.propose','usage_summary.read','goal_progress.read','training_plan.read','coach.chat','day_plan.snapshot.write','activity_status.write','usage_summary.write','goal_progress.write','training_plan.write','consent.state.write','proposal.ack')), granted INTEGER NOT NULL CHECK(granted IN (0,1)), updated_at TEXT NOT NULL, PRIMARY KEY(principal_id,capability))",
+    "CREATE TABLE principal_events_v4 (event_id TEXT PRIMARY KEY, principal_id TEXT NOT NULL REFERENCES principals_v4(principal_id), credential_id TEXT REFERENCES credentials_v4(credential_id), event_type TEXT NOT NULL CHECK(event_type IN ('PROVISIONED','ROTATED','CREDENTIAL_REVOKED','PRINCIPAL_REVOKED','CAPABILITY_CHANGED','RELAY_BOUND')), occurred_at TEXT NOT NULL, metadata_json TEXT NOT NULL)",
+    "CREATE TRIGGER principal_events_v4_no_update BEFORE UPDATE ON principal_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 principal events are immutable'); END",
+    "CREATE TRIGGER principal_events_v4_no_delete BEFORE DELETE ON principal_events_v4 BEGIN SELECT RAISE(ABORT, 'V4 principal events are immutable'); END",
+    "CREATE TABLE relay_principal_bindings_v4 (relay_device_id TEXT PRIMARY KEY, principal_id TEXT NOT NULL REFERENCES principals_v4(principal_id), state TEXT NOT NULL CHECK(state IN ('ACTIVE','REVOKED')), created_at TEXT NOT NULL, revoked_at TEXT, event_id TEXT NOT NULL)",
+    "CREATE TRIGGER principals_v4_no_reactivation BEFORE UPDATE OF state ON principals_v4 WHEN OLD.state='REVOKED' AND NEW.state!='REVOKED' BEGIN SELECT RAISE(ABORT, 'V4 principal revocation is monotonic'); END",
+    "CREATE TRIGGER principals_v4_device_ref_immutable BEFORE UPDATE OF device_ref ON principals_v4 WHEN NEW.device_ref!=OLD.device_ref BEGIN SELECT RAISE(ABORT, 'V4 principal device_ref is immutable'); END",
+    "CREATE TRIGGER credentials_v4_no_reactivation BEFORE UPDATE OF state ON credentials_v4 WHEN OLD.state='REVOKED' AND NEW.state!='REVOKED' BEGIN SELECT RAISE(ABORT, 'V4 credential revocation is monotonic'); END",
+    "CREATE TRIGGER relay_bindings_v4_no_reactivation BEFORE UPDATE OF state ON relay_principal_bindings_v4 WHEN OLD.state='REVOKED' AND NEW.state!='REVOKED' BEGIN SELECT RAISE(ABORT, 'V4 Relay binding revocation is monotonic'); END",
+    "ALTER TABLE agent_proposals_v4 ADD COLUMN device_ref TEXT",
+    "CREATE INDEX agent_proposals_v4_owner_state_idx ON agent_proposals_v4(device_ref,state,expires_at,created_at,proposal_id)",
+    "CREATE TRIGGER agent_proposals_v4_require_owner BEFORE INSERT ON agent_proposals_v4 WHEN NEW.device_ref IS NULL BEGIN SELECT RAISE(ABORT, 'V4 proposal owner is required'); END",
+    "CREATE TRIGGER agent_proposals_v4_owner_immutable BEFORE UPDATE OF device_ref ON agent_proposals_v4 WHEN OLD.device_ref IS NOT NULL AND NEW.device_ref IS NOT OLD.device_ref BEGIN SELECT RAISE(ABORT, 'V4 proposal owner is immutable'); END",
+)
+
 
 class _BorrowedConnection:
     """Nested store calls borrow an outer transaction without committing it."""
@@ -82,6 +101,7 @@ class SQLiteStore:
             return _BorrowedConnection(active)
         connection = sqlite3.connect(self.path, timeout=5)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
     @contextmanager
@@ -90,6 +110,7 @@ class SQLiteStore:
             raise RuntimeError("SQLiteStore transactions cannot be nested")
         connection = sqlite3.connect(self.path, timeout=timeout)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
         try:
             connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
             token = self._transaction_connection.set(connection)
@@ -178,6 +199,7 @@ class SQLiteStore:
             (1, "v4_core_projections", _V4_MIGRATION_V1_STATEMENTS),
             (2, "v4_status_received_at", _V4_MIGRATION_V2_STATEMENTS),
             (3, "v4_explicit_consent_states", _V4_MIGRATION_V3_STATEMENTS),
+            (4, "v4_device_principals_and_proposal_owners", _V4_MIGRATION_V4_STATEMENTS),
         )
         checksums = {
             version: hashlib.sha256(
