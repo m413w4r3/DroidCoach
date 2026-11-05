@@ -16,6 +16,10 @@ Le parcours REJECT est **prouvé de bout en bout sur le Pixel physique** :
 > ACK durable `REJECTED / USER_REJECTED` → plan inchangé (v2 / 1380) →
 > rejeu idempotent `X-Atlas-Replayed: true` → un seul événement.
 
+Le rejeu idempotent est un **rejeu contrôlé du corps ACK exact côté Core** ;
+le worker Android n'a pas renvoyé spontanément un ACK déjà `DELIVERED`. Les
+sections détaillées le précisent.
+
 Les preuves APPLY V7-08 restent valides et n'ont pas été rejouées.
 
 La proposition V7-08 expirée `2da9c5e2…` n'a pas été réutilisée. Elle est
@@ -33,8 +37,8 @@ défaut de cycle de vie P1 documenté, non contourné.
 | A1 Core audit | `7fa8000` — `docs/operations/evidence/V7-09_A1_CORE_AUDIT.md` |
 | A2 QA assertions | `2dde10c` — `docs/operations/evidence/V7-09_A2_QA_ASSERTIONS.md` |
 | A3 sécurité | `9741903` — `docs/operations/evidence/V7-09_A3_SECURITY_READINESS.md` |
-| Documents V7-09 | commit `docs(v7-09): …` (voir `git log`) |
-| A4 revue indépendante | à exécuter après le commit documentaire |
+| Documents V7-09 | `7788d23`, `ae17409`, `eb38ae7` puis commit de clôture (`git log -1`) |
+| A4 revue indépendante | `ae17409` examiné ; **GO_WITH_LIMITATIONS** — `docs/operations/evidence/V7-09_A4_INDEPENDENT_REVIEW.md` |
 | Push / PR / merge | **aucun** |
 
 Historique V7-08 préservé ; aucun `reset --hard`, aucun force-push, aucune
@@ -47,12 +51,13 @@ réécriture destructive.
 | A1 | audit cycle Core A0, expiration, pull, ACK, idempotence | `codex/gpt-6-luna`, `xhigh` | `v7-09-a1-core-audit` | `7fa8000` |
 | A2 | assertions QA et observabilité, sans ADB | `codex/gpt-6-luna`, `xhigh` | `v7-09-a2-qa-recipe` | `2dde10c` |
 | A3 | P1 bearer, fiabilité V4 | `codex/gpt-6-luna`, `xhigh` | `v7-09-a3-security` | `9741903` |
-| A4 | revue indépendante lecture seule | `codex/gpt-6-luna`, `xhigh` | à créer | en cours / à clôturer |
+| A4 | revue indépendante lecture seule | `codex/gpt-6-luna`, `xhigh` | `v7-09-a4-review`, `chmod a-w` | **GO_WITH_LIMITATIONS** — `evidence/V7-09_A4_INDEPENDENT_REVIEW.md` |
 | Paseo | préflight, ADB/UI, sauvegardes, intégration, rédaction | orchestrateur | dépôt principal | docs V7-09 |
 
 Aucune sous-délégation. Paseo est le seul opérateur ADB et le seul intégrateur
 Git. Les trois rapports sont des commits d'un fichier chacun, cherry-pickés
-sans conflit.
+sans conflit. Les statuts Paseo confirment pour A1/A2/A3 :
+`provider=codex`, `model=gpt-6-luna`, `effectiveThinkingOptionId=xhigh`.
 
 ## 4. Recette physique — synthèse
 
@@ -100,12 +105,18 @@ Détails complets : `V7-09_REJECT_QA.md`.
 | Backend complet | `pytest -q` | **408 passed, 1 skipped**, 3 warnings |
 | Android JVM | `./gradlew :app:testDebugUnitTest` | **BUILD SUCCESSFUL**, 922 tests, 0 échec, 0 skip |
 | Android lint | `./gradlew :app:lintDebug` | **BUILD SUCCESSFUL**, 0 erreur, 89 avertissements préexistants |
+
+Artefacts détaillés : `docs/operations/evidence/V7-09_ANDROID_TEST_EVIDENCE.md`.
 | `git diff --check` / `git show --check` | — | voir §9 |
 | Pixel physique | recette REJECT | **PASS** (voir §4) |
 
 Les avertissements backend sont préexistants (dépréciation Starlette/httpx,
 deux Operation ID OpenAPI dupliqués). Aucun test Android instrumenté n'a été
 exécuté et aucun APK n'a été installé.
+
+Aucune CI distante n'a été observée : la branche n'a pas été poussée, donc
+aucun job GitHub Actions V7-09 n'existe. La CI V7-08 (`verify`, `relay-node`)
+reste la dernière CI distante connue sur `main`.
 
 ## 6. Gates
 
@@ -121,8 +132,23 @@ exécuté et aucun APK n'a été installé.
 | `GO_PRODUCT_LOCAL_SMOKE` | **GO** | HOME, Plan, Coach, Focus, hors ligne ; aucun crash/ANR |
 | `GO_LIVE_SECURITY` | **GO_WITH_LIMITATIONS** | aucun P0 ; P1 bearer partagé toujours ouvert |
 | `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** | backend 408/1, Android JVM 922/0, lint 0 erreur / 89 warnings ; pas de CI distante |
-| `GO_MAIN_INTEGRATION` | **GO_WITH_LIMITATIONS** | branche locale prête, revue A4 à clôturer ; aucun push/merge |
+| `GO_MAIN_INTEGRATION` | **GO_WITH_LIMITATIONS** | revue A4 GO_WITH_LIMITATIONS, P2 corrigés ; aucun push/merge |
 | `GO_DAILY_PILOT` | **NO-GO** | non autorisé ; P1 bearer et pull relay non corrigés |
+
+### Revue indépendante A4
+
+A4 a examiné `ae17409` en worktree `chmod a-w`. Verdict :
+**GO_WITH_LIMITATIONS**, aucun P0. A4 a vérifié l'état SQLite réel
+(proposition `REJECTED`, un événement, total deux, snapshot v3 vide,
+consentements inchangés), les XML backend, le diff docs-only, l'absence de
+secret et de push, et a relancé avec succès les deux fichiers backend demandés
+(16 tests). Il n'a pas exécuté ADB/Pixel, n'a pas relancé de build Android et
+n'a pas eu de journaux Relay/Gateway complets.
+
+Ses P2 de clarté/preuve ont été corrigés : compte de diff exact au SHA revu,
+contrôles Git décrits comme exécutés, bannière historique sur A2,
+clarification du rejeu contrôlé Core et document d'évidence Android. Le
+rapport A4 est dans `evidence/V7-09_A4_INDEPENDENT_REVIEW.md`.
 
 ## 7. Risques ouverts
 
@@ -157,6 +183,8 @@ Fichiers ajoutés par V7-09 :
 - `docs/operations/evidence/V7-09_A1_CORE_AUDIT.md`
 - `docs/operations/evidence/V7-09_A2_QA_ASSERTIONS.md`
 - `docs/operations/evidence/V7-09_A3_SECURITY_READINESS.md`
+- `docs/operations/evidence/V7-09_A4_INDEPENDENT_REVIEW.md`
+- `docs/operations/evidence/V7-09_ANDROID_TEST_EVIDENCE.md`
 - `docs/operations/V7-09_REJECT_QA.md`
 - `docs/operations/V7-09_SECURITY_READINESS.md`
 - `docs/operations/V7-09_FINAL_REPORT.md`
@@ -166,12 +194,16 @@ Fichiers ajoutés par V7-09 :
 Aucun fichier de code produit n'a été modifié. Aucun secret, token, bearer,
 identifiant de série en clair ou donnée personnelle n'a été ajouté.
 
-Différence Git cumulée sur la branche : **8 fichiers, 1496 insertions,
-0 suppression** (`git diff --stat efcfdcd..HEAD`), tous sous
-`docs/operations/`.
+Au SHA revu `ae17409` : **8 fichiers, 1500 insertions, 0 suppression**
+(`git diff --numstat efcfdcd..ae17409`), tous sous `docs/operations/`. Le
+commit de clôture ajoute le rapport A4 et les clarifications demandées, sans
+fichier de code.
 
-Contrôles prévus avant clôture : `git status`, `git diff --check`,
-`git show --check`, `git log --oneline`, vérification des worktrees.
+Contrôles exécutés sur les commits de contenu jusqu'à `eb38ae7` :
+`git status` propre, `git diff --check` PASS, `git show --check` PASS sur
+chaque commit, `git log` conforme, worktrees A1/A2/A3 propres et worktree A4
+en lecture seule. Le commit de clôture est docs-only et vérifié par
+`git show --check` après création.
 
 ## 10. Proposition de publication
 

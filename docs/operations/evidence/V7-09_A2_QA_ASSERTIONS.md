@@ -1,5 +1,12 @@
 # ATLAS V7-09 — Recette physique REJECT : assertions et preuves A2
 
+> **Addendum V7-09 (2026-11-05) :** ce document est un **plan de préparation
+> historique**. L'exécution réelle du 2026-11-05 a utilisé un plan du jour
+> **v2 / 1380** (et non le v16 / 1375 supposé ici, devenu obsolète après le
+> changement de date). Les verdicts `NOT_RUN` de la fin du document sont donc
+> remplacés par les résultats de `docs/operations/V7-09_REJECT_QA.md`. Le
+> scénario, les oracles et les commandes restent une référence méthodologique.
+
 **Ticket :** V7-09-A2 / `REVIEW_REQUIRED`
 **Rôle :** QA indépendante, préparation de recette uniquement
 **Base SHA :** `efcfdcd0936ab2791f8ea14c151247257b05d19b`
