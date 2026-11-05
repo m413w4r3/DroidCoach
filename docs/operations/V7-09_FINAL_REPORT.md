@@ -86,7 +86,7 @@ Détails complets : `V7-09_REJECT_QA.md`.
 | Backend ciblé | `pytest tests/test_v4_proposals.py tests/test_v7_08_a0_protocol.py tests/test_chat_orchestration_v4.py tests/test_v4_projection_store.py tests/test_v4_contracts.py -q` | **121 passed**, 1 warning |
 | Backend complet | `pytest -q` | **408 passed, 1 skipped**, 3 warnings |
 | Android JVM | `./gradlew :app:testDebugUnitTest` | **BUILD SUCCESSFUL**, 922 tests, 0 échec, 0 skip |
-| Android lint | `./gradlew :app:lintDebug` | voir résultat ci-dessous |
+| Android lint | `./gradlew :app:lintDebug` | **BUILD SUCCESSFUL**, 0 erreur, 89 avertissements préexistants |
 | `git diff --check` / `git show --check` | — | voir §9 |
 | Pixel physique | recette REJECT | **PASS** (voir §4) |
 
@@ -107,7 +107,7 @@ exécuté et aucun APK n'a été installé.
 | `GO_PRODUCT_REMOTE` | **GO_WITH_LIMITATIONS** | transport public réel ; P1 bearer |
 | `GO_PRODUCT_LOCAL_SMOKE` | **GO** | HOME, Plan, Coach, Focus, hors ligne ; aucun crash/ANR |
 | `GO_LIVE_SECURITY` | **GO_WITH_LIMITATIONS** | aucun P0 ; P1 bearer partagé toujours ouvert |
-| `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** | backend 408/1, Android JVM 922/0 ; lint selon résultat ; pas de CI distante |
+| `GO_SOURCE_AND_CI` | **GO_WITH_LIMITATIONS** | backend 408/1, Android JVM 922/0, lint 0 erreur / 89 warnings ; pas de CI distante |
 | `GO_MAIN_INTEGRATION` | **GO_WITH_LIMITATIONS** | branche locale prête, revue A4 à clôturer ; aucun push/merge |
 | `GO_DAILY_PILOT` | **NO-GO** | non autorisé ; P1 bearer et pull relay non corrigés |
 
@@ -152,6 +152,10 @@ Fichiers ajoutés par V7-09 :
 
 Aucun fichier de code produit n'a été modifié. Aucun secret, token, bearer,
 identifiant de série en clair ou donnée personnelle n'a été ajouté.
+
+Différence Git cumulée sur la branche : **8 fichiers, 1496 insertions,
+0 suppression** (`git diff --stat efcfdcd..HEAD`), tous sous
+`docs/operations/`.
 
 Contrôles prévus avant clôture : `git status`, `git diff --check`,
 `git show --check`, `git log --oneline`, vérification des worktrees.
