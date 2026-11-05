@@ -327,6 +327,7 @@ def _chat_error_response(request_id: str, code: str, capability: str = "coach.ch
         "AUTH_REQUIRED": "Authentification Android requise.",
         "CONSENT_REQUIRED": "Le consentement Android n’est pas GRANTED.",
         "STALE_VERSION": "La version de consentement est obsolète.",
+        "STALE_DATA": "Les données Android doivent être resynchronisées avant cette opération.",
         "CAPABILITY_UNAVAILABLE": "Capability désactivée.",
         "QUOTA_EXCEEDED": "La limite d’outils ou le quota du coach est atteint.",
         "RATE_LIMITED": "Le quota du fournisseur est temporairement limité.",
@@ -348,6 +349,7 @@ def _chat_error_response(request_id: str, code: str, capability: str = "coach.ch
         "AUTH_REQUIRED": 401,
         "CONSENT_REQUIRED": 403,
         "STALE_VERSION": 409,
+        "STALE_DATA": 409,
         "CAPABILITY_UNAVAILABLE": 403,
         "QUOTA_EXCEEDED": 429,
         "RATE_LIMITED": 429,
@@ -1653,7 +1655,11 @@ def create_v4_router(
                                 }
                                 status_code = 504
                         except ChatOrchestrationFailure as exc:
-                            if exc.tool_call_count > 0:
+                            if exc.code == "STALE_DATA":
+                                error_response = _chat_error_response(request_id, "STALE_DATA")
+                                status_code = error_response.status_code
+                                orchestration = json.loads(error_response.body)
+                            elif exc.tool_call_count > 0:
                                 status_code = _chat_error_response(request_id, exc.code).status_code
                                 orchestration = {
                                     "reply": CHAT_V4_FALLBACK_REPLY,
