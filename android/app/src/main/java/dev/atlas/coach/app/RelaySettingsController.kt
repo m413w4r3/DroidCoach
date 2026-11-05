@@ -122,9 +122,12 @@ class RelaySettingsController(
         private set
     var credentialsConfigured by mutableStateOf(credentialStore.credentials() != null)
         private set
-    private var v4ChatOptIn by mutableStateOf(V4_CHAT_DEFAULT_ENABLED)
+    private var v4ChatOptIn by mutableStateOf(settings.v4ChatEnabled)
         private set
     val v4ChatEnabled: Boolean get() = v4ChatOptIn
+    val v4ChatNegotiated: Boolean
+        get() = v4ChatOptIn && state == RelayConnectionState.RELAY_CONNECTED &&
+            transport?.hasNegotiatedCapability("v4.coach.chat") == true
 
     /** WebSocket close code observed by the active transport; 4001 is the revocation close. */
     val lastCloseCode: Int? get() = transport?.lastCloseCode
@@ -198,7 +201,6 @@ class RelaySettingsController(
     }
 
     fun selectMode(newMode: RelayTransportMode) {
-        if (newMode != RelayTransportMode.RELAY) v4ChatOptIn = V4_CHAT_DEFAULT_ENABLED
         settingsStore.updateMode(newMode)
         settings = settings.copy(mode = newMode)
         mode = newMode
@@ -231,9 +233,12 @@ class RelaySettingsController(
         }
     }
 
-    /** V4 is an explicit session capability and starts disabled on every app launch. */
+    /** V4 is a persistent opt-in; session negotiation is exposed separately by [v4ChatNegotiated]. */
     fun setV4ChatEnabled(enabled: Boolean) {
         if (v4ChatOptIn == enabled) return
+        val updatedSettings = settings.copy(v4ChatEnabled = enabled)
+        settingsStore.write(updatedSettings)
+        settings = updatedSettings
         v4ChatOptIn = enabled
         if (mode == RelayTransportMode.RELAY && state in setOf(
                 RelayConnectionState.RELAY_CONNECTED,
@@ -280,6 +285,7 @@ class RelaySettingsController(
         if (mode != RelayTransportMode.RELAY || state != RelayConnectionState.RELAY_CONNECTED) return null
         val active = transport ?: return null
         val selectedV4 = v4ChatOptIn
+        if (selectedV4 && !v4ChatNegotiated) return null
         val executor = RelayBackendChatRequestExecutor(active)
         return RelayAgentChatClient(
             executor,

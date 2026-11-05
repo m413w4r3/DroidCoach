@@ -25,6 +25,7 @@ data class RelaySettings(
     val serverPublicKey: String = "",
     val deviceId: String = "",
     val lastConnectedAtUtcMillis: Long? = null,
+    val v4ChatEnabled: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_RELAY_URL = "wss://relay.example.org"
@@ -45,6 +46,7 @@ class AndroidRelaySettingsStore(context: Context) {
         serverPublicKey = preferences.getString(SERVER_PUBLIC_KEY_KEY, "").orEmpty(),
         deviceId = preferences.getString(DEVICE_ID_KEY, "").orEmpty(),
         lastConnectedAtUtcMillis = preferences.getLong(LAST_CONNECTED_KEY, -1L).takeIf { it >= 0L },
+        v4ChatEnabled = preferences.getBoolean(V4_CHAT_OPT_IN_V1_KEY, false),
     )
 
     fun write(settings: RelaySettings) {
@@ -56,6 +58,7 @@ class AndroidRelaySettingsStore(context: Context) {
             putString(DEVICE_ID_KEY, settings.deviceId.trim())
             if (settings.lastConnectedAtUtcMillis == null) remove(LAST_CONNECTED_KEY)
             else putLong(LAST_CONNECTED_KEY, settings.lastConnectedAtUtcMillis)
+            putBoolean(V4_CHAT_OPT_IN_V1_KEY, settings.v4ChatEnabled)
         }.commit()
     }
 
@@ -82,6 +85,7 @@ class AndroidRelaySettingsStore(context: Context) {
         private const val SERVER_PUBLIC_KEY_KEY = "relay_server_public_key"
         private const val DEVICE_ID_KEY = "relay_device_id"
         private const val LAST_CONNECTED_KEY = "relay_last_connected_at"
+        private const val V4_CHAT_OPT_IN_V1_KEY = "v4_chat_opt_in_v1"
     }
 }
 

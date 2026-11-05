@@ -81,6 +81,9 @@ class GoalFocusStartTransactionTest {
         val root = harness.persistedRoot()
         val savedGoal = root.goal(goal.id)
         val started = requireNotNull(harness.controller.focusSession)
+        // The unsafe controller harness persists before every Compose delegate exists;
+        // newly added durable fields must remain safe on this construction-time path.
+        assertEquals(emptyList<Any?>(), root["agentConversationArchivesV1"])
         assertEquals(writesBeforeStart + 1, harness.backend.writes)
         assertEquals(FocusStatus.RUNNING, started?.status)
         assertEquals("Écriture", started?.taskTitle)

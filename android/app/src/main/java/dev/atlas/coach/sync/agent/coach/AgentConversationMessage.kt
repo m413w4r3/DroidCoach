@@ -11,12 +11,17 @@ data class AgentConversationMessage(
     val text: String,
     val createdAtUtcMillis: Long,
     val contextSources: List<String> = emptyList(),
+    val diagnosticDetails: String? = null,
 ) {
-    init { require(text.isNotBlank() && text.length <= 4_000 && contextSources.size <= 12) }
+    init {
+        require(text.isNotBlank() && text.length <= 4_000 && contextSources.size <= 12)
+        require(diagnosticDetails == null || diagnosticDetails.length <= 1_000)
+    }
 
     fun toMap() = mapOf(
         "id" to id, "role" to role.name, "text" to text,
         "created_at_utc_ms" to createdAtUtcMillis, "context_sources" to contextSources,
+        "diagnostic_details" to diagnosticDetails,
     )
 
     companion object {
@@ -26,6 +31,7 @@ data class AgentConversationMessage(
             text = values["text"] as? String ?: error("Missing text"),
             createdAtUtcMillis = (values["created_at_utc_ms"] as? Number)?.toLong() ?: error("Missing timestamp"),
             contextSources = (values["context_sources"] as? List<*>)?.map { it as? String ?: error("Invalid context source") }.orEmpty(),
+            diagnosticDetails = values["diagnostic_details"] as? String,
         )
     }
 }

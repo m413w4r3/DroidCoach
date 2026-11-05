@@ -155,6 +155,7 @@ import dev.atlas.coach.sync.agent.coach.AgentChatClient
 import dev.atlas.coach.sync.agent.coach.AgentChatException
 import dev.atlas.coach.sync.agent.coach.AgentChatFailureKind
 import dev.atlas.coach.sync.agent.coach.AgentChatSendState
+import dev.atlas.coach.sync.agent.coach.AgentConversationArchive
 import dev.atlas.coach.sync.agent.coach.LocalMockAgentChatClient
 import dev.atlas.coach.sync.agent.coach.AgentContextCoordinator
 import dev.atlas.coach.sync.agent.coach.AgentConversationMessage
@@ -487,6 +488,11 @@ class AtlasController @JvmOverloads constructor(
     private var agentConversationSnapshot by mutableStateOf(
         restored["agentConversation"].asList().mapNotNull { it.asMap()?.let { values -> runCatching { AgentConversationMessage.fromMap(values) }.getOrNull() } }.takeLast(80),
     )
+    // Keep persisted archives independent from Compose state: persistence can run while the
+    // controller's Compose delegates are not yet initialized (including startup recovery).
+    @Volatile private var agentConversationArchivesSnapshot: List<AgentConversationArchive> =
+        restored["agentConversationArchivesV1"].asList()
+            .mapNotNull { it.asMap()?.let(AgentConversationArchive::fromMap) }
     private var planActivityCoachContextEventsSnapshot by mutableStateOf(
         restored["planActivityCoachEvents"].asList()
             .mapNotNull { it.asMap()?.let(PlanActivityCoachContextEvent::fromMap) }
@@ -497,6 +503,7 @@ class AtlasController @JvmOverloads constructor(
     )
     private var agentConversationId: String? = restored["agentConversationId"] as? String
     @Volatile private var agentApiClient: AgentApiClient? = null
+    @Volatile private var relayAgentChatClientOverrideForTesting: AgentChatClient? = null
     private val localMockAgentChatClient = LocalMockAgentChatClient(clock::nowMillis)
     private val agentRequestGeneration = AtomicLong(0L)
     private val agentChatGeneration = AtomicLong(0L)
@@ -530,6 +537,10 @@ class AtlasController @JvmOverloads constructor(
 
     internal fun setAgentApiClientForTesting(client: AgentApiClient?) {
         agentApiClient = client
+    }
+
+    internal fun setRelayAgentChatClientForTesting(client: AgentChatClient?) {
+        relayAgentChatClientOverrideForTesting = client
     }
 
     internal val navigationState = AtlasNavigationState()
@@ -866,6 +877,8 @@ class AtlasController @JvmOverloads constructor(
         ) else current
     }
     val agentConversation: List<AgentConversationMessage> get() = agentConversationSnapshot
+    val agentConversationArchives: List<AgentConversationArchive> get() = agentConversationArchivesSnapshot.orEmpty()
+    val currentAgentConversationId: String? get() = agentConversationId
     internal val planActivityCoachContextEvents: List<PlanActivityCoachContextEvent>
         get() = currentPlanActivityCoachEvents()
     val agentInbox: List<AgentInboxEntry> get() = agentInboxRepository.all()
@@ -2167,6 +2180,7 @@ class AtlasController @JvmOverloads constructor(
         }
     }
 
+    @Synchronized
     fun sendAgentMessage(rawMessage: String): Boolean {
         val message = rawMessage.trim()
         if (message.isEmpty() || message.length > MAX_AGENT_MESSAGE_LENGTH) {
@@ -2182,10 +2196,22 @@ class AtlasController @JvmOverloads constructor(
         if (agentChatSendState == AgentChatSendState.SENDING) return false
 
         val mode = relaySettings.mode
+        if (mode == RelayTransportMode.RELAY && relaySettings.v4ChatEnabled &&
+            relaySettings.state == RelayConnectionState.RELAY_CONNECTED && !relaySettings.v4ChatNegotiated
+        ) {
+            agentChatSendState = AgentChatSendState.ERROR
+            val negotiationMessage = "Conversation V4 demandée mais non négociée par le relais. Aucun message n’a été envoyé et aucun repli V2 ne sera tenté."
+            agentChatStatusMessage = negotiationMessage
+            latestMessage = agentChatStatusMessage
+            agentStatus = AgentStatus.UNAVAILABLE
+            agentStatusMessage = negotiationMessage
+            touch()
+            return false
+        }
         val client: AgentChatClient? = when (mode) {
             RelayTransportMode.OFFLINE -> null
             RelayTransportMode.DIRECT -> agentApiClient
-            RelayTransportMode.RELAY -> relaySettings.relayAgentChatClient(
+            RelayTransportMode.RELAY -> relayAgentChatClientOverrideForTesting ?: relaySettings.relayAgentChatClient(
                 freshRequestContext = agentContextCoordinator::requestContext,
                 onContextWritten = { snapshot -> recordAgentContextWritten(snapshot) },
                 requestAllowed = ::isAgentRequestAllowed,
@@ -2293,6 +2319,7 @@ class AtlasController @JvmOverloads constructor(
                                 response.proposals.flatMap { agentProposalContextSources(it, sentContextSummary) }.distinct().ifEmpty {
                                     listOf(sentContextSummary)
                                 },
+                            diagnosticDetails = response.diagnosticDetails,
                         ))
                     if (!dispatchPreauthorizedInbox()) return@post
                     persist()
@@ -2348,6 +2375,37 @@ class AtlasController @JvmOverloads constructor(
             requestId = idempotencyKey,
         )
         activeAgentChatJob = job
+        return true
+    }
+
+    /** Archives the visible local thread, then durably starts an empty conversation. */
+    @Synchronized
+    fun startNewAgentConversation(): Boolean {
+        if (agentChatSendState == AgentChatSendState.SENDING) return false
+
+        val previousMessages = agentConversationSnapshot
+        val previousId = agentConversationId
+        val previousArchives = agentConversationArchivesSnapshot.orEmpty()
+        val archiveConversationId = previousId ?: previousMessages.firstOrNull()?.let { UUID.randomUUID().toString() }
+        if (archiveConversationId != null) {
+            agentConversationArchivesSnapshot = previousArchives + AgentConversationArchive(
+                conversationId = archiveConversationId,
+                archivedAtUtcMillis = clock.nowMillis(),
+                messages = previousMessages,
+            )
+        }
+        agentConversationSnapshot = emptyList()
+        agentConversationId = UUID.randomUUID().toString()
+
+        if (runCatching { persistOrThrow("agent.new_conversation") }.isFailure) {
+            agentConversationSnapshot = previousMessages
+            agentConversationId = previousId
+            agentConversationArchivesSnapshot = previousArchives
+            latestMessage = "Impossible d’archiver la conversation. Votre fil reste disponible."
+            touch()
+            return false
+        }
+        touch()
         return true
     }
 
@@ -4811,6 +4869,7 @@ class AtlasController @JvmOverloads constructor(
             "agentMandate" to agentMandateStore.current().toJson().toString(),
             "agentHomeState" to agentHomeStateSnapshot.toJson().toString(),
             "agentConversation" to agentConversationSnapshot.map(AgentConversationMessage::toMap),
+            "agentConversationArchivesV1" to agentConversationArchivesSnapshot.orEmpty().map(AgentConversationArchive::toMap),
             "planActivityCoachEvents" to currentPlanActivityCoachEvents().map(PlanActivityCoachContextEvent::toMap),
             "agentConversationId" to agentConversationId,
             "agentSuggestions" to agentSuggestionsSnapshot,
