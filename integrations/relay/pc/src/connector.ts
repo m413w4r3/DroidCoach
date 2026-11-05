@@ -19,6 +19,13 @@ export interface ConnectorConfig {
   backendUrl: string;
   serviceToken?: string;
   v4Enabled?: boolean;
+  v4AuthMode?: string;
+  requirePrincipalBinding?: boolean;
+  v4PrincipalMapFile?: string;
+  v4RelayAssertionKeyId?: string;
+  v4RelayAssertionSecretFile?: string;
+  v4RelayAssertionSecret?: string;
+  /** Development-only compatibility path when legacy mode has no principal map. */
   v4AndroidTokenFile?: string;
   metricsPort: number;
   handshakeTimeoutMs?: number;
@@ -37,6 +44,12 @@ export interface ConnectorRuntime {
 export function configFromEnvironment(): ConnectorConfig {
   const stateDir = process.env.ATLAS_RELAY_STATE_DIR ?? join(homedir(), ".local", "state", "atlas-relay");
   const metricsPort = integerEnv("ATLAS_METRICS_PORT", 4401, 1, 65_535);
+  const v4AuthMode = process.env.ATLAS_V4_AUTH_MODE ?? "legacy";
+  if (!["legacy", "dual", "principal"].includes(v4AuthMode)) throw new Error("invalid ATLAS_V4_AUTH_MODE");
+  const requirePrincipalBinding = process.env.ATLAS_REQUIRE_PRINCIPAL_BINDING;
+  if (requirePrincipalBinding !== undefined && !["0", "1"].includes(requirePrincipalBinding)) {
+    throw new Error("ATLAS_REQUIRE_PRINCIPAL_BINDING must be 0 or 1");
+  }
   return {
     stateDir,
     relayUrl: process.env.ATLAS_RELAY_URL ?? "ws://127.0.0.1:4400",
@@ -45,6 +58,12 @@ export function configFromEnvironment(): ConnectorConfig {
     backendUrl: process.env.ATLAS_BACKEND_URL ?? "http://127.0.0.1:8100",
     ...(process.env.ATLAS_SERVICE_TOKEN ? { serviceToken: process.env.ATLAS_SERVICE_TOKEN } : {}),
     v4Enabled: process.env.ATLAS_V4_ENABLED === "1",
+    v4AuthMode,
+    requirePrincipalBinding: requirePrincipalBinding === "1",
+    ...(process.env.ATLAS_CORE_PRINCIPAL_MAP_FILE ? { v4PrincipalMapFile: process.env.ATLAS_CORE_PRINCIPAL_MAP_FILE } : {}),
+    ...(process.env.ATLAS_V4_RELAY_ASSERTION_KEY_ID ? { v4RelayAssertionKeyId: process.env.ATLAS_V4_RELAY_ASSERTION_KEY_ID } : {}),
+    ...(process.env.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE ? { v4RelayAssertionSecretFile: process.env.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE } : {}),
+    ...(process.env.ATLAS_V4_RELAY_ASSERTION_SECRET ? { v4RelayAssertionSecret: process.env.ATLAS_V4_RELAY_ASSERTION_SECRET } : {}),
     ...(process.env.ATLAS_V4_ANDROID_TOKEN_FILE ? { v4AndroidTokenFile: process.env.ATLAS_V4_ANDROID_TOKEN_FILE } : {}),
     metricsPort,
     handshakeTimeoutMs: integerEnv("ATLAS_HANDSHAKE_TIMEOUT_MS", 8000, 100, 60_000),
@@ -52,7 +71,28 @@ export function configFromEnvironment(): ConnectorConfig {
 }
 
 export async function createConnector(config: ConnectorConfig): Promise<ConnectorRuntime> {
-  const v4AndroidToken = config.v4Enabled ? await readPrivateV4AndroidToken(config.v4AndroidTokenFile) : undefined;
+  let v4Enabled = config.v4Enabled === true;
+  if (!["legacy", "dual", "principal"].includes(config.v4AuthMode ?? "legacy")) v4Enabled = false;
+  let principalCredentials: Map<string, { principalId: string; credential: string }> | undefined;
+  let legacyAndroidToken: string | undefined;
+  let relayAssertion: { keyId: string; secret: Uint8Array } | undefined;
+  if (v4Enabled) {
+    const map = await readPrivateV4PrincipalMap(config.v4PrincipalMapFile);
+    const credentialMode = selectV4CredentialMode(
+      config.v4AuthMode ?? "legacy", config.requirePrincipalBinding === true, map.status,
+    );
+    if (credentialMode === "principal-map" && map.status === "valid") {
+      relayAssertion = await readPrivateV4RelayAssertion(config.v4RelayAssertionKeyId,
+        config.v4RelayAssertionSecretFile, config.v4RelayAssertionSecret);
+      if (relayAssertion) principalCredentials = map.credentials;
+      else v4Enabled = false;
+    } else if (credentialMode === "legacy-fallback") {
+      legacyAndroidToken = await readPrivateV4AndroidToken(config.v4AndroidTokenFile);
+      v4Enabled = Boolean(legacyAndroidToken);
+    } else {
+      v4Enabled = false;
+    }
+  }
   const registry = new DeviceRegistry(join(config.stateDir, "devices.json"));
   // Validate existing state before creating any connector identity or opening a relay.
   await registry.list();
@@ -63,7 +103,7 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   const backend = new BackendClient({
     baseUrl: config.backendUrl,
     ...(config.serviceToken ? { serviceToken: config.serviceToken } : {}),
-    v4Enabled: config.v4Enabled === true,
+    v4Enabled,
     ...(diagnostics.enabled ? {
       fetcher: async (input, init) => {
         const response = await fetch(input, init);
@@ -71,10 +111,16 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
         return response;
       },
     } : {}),
-    ...(v4AndroidToken ? {
-      // The shared Android bearer is only selected after an authenticated relay session
-      // supplies its paired device id; payload data never chooses credentials.
-      pairedDeviceToken: (pairedDeviceId: string) => pairedDeviceId.length > 0 ? v4AndroidToken : undefined,
+    ...(principalCredentials && relayAssertion ? {
+      pairedDeviceAuth: (relayDeviceId: string) => {
+        const selected = principalCredentials?.get(relayDeviceId);
+        return selected ? { principalId: selected.principalId, credential: selected.credential } : undefined;
+      },
+      relayAssertion,
+    } : {}),
+    ...(legacyAndroidToken ? {
+      // Development compatibility only: enabled solely in legacy mode with no principal map.
+      pairedDeviceToken: (pairedDeviceId: string) => pairedDeviceId.length > 0 ? legacyAndroidToken : undefined,
     } : {}),
   });
   let relay: RelayLink;
@@ -119,10 +165,20 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   };
 }
 
-/** Reads the dedicated Core Android bearer from a private, owner-controlled file. */
-export async function readPrivateV4AndroidToken(path: string | undefined): Promise<string | undefined> {
-  if (!path || !isAbsolute(path) || typeof process.getuid !== "function" || constants.O_NOFOLLOW === undefined) return undefined;
+export function selectV4CredentialMode(
+  authMode: string,
+  principalBindingRequired: boolean,
+  mapStatus: PrincipalMapRead["status"],
+): "principal-map" | "legacy-fallback" | "disabled" {
+  if (authMode !== "legacy" && authMode !== "dual" && authMode !== "principal") return "disabled";
+  if (mapStatus === "invalid") return "disabled";
+  if (mapStatus === "valid") return authMode === "dual" || authMode === "principal" ? "principal-map" : "disabled";
+  return authMode === "legacy" && !principalBindingRequired ? "legacy-fallback" : "disabled";
+}
 
+/** Reads a mode-0600 owner-controlled file without following links or accepting inode swaps. */
+async function readPrivateFile(path: string | undefined, maxBytes: number): Promise<string | undefined> {
+  if (!path || !isAbsolute(path) || typeof process.getuid !== "function" || constants.O_NOFOLLOW === undefined) return undefined;
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     const beforeOpen = await lstat(path);
@@ -133,20 +189,88 @@ export async function readPrivateV4AndroidToken(path: string | undefined): Promi
     const owner = process.getuid();
     if (!file.isFile() || file.uid !== owner || beforeOpen.uid !== owner ||
         (file.mode & 0o777) !== 0o600 || beforeOpen.dev !== file.dev || beforeOpen.ino !== file.ino ||
-        file.size < 1 || file.size > 4_098) {
+        file.size < 1 || file.size > maxBytes) {
       return undefined;
     }
 
     const raw = await handle.readFile("utf8");
-    const token = raw.endsWith("\r\n") ? raw.slice(0, -2) : raw.endsWith("\n") ? raw.slice(0, -1) : raw;
-    if (token.length < 1 || token.length > 4_096 || /[^\x21-\x7e]/.test(token)) return undefined;
-    return token;
+    const afterRead = await lstat(path);
+    if (afterRead.isSymbolicLink() || afterRead.dev !== file.dev || afterRead.ino !== file.ino) return undefined;
+    return raw;
   } catch {
     // Missing, inaccessible, replaced, or unsafe credential files disable V4 without
     // affecting V1/V2/V3 or exposing filesystem details in connector responses.
     return undefined;
   } finally {
     await handle?.close().catch(() => {});
+  }
+}
+
+/** Reads the dedicated legacy Core Android bearer used only by the explicit dev fallback. */
+export async function readPrivateV4AndroidToken(path: string | undefined): Promise<string | undefined> {
+  const raw = await readPrivateFile(path, 4_098);
+  if (raw === undefined) return undefined;
+  const token = raw.endsWith("\r\n") ? raw.slice(0, -2) : raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+  if (token.length < 1 || token.length > 4_096 || /[^\x21-\x7e]/.test(token)) return undefined;
+  return token;
+}
+
+export type PrincipalMapRead =
+  | { status: "absent" }
+  | { status: "invalid" }
+  | { status: "valid"; credentials: Map<string, { principalId: string; credential: string }> };
+
+/** Loads Relay-ID → principal credential mappings from a private JSON file. */
+export async function readPrivateV4PrincipalMap(path: string | undefined): Promise<PrincipalMapRead> {
+  if (!path) return { status: "absent" };
+  try {
+    await lstat(path);
+  } catch (error) {
+    if (isNotFound(error)) return { status: "absent" };
+    return { status: "invalid" };
+  }
+  const raw = await readPrivateFile(path, 262_144);
+  if (raw === undefined) return { status: "invalid" };
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value) || Object.keys(value).length < 1 || Object.keys(value).length > 4096) {
+      return { status: "invalid" };
+    }
+    const credentials = new Map<string, { principalId: string; credential: string }>();
+    for (const [relayDeviceId, entry] of Object.entries(value)) {
+      if (!relayDeviceId || relayDeviceId.length > 256 || !isRecord(entry)
+        || Object.keys(entry).sort().join(",") !== "credential_file,principal_id"
+        || typeof entry.principal_id !== "string" || !entry.principal_id
+        || typeof entry.credential_file !== "string" || !isAbsolute(entry.credential_file)) {
+        return { status: "invalid" };
+      }
+      const credential = await readPrivateV4AndroidToken(entry.credential_file);
+      if (!credential) return { status: "invalid" };
+      credentials.set(relayDeviceId, { principalId: entry.principal_id, credential });
+    }
+    return { status: "valid", credentials };
+  } catch {
+    return { status: "invalid" };
+  }
+}
+
+/** Loads a base64url-encoded dedicated connector-to-Core assertion secret. */
+export async function readPrivateV4RelayAssertion(
+  keyId: string | undefined,
+  secretFile: string | undefined,
+  secretEnvironment: string | undefined,
+): Promise<{ keyId: string; secret: Uint8Array } | undefined> {
+  if (!keyId || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId) || (secretFile && secretEnvironment)) return undefined;
+  const rawValue = secretEnvironment ?? await readPrivateFile(secretFile, 512);
+  if (!rawValue) return undefined;
+  const encoded = rawValue.endsWith("\r\n") ? rawValue.slice(0, -2) : rawValue.endsWith("\n") ? rawValue.slice(0, -1) : rawValue;
+  if (!/^[A-Za-z0-9_-]{43,}$/.test(encoded)) return undefined;
+  try {
+    const secret = Buffer.from(encoded, "base64url");
+    if (secret.length < 32) return undefined;
+    return { keyId, secret };
+  } catch {
+    return undefined;
   }
 }
 
@@ -157,4 +281,12 @@ function integerEnv(name: string, fallback: number, minimum: number, maximum: nu
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) throw new Error(`invalid ${name}`);
   return parsed;
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

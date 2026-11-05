@@ -1,3 +1,4 @@
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { RemoteError } from "./errors.js";
 import { assertCoachChatResponse, assertSmallResponse, isRecord, isV4Operation, type Operation, validatePayload } from "./protocol.js";
 
@@ -12,6 +13,10 @@ export interface BackendConfig {
   v4Enabled?: boolean;
   /** Resolves a session-selected paired Relay device to the dedicated Core Android bearer; never read from payload data. */
   pairedDeviceToken?: (pairedDeviceId: string) => string | undefined;
+  /** Session-selected Core credential and binding metadata loaded from a private principal map. */
+  pairedDeviceAuth?: (relayDeviceId: string) => { principalId: string; credential: string } | undefined;
+  /** Dedicated connector-to-Core assertion key. Required with pairedDeviceAuth. */
+  relayAssertion?: { keyId: string; secret: Uint8Array };
   fetcher?: FetchLike;
 }
 
@@ -102,10 +107,15 @@ export class BackendClient {
   async execute(operation: Operation, payload: Record<string, unknown>, signal?: AbortSignal, pairedDeviceId?: string): Promise<Record<string, unknown>> {
     const v4Operation = isV4Operation(operation);
     if (v4Operation) validatePayload(operation, payload);
-    if (v4Operation && (!this.config.v4Enabled || !pairedDeviceId || !this.config.pairedDeviceToken)) {
+    const pairedAuth = v4Operation && pairedDeviceId ? this.config.pairedDeviceAuth?.(pairedDeviceId) : undefined;
+    const legacyToken = v4Operation && pairedDeviceId ? this.config.pairedDeviceToken?.(pairedDeviceId) : undefined;
+    if (v4Operation && (
+      !this.config.v4Enabled || !pairedDeviceId || (!pairedAuth && !legacyToken)
+      || (pairedAuth !== undefined && !this.config.relayAssertion)
+    )) {
       throw new RemoteError("OPERATION_UNAVAILABLE");
     }
-    const deviceToken = v4Operation ? this.config.pairedDeviceToken?.(pairedDeviceId!) : undefined;
+    const deviceToken = pairedAuth?.credential ?? legacyToken;
     if (v4Operation && !deviceToken) throw new RemoteError("OPERATION_UNAVAILABLE");
     const route = routeFor(operation, payload);
     if (!route) throw new RemoteError("OPERATION_UNAVAILABLE");
@@ -121,11 +131,24 @@ export class BackendClient {
       headers["X-Atlas-Request-Id"] = route.v4.requestId;
     }
     if (route.body) headers["Content-Type"] = "application/json";
+    const bodyText = route.body ? JSON.stringify(route.body) : undefined;
+    if (route.v4 && pairedAuth && this.config.relayAssertion) {
+      const timestamp = String(Date.now());
+      const nonce = randomBytes(16).toString("base64url");
+      const bodyHash = createHash("sha256").update(bodyText ?? "", "utf8").digest("hex");
+      const canonical = `v1\n${route.method.toUpperCase()}\n${route.path}\n${timestamp}\n${nonce}\n${pairedDeviceId}\n${bodyHash}`;
+      const signature = createHmac("sha256", this.config.relayAssertion.secret).update(canonical, "utf8").digest("base64url");
+      headers["X-Atlas-Relay-Device-Id"] = pairedDeviceId!;
+      headers["X-Atlas-Relay-Key-Id"] = this.config.relayAssertion.keyId;
+      headers["X-Atlas-Relay-Time"] = timestamp;
+      headers["X-Atlas-Relay-Nonce"] = nonce;
+      headers["X-Atlas-Relay-Signature"] = `v1=${signature}`;
+    }
     const timeoutMs = operation === "coach.chat.request" || operation === "v4.coach.chat.request" ? this.chatTimeoutMs : this.timeoutMs;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const init: RequestInit = { method: route.method, headers, signal: combinedSignal, redirect: "error" };
-    if (route.body) init.body = JSON.stringify(route.body);
+    if (bodyText !== undefined) init.body = bodyText;
     let response: Response;
     try {
       response = await this.fetcher(new URL(route.path, this.baseUrl), init);
