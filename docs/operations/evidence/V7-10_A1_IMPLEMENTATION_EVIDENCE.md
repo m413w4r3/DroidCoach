@@ -6,13 +6,18 @@
 - **Profil effectif:** `codex / gpt-6-luna / xhigh`, confirmé par l’orchestrateur Paseo.
 - **Portée:** Core backend V4, connecteur Relay PC, CLI offline, tests et documentation. Aucun changement Android.
 
+## Verdict
+
+**PASS_WITH_LIMITATIONS** pour le ticket d’implémentation et ses suites synthétiques. L’incident SQLite constaté est local au worktree A1; les métadonnées confirment que la base du dépôt principal n’a pas reçu la migration 4 et que le Core live utilise un volume Docker séparé, auquel aucun accès n’a eu lieu. Les gates de déploiement et les migrations live restent `NOT_RUN`.
+
 ## Commits locaux
 
 1. `c12340b5b9d0a99fb8c60ec5aa34023e6fa1b4c2` — `feat(v7-10): add core device principal registry and auth modes`
 2. `c480d7487a79533440a39b1671be5966aa16884b` — `feat(v7-10): scope proposals and cursors to authenticated device`
 3. `d2cebefad0e2326e5d7a35003e9ddec2a6eb780f` — `feat(v7-10): bind relay sessions to core principals with signed assertions`
 4. `c5b097e419188d10393b84a30e71b20138e6678a` — `test(v7-10): prove per-device authentication isolation`
-5. Documentation and this evidence are committed together as the final documentation commit; its SHA is recorded in the final handoff and Git history (a commit cannot contain its own SHA).
+5. `5aaafbb99d9027e935234598b6864c7700461189` — `docs(v7-10): document device auth migration and rollback`
+6. Documentation addendum: `docs(v7-10): record local database incident findings`; its SHA is in Git history and the final handoff (a commit cannot contain its own SHA).
 
 ## Fichiers livrés
 
@@ -44,9 +49,15 @@ Le premier essai des tests Node en sandbox a rencontré des refus de loopback/pr
 - `GO_BEARER_MIGRATION_DESIGN`: **NOT_RUN** — plan documenté, migration live non autorisée.
 - `GO_BEARER_REVOKE_FAIL_CLOSED`: **NOT_RUN** — tests synthétiques passés; aucune révocation live exécutée.
 
-## Incident à auditer
+## Incident local et constat
 
-Avant l’ajout de la garde d’import des tests, un import de `atlas_backend.main` a laissé son initialisation lire `ATLAS_DB_PATH` depuis l’environnement du processus et appeler le migrateur existant sur `backend/data/atlas.sqlite3`. Le contenu de cette base n’a pas été lu et aucune interaction ultérieure avec ce chemin n’a été faite. Son statut (base live ou locale) et l’effet exact de l’initialisation restent **non vérifiés**; ne pas considérer l’interdiction de toucher une base live comme certifiée sans audit séparé. La garde actuelle force les tests à utiliser une base temporaire neuve.
+Au premier import de `atlas_backend.main`, l’initialisation a lancé le migrateur existant sur `backend/data/atlas.sqlite3` dans le worktree A1. L’orchestrateur a ensuite vérifié uniquement des métadonnées SQLite, sans lire de ligne métier ni de secret:
+
+- Dans le dépôt principal, `backend/data/atlas.sqlite3` avait `PRAGMA user_version=3`, uniquement les migrations 1–3 appliquées (`applied_at=2026-10-30T20:35:54Z`), `PRAGMA integrity_check=ok`, et aucune migration 4. Cette base n’a donc pas été migrée par l’import.
+- Dans le worktree A1, son fichier local `backend/data/atlas.sqlite3` est ignoré par Git, mode `0644`, `user_version=4`; `v4_device_principals_and_proposal_owners` y est appliquée à `2026-11-05T22:28:48Z`. C’est l’effet de bord local de cette tâche. Ce fichier ignoré n’est pas livré et n’a pas été supprimé.
+- Le Core live utilise le volume Docker nommé `atlas-core-data:/data` depuis `compose.yaml`; aucun accès à ce volume live n’a eu lieu.
+
+Le contenu métier des deux fichiers SQLite n’a pas été lu par cette tâche. Le statut précédent « BLOCKED car statut de base inconnu » est remplacé par `PASS_WITH_LIMITATIONS`, compte tenu des constats de métadonnées fournis par l’orchestrateur. La base locale de worktree conserve toutefois la migration 4 comme effet de bord documenté; les fixtures actuelles isolent les tests sous `/tmp`.
 
 ## Limites
 
