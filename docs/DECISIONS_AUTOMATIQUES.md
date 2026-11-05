@@ -347,3 +347,11 @@
 - **Raison:** préserver l’usage direct de l’APK installé pendant `dual` sans créer une capability par défaut pour les nouveaux principaux.
 - **Réversibilité:** retirer un grant par `capability set` ou révoquer le credential/principal. Le mode `principal` refuse toujours les credentials `LEGACY`.
 - **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md`.
+
+## V7-10-A3 — Fiabilité Android quotidienne (2026-11-06)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-11-06 | « Synchroniser maintenant » passe par le worker Core V4 existant; `KEEP` garantit l’unicité WorkManager et un anti-double-tap local borné à 750 ms protège le geste UI. Les travaux de suivi internes gardent `APPEND_OR_REPLACE`. | Le geste manuel ne doit ni contourner la session Relay appairée ni changer les consentements; le gate UI doit expirer même si un work est annulé, bloqué ou jamais lancé. |
+| 2026-11-06 | Le fil archivé est stocké localement dans `agentConversationArchivesV1`; la conversation active garde son ID historique, et « Nouvelle conversation » persiste un nouvel UUID et un fil vide. Le V4 opt-in reste faux par défaut mais est conservé sous `v4_chat_opt_in_v1`; négociation Relay reste un état séparé. | Une nouvelle conversation ne doit pas modifier les consentements, le plan, le mandat, l’appairage ni les identifiants. Une capability V4 demandée mais absente échoue sans envoi ni repli V2. |
+| 2026-11-06 | Les métadonnées d’outils et les identifiants de proposition restent accessibles dans « Détails », tandis que le texte de réponse reste simple. Les dates du plan sont montrées à l’heure locale et les identifiants/version bruts restent masqués par défaut. | Garder l’accès d’audit sans exposer UUID, noms d’outils ou états protocolaires au premier niveau de lecture. |
