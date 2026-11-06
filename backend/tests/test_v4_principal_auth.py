@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -65,6 +65,11 @@ def make_app(tmp_path, monkeypatch, *, mode: str = "principal"):
         "coach.chat": True,
     }))
     app = create_app(db_path=tmp_path / "atlas.sqlite3", token="synthetic-legacy-token")
+    with app.state.store.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert connection.execute(
+            "SELECT name FROM schema_migrations WHERE version=5"
+        ).fetchone()[0] == "v4_proposal_expiration_audit"
     return app, V4PrincipalRegistry(app.state.store), Client(app)
 
 
@@ -364,8 +369,38 @@ def test_proposal_pull_and_ack_are_scoped_to_authenticated_device(tmp_path, monk
         json=ack,
     )
     assert crossed_ack.status_code == 404
+
+    expired_at = (datetime.now(timezone.utc) - timedelta(seconds=1)).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z")
+    with app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?", (expired_at, ids["b"])
+        )
+    after_expiration = client.post(
+        "/v4/agent/proposals/pull",
+        headers=consent_headers("synthetic-proposal-credential-token-a"),
+        json={**pull_body, "request_id": "00000000-0000-4000-8000-000000000563"},
+    )
+    assert after_expiration.status_code == 200
+    assert [item["proposal_id"] for item in after_expiration.json()["proposals"]] == [ids["a"]]
+    crossed_expired_ack = client.post(
+        f"/v4/agent/proposals/{ids['b']}/ack",
+        headers=consent_headers("synthetic-proposal-credential-token-a"),
+        json=ack,
+    )
+    assert crossed_expired_ack.status_code == 404
     with app.state.store.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+        owner_row = connection.execute(
+            "SELECT device_ref,state FROM agent_proposals_v4 WHERE proposal_id=?", (ids["b"],)
+        ).fetchone()
+        assert owner_row["device_ref"] == principals["b"][1]
+        assert owner_row["state"] == "EXPIRED"
+        expiration_audit = connection.execute(
+            "SELECT source FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?", (ids["b"],)
+        ).fetchone()
+        assert expiration_audit["source"] == "PULL"
 
 
 def test_historical_null_proposals_are_visible_only_to_legacy_in_dual_mode(tmp_path, monkeypatch):

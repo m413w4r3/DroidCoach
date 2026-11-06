@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _fd, _import_test_db = tempfile.mkstemp(prefix="atlas-backend-test-global-", suffix=".sqlite3")
 os.close(_fd)
 os.environ["ATLAS_DB_PATH"] = _import_test_db
+os.environ.setdefault("ATLAS_V4_PROPOSAL_EXPIRY_SWEEPER_ENABLED", "0")
 atexit.register(lambda: Path(_import_test_db).unlink(missing_ok=True))
 atexit.register(lambda: Path(f"{_import_test_db}.pre-v4.bak").unlink(missing_ok=True))
 

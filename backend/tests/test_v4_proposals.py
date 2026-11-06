@@ -64,6 +64,17 @@ class ASGITestClient:
         return None
 
 
+class FakeClock:
+    def __init__(self, value: datetime):
+        self.value = value.astimezone(timezone.utc).replace(microsecond=0)
+
+    def __call__(self) -> datetime:
+        return self.value
+
+    def advance(self, delta: timedelta) -> None:
+        self.value += delta
+
+
 def stamp(value: datetime | None = None) -> str:
     return (value or datetime.now(timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -364,6 +375,332 @@ def test_inbox_cursor_pagination_ack_states_and_replay_conflicts(tmp_path, monke
     response = client.post(f"/v4/agent/proposals/{rejected_id}/ack", headers=android_headers(), json=wrong_consent)
     assert response.status_code == 409
     assert error_code(response) == "STALE_VERSION"
+    client.close()
+
+
+def test_pull_expires_due_rows_without_changing_cursor_order_or_page_size(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    proposal_ids = []
+    for index in range(4):
+        response = post_proposal(
+            client, f"00000000-0000-4000-8000-00000000029{index}", target=640 + index * 10
+        )
+        assert response.status_code == 200, response.text
+        proposal_ids.append(response.json()["data"]["proposal_id"])
+    with client.app.state.store.connect() as connection:
+        expected_order = [row[0] for row in connection.execute(
+            "SELECT proposal_id FROM agent_proposals_v4 ORDER BY created_at,proposal_id"
+        )]
+
+    fake_clock = FakeClock(datetime.now(timezone.utc))
+    client.app.state.store.clock = fake_clock
+    pull_body = {
+        "contract_version": 4, "schema_version": 4, "request_id": UUID_REQUEST,
+        "capability": "proposal.ack", "consent_version": 3, "page_size": 1, "cursor": None,
+    }
+    first_page = client.post("/v4/agent/proposals/pull", headers=android_headers(), json=pull_body)
+    assert first_page.status_code == 200
+    assert [row["proposal_id"] for row in first_page.json()["proposals"]] == [expected_order[0]]
+    first_cursor = first_page.json()["next_cursor"]
+    assert first_cursor
+
+    with client.app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), expected_order[1]),
+        )
+    second_page = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={**pull_body, "request_id": "00000000-0000-4000-8000-000000000295", "cursor": first_cursor},
+    )
+    third_page = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={**pull_body, "request_id": "00000000-0000-4000-8000-000000000296",
+              "cursor": second_page.json()["next_cursor"]},
+    )
+    assert second_page.status_code == third_page.status_code == 200
+    assert [row["proposal_id"] for row in second_page.json()["proposals"]] == [expected_order[2]]
+    assert [row["proposal_id"] for row in third_page.json()["proposals"]] == [expected_order[3]]
+    assert second_page.json()["next_cursor"] is not None
+    assert third_page.json()["next_cursor"] is None
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (expected_order[1],)
+        ).fetchone()[0] == "EXPIRED"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?",
+            (expected_order[1],),
+        ).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+    client.close()
+
+
+def test_pull_expires_never_delivered_proposal_and_leaves_uncertain_unresolved(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    never_pulled = post_proposal(client, "00000000-0000-4000-8000-000000000297").json()["data"]["proposal_id"]
+    uncertain = post_proposal(client, "00000000-0000-4000-8000-000000000298").json()["data"]["proposal_id"]
+    fake_clock = FakeClock(datetime.now(timezone.utc) + timedelta(hours=1))
+    client.app.state.store.clock = fake_clock
+    with client.app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), never_pulled),
+        )
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET state='UNCERTAIN',expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), uncertain),
+        )
+    pull = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={"contract_version": 4, "schema_version": 4, "request_id": UUID_REQUEST,
+              "capability": "proposal.ack", "consent_version": 3, "page_size": 32, "cursor": None},
+    )
+    assert pull.status_code == 200
+    assert never_pulled not in {row["proposal_id"] for row in pull.json()["proposals"]}
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (never_pulled,)
+        ).fetchone()[0] == "EXPIRED"
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (uncertain,)
+        ).fetchone()[0] == "UNCERTAIN"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?", (never_pulled,)
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?", (uncertain,)
+        ).fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+    client.close()
+
+
+def test_pull_refusal_does_not_commit_lazy_expiration(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    proposal_id = post_proposal(client, "00000000-0000-4000-8000-000000000329").json()["data"]["proposal_id"]
+    fake_clock = FakeClock(datetime.now(timezone.utc) + timedelta(days=1))
+    client.app.state.store.clock = fake_clock
+    with client.app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), proposal_id),
+        )
+
+    pull_body = {
+        "contract_version": 4, "schema_version": 4, "request_id": UUID_REQUEST,
+        "capability": "proposal.ack", "consent_version": 3, "page_size": 32, "cursor": None,
+    }
+    unauthorized = client.post("/v4/agent/proposals/pull", json=pull_body)
+    malformed = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(), json={**pull_body, "unexpected": True}
+    )
+    bad_cursor = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(), json={**pull_body, "cursor": "invalid"}
+    )
+    assert unauthorized.status_code == 401
+    assert malformed.status_code == 400
+    assert error_code(bad_cursor) == "CURSOR_INVALID"
+
+    post_consent(client, "DAY_PLAN", "REVOKED", 4)
+    revoked = client.post(
+        "/v4/agent/proposals/pull", headers=android_headers(),
+        json={**pull_body, "request_id": "00000000-0000-4000-8000-000000000328", "consent_version": 4},
+    )
+    assert revoked.status_code == 403
+    assert error_code(revoked) == "CONSENT_REQUIRED"
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == "PENDING_ANDROID"
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_expiration_events_v4").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+    client.close()
+
+
+@pytest.mark.parametrize(
+    ("ack_state", "result_code"),
+    [("APPLIED", "APPLIED"), ("REJECTED", "USER_REJECTED")],
+)
+def test_late_apply_or_reject_commits_server_expiration_but_no_android_ack(
+    tmp_path, monkeypatch, ack_state: str, result_code: str
+):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    suffix = int(ack_state == "REJECTED")
+    proposal_id = post_proposal(client, f"00000000-0000-4000-8000-00000000030{suffix}").json()["data"]["proposal_id"]
+    fake_clock = FakeClock(datetime.now(timezone.utc) + timedelta(days=1))
+    client.app.state.store.clock = fake_clock
+    with client.app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), proposal_id),
+        )
+    ack = ack_body(
+        proposal_id, f"00000000-0000-4000-8000-00000000031{suffix}",
+        ack_state, result_code,
+    )
+    ack["occurred_at"] = stamp(fake_clock.value)
+    response = client.post(f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json=ack)
+    assert response.status_code == 409
+    assert error_code(response) == "PROPOSAL_EXPIRED"
+    with client.app.state.store.connect() as connection:
+        proposal = connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()
+        audit = connection.execute(
+            "SELECT from_state,to_state,source FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?",
+            (proposal_id,),
+        ).fetchone()
+        assert proposal["state"] == "EXPIRED"
+        assert tuple(audit) == ("PENDING_ANDROID", "EXPIRED", "ACK")
+        assert connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_events_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == 0
+    client.close()
+
+
+def test_expired_ack_is_rejected_before_deadline_then_accepted_after_sweeper_with_replay_order(
+    tmp_path, monkeypatch
+):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    proposal_id = post_proposal(client, "00000000-0000-4000-8000-000000000321").json()["data"]["proposal_id"]
+    fake_clock = FakeClock(datetime.now(timezone.utc) + timedelta(days=1))
+    client.app.state.store.clock = fake_clock
+    expires_at = stamp(fake_clock.value + timedelta(seconds=5))
+    with client.app.state.store.connect() as connection:
+        connection.execute("UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?", (expires_at, proposal_id))
+    expired_ack = ack_body(proposal_id, "00000000-0000-4000-8000-000000000322", "EXPIRED", "PROPOSAL_EXPIRED")
+    expired_ack["occurred_at"] = stamp(fake_clock.value)
+    early = client.post(f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json=expired_ack)
+    assert early.status_code == 409
+    assert error_code(early) == "PROPOSAL_NOT_EXPIRED"
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == "PENDING_ANDROID"
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_expiration_events_v4").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+
+    fake_clock.advance(timedelta(seconds=5))
+    with client.app.state.store.transaction() as connection:
+        assert client.app.state.v4_tool_service.projections.expire_due_proposals(
+            connection, now=stamp(fake_clock.value), batch_size=100, source="SWEEPER"
+        ) == 1
+    accepted = client.post(f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json=expired_ack)
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.headers["x-atlas-replayed"] == "false"
+    replay = client.post(f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json=expired_ack)
+    assert replay.status_code == 200
+    assert replay.headers["x-atlas-replayed"] == "true"
+    changed = {**expired_ack, "occurred_at": stamp(fake_clock.value + timedelta(seconds=1))}
+    conflict = client.post(f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json=changed)
+    assert conflict.status_code == 409
+    assert error_code(conflict) == "ACK_ID_CONFLICT"
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == "EXPIRED"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == 1
+        ack_event = connection.execute(
+            "SELECT state,sequence FROM agent_proposal_events_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()
+        assert tuple(ack_event) == ("EXPIRED", 1)
+    client.close()
+
+
+def test_failed_auth_schema_or_consent_does_not_commit_lazy_expiration(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    proposal_id = post_proposal(client, "00000000-0000-4000-8000-000000000331").json()["data"]["proposal_id"]
+    fake_clock = FakeClock(datetime.now(timezone.utc) + timedelta(days=1))
+    client.app.state.store.clock = fake_clock
+    with client.app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), proposal_id),
+        )
+    body = ack_body(proposal_id, "00000000-0000-4000-8000-000000000332", "REJECTED", "USER_REJECTED")
+    body["occurred_at"] = stamp(fake_clock.value)
+
+    unauthorized = client.post(f"/v4/agent/proposals/{proposal_id}/ack", json=body)
+    malformed = client.post(
+        f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json={**body, "extra": "x"}
+    )
+    assert unauthorized.status_code == 401
+    assert error_code(unauthorized) == "AUTH_REQUIRED"
+    assert malformed.status_code == 400
+    assert error_code(malformed) == "BAD_REQUEST"
+    post_consent(client, "DAY_PLAN", "REVOKED", 4)
+    revoked = client.post(
+        f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(),
+        json={**body, "consent_version": 4},
+    )
+    assert revoked.status_code == 403
+    assert error_code(revoked) == "CONSENT_REQUIRED"
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == "PENDING_ANDROID"
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_expiration_events_v4").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
+    client.close()
+
+
+@pytest.mark.parametrize(
+    ("ack_state", "result_code"), [("APPLIED", "APPLIED"), ("REJECTED", "USER_REJECTED")]
+)
+def test_ack_racing_sweeper_is_serialized_for_apply_and_reject(
+    tmp_path, monkeypatch, ack_state: str, result_code: str
+):
+    client = make_client(tmp_path, monkeypatch)
+    post_plan(client)
+    suffix = int(ack_state == "REJECTED")
+    proposal_id = post_proposal(client, f"00000000-0000-4000-8000-00000000034{suffix}").json()["data"]["proposal_id"]
+    fake_clock = FakeClock(datetime.now(timezone.utc) + timedelta(days=1))
+    client.app.state.store.clock = fake_clock
+    with client.app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE agent_proposals_v4 SET expires_at=? WHERE proposal_id=?",
+            (stamp(fake_clock.value - timedelta(seconds=1)), proposal_id),
+        )
+    ack = ack_body(
+        proposal_id, f"00000000-0000-4000-8000-00000000035{suffix}",
+        ack_state, result_code,
+    )
+    ack["occurred_at"] = stamp(fake_clock.value)
+    start = threading.Barrier(2)
+
+    def send_ack():
+        start.wait(timeout=3)
+        return client.post(f"/v4/agent/proposals/{proposal_id}/ack", headers=android_headers(), json=ack)
+
+    def sweep():
+        start.wait(timeout=3)
+        with client.app.state.store.transaction(timeout=2) as connection:
+            return client.app.state.v4_tool_service.projections.expire_due_proposals(
+                connection, now=stamp(fake_clock.value), batch_size=100, source="SWEEPER"
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ack_future = pool.submit(send_ack)
+        sweep_future = pool.submit(sweep)
+        response = ack_future.result(timeout=5)
+        sweep_future.result(timeout=5)
+    assert response.status_code == 409
+    assert error_code(response) == "PROPOSAL_EXPIRED"
+    with client.app.state.store.connect() as connection:
+        assert connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == "EXPIRED"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM agent_proposal_expiration_events_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
     client.close()
 
 

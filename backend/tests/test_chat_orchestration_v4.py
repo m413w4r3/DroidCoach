@@ -11,7 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 from atlas_backend.main import create_app
-from atlas_backend.openclaw_adapter import OpenClawAgentAdapter
+from atlas_backend.openclaw_adapter import ChatOrchestrationFailure, OpenClawAgentAdapter
 from atlas_backend.v4_tool_service import V4ToolError, V4ToolService
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -1141,3 +1141,68 @@ def test_chat_cache_is_stable_for_24_hours_then_expires_and_cleans_old_rows(tmp_
     assert len(rows) == 1
     assert rows[0]["cache_key"] == cache_key
     assert rows[0]["expires_at"] == "2030-01-03T00:00:01Z"
+
+
+def test_stale_data_before_tool_returns_standard_sanitized_409(tmp_path, monkeypatch):
+    provider_calls = 0
+
+    def provider(_request: httpx.Request) -> httpx.Response:
+        nonlocal provider_calls
+        provider_calls += 1
+        return httpx.Response(200, json=final_response())
+
+    def fail_before_tool(_adapter, **_kwargs):
+        raise ChatOrchestrationFailure("STALE_DATA")
+
+    monkeypatch.setattr(OpenClawAgentAdapter, "chat_v4", fail_before_tool)
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    response = post_chat(ASGITestClient(app), chat_body())
+
+    assert response.status_code == 409
+    validate("error.schema.json", response.json())
+    assert response.json()["error"]["code"] == "STALE_DATA"
+    assert "error" in response.json()
+    assert "synthetic-secret-phrase" not in response.text
+    assert "synthetic-provider-token" not in response.text
+    assert provider_calls == 0
+
+
+def test_stale_data_after_tool_returns_standard_sanitized_409(tmp_path, monkeypatch):
+    provider_calls = 0
+    arguments = json.dumps({
+        "plan_id": PLAN_ID,
+        "base_version": 7,
+        "changes": [{"op": "reschedule", "activity_id": ACTIVITY_ID, "target_start_minute": 660}],
+        "justification": "synthetic-private-tool-argument",
+    })
+
+    def provider(_request: httpx.Request) -> httpx.Response:
+        nonlocal provider_calls
+        provider_calls += 1
+        return httpx.Response(200, json=response_with_tool_calls(
+            tool_call("call-stale-proposal", "atlas_propose_plan_revision", arguments)
+        ))
+
+    app, _adapter = make_app(tmp_path, monkeypatch, provider)
+    seed_day_plan(app)
+    old_observed_at = (datetime.now(timezone.utc) - timedelta(days=2)).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z")
+    with app.state.store.connect() as connection:
+        connection.execute(
+            "UPDATE day_plan_snapshots_v4 SET observed_at=? WHERE device_ref=? AND plan_id=?",
+            (old_observed_at, device_ref(), PLAN_ID),
+        )
+    response = post_chat(
+        ASGITestClient(app), chat_body(shared_categories=["DAY_PLAN"])
+    )
+
+    assert response.status_code == 409
+    validate("error.schema.json", response.json())
+    assert response.json()["error"]["code"] == "STALE_DATA"
+    assert "synthetic-secret-phrase" not in response.text
+    assert "synthetic-private-tool-argument" not in response.text
+    assert "synthetic-provider-token" not in response.text
+    assert "snapshot Android est trop ancien" not in response.text
+    assert "tool_call_count" not in response.json()
+    assert provider_calls == 1
