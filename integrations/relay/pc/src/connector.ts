@@ -12,8 +12,6 @@ import { OperationExecutor } from "./operations.js";
 import { RelayLink } from "./relay-link.js";
 import { SessionManager } from "./session.js";
 
-const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
-
 export interface ConnectorConfig {
   stateDir: string;
   relayUrl: string;
@@ -289,12 +287,37 @@ export async function readPrivateV4RelayAssertion(
   }
 }
 
+/** Finds a Git checkout root by walking upward from a module directory. */
+export async function findRepositoryRoot(startDirectory: string): Promise<string | undefined> {
+  let current = resolve(startDirectory);
+  while (true) {
+    try {
+      await lstat(join(current, ".git"));
+      return current;
+    } catch (error) {
+      if (!isNotFound(error)) return resolve(current, sep);
+    }
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+/** Pure path check; no Git context means standalone deployment with no repository boundary. */
+export function isOutsideRepositoryPath(path: string, repositoryRoot: string | undefined): boolean {
+  if (!isAbsolute(path)) return false;
+  if (repositoryRoot === undefined) return true;
+  const fromRepository = relative(resolve(repositoryRoot), resolve(path));
+  return fromRepository === ".." || fromRepository.startsWith(`..${sep}`) || isAbsolute(fromRepository);
+}
+
 async function isOutsideRepository(path: string): Promise<boolean> {
   if (!isAbsolute(path)) return false;
   try {
     const actualPath = resolve(await realpath(dirname(path)), basename(path));
-    const fromRepository = relative(REPOSITORY_ROOT, actualPath);
-    return fromRepository === ".." || fromRepository.startsWith(`..${sep}`) || isAbsolute(fromRepository);
+    const moduleDirectory = await realpath(dirname(fileURLToPath(import.meta.url)));
+    const repositoryRoot = await findRepositoryRoot(moduleDirectory);
+    return isOutsideRepositoryPath(actualPath, repositoryRoot);
   } catch {
     return false;
   }

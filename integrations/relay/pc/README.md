@@ -69,7 +69,7 @@ is the expected race with a concurrent release.
 | `ATLAS_V4_AUTH_MODE` | Core V4 mode: `legacy`, `dual`, or `principal`. Principal-bound modes require a private principal map and Relay assertion key. |
 | `ATLAS_CORE_PRINCIPAL_MAP_FILE` | Absolute path to the private Relay device ID → principal/credential map used in `dual` and `principal` modes. |
 | `ATLAS_V4_RELAY_ASSERTION_KEY_ID` | Key ID included in Relay assertions and matched against Core's active key ring. |
-| `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE` | Production source for the Relay assertion secret. Use an absolute path outside the repository, owned by the connector user, regular, non-symlink, and mode `0600`. |
+| `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE` | Production source for the Relay assertion secret. Use an absolute path, owned by the connector user, regular, non-symlink, and mode `0600`. In a Git checkout it must be outside the discovered repository root. |
 | `ATLAS_V4_RELAY_ASSERTION_SECRET` | Test-only base64url assertion secret; accepted only when `NODE_ENV=test`. Production startup rejects this source. |
 | `ATLAS_V4_ANDROID_TOKEN_FILE` | Absolute path to the legacy development Core bearer file. Used only for the `legacy` fallback; the file must be regular, non-symlink, owned by the connector user, and mode `0600`. |
 | `ATLAS_ALLOW_LOOPBACK_WS` | Set to `1` only for explicit local loopback `ws://` development; default deny. |
@@ -83,8 +83,12 @@ Do not place token values in command arguments, checked-in files, or logs.
 V4 remains unavailable unless `ATLAS_V4_ENABLED=1` is explicitly set. In
 `dual` and `principal` modes, configure `ATLAS_CORE_PRINCIPAL_MAP_FILE`,
 `ATLAS_V4_RELAY_ASSERTION_KEY_ID`, and `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE`.
-The assertion file must be outside the repository, owner-controlled, mode
-`0600`, and read without following symlinks. A missing or unsafe file leaves
+The assertion file must be absolute, owner-controlled, a regular non-symlink
+file, mode `0600`, and read without following symlinks. When running from a Git
+checkout, it must be outside the root found by walking upward to `.git`. In a
+standalone installation with no `.git` marker, there is no repository boundary
+to enforce; keep the file outside the installation directory anyway, such as
+under `~/.local/state/atlas-relay`. A missing or unsafe file leaves
 principal-bound V4 unavailable. The environment secret is accepted only in
 tests with `NODE_ENV=test`; `configFromEnvironment`, `check-config.mjs`, and
 `check-secret.mjs` fail closed for it outside tests and reject two configured

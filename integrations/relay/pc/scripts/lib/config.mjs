@@ -6,8 +6,6 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
-
 const ALLOWED_KEYS = new Set([
   "ATLAS_RELAY_URL",
   "ATLAS_RELAY_SERVER_ID",
@@ -268,12 +266,37 @@ async function readPrivateV4RelayAssertionFile(path) {
   }
 }
 
+/** Finds a Git checkout root by walking upward from a module directory. */
+export async function findRepositoryRoot(startDirectory) {
+  let current = resolve(startDirectory);
+  while (true) {
+    try {
+      await lstat(join(current, ".git"));
+      return current;
+    } catch (error) {
+      if (error?.code !== "ENOENT") return resolve(current, sep);
+    }
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+/** Pure path check; no Git context means standalone deployment with no repository boundary. */
+export function isOutsideRepositoryPath(path, repositoryRoot) {
+  if (typeof path !== "string" || !isAbsolute(path)) return false;
+  if (repositoryRoot === undefined) return true;
+  const fromRepository = relative(resolve(repositoryRoot), resolve(path));
+  return fromRepository === ".." || fromRepository.startsWith(`..${sep}`) || isAbsolute(fromRepository);
+}
+
 async function isOutsideRepository(path) {
   if (typeof path !== "string" || !isAbsolute(path)) return false;
   try {
     const actualPath = resolve(await realpath(dirname(path)), basename(path));
-    const fromRepository = relative(REPOSITORY_ROOT, actualPath);
-    return fromRepository === ".." || fromRepository.startsWith(`..${sep}`) || isAbsolute(fromRepository);
+    const moduleDirectory = await realpath(dirname(fileURLToPath(import.meta.url)));
+    const repositoryRoot = await findRepositoryRoot(moduleDirectory);
+    return isOutsideRepositoryPath(actualPath, repositoryRoot);
   } catch {
     return false;
   }

@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
-import { loadEnvironmentFile } from "../scripts/lib/config.mjs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { findRepositoryRoot, isOutsideRepositoryPath, isPrivateV4RelayAssertion, loadEnvironmentFile } from "../scripts/lib/config.mjs";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryDirectories: string[] = [];
@@ -186,6 +186,64 @@ describe("restricted relay environment files", () => {
     expect(bothSources.status).toBe(1);
     expect(bothSources.stdout).toContain("ATLAS_V4_RELAY_ASSERTION_SECRET: unavailable or permissions invalid");
     expect(`${bothSources.stdout}${bothSources.stderr}`).not.toContain(secret);
+  });
+
+  it("validates assertion files in standalone layouts and detects fake checkout roots", async () => {
+    const directory = await makeTemporaryDirectory();
+    const standaloneModuleDirectory = join(directory, "standalone", "src", "lib");
+    await mkdir(standaloneModuleDirectory, { recursive: true });
+    const secret = Buffer.from("synthetic-standalone-assertion-secret").toString("base64url");
+    const assertionPath = join(directory, ".local", "state", "atlas-relay", "assertion-key");
+    await mkdir(dirname(assertionPath), { recursive: true });
+    await writePrivateFile(assertionPath, `${secret}\n`);
+
+    // Explicit undefined models a standalone install with no .git marker in any ancestor.
+    expect(isOutsideRepositoryPath(assertionPath, undefined)).toBe(true);
+    const fileEnvironment = {
+      ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: assertionPath,
+      NODE_ENV: "production",
+    };
+    expect(await isPrivateV4RelayAssertion(fileEnvironment)).toBe(true);
+
+    await chmod(assertionPath, 0o640);
+    expect(await isPrivateV4RelayAssertion(fileEnvironment)).toBe(false);
+    await chmod(assertionPath, 0o600);
+    expect(await isPrivateV4RelayAssertion({
+      ...fileEnvironment,
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: "relative/assertion-key",
+    })).toBe(false);
+
+    const invalidPath = join(directory, "invalid-assertion-key");
+    await writePrivateFile(invalidPath, "not-base64url\n");
+    expect(await isPrivateV4RelayAssertion({
+      ...fileEnvironment,
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: invalidPath,
+    })).toBe(false);
+
+    const linkedPath = join(directory, "linked-assertion-key");
+    await symlink(assertionPath, linkedPath);
+    expect(await isPrivateV4RelayAssertion({
+      ...fileEnvironment,
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: linkedPath,
+    })).toBe(false);
+
+    const owner = process.getuid();
+    const ownerSpy = vi.spyOn(process, "getuid").mockReturnValue(owner + 1);
+    try {
+      expect(await isPrivateV4RelayAssertion(fileEnvironment)).toBe(false);
+    } finally {
+      ownerSpy.mockRestore();
+    }
+
+    const checkoutRoot = join(directory, "checkout");
+    const checkoutModuleDirectory = join(checkoutRoot, "scripts", "lib");
+    await mkdir(checkoutModuleDirectory, { recursive: true });
+    await writeFile(join(checkoutRoot, ".git"), "synthetic git marker\n", { mode: 0o600 });
+    const checkoutSecretPath = join(checkoutRoot, "state", "assertion-key");
+    const discoveredRoot = await findRepositoryRoot(checkoutModuleDirectory);
+    expect(discoveredRoot).toBe(checkoutRoot);
+    expect(isOutsideRepositoryPath(checkoutSecretPath, discoveredRoot)).toBe(false);
   });
 });
 

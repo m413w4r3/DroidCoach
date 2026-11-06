@@ -1,8 +1,8 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configFromEnvironment, createConnector, readPrivateV4AndroidToken, readPrivateV4PrincipalMap, readPrivateV4RelayAssertion, selectV4CredentialMode, type ConnectorConfig, type ConnectorRuntime } from "../src/connector.js";
+import { configFromEnvironment, createConnector, findRepositoryRoot, isOutsideRepositoryPath, readPrivateV4AndroidToken, readPrivateV4PrincipalMap, readPrivateV4RelayAssertion, selectV4CredentialMode, type ConnectorConfig, type ConnectorRuntime } from "../src/connector.js";
 import { loadOrCreateIdentity } from "../src/identity.js";
 import { PROTOCOL_V2 } from "../src/protocol.js";
 import { FakeSecureChannel, hello, request } from "./helpers.js";
@@ -194,6 +194,57 @@ describe("connector restart and configuration resilience", () => {
     expect(Buffer.from(fromFile?.secret ?? []).equals(key)).toBe(true);
     expect(Buffer.from(fromEnvironment?.secret ?? []).equals(key)).toBe(true);
     expect(await readPrivateV4RelayAssertion("test-key-1", keyPath, encoded)).toBeUndefined();
+
+    await chmod(keyPath, 0o640);
+    expect(await readPrivateV4RelayAssertion("test-key-1", keyPath, undefined)).toBeUndefined();
+    await chmod(keyPath, 0o600);
+    expect(await readPrivateV4RelayAssertion("test-key-1", "relative/assertion-key", undefined)).toBeUndefined();
+
+    const invalidPath = join(directory, "invalid-assertion-key");
+    await writeFile(invalidPath, "not-base64url\n", { mode: 0o600 });
+    await chmod(invalidPath, 0o600);
+    expect(await readPrivateV4RelayAssertion("test-key-1", invalidPath, undefined)).toBeUndefined();
+
+    const linkedPath = join(directory, "linked-assertion-key");
+    await symlink(keyPath, linkedPath);
+    expect(await readPrivateV4RelayAssertion("test-key-1", linkedPath, undefined)).toBeUndefined();
+
+    const owner = process.getuid();
+    const ownerSpy = vi.spyOn(process, "getuid").mockReturnValue(owner + 1);
+    try {
+      expect(await readPrivateV4RelayAssertion("test-key-1", keyPath, undefined)).toBeUndefined();
+    } finally {
+      ownerSpy.mockRestore();
+    }
+  });
+
+  it("finds repository boundaries for standalone and checkout secret paths", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-repository-root-"));
+    activeDirectories.push(directory);
+
+    const standaloneModuleDirectory = join(directory, "standalone", "src", "lib");
+    await mkdir(standaloneModuleDirectory, { recursive: true });
+    const standaloneSecretPath = join(directory, ".local", "state", "atlas-relay", "assertion-key");
+    await mkdir(dirname(standaloneSecretPath), { recursive: true });
+    const encoded = Buffer.from("synthetic-standalone-assertion-key").toString("base64url");
+    await writeFile(standaloneSecretPath, `${encoded}\n`, { mode: 0o600 });
+    await chmod(standaloneSecretPath, 0o600);
+
+    // Explicit undefined models a standalone install with no .git marker in any ancestor.
+    expect(isOutsideRepositoryPath(standaloneSecretPath, undefined)).toBe(true);
+    expect(await readPrivateV4RelayAssertion("standalone-test", standaloneSecretPath, undefined)).toBeDefined();
+
+    const checkoutRoot = join(directory, "checkout");
+    const checkoutModuleDirectory = join(checkoutRoot, "src", "lib");
+    await mkdir(checkoutModuleDirectory, { recursive: true });
+    await writeFile(join(checkoutRoot, ".git"), "synthetic git marker\n", { mode: 0o600 });
+    const checkoutSecretPath = join(checkoutRoot, "state", "assertion-key");
+    await mkdir(dirname(checkoutSecretPath), { recursive: true });
+
+    const checkoutRootFound = await findRepositoryRoot(checkoutModuleDirectory);
+    expect(checkoutRootFound).toBe(checkoutRoot);
+    expect(isOutsideRepositoryPath(checkoutSecretPath, checkoutRootFound)).toBe(false);
+    expect(isOutsideRepositoryPath("relative/assertion-key", checkoutRootFound)).toBe(false);
   });
 
   it("sends V4 from an authenticated paired session using the dedicated Android bearer", async () => {
