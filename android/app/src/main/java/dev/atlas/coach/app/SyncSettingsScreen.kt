@@ -284,11 +284,22 @@ fun SyncSettingsScreen(controller: AtlasController, @Suppress("UNUSED_PARAMETER"
 
         if (advancedExpanded) {
             AtlasSection("Configuration avancée") {
-                Button(
-                    modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("sync_now"),
-                    enabled = !controller.syncInProgress,
-                    onClick = controller::syncNow,
-                ) { Text(if (controller.syncInProgress) "Synchronisation…" else "Synchroniser maintenant") }
+                if (isLegacyDirectSyncAvailable(controller.relaySettings.mode)) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 52.dp).testTag("sync_now"),
+                        enabled = !controller.syncInProgress,
+                        onClick = controller::syncNow,
+                    ) {
+                        Text(if (controller.syncInProgress) "$LEGACY_DIRECT_SYNC_LABEL en cours…" else LEGACY_DIRECT_SYNC_LABEL)
+                    }
+                } else {
+                    Text(
+                        "La synchronisation directe V1–V3 est réservée au mode Direct. En Relay, utilisez l’action Core V4 ci-dessus.",
+                        modifier = Modifier.testTag("sync_direct_legacy_unavailable"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 OutlinedButton(
                     modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp),
                     enabled = controller.syncPendingCount > 0,

@@ -1394,6 +1394,15 @@ class AtlasController @JvmOverloads constructor(
     }
 
     fun syncNow() {
+        if (!dispatchLegacyDirectSync(relaySettings.mode) { syncNowDirect() }) {
+            syncStatus = if (capabilities[CAP_SYNC] == true) SyncStatus.NOTHING_TO_SYNC else SyncStatus.LOCAL_ONLY
+            syncPendingCount = syncOutbox.size()
+            syncStatusMessage = "La synchronisation directe V1–V3 est réservée au mode Direct. En Relay, utilisez la synchronisation Core V4."
+            touch()
+        }
+    }
+
+    private fun syncNowDirect() {
         if (!canUseRemoteSync()) {
             syncStatus = if (capabilities[CAP_SYNC] == true) SyncStatus.NOTHING_TO_SYNC else SyncStatus.LOCAL_ONLY
             syncPendingCount = syncOutbox.size()
@@ -1482,6 +1491,7 @@ class AtlasController @JvmOverloads constructor(
     }
 
     private fun canUseRemoteSync(): Boolean =
+        isLegacyDirectSyncAvailable(relaySettings.mode) &&
         capabilities[CAP_SYNC] == true &&
             effectiveConsent.get().enabledCategories.isNotEmpty() &&
             isAllowedBackendUrl(syncBaseUrl) && remoteBackend != null
@@ -1507,6 +1517,18 @@ class AtlasController @JvmOverloads constructor(
     }
 
     private fun executeSync(generation: Long) {
+        if (generation != syncGeneration.get()) return
+        if (!isLegacyDirectSyncAvailable(relaySettings.mode)) {
+            mainHandler.post {
+                if (generation != syncGeneration.get()) return@post
+                syncInProgress = false
+                syncPendingCount = syncOutbox.size()
+                syncStatus = if (capabilities[CAP_SYNC] == true) SyncStatus.NOTHING_TO_SYNC else SyncStatus.LOCAL_ONLY
+                syncStatusMessage = "La synchronisation directe V1–V3 est réservée au mode Direct. En Relay, utilisez la synchronisation Core V4."
+                touch()
+            }
+            return
+        }
         if (generation != syncGeneration.get() || !syncRunning.compareAndSet(false, true)) return
         val result = try {
             syncGateway.syncNow()
@@ -1579,12 +1601,13 @@ class AtlasController @JvmOverloads constructor(
         }
     }
 
-    /** LocalCoach remains authoritative; the selected response is also sent remotely only after consent. */
+    /** LocalCoach remains authoritative; V1–V3 sends use direct mode only and require consent. */
     private fun sendRemoteCoachResponse(choice: DirectiveChoice) {
+        if (!isLegacyDirectSyncAvailable(relaySettings.mode)) return
         if (!effectiveConsent.get().enabledCategories.contains(SyncDataCategory.COACH_INTERACTION)) return
         val generation = syncGeneration.get()
         syncWorker.execute {
-            if (generation != syncGeneration.get()) return@execute
+            if (generation != syncGeneration.get() || !isLegacyDirectSyncAvailable(relaySettings.mode)) return@execute
             val remote = coachGateway as? RemoteBackendGateway ?: return@execute
             try {
                 val remoteDirective = remote.currentDirective()
