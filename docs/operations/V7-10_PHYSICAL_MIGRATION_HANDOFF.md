@@ -2,7 +2,7 @@
 
 # V7-10 — Handoff opérateur de migration physique
 
-Base documentaire : `d2f98265b1c4ca42fafc481d7b121f5d4f2bed01` (branche d’intégration `feat/atlas-v7-10-security-reliability`). Le plan suit le registre Core V4, la migration additive SQLite v4/v5, le cycle d’expiration et les changements Android décrits dans [l’architecture V7-10](V7-10_ARCHITECTURE.md). Les gates `GO_PRODUCT_INSTALL`, `GO_LIVE_SECURITY` et `GO_DAILY_PILOT` sont **NO_GO / NOT_RUN**.
+Base documentaire : `3123dba4f89579d414406d8c790609d1e4a5adf6` (branche d’intégration `feat/atlas-v7-10-security-reliability`). Le plan suit le registre Core V4, la migration additive SQLite v4/v5, le cycle d’expiration et les changements Android décrits dans [l’architecture V7-10](V7-10_ARCHITECTURE.md). Les gates `GO_PRODUCT_INSTALL`, `GO_LIVE_SECURITY` et `GO_DAILY_PILOT` sont **NO_GO / NOT_RUN**; `GO_INDEPENDENT_SECURITY_REVIEW` attend le verdict final A4-delta.
 
 Ce protocole n’exécute aucune commande. Les chaînes entre chevrons sont des valeurs fictives à remplacer dans une session opérateur privée; ne jamais y mettre un bearer dans la ligne de commande. Les variables de chemin/id ci-dessous ne sont pas des secrets.
 
@@ -618,7 +618,7 @@ git -C '<CHEMIN_SOURCE_CORE>' status --short
 sha256sum -c "$BACKUP_DIR/SHA256SUMS"
 ```
 
-**Résultat attendu.** Le rapport final renvoie aux preuves A2/A3/A5/A4-delta/A6, cite le SHA relu et distingue `PASS`, `NO_GO`, `NOT_RUN` et les limitations. Dans ce checkout, A5, A4-delta indépendant et A6 sont absents : ces conclusions restent **à consolider dans le rapport final**. Sans preuve Android 17/API 37 Pixel spécifique à l’APK et à cette migration, `GO_PRODUCT_INSTALL` ne peut pas être levé. Les trois gates restent `NO_GO / NOT_RUN` jusqu’à décision explicite du propriétaire.
+**Résultat attendu.** Le rapport final renvoie aux preuves A2/A3/A5/A4-delta/A6, cite le SHA relu et distingue `PASS`, `NO_GO`, `NOT_RUN` et les limitations. Le rapport A5 est disponible dans [V7-10_TEST_REPORT.md](V7-10_TEST_REPORT.md); la revue indépendante finale A4-delta est en cours et `GO_INDEPENDENT_SECURITY_REVIEW` attend son verdict; A6 n’est pas encore disponible. Les éléments qui en dépendent restent **à consolider dans le rapport final**. Sans preuve Android 17/API 37 Pixel spécifique à l’APK et à cette migration, `GO_PRODUCT_INSTALL` ne peut pas être levé. Les trois gates produit/live/pilote restent `NO_GO / NOT_RUN` jusqu’à décision explicite du propriétaire.
 
 **Preuve à conserver.** Rapport final signé par l’orchestrateur/relecteur, inventaire expurgé, hashes des preuves privées, chaîne des SHAs, écarts et personne qui autorise (ou refuse) E.
 
@@ -643,13 +643,13 @@ Une révocation de credential est monotone; le bearer révoqué ne peut pas êtr
 - **Restauration app-only :** le manifeste lie l’archive au serial d’origine; le test AVD valide la mécanique avec une archive synthétique de ce même AVD, pas la restauration du backup Pixel sur un appareil différent.
 - **Signature APK :** paquet, versionCode et certificat doivent permettre la mise à jour in-place; désinstaller ferait perdre les clés Keystore et peut exiger un nouvel appairage.
 - **Absence de preuve Pixel :** aucune qualification Pixel V7-10 n’est présente. Une preuve historique V7-07 de backup/update ne valide ni l’APK final V7-10, ni les parcours auth/expiration actuels.
-- **Preuves de clôture :** les rapports A5, A4-delta indépendant et A6 ne sont pas présents dans cette base; le dossier final et la décision de pilote doivent être consolidés après leur livraison.
+- **Preuves de clôture :** le rapport A5 est présent; la revue indépendante finale A4-delta reste en cours et son verdict est en attente sous `GO_INDEPENDENT_SECURITY_REVIEW`; A6 n’est pas encore disponible. Le dossier final et la décision de pilote doivent intégrer ces éléments lorsqu’ils seront établis.
 
 ## Références et traçabilité
 
 - Code Core/Relay/Android/contrats : [V7-10_ARCHITECTURE.md](V7-10_ARCHITECTURE.md), [migration sécurité](V7-10_SECURITY_MIGRATION.md), [cycle d’expiration](V7-10_EXPIRATION_LIFECYCLE.md), [fiabilité Android A3](V7-10_ANDROID_RELIABILITY.md).
-- Preuves de code : [A1](evidence/V7-10_A1_IMPLEMENTATION_EVIDENCE.md), [correctifs A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md), [A2](evidence/V7-10_A2_IMPLEMENTATION_EVIDENCE.md), [S3 Android](evidence/V7-10_S3_ANDROID_MAP.md).
+- Preuves de code et qualification : [A1](evidence/V7-10_A1_IMPLEMENTATION_EVIDENCE.md), [correctifs A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md), [A2](evidence/V7-10_A2_IMPLEMENTATION_EVIDENCE.md), [rapport A5](V7-10_TEST_REPORT.md), [S3 Android](evidence/V7-10_S3_ANDROID_MAP.md).
 - Préparation et limites historiques : [V7-07 exécution physique](V7-07_PHYSICAL_EXECUTION.md), [V7-07 backup/rollback](V7-07_BACKUP_AND_ROLLBACK.md), [V7-08 handoff](V7-08_HANDOFF.md), [V7-09 rapport final](V7-09_FINAL_REPORT.md).
-- Commits d’intégration vérifiés, dans l’ordre de l’historique : `ae76bda`, `499b4ef`, `710a49a`, `4c50a13`, `8dd31a7`, `acccd0c`, `6d8688d`, `cef4e13`, `00a4a8d`, `2ff9fa1`, `a43f115`, `298fafe`, `5cdbc80`, `fa82af3`, `614b639`, `a566503`, `70beee9`, `7b1004b`, `c0eb437`, `549f658`, `e672ee2`, `440b0a5`, `0890fd2`, `d96810b`, `77dc105`, `ffcd43e`, `739ad87`, `d2f9826`. La chaîne a été vérifiée dans l’historique d’intégration; aucun commit de branche source non intégrée n’est cité.
+- Commits d’intégration vérifiés, dans l’ordre de l’historique : `ae76bda`, `499b4ef`, `710a49a`, `4c50a13`, `8dd31a7`, `acccd0c`, `6d8688d`, `cef4e13`, `00a4a8d`, `2ff9fa1`, `a43f115`, `298fafe`, `5cdbc80`, `fa82af3`, `614b639`, `a566503`, `70beee9`, `7b1004b`, `c0eb437`, `549f658`, `e672ee2`, `440b0a5`, `0890fd2`, `d96810b`, `77dc105`, `ffcd43e`, `739ad87`, `d2f9826`, `d4d639a`, `d986477`, `3123dba`. La chaîne a été vérifiée dans l’historique d’intégration; aucun commit de branche source non intégrée n’est cité.
 
 Ce document est un handoff, pas une preuve d’exécution. Aucune des commandes ci-dessus n’a été exécutée pendant V7-10-D1-DOCS.
