@@ -266,16 +266,15 @@ async function readPrivateV4RelayAssertionFile(path) {
   }
 }
 
-/** Finds a Git checkout root by walking upward from a module directory. */
+/** Finds only an ATLAS checkout root containing this package and a checkout marker. */
 export async function findRepositoryRoot(startDirectory) {
   let current = resolve(startDirectory);
   while (true) {
-    try {
-      await lstat(join(current, ".git"));
-      return current;
-    } catch (error) {
-      if (error?.code !== "ENOENT") return resolve(current, sep);
-    }
+    const packagePath = join(current, "integrations", "relay", "pc");
+    const hasPackage = await lstat(packagePath).then((entry) => entry.isDirectory() && !entry.isSymbolicLink()).catch(() => false);
+    const hasGitMarker = await lstat(join(current, ".git")).then((entry) => !entry.isSymbolicLink()).catch(() => false);
+    const hasAgentMarker = await lstat(join(current, "AGENTS.md")).then((entry) => !entry.isSymbolicLink()).catch(() => false);
+    if (hasPackage && (hasGitMarker || hasAgentMarker)) return current;
     const parent = dirname(current);
     if (parent === current) return undefined;
     current = parent;

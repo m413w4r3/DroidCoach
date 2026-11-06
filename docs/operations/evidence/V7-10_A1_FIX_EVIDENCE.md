@@ -68,8 +68,8 @@ Les commits sont locaux uniquement. Aucun push ni PR.
 |---|---|
 | Base | `b204c442eb9b3492c7210b0e91fe42a8108d141a` |
 | Fichiers | `integrations/relay/pc/src/connector.ts`, `integrations/relay/pc/scripts/lib/config.mjs`, tests `connector-resilience.test.ts` et `config-env.test.ts`, README, migration, décisions automatiques et cette preuve. |
-| Remédiation | Suppression des calculs de racine par profondeur fixe. Les deux modules remontent à la recherche d’un marqueur `.git` (fichier worktree ou dossier). Un résultat `undefined` signifie une installation standalone et désactive uniquement la frontière de dépôt; les contrôles de chemin absolu, propriétaire, mode `0600`, fichier régulier, absence de symlink, lecture `O_NOFOLLOW`, taille et contenu restent actifs. |
-| Tests ciblés | Le prédicat exporté reçoit explicitement `undefined` pour un layout temporaire `standalone/src/lib`, puis une racine contenant un `.git` synthétique pour refuser un secret dans le checkout. Les deux lecteurs valident un fichier privé standalone. Les rejets couvrent mode incorrect, propriétaire simulé, symlink, chemin relatif et contenu invalide. |
+| Remédiation | Suppression des calculs de racine par profondeur fixe. Les deux modules reconnaissent uniquement un parent qui contient `integrations/relay/pc` et un marqueur `.git` ou `AGENTS.md`. Un parent avec `.git` sans le package (par exemple un dépôt dotfiles) est ignoré. Sans candidat ATLAS, la frontière est inactive; les contrôles de chemin absolu, propriétaire, mode `0600`, fichier régulier, absence de symlink, lecture `O_NOFOLLOW`, taille et contenu restent actifs. |
+| Tests ciblés | Le layout standalone sous un parent `.git` sans package ATLAS retourne `undefined`, et les deux lecteurs acceptent une clé privée valide. Un checkout ATLAS synthétique avec `AGENTS.md`, `.git` et le package refuse un chemin interne et accepte un chemin externe. Le checkout réel refuse aussi une clé privée synthétique dans le dépôt. Les rejets couvrent mode incorrect, propriétaire simulé, symlink, chemin relatif et contenu invalide. |
 | Profil | Le profil Luna/XHigh a été demandé; le runtime ne permet pas d’inspecter le modèle et l’effort effectifs. |
 
 | Commande | Résultat |
@@ -80,4 +80,23 @@ Les commits sont locaux uniquement. Aucun push ni PR.
 | `git show --check --oneline <commit>` | PASS; commit local séparé `fix(auth): detect repository root for relay secrets` (SHA repris dans le rapport de clôture, non auto-référencé ici). |
 | `git status --short` après commit | Propre. |
 
-La fixture standalone injecte explicitement `undefined` dans le prédicat pur pour ne pas dépendre des marqueurs Git présents dans les ancêtres du chemin temporaire du runner. Aucun Relay/Core live, ADB, Pixel, AVD ni test 4402 n’a été utilisé.
+La fixture standalone inclut un `.git` parent sans package ATLAS pour vérifier qu’un dépôt dotfiles ne devient pas la frontière du connecteur. Aucun Relay/Core live, ADB, Pixel, AVD ni test 4402 n’a été utilisé.
+
+## Correctif complémentaire A4-delta — racine ATLAS uniquement (2026-11-06)
+
+| Champ | Valeur |
+|---|---|
+| Base | `74302733fe481c194dbcf88a9cbab9dbcab83604` |
+| Constat | Un `.git` quelconque dans `$HOME` faisait auparavant prendre le dépôt dotfiles pour racine et rejetait une clé standalone dans `~/.local/state/atlas-relay`. |
+| Remédiation | `findRepositoryRoot` ne retourne maintenant un parent que s’il contient le sous-chemin `integrations/relay/pc` et au moins un marqueur non symlink `.git` ou `AGENTS.md`. Aucun candidat donne `undefined`; les autres validations du fichier privé ne changent pas. |
+| Tests | Les deux lecteurs voient un `.git` parent sans package ATLAS, retournent `undefined` et acceptent une clé privée 0600 standalone. Les deux détectent le checkout synthétique ATLAS et refusent le chemin interne tout en acceptant le chemin externe. Les deux refusent aussi une clé 0600 synthétique placée dans le checkout réel. Mode incorrect, propriétaire simulé, symlink, chemin relatif, contenu invalide, double source et secret d’environnement hors test restent couverts. |
+
+| Commande | Résultat |
+|---|---|
+| `cd integrations/relay/pc && npm run test:unit` | **125 passed, 18 fichiers**; `npm run build` / `tsc -p tsconfig.json` inclus. |
+| `cd integrations/relay/pc && npm run build` | PASS; compilation TypeScript séparée. |
+| `git diff --check` | PASS. |
+| `git show --check --oneline <commit>` | PASS après commit local séparé `fix(auth): scope relay repository detection to atlas checkout`; SHA dans le rapport, non auto-référencé ici. |
+| `git status --short` après commit | Propre. |
+
+Aucun secret réel n’est utilisé; les assertions de test sont synthétiques. Aucun service live, relais 4402, ADB, Pixel ou AVD n’a été testé.

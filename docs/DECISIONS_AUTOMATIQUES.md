@@ -368,9 +368,9 @@
 - **Décision:** les flags globaux absents restent `false` pour lectures/chat et valent `true` pour les mutations; `false` reste un kill switch avant mutation.
 - **Raison:** garder l’installation existante fonctionnelle tout en pouvant désactiver rapidement une écriture, un consentement ou un ACK.
 - **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md` et `docs/operations/evidence/V7-10_A1_FIX_EVIDENCE.md`.
-- **Décision:** la racine du dépôt est trouvée en remontant depuis le module jusqu’à `.git`; sans marqueur `.git` (installation standalone), aucun contrôle de frontière de dépôt ne s’applique. Le fichier d’assertion reste absolu, propriétaire, régulier, sans symlink, mode `0600` et valide; il est recommandé de le garder hors du répertoire d’installation.
-- **Raison:** les installations systemd sous `~/.local/lib/atlas-relay` ne sont pas des checkouts et ne doivent pas interpréter `$HOME` comme une racine Git à cause de la profondeur d’un chemin de module.
-- **Réversibilité:** rétablir un garde explicite configurable pour la racine d’installation si le déploiement standalone acquiert ultérieurement un autre modèle de frontière.
+- **Décision:** une racine de dépôt Relay n’est reconnue que si elle contient `integrations/relay/pc` et au moins un marqueur `.git` ou `AGENTS.md`; un dépôt parent sans le package ATLAS n’est pas une racine. Sans candidat, aucun contrôle de frontière de dépôt ne s’applique. Le fichier d’assertion reste absolu, propriétaire, régulier, sans symlink, mode `0600` et valide; il est recommandé de le garder hors du répertoire d’installation.
+- **Raison:** une installation systemd sous `~/.local/lib/atlas-relay` peut être dans un `$HOME` versionné par un dépôt dotfiles; ce dépôt ne doit pas faire rejeter une clé privée d’état hors de l’installation.
+- **Réversibilité:** modifier les marqueurs reconnus et leur preuve synthétique lors d’un changement de layout du package, sans revenir à une profondeur fixe.
 - **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md` et `docs/operations/evidence/V7-10_A1_FIX_EVIDENCE.md`.
 
 ## V7-10-A3 — Fiabilité Android quotidienne (2026-11-06)

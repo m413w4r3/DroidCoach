@@ -84,11 +84,13 @@ V4 remains unavailable unless `ATLAS_V4_ENABLED=1` is explicitly set. In
 `dual` and `principal` modes, configure `ATLAS_CORE_PRINCIPAL_MAP_FILE`,
 `ATLAS_V4_RELAY_ASSERTION_KEY_ID`, and `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE`.
 The assertion file must be absolute, owner-controlled, a regular non-symlink
-file, mode `0600`, and read without following symlinks. When running from a Git
-checkout, it must be outside the root found by walking upward to `.git`. In a
-standalone installation with no `.git` marker, there is no repository boundary
-to enforce; keep the file outside the installation directory anyway, such as
-under `~/.local/state/atlas-relay`. A missing or unsafe file leaves
+file, mode `0600`, and read without following symlinks. The repository root is
+recognized only when an ancestor contains the `integrations/relay/pc` package
+and has a `.git` or `AGENTS.md` marker; the file must be outside that root. An
+unrelated `.git` in a parent directory such as a dotfiles checkout does not
+create an ATLAS repository boundary. In a standalone installation, keep the
+file outside the installation directory anyway, such as under
+`~/.local/state/atlas-relay`. A missing or unsafe file leaves
 principal-bound V4 unavailable. The environment secret is accepted only in
 tests with `NODE_ENV=test`; `configFromEnvironment`, `check-config.mjs`, and
 `check-secret.mjs` fail closed for it outside tests and reject two configured

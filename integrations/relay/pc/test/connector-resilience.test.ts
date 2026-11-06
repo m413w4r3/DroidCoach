@@ -224,27 +224,50 @@ describe("connector restart and configuration resilience", () => {
 
     const standaloneModuleDirectory = join(directory, "standalone", "src", "lib");
     await mkdir(standaloneModuleDirectory, { recursive: true });
+    await writeFile(join(directory, ".git"), "unrelated dotfiles marker\n", { mode: 0o600 });
     const standaloneSecretPath = join(directory, ".local", "state", "atlas-relay", "assertion-key");
     await mkdir(dirname(standaloneSecretPath), { recursive: true });
     const encoded = Buffer.from("synthetic-standalone-assertion-key").toString("base64url");
     await writeFile(standaloneSecretPath, `${encoded}\n`, { mode: 0o600 });
     await chmod(standaloneSecretPath, 0o600);
 
-    // Explicit undefined models a standalone install with no .git marker in any ancestor.
+    const standaloneRoot = await findRepositoryRoot(standaloneModuleDirectory);
+    expect(standaloneRoot).toBeUndefined();
     expect(isOutsideRepositoryPath(standaloneSecretPath, undefined)).toBe(true);
     expect(await readPrivateV4RelayAssertion("standalone-test", standaloneSecretPath, undefined)).toBeDefined();
+  });
 
-    const checkoutRoot = join(directory, "checkout");
-    const checkoutModuleDirectory = join(checkoutRoot, "src", "lib");
+  it("scopes repository fences to ATLAS checkouts and keeps the real checkout fenced", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-atlas-root-"));
+    activeDirectories.push(directory);
+    const checkoutRoot = join(directory, "atlas-checkout");
+    const checkoutModuleDirectory = join(checkoutRoot, "integrations", "relay", "pc", "src", "lib");
     await mkdir(checkoutModuleDirectory, { recursive: true });
     await writeFile(join(checkoutRoot, ".git"), "synthetic git marker\n", { mode: 0o600 });
+    await writeFile(join(checkoutRoot, "AGENTS.md"), "synthetic marker\n", { mode: 0o600 });
     const checkoutSecretPath = join(checkoutRoot, "state", "assertion-key");
+    const externalSecretPath = join(directory, "external", "state", "assertion-key");
     await mkdir(dirname(checkoutSecretPath), { recursive: true });
-
+    await mkdir(dirname(externalSecretPath), { recursive: true });
+    const externalSecret = Buffer.from("synthetic-atlas-external-assertion").toString("base64url");
+    await writeFile(externalSecretPath, `${externalSecret}\n`, { mode: 0o600 });
+    await chmod(externalSecretPath, 0o600);
     const checkoutRootFound = await findRepositoryRoot(checkoutModuleDirectory);
     expect(checkoutRootFound).toBe(checkoutRoot);
     expect(isOutsideRepositoryPath(checkoutSecretPath, checkoutRootFound)).toBe(false);
+    expect(isOutsideRepositoryPath(externalSecretPath, checkoutRootFound)).toBe(true);
     expect(isOutsideRepositoryPath("relative/assertion-key", checkoutRootFound)).toBe(false);
+    expect(await readPrivateV4RelayAssertion("external-test", externalSecretPath, undefined)).toBeDefined();
+
+    const actualCheckoutRoot = await findRepositoryRoot(process.cwd());
+    expect(actualCheckoutRoot).toBeDefined();
+    const actualSecretDirectory = await mkdtemp(join(process.cwd(), ".test-v4-assertion-in-checkout-"));
+    activeDirectories.push(actualSecretDirectory);
+    const actualSecretPath = join(actualSecretDirectory, "assertion-key");
+    const actualSecret = Buffer.from("synthetic-real-checkout-assertion-key").toString("base64url");
+    await writeFile(actualSecretPath, `${actualSecret}\n`, { mode: 0o600 });
+    await chmod(actualSecretPath, 0o600);
+    expect(await readPrivateV4RelayAssertion("checkout-test", actualSecretPath, undefined)).toBeUndefined();
   });
 
   it("sends V4 from an authenticated paired session using the dedicated Android bearer", async () => {

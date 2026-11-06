@@ -190,15 +190,17 @@ describe("restricted relay environment files", () => {
 
   it("validates assertion files in standalone layouts and detects fake checkout roots", async () => {
     const directory = await makeTemporaryDirectory();
-    const standaloneModuleDirectory = join(directory, "standalone", "src", "lib");
+    await writeFile(join(directory, ".git"), "unrelated dotfiles marker\n", { mode: 0o600 });
+    const standaloneModuleDirectory = join(directory, ".local", "lib", "atlas-relay", "scripts", "lib");
     await mkdir(standaloneModuleDirectory, { recursive: true });
     const secret = Buffer.from("synthetic-standalone-assertion-secret").toString("base64url");
     const assertionPath = join(directory, ".local", "state", "atlas-relay", "assertion-key");
     await mkdir(dirname(assertionPath), { recursive: true });
     await writePrivateFile(assertionPath, `${secret}\n`);
 
-    // Explicit undefined models a standalone install with no .git marker in any ancestor.
-    expect(isOutsideRepositoryPath(assertionPath, undefined)).toBe(true);
+    const standaloneRoot = await findRepositoryRoot(standaloneModuleDirectory);
+    expect(standaloneRoot).toBeUndefined();
+    expect(isOutsideRepositoryPath(assertionPath, standaloneRoot)).toBe(true);
     const fileEnvironment = {
       ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
       ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: assertionPath,
@@ -235,15 +237,43 @@ describe("restricted relay environment files", () => {
     } finally {
       ownerSpy.mockRestore();
     }
+  });
 
+  it("recognizes ATLAS checkouts, ignores unrelated Git parents, and fences the real checkout", async () => {
+    const directory = await makeTemporaryDirectory();
     const checkoutRoot = join(directory, "checkout");
-    const checkoutModuleDirectory = join(checkoutRoot, "scripts", "lib");
+    const checkoutModuleDirectory = join(checkoutRoot, "integrations", "relay", "pc", "scripts", "lib");
     await mkdir(checkoutModuleDirectory, { recursive: true });
     await writeFile(join(checkoutRoot, ".git"), "synthetic git marker\n", { mode: 0o600 });
+    await writeFile(join(checkoutRoot, "AGENTS.md"), "synthetic marker\n", { mode: 0o600 });
     const checkoutSecretPath = join(checkoutRoot, "state", "assertion-key");
+    const externalSecretPath = join(directory, "external", "state", "assertion-key");
+    await mkdir(dirname(checkoutSecretPath), { recursive: true });
+    await mkdir(dirname(externalSecretPath), { recursive: true });
     const discoveredRoot = await findRepositoryRoot(checkoutModuleDirectory);
     expect(discoveredRoot).toBe(checkoutRoot);
     expect(isOutsideRepositoryPath(checkoutSecretPath, discoveredRoot)).toBe(false);
+    expect(isOutsideRepositoryPath(externalSecretPath, discoveredRoot)).toBe(true);
+    const externalSecret = Buffer.from("synthetic-atlas-external-assertion").toString("base64url");
+    await writePrivateFile(externalSecretPath, `${externalSecret}\n`);
+    expect(await isPrivateV4RelayAssertion({
+      ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: externalSecretPath,
+      NODE_ENV: "production",
+    })).toBe(true);
+
+    const actualCheckoutRoot = await findRepositoryRoot(PACKAGE_ROOT);
+    expect(actualCheckoutRoot).toBeDefined();
+    const actualSecretDirectory = await mkdtemp(join(PACKAGE_ROOT, ".relay-secret-test-"));
+    temporaryDirectories.push(actualSecretDirectory);
+    const actualSecretPath = join(actualSecretDirectory, "assertion-key");
+    const actualSecret = Buffer.from("synthetic-real-checkout-assertion-secret").toString("base64url");
+    await writePrivateFile(actualSecretPath, `${actualSecret}\n`);
+    expect(await isPrivateV4RelayAssertion({
+      ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: actualSecretPath,
+      NODE_ENV: "production",
+    })).toBe(false);
   });
 });
 
