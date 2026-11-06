@@ -84,9 +84,10 @@ V4 remains unavailable unless `ATLAS_V4_ENABLED=1` is explicitly set. In
 `dual` and `principal` modes, configure `ATLAS_CORE_PRINCIPAL_MAP_FILE`,
 `ATLAS_V4_RELAY_ASSERTION_KEY_ID`, and `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE`.
 The assertion file must be absolute, owner-controlled, a regular non-symlink
-file, mode `0600`, and read without following symlinks. The repository root is
-recognized only when an ancestor contains the `integrations/relay/pc` package
-and has a `.git` or `AGENTS.md` marker; the file must be outside that root. An
+file, mode `0600`, and read without following symlinks. The repository boundary
+is the outermost ancestor containing the `integrations/relay/pc` package and a
+`.git` or `AGENTS.md` marker; the file must be outside that root even when an
+ATLAS checkout is nested inside another. An
 unrelated `.git` in a parent directory such as a dotfiles checkout does not
 create an ATLAS repository boundary. In a standalone installation, keep the
 file outside the installation directory anyway, such as under

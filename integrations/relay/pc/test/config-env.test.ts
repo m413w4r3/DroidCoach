@@ -275,6 +275,35 @@ describe("restricted relay environment files", () => {
       NODE_ENV: "production",
     })).toBe(false);
   });
+
+  it("uses the outermost ATLAS boundary when checkouts are nested", async () => {
+    const directory = await makeTemporaryDirectory();
+    const outerRoot = join(directory, "outer-checkout");
+    const nestedRoot = join(outerRoot, "projects", "nested-checkout");
+    const moduleDirectory = join(nestedRoot, "integrations", "relay", "pc", "scripts", "lib");
+    await mkdir(join(outerRoot, "integrations", "relay", "pc"), { recursive: true });
+    await mkdir(moduleDirectory, { recursive: true });
+    await writeFile(join(outerRoot, ".git"), "synthetic outer git marker\n", { mode: 0o600 });
+    await writeFile(join(nestedRoot, "AGENTS.md"), "synthetic nested marker\n", { mode: 0o600 });
+
+    const outerSecretPath = join(outerRoot, "state", "assertion-key");
+    const externalSecretPath = join(directory, "outside", "state", "assertion-key");
+    await mkdir(dirname(outerSecretPath), { recursive: true });
+    await mkdir(dirname(externalSecretPath), { recursive: true });
+    const secret = Buffer.from("synthetic-nested-checkout-assertion-secret").toString("base64url");
+    await writePrivateFile(outerSecretPath, `${secret}\n`);
+    await writePrivateFile(externalSecretPath, `${secret}\n`);
+
+    const discoveredRoot = await findRepositoryRoot(moduleDirectory);
+    expect(discoveredRoot).toBe(outerRoot);
+    expect(isOutsideRepositoryPath(outerSecretPath, discoveredRoot)).toBe(false);
+    expect(isOutsideRepositoryPath(externalSecretPath, discoveredRoot)).toBe(true);
+    expect(await isPrivateV4RelayAssertion({
+      ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: externalSecretPath,
+      NODE_ENV: "production",
+    })).toBe(true);
+  });
 });
 
 async function makeTemporaryDirectory(): Promise<string> {

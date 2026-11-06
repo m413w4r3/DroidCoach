@@ -100,3 +100,22 @@ La fixture standalone inclut un `.git` parent sans package ATLAS pour vérifier 
 | `git status --short` après commit | Propre. |
 
 Aucun secret réel n’est utilisé; les assertions de test sont synthétiques. Aucun service live, relais 4402, ADB, Pixel ou AVD n’a été testé.
+
+## Correctif complémentaire A4-delta — candidat ATLAS le plus externe (2026-11-06)
+
+| Champ | Valeur |
+|---|---|
+| Base | `2c098eb1bc17fba175e15d2a046c2214b5e14110` |
+| Constat | Le premier candidat ATLAS imbriqué bornait à tort la recherche, laissant accepter un secret placé ailleurs dans le checkout ATLAS extérieur. |
+| Remédiation | Les détecteurs parcourent chaque ancêtre jusqu’à la racine du système et gardent le dernier candidat ATLAS valide. Une absence de candidat continue de produire `undefined`. |
+| Tests | Checkout extérieur `.git` + package ATLAS, checkout imbriqué `AGENTS.md` + package ATLAS, module dans l’imbriqué : la racine extérieure est retournée, un secret externe à l’imbriqué mais interne à l’extérieur est refusé, et un secret hors de l’extérieur est accepté. Les fixtures standalone avec `.git` parent sans package et checkout réel restent testées. |
+
+| Commande | Résultat |
+|---|---|
+| `cd integrations/relay/pc && npm run test:unit` | **127 passed, 18 fichiers**; compilation TypeScript incluse. |
+| `cd integrations/relay/pc && npm run build` | PASS; compilation TypeScript séparée. |
+| `git diff --check` | PASS. |
+| `git show --check --oneline <commit>` | PASS après commit local séparé `fix(auth): use outermost atlas repository boundary`; SHA dans le rapport, non auto-référencé ici. |
+| `git status --short` après commit | Propre. |
+
+Pas de push, service live, test 4402, ADB, Pixel ou AVD.

@@ -368,9 +368,9 @@
 - **Décision:** les flags globaux absents restent `false` pour lectures/chat et valent `true` pour les mutations; `false` reste un kill switch avant mutation.
 - **Raison:** garder l’installation existante fonctionnelle tout en pouvant désactiver rapidement une écriture, un consentement ou un ACK.
 - **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md` et `docs/operations/evidence/V7-10_A1_FIX_EVIDENCE.md`.
-- **Décision:** une racine de dépôt Relay n’est reconnue que si elle contient `integrations/relay/pc` et au moins un marqueur `.git` ou `AGENTS.md`; un dépôt parent sans le package ATLAS n’est pas une racine. Sans candidat, aucun contrôle de frontière de dépôt ne s’applique. Le fichier d’assertion reste absolu, propriétaire, régulier, sans symlink, mode `0600` et valide; il est recommandé de le garder hors du répertoire d’installation.
+- **Décision:** la frontière de dépôt Relay est le candidat ATLAS le plus externe qui contient `integrations/relay/pc` et au moins un marqueur `.git` ou `AGENTS.md`; les candidats imbriqués ne raccourcissent pas la frontière. Un dépôt parent sans le package ATLAS n’est pas une racine. Sans candidat, aucun contrôle de frontière de dépôt ne s’applique. Le fichier d’assertion reste absolu, propriétaire, régulier, sans symlink, mode `0600` et valide; il est recommandé de le garder hors du répertoire d’installation.
 - **Raison:** une installation systemd sous `~/.local/lib/atlas-relay` peut être dans un `$HOME` versionné par un dépôt dotfiles; ce dépôt ne doit pas faire rejeter une clé privée d’état hors de l’installation.
-- **Réversibilité:** modifier les marqueurs reconnus et leur preuve synthétique lors d’un changement de layout du package, sans revenir à une profondeur fixe.
+- **Réversibilité:** modifier les marqueurs reconnus et leur preuve synthétique lors d’un changement de layout du package, sans revenir à une profondeur fixe ni au premier candidat.
 - **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md` et `docs/operations/evidence/V7-10_A1_FIX_EVIDENCE.md`.
 
 ## V7-10-A3 — Fiabilité Android quotidienne (2026-11-06)

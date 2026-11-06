@@ -270,6 +270,34 @@ describe("connector restart and configuration resilience", () => {
     expect(await readPrivateV4RelayAssertion("checkout-test", actualSecretPath, undefined)).toBeUndefined();
   });
 
+  it("uses the outermost ATLAS boundary when checkouts are nested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-nested-root-"));
+    activeDirectories.push(directory);
+    const outerRoot = join(directory, "outer-checkout");
+    const nestedRoot = join(outerRoot, "projects", "nested-checkout");
+    const moduleDirectory = join(nestedRoot, "integrations", "relay", "pc", "src", "lib");
+    await mkdir(join(outerRoot, "integrations", "relay", "pc"), { recursive: true });
+    await mkdir(moduleDirectory, { recursive: true });
+    await writeFile(join(outerRoot, ".git"), "synthetic outer git marker\n", { mode: 0o600 });
+    await writeFile(join(nestedRoot, "AGENTS.md"), "synthetic nested marker\n", { mode: 0o600 });
+
+    const outerSecretPath = join(outerRoot, "state", "assertion-key");
+    const externalSecretPath = join(directory, "outside", "state", "assertion-key");
+    await mkdir(dirname(outerSecretPath), { recursive: true });
+    await mkdir(dirname(externalSecretPath), { recursive: true });
+    const secret = Buffer.from("synthetic-nested-checkout-assertion-key").toString("base64url");
+    await writeFile(outerSecretPath, `${secret}\n`, { mode: 0o600 });
+    await chmod(outerSecretPath, 0o600);
+    await writeFile(externalSecretPath, `${secret}\n`, { mode: 0o600 });
+    await chmod(externalSecretPath, 0o600);
+
+    const discoveredRoot = await findRepositoryRoot(moduleDirectory);
+    expect(discoveredRoot).toBe(outerRoot);
+    expect(isOutsideRepositoryPath(outerSecretPath, discoveredRoot)).toBe(false);
+    expect(isOutsideRepositoryPath(externalSecretPath, discoveredRoot)).toBe(true);
+    expect(await readPrivateV4RelayAssertion("outside-test", externalSecretPath, undefined)).toBeDefined();
+  });
+
   it("sends V4 from an authenticated paired session using the dedicated Android bearer", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "atlas-v4-connector-session-"));
     activeDirectories.push(stateDir);
