@@ -3,12 +3,13 @@
 - **Date :** 2026-11-06
 - **Branche du rapport :** `v7-10/a5-qa`
 - **Base du ticket :** `d96810bcf756a5c52f4dbfbc3926e14ef1c8de69`
-- **SHA final qualifié :** `739ad878ea9c2822505bf35b9c345e0917578c38`
+- **SHA de la preuve AVD/Android :** `739ad878ea9c2822505bf35b9c345e0917578c38`
+- **SHA final d’intégration :** `3123dba4f89579d414406d8c790609d1e4a5adf6`
 - **Verdict : `PASS_WITH_LIMITATIONS`**
 
 ## Résultat
 
-Les suites backend, connecteur et proxy passent avec les nombres attendus. L’APK debug a été reconstruit depuis le checkout principal au SHA final demandé, puis installé en mise à jour in-place sur l’AVD API 37. Le marqueur et les préférences synthétiques ont conservé leur contenu et leurs hashes; `firstInstallTime` est resté inchangé, le lancement à froid a réussi et aucun `FATAL EXCEPTION` n’a été trouvé avant instrumentation. Les deux classes instrumentées passent séparément : Agent Coach **9/9**, scheduler V4 **1/1**.
+Les suites backend et proxy passent avec les nombres rapportés. La preuve AVD/Android et son APK debug correspondent au SHA `739ad878...`; l’APK a été installé en mise à jour in-place sur l’AVD API 37. Le marqueur et les préférences synthétiques ont conservé leur contenu et leurs hashes; `firstInstallTime` est resté inchangé, le lancement à froid a réussi et aucun `FATAL EXCEPTION` n’a été trouvé avant instrumentation. Les deux classes instrumentées passent séparément : Agent Coach **9/9**, scheduler V4 **1/1**. Le connecteur final passe **131/131** sur `3123dba`; le **125/125** enregistré dans les preuves A5 est la photo antérieure du SHA `739ad878`.
 
 Les limites sont l’absence de test sur Pixel réel et de Relay/service live, l’usage d’un APK debug, ainsi que le rerun combiné JVM/lint qui n’a pas démarré à cause d’un verrou Gradle en lecture seule. Le résultat complet précédent reste valide pour les sources Android de production et JVM inchangées; le changement Android intervenu ensuite concerne trois arguments d’assertion dans un test instrumenté, compilé et exécuté 9/9 sur le SHA final.
 
@@ -16,7 +17,7 @@ Les limites sont l’absence de test sur Pixel réel et de Relay/service live, l
 
 Profil demandé : **Codex / gpt-6-luna / xhigh** (« Luna Implementer »). Aucun sous-agent.
 
-Le checkout principal a été vérifié propre et à `739ad878...` avant le build final. L’APK embarque `source_sha=739ad878...` et `worktree_clean=true`. Le checkout principal a ensuite avancé à `d2f98265b1c4ca42fafc481d7b121f5d4f2bed01`; le diff ultérieur ne contient aucun changement Android ou backend. Les tests connecteur/proxy ont été exécutés dans un clone complet au SHA exact `739ad878...`. Voir [provenance APK](evidence/V7-10_A5_R3_FINAL_APK_METADATA.log), [portée Android/backend](evidence/V7-10_A5_R3_FINAL_SHA_SCOPE.log) et [avancement ultérieur du checkout](evidence/V7-10_A5_R3_FINAL_SHA_ADVANCE.log).
+Le checkout principal a été vérifié propre et à `739ad878...` avant le build final. L’APK embarque `source_sha=739ad878...` et `worktree_clean=true`; c’est le SHA de la preuve AVD/Android. Le SHA final d’intégration est `3123dba4f89579d414406d8c790609d1e4a5adf6`. La commande `git diff --stat 739ad878..3123dba -- android` ne produit aucune sortie : l’arbre `android/` est identique entre les deux SHA. Les tests connecteur/proxy enregistrés ici ont été exécutés dans un clone complet au SHA `739ad878`; le connecteur final 131/131 sur `3123dba` est une vérification rapportée par l’orchestrateur, distincte de cette preuve A5. Voir [provenance APK](evidence/V7-10_A5_R3_FINAL_APK_METADATA.log), [portée Android/backend de la preuve](evidence/V7-10_A5_R3_FINAL_SHA_SCOPE.log) et [avancement observé du checkout](evidence/V7-10_A5_R3_FINAL_SHA_ADVANCE.log).
 
 Aucun fichier de code produit, test, contrat ou configuration n’a été modifié par cette qualification. Le commit local contient uniquement ce rapport et des preuves sous `docs/operations/evidence/`; aucun push/PR n’a été effectué. Aucun Pixel physique, service Relay/Core/backend live, `adb devices`, `adb -d` ou `adb -e` n’a été utilisé. La suite proxy exclut explicitement le cas épinglé sur le port 4402.
 
@@ -30,6 +31,7 @@ Aucun fichier de code produit, test, contrat ou configuration n’a été modifi
 | `GO_NEW_CONVERSATION` | **GO** | `AgentCoachConversationInstrumentationTest`: 9/9, 0 échec/erreur/ignoré. |
 | `GO_V4_COLD_START` | **GO** | Après update et avant instrumentation : `LaunchState: COLD`, PID présent, préférences V4 relues, aucun fatal crash. La suite instrumentée inclut également le scénario V4 cold start. |
 | `GO_RELAY_IMMEDIATE_SYNC` (partie locale) | **GO, portée locale** | Scheduler : 1/1; enqueue WorkManager local vérifié. Aucun envoi vers un Relay réel n’est démontré. |
+| `GO_INDEPENDENT_SECURITY_REVIEW` | **EN ATTENTE** | En attente du verdict final A4-delta; ce rapport ne prononce pas ce gate. |
 | `GO_PRODUCT_INSTALL` | **NO_GO / NOT_RUN** | Cette qualification AVD ne constitue pas une autorisation d’installation produit. |
 | `GO_LIVE_SECURITY` | **NO_GO / NOT_RUN** | Aucun service live ni test de sécurité live. |
 | `GO_DAILY_PILOT` | **NO_GO / NOT_RUN** | Aucun pilote quotidien ni Pixel réel. |
@@ -39,7 +41,8 @@ Aucun fichier de code produit, test, contrat ou configuration n’a été modifi
 | Suite / commande réellement exécutée | Résultat |
 |---|---|
 | Backend : `cd backend && ATLAS_AGENT_ADAPTER=mock /tmp/v7-10-a5-backend-venv/bin/python -m pytest -q` | **PASS — 451 passed, 1 skipped, 3 warnings, 38.05 s.** Venv temporaire local, sans accès live. [Log](evidence/V7-10_A5_BACKEND_TESTS.log) |
-| Connecteur au SHA final : `export npm_config_cache=/tmp/v7-10-a5-npm-cache; npm ci --offline && npm run test:unit` dans `/tmp/v7-10-a5-r3-final-739ad/integrations/relay/pc` (clone complet, HEAD exact `739ad878...`) | **PASS — TypeScript compilé (`tsc -p tsconfig.json`), 18 fichiers, 125/125 tests.** [Log](evidence/V7-10_A5_R3_FINAL_CONNECTOR.log) |
+| Connecteur de la preuve A5 : `export npm_config_cache=/tmp/v7-10-a5-npm-cache; npm ci --offline && npm run test:unit` dans `/tmp/v7-10-a5-r3-final-739ad/integrations/relay/pc` (clone complet, HEAD exact `739ad878...`) | **PASS — TypeScript compilé (`tsc -p tsconfig.json`), 18 fichiers, 125/125 tests.** Cette preuve est une photo antérieure. [Log](evidence/V7-10_A5_R3_FINAL_CONNECTOR.log) |
+| Connecteur final d’intégration `3123dba` | **PASS — 131/131**, vérifié par l’orchestrateur. Ce total remplace 125/125 comme résultat final du connecteur; le log A5 conserve le résultat observé au SHA `739ad878`. |
 | Proxy : `node --test --test-skip-pattern='pinned relay integration on 4402' integrations/relay/proxy/test/proxy.test.mjs` | **PASS — 18 pass, 0 fail.** Le cas `pinned relay integration on 4402` a été exclu par le filtre et n’a pas été exécuté. [Log](evidence/V7-10_A5_R3_PROXY_TESTS.log) |
 | Android complet antérieur : `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --max-workers=1 --console=plain` depuis `android/` | **PASS — 934 JVM, 0 échec, 0 ignoré; lint 0 erreur / 89 avertissements; APK debug et androidTest assemblés.** Sources de production/JVM identiques au SHA final. [Log](evidence/V7-10_A5_ANDROID_BUILD.log) |
 | Tentative de rerun Android complet au SHA final | **NOT_RUN avant exécution Gradle.** Le wrapper a échoué sur `FileNotFoundException: /home/nill/.gradle/wrapper/dists/gradle-9.6.0-bin/42k10rwplmzkhuboz9kdazi7s/gradle-9.6.0-bin.zip.lck (Read-only file system)`. Ce résultat d’environnement n’est pas compté comme un test. [Sortie exacte](evidence/V7-10_A5_R3_FINAL_ANDROID_FULL.log) |
