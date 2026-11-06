@@ -2,7 +2,7 @@
 
 - **Task ID:** `V7-10-A1-DEVICE-AUTH`
 - **Base SHA:** `710a49a0094e49ae1e794d009e55536fe1aba7fe`
-- **Branche / worktree:** `v7-10/a1-device-auth` — `/home/nill/.paseo/worktrees/073527gm/v7-10-a1-device-auth`
+- **Branche / worktree:** `v7-10/a1-device-auth` — `<WORKTREE>/v7-10-a1-device-auth`
 - **Profil effectif:** `codex / gpt-6-luna / xhigh` (confirmé par l’orchestrateur Paseo)
 - **Scope:** Core backend V4 + connecteur Relay PC, tests locaux, migration/provisionnement offline et documentation. Android, services/base live, secrets réels, ADB, Pixel, réseau externe, push/PR/merge exclus.
 - **Base inspectée:** worktree assigné sur la base SHA indiquée; `.codegraph/` absent.
