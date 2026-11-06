@@ -119,3 +119,24 @@ Aucun secret réel n’est utilisé; les assertions de test sont synthétiques. 
 | `git status --short` après commit | Propre. |
 
 Pas de push, service live, test 4402, ADB, Pixel ou AVD.
+
+## Correctif complémentaire A4-delta — inspection et lecture du chemin du secret (2026-11-06)
+
+| Champ | Valeur |
+|---|---|
+| Base | `c9ca86d7ceb62f4a86877d9cc0aefea6c2250796` |
+| Constats | `findRepositoryRoot` traitait toute erreur `lstat` comme une absence, ce qui pouvait ignorer un checkout extérieur inaccessible. La vérification canonicalisait le parent mais `lstat` et `open` continuaient sur le chemin fourni, avec une course possible lors du remplacement du parent. |
+| Fichiers | `integrations/relay/pc/src/connector.ts`, `integrations/relay/pc/scripts/lib/config.mjs`, tests `connector-resilience.test.ts` et `config-env.test.ts`, README Relay, guide de migration, décisions automatiques et cette preuve. |
+| Remédiation | Seul `ENOENT` devient un marqueur absent; les autres erreurs d’inspection remontent et empêchent la validation. Chaque lecteur calcule une seule fois `actualPath = resolve(realpath(dirname(path)), basename(path))`, applique la frontière sur ce chemin, puis utilise le même chemin pour `lstat` et `open(O_RDONLY | O_NOFOLLOW)`. Le parent canonique doit être un répertoire non symlink et conserver son `dev/ino` avant/après l’ouverture et la lecture. |
+| Tests | Les layouts standalone avec `.git` sans package ATLAS continuent à retourner `undefined` (absence `ENOENT`). Une fixture avec checkout ATLAS imbriqué et parent extérieur contenant `.git` rend le `integrations/` extérieur inaccessible (`000`); le détecteur renvoie `EACCES` au lieu de retenir la racine imbriquée, et le secret du chemin inaccessible est refusé. Les deux lecteurs acceptent un parent symlink statique vers un répertoire privé réel. Le helper utilisé par les gardes de lecture détecte le remplacement du parent canonique par un symlink ou un nouveau répertoire. Les refus existants du symlink de fichier, mode incorrect, propriétaire simulé, chemin relatif et contenu invalide restent couverts. |
+| Limites | Le remplacement du parent est exercé de façon déterministe via les snapshots d’identité remis au helper de garde; la course OS concurrente n’est pas synchronisée artificiellement dans le test. Aucun service Relay/Core live n’est impliqué. |
+
+| Commande | Résultat |
+|---|---|
+| `cd integrations/relay/pc && npm run test:unit` | **131 passed, 18 fichiers**. La compilation `tsc -p tsconfig.json` est également incluse. Exécution finale avec permissions locales car le bac à sable restreint bloque les sockets loopback et les sous-processus nécessaires à cette suite. |
+| `cd integrations/relay/pc && npm run build` | PASS; compilation TypeScript séparée. |
+| `git diff --check` | PASS avant commit. |
+| `git show --check --oneline <commit>` | PASS après commit local séparé `fix(auth): fail closed on relay secret path inspection`; SHA indiqué au rapport de clôture, sans auto-référence ici. |
+| `git status --short` après commit | Propre. |
+
+Aucun secret réel n’est utilisé; tous les chemins et contenus sont synthétiques. Aucun push, test 4402, service live, ADB, Pixel ou AVD.

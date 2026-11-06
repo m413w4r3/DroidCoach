@@ -91,7 +91,13 @@ ATLAS checkout is nested inside another. An
 unrelated `.git` in a parent directory such as a dotfiles checkout does not
 create an ATLAS repository boundary. In a standalone installation, keep the
 file outside the installation directory anyway, such as under
-`~/.local/state/atlas-relay`. A missing or unsafe file leaves
+`~/.local/state/atlas-relay`. The reader resolves the parent once and uses the
+resulting canonical path for the boundary check, `lstat`, and `O_NOFOLLOW`
+open. It requires the canonical parent to be a real directory with the same
+device and inode before and after opening and reading. `ENOENT` while looking
+for repository markers means no marker; other inspection errors fail closed.
+A static symlink used as the supplied parent is resolved to its real directory,
+while a symlink at the secret-file path is rejected. A missing or unsafe file leaves
 principal-bound V4 unavailable. The environment secret is accepted only in
 tests with `NODE_ENV=test`; `configFromEnvironment`, `check-config.mjs`, and
 `check-secret.mjs` fail closed for it outside tests and reject two configured

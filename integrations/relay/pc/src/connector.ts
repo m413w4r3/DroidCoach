@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -186,14 +186,28 @@ export function selectV4CredentialMode(
 }
 
 /** Reads a mode-0600 owner-controlled file without following links or accepting inode swaps. */
-async function readPrivateFile(path: string | undefined, maxBytes: number): Promise<string | undefined> {
+async function readPrivateFile(
+  path: string | undefined,
+  maxBytes: number,
+  requireOutsideRepository = false,
+): Promise<string | undefined> {
   if (!path || !isAbsolute(path) || typeof process.getuid !== "function" || constants.O_NOFOLLOW === undefined) return undefined;
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    const beforeOpen = await lstat(path);
+    let actualPath = path;
+    let parentBefore: Stats | undefined;
+    if (requireOutsideRepository) {
+      actualPath = resolve(await realpath(dirname(path)), basename(path));
+      if (!(await isOutsideRepository(actualPath))) return undefined;
+      parentBefore = await lstat(dirname(actualPath));
+      if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) return undefined;
+    }
+
+    const beforeOpen = await lstat(actualPath);
     if (!beforeOpen.isFile() || beforeOpen.isSymbolicLink()) return undefined;
 
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(actualPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    if (parentBefore && !sameDirectoryIdentity(parentBefore, await lstat(dirname(actualPath)))) return undefined;
     const file = await handle.stat();
     const owner = process.getuid();
     if (!file.isFile() || file.uid !== owner || beforeOpen.uid !== owner ||
@@ -203,8 +217,9 @@ async function readPrivateFile(path: string | undefined, maxBytes: number): Prom
     }
 
     const raw = await handle.readFile("utf8");
-    const afterRead = await lstat(path);
-    if (afterRead.isSymbolicLink() || afterRead.dev !== file.dev || afterRead.ino !== file.ino) return undefined;
+    const afterRead = await lstat(actualPath);
+    if ((parentBefore && !sameDirectoryIdentity(parentBefore, await lstat(dirname(actualPath)))) || afterRead.isSymbolicLink() ||
+        afterRead.dev !== file.dev || afterRead.ino !== file.ino) return undefined;
     return raw;
   } catch {
     // Missing, inaccessible, replaced, or unsafe credential files disable V4 without
@@ -273,8 +288,7 @@ export async function readPrivateV4RelayAssertion(
   const hasSecretEnvironment = secretEnvironment !== undefined;
   if (!keyId || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId) || hasSecretFile === hasSecretEnvironment) return undefined;
   if (hasSecretEnvironment && process.env.NODE_ENV !== "test") return undefined;
-  if (hasSecretFile && !(await isOutsideRepository(secretFile))) return undefined;
-  const rawValue = secretEnvironment ?? await readPrivateFile(secretFile, 512);
+  const rawValue = secretEnvironment ?? await readPrivateFile(secretFile, 512, hasSecretFile);
   if (!rawValue) return undefined;
   const encoded = rawValue.endsWith("\r\n") ? rawValue.slice(0, -2) : rawValue.endsWith("\n") ? rawValue.slice(0, -1) : rawValue;
   if (!/^[A-Za-z0-9_-]{43,}$/.test(encoded)) return undefined;
@@ -293,14 +307,23 @@ export async function findRepositoryRoot(startDirectory: string): Promise<string
   let repositoryRoot: string | undefined;
   while (true) {
     const packagePath = join(current, "integrations", "relay", "pc");
-    const hasPackage = await lstat(packagePath).then((entry) => entry.isDirectory() && !entry.isSymbolicLink()).catch(() => false);
-    const hasGitMarker = await lstat(join(current, ".git")).then((entry) => !entry.isSymbolicLink()).catch(() => false);
-    const hasAgentMarker = await lstat(join(current, "AGENTS.md")).then((entry) => !entry.isSymbolicLink()).catch(() => false);
+    const packageEntry = await lstatIfPresent(packagePath);
+    const gitMarker = await lstatIfPresent(join(current, ".git"));
+    const agentMarker = await lstatIfPresent(join(current, "AGENTS.md"));
+    const hasPackage = packageEntry?.isDirectory() === true && !packageEntry.isSymbolicLink();
+    const hasGitMarker = gitMarker !== undefined && !gitMarker.isSymbolicLink();
+    const hasAgentMarker = agentMarker !== undefined && !agentMarker.isSymbolicLink();
     if (hasPackage && (hasGitMarker || hasAgentMarker)) repositoryRoot = current;
     const parent = dirname(current);
     if (parent === current) return repositoryRoot;
     current = parent;
   }
+}
+
+/** Compares a canonical parent directory before and after a private-file read. */
+export function sameDirectoryIdentity(before: Stats, after: Stats): boolean {
+  return before.isDirectory() && !before.isSymbolicLink() && after.isDirectory() &&
+    !after.isSymbolicLink() && before.dev === after.dev && before.ino === after.ino;
 }
 
 /** Pure path check; no Git context means standalone deployment with no repository boundary. */
@@ -314,12 +337,20 @@ export function isOutsideRepositoryPath(path: string, repositoryRoot: string | u
 async function isOutsideRepository(path: string): Promise<boolean> {
   if (!isAbsolute(path)) return false;
   try {
-    const actualPath = resolve(await realpath(dirname(path)), basename(path));
     const moduleDirectory = await realpath(dirname(fileURLToPath(import.meta.url)));
     const repositoryRoot = await findRepositoryRoot(moduleDirectory);
-    return isOutsideRepositoryPath(actualPath, repositoryRoot);
+    return isOutsideRepositoryPath(path, repositoryRoot);
   } catch {
     return false;
+  }
+}
+
+async function lstatIfPresent(path: string): Promise<Stats | undefined> {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if (isNotFound(error)) return undefined;
+    throw error;
   }
 }
 

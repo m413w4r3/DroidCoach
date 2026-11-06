@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findRepositoryRoot, isOutsideRepositoryPath, isPrivateV4RelayAssertion, loadEnvironmentFile } from "../scripts/lib/config.mjs";
+import { findRepositoryRoot, isOutsideRepositoryPath, isPrivateV4RelayAssertion, loadEnvironmentFile, sameDirectoryIdentity } from "../scripts/lib/config.mjs";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryDirectories: string[] = [];
@@ -237,6 +237,13 @@ describe("restricted relay environment files", () => {
     } finally {
       ownerSpy.mockRestore();
     }
+
+    const parentAlias = join(directory, "assertion-parent-link");
+    await symlink(dirname(assertionPath), parentAlias, "dir");
+    expect(await isPrivateV4RelayAssertion({
+      ...fileEnvironment,
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: join(parentAlias, "assertion-key"),
+    })).toBe(true);
   });
 
   it("recognizes ATLAS checkouts, ignores unrelated Git parents, and fences the real checkout", async () => {
@@ -303,6 +310,59 @@ describe("restricted relay environment files", () => {
       ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: externalSecretPath,
       NODE_ENV: "production",
     })).toBe(true);
+  });
+
+  it("fails closed when repository inspection encounters an inaccessible ancestor", async () => {
+    const directory = await makeTemporaryDirectory();
+    const outerRoot = join(directory, "outer-checkout");
+    const lockedIntegrations = join(outerRoot, "integrations");
+    const nestedRoot = join(outerRoot, "nested-checkout");
+    const moduleDirectory = join(nestedRoot, "integrations", "relay", "pc", "scripts", "lib");
+    await mkdir(moduleDirectory, { recursive: true });
+    await mkdir(lockedIntegrations, { recursive: true });
+    await writeFile(join(outerRoot, ".git"), "synthetic outer marker\n", { mode: 0o600 });
+    await writeFile(join(nestedRoot, "AGENTS.md"), "synthetic nested marker\n", { mode: 0o600 });
+    await chmod(lockedIntegrations, 0o000);
+    try {
+      await expect(findRepositoryRoot(moduleDirectory)).rejects.toMatchObject({ code: "EACCES" });
+      expect(await isPrivateV4RelayAssertion({
+        ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
+        ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: join(lockedIntegrations, "secret"),
+        NODE_ENV: "production",
+      })).toBe(false);
+    } finally {
+      await chmod(lockedIntegrations, 0o700);
+    }
+  });
+
+  it("accepts a stable symlink parent and detects canonical parent replacement", async () => {
+    const directory = await makeTemporaryDirectory();
+    const secretDirectory = join(directory, "private-state");
+    await mkdir(secretDirectory);
+    const secretPath = join(secretDirectory, "assertion-key");
+    const secret = Buffer.from("synthetic-parent-identity-assertion-secret").toString("base64url");
+    await writePrivateFile(secretPath, `${secret}\n`);
+    const parentAlias = join(directory, "private-state-link");
+    await symlink(secretDirectory, parentAlias, "dir");
+    expect(await isPrivateV4RelayAssertion({
+      ATLAS_V4_RELAY_ASSERTION_KEY_ID: "synthetic-test-key",
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: join(parentAlias, "assertion-key"),
+      NODE_ENV: "production",
+    })).toBe(true);
+
+    const canonicalParent = join(directory, "canonical-parent");
+    const oldParent = join(directory, "canonical-parent-old");
+    await mkdir(canonicalParent);
+    const beforeSymlinkReplacement = await lstat(canonicalParent);
+    await rename(canonicalParent, oldParent);
+    await symlink(oldParent, canonicalParent, "dir");
+    const afterSymlinkReplacement = await lstat(canonicalParent);
+    expect(sameDirectoryIdentity(beforeSymlinkReplacement, afterSymlinkReplacement)).toBe(false);
+
+    await rm(canonicalParent);
+    await mkdir(canonicalParent);
+    const afterDirectoryReplacement = await lstat(canonicalParent);
+    expect(sameDirectoryIdentity(beforeSymlinkReplacement, afterDirectoryReplacement)).toBe(false);
   });
 });
 

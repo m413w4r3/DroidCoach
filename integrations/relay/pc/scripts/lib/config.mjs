@@ -244,20 +244,29 @@ export async function isPrivateV4RelayAssertion(environment) {
 }
 
 async function readPrivateV4RelayAssertionFile(path) {
-  if (!path || !isAbsolute(path) || !await isOutsideRepository(path) ||
-      typeof process.getuid !== "function" || constants.O_NOFOLLOW === undefined) return undefined;
+  if (!path || !isAbsolute(path) || typeof process.getuid !== "function" || constants.O_NOFOLLOW === undefined) return undefined;
   let handle;
   try {
-    const beforeOpen = await lstat(path);
+    const actualPath = resolve(await realpath(dirname(path)), basename(path));
+    if (!await isOutsideRepository(actualPath)) return undefined;
+    const canonicalParent = dirname(actualPath);
+    const parentBefore = await lstat(canonicalParent);
+    if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) return undefined;
+
+    const beforeOpen = await lstat(actualPath);
     if (!beforeOpen.isFile() || beforeOpen.isSymbolicLink()) return undefined;
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(actualPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const parentAfterOpen = await lstat(canonicalParent);
+    if (!sameDirectoryIdentity(parentBefore, parentAfterOpen)) return undefined;
     const file = await handle.stat();
     const owner = process.getuid();
     if (!file.isFile() || file.uid !== owner || beforeOpen.uid !== owner || (file.mode & 0o777) !== 0o600 ||
         beforeOpen.dev !== file.dev || beforeOpen.ino !== file.ino || file.size < 1 || file.size > 512) return undefined;
     const value = await handle.readFile("utf8");
-    const afterRead = await lstat(path);
-    if (afterRead.isSymbolicLink() || afterRead.dev !== file.dev || afterRead.ino !== file.ino) return undefined;
+    const afterRead = await lstat(actualPath);
+    const parentAfterRead = await lstat(canonicalParent);
+    if (!sameDirectoryIdentity(parentBefore, parentAfterRead) || afterRead.isSymbolicLink() ||
+        afterRead.dev !== file.dev || afterRead.ino !== file.ino) return undefined;
     return value;
   } catch {
     return undefined;
@@ -272,14 +281,23 @@ export async function findRepositoryRoot(startDirectory) {
   let repositoryRoot;
   while (true) {
     const packagePath = join(current, "integrations", "relay", "pc");
-    const hasPackage = await lstat(packagePath).then((entry) => entry.isDirectory() && !entry.isSymbolicLink()).catch(() => false);
-    const hasGitMarker = await lstat(join(current, ".git")).then((entry) => !entry.isSymbolicLink()).catch(() => false);
-    const hasAgentMarker = await lstat(join(current, "AGENTS.md")).then((entry) => !entry.isSymbolicLink()).catch(() => false);
+    const packageEntry = await lstatIfPresent(packagePath);
+    const gitMarker = await lstatIfPresent(join(current, ".git"));
+    const agentMarker = await lstatIfPresent(join(current, "AGENTS.md"));
+    const hasPackage = packageEntry?.isDirectory() === true && !packageEntry.isSymbolicLink();
+    const hasGitMarker = gitMarker !== undefined && !gitMarker.isSymbolicLink();
+    const hasAgentMarker = agentMarker !== undefined && !agentMarker.isSymbolicLink();
     if (hasPackage && (hasGitMarker || hasAgentMarker)) repositoryRoot = current;
     const parent = dirname(current);
     if (parent === current) return repositoryRoot;
     current = parent;
   }
+}
+
+/** Compares a canonical parent directory before and after a private-file read. */
+export function sameDirectoryIdentity(before, after) {
+  return before.isDirectory() && !before.isSymbolicLink() && after.isDirectory() &&
+    !after.isSymbolicLink() && before.dev === after.dev && before.ino === after.ino;
 }
 
 /** Pure path check; no Git context means standalone deployment with no repository boundary. */
@@ -293,13 +311,25 @@ export function isOutsideRepositoryPath(path, repositoryRoot) {
 async function isOutsideRepository(path) {
   if (typeof path !== "string" || !isAbsolute(path)) return false;
   try {
-    const actualPath = resolve(await realpath(dirname(path)), basename(path));
     const moduleDirectory = await realpath(dirname(fileURLToPath(import.meta.url)));
     const repositoryRoot = await findRepositoryRoot(moduleDirectory);
-    return isOutsideRepositoryPath(actualPath, repositoryRoot);
+    return isOutsideRepositoryPath(path, repositoryRoot);
   } catch {
     return false;
   }
+}
+
+async function lstatIfPresent(path) {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if (isNotFound(error)) return undefined;
+    throw error;
+  }
+}
+
+function isNotFound(error) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 export function assertTokenNotInArgs(environment, args) {

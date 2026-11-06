@@ -1,8 +1,8 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configFromEnvironment, createConnector, findRepositoryRoot, isOutsideRepositoryPath, readPrivateV4AndroidToken, readPrivateV4PrincipalMap, readPrivateV4RelayAssertion, selectV4CredentialMode, type ConnectorConfig, type ConnectorRuntime } from "../src/connector.js";
+import { configFromEnvironment, createConnector, findRepositoryRoot, isOutsideRepositoryPath, readPrivateV4AndroidToken, readPrivateV4PrincipalMap, readPrivateV4RelayAssertion, sameDirectoryIdentity, selectV4CredentialMode, type ConnectorConfig, type ConnectorRuntime } from "../src/connector.js";
 import { loadOrCreateIdentity } from "../src/identity.js";
 import { PROTOCOL_V2 } from "../src/protocol.js";
 import { FakeSecureChannel, hello, request } from "./helpers.js";
@@ -195,6 +195,10 @@ describe("connector restart and configuration resilience", () => {
     expect(Buffer.from(fromEnvironment?.secret ?? []).equals(key)).toBe(true);
     expect(await readPrivateV4RelayAssertion("test-key-1", keyPath, encoded)).toBeUndefined();
 
+    const parentAlias = join(directory, "assertion-parent-link");
+    await symlink(directory, parentAlias, "dir");
+    expect(await readPrivateV4RelayAssertion("test-key-1", join(parentAlias, "assertion-key"), undefined)).toBeDefined();
+
     await chmod(keyPath, 0o640);
     expect(await readPrivateV4RelayAssertion("test-key-1", keyPath, undefined)).toBeUndefined();
     await chmod(keyPath, 0o600);
@@ -296,6 +300,54 @@ describe("connector restart and configuration resilience", () => {
     expect(isOutsideRepositoryPath(outerSecretPath, discoveredRoot)).toBe(false);
     expect(isOutsideRepositoryPath(externalSecretPath, discoveredRoot)).toBe(true);
     expect(await readPrivateV4RelayAssertion("outside-test", externalSecretPath, undefined)).toBeDefined();
+  });
+
+  it("fails closed when repository inspection encounters an inaccessible ancestor", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-inaccessible-root-"));
+    activeDirectories.push(directory);
+    const outerRoot = join(directory, "outer-checkout");
+    const lockedIntegrations = join(outerRoot, "integrations");
+    const nestedRoot = join(outerRoot, "nested-checkout");
+    const moduleDirectory = join(nestedRoot, "integrations", "relay", "pc", "src");
+    await mkdir(moduleDirectory, { recursive: true });
+    await mkdir(lockedIntegrations, { recursive: true });
+    await writeFile(join(outerRoot, ".git"), "synthetic outer marker\n", { mode: 0o600 });
+    await writeFile(join(nestedRoot, "AGENTS.md"), "synthetic nested marker\n", { mode: 0o600 });
+    await chmod(lockedIntegrations, 0o000);
+    try {
+      await expect(findRepositoryRoot(moduleDirectory)).rejects.toMatchObject({ code: "EACCES" });
+      expect(await readPrivateV4RelayAssertion("inaccessible-test", join(lockedIntegrations, "secret"), undefined)).toBeUndefined();
+    } finally {
+      await chmod(lockedIntegrations, 0o700);
+    }
+  });
+
+  it("accepts a stable symlink parent and detects canonical parent replacement", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "atlas-v4-parent-identity-"));
+    activeDirectories.push(directory);
+    const secretDirectory = join(directory, "private-state");
+    await mkdir(secretDirectory);
+    const secretPath = join(secretDirectory, "assertion-key");
+    const secret = Buffer.from("synthetic-parent-identity-assertion-key").toString("base64url");
+    await writeFile(secretPath, `${secret}\n`, { mode: 0o600 });
+    await chmod(secretPath, 0o600);
+    const parentAlias = join(directory, "private-state-link");
+    await symlink(secretDirectory, parentAlias, "dir");
+    expect(await readPrivateV4RelayAssertion("parent-link-test", join(parentAlias, "assertion-key"), undefined)).toBeDefined();
+
+    const canonicalParent = join(directory, "canonical-parent");
+    const oldParent = join(directory, "canonical-parent-old");
+    await mkdir(canonicalParent);
+    const beforeSymlinkReplacement = await lstat(canonicalParent);
+    await rename(canonicalParent, oldParent);
+    await symlink(oldParent, canonicalParent, "dir");
+    const afterSymlinkReplacement = await lstat(canonicalParent);
+    expect(sameDirectoryIdentity(beforeSymlinkReplacement, afterSymlinkReplacement)).toBe(false);
+
+    await rm(canonicalParent);
+    await mkdir(canonicalParent);
+    const afterDirectoryReplacement = await lstat(canonicalParent);
+    expect(sameDirectoryIdentity(beforeSymlinkReplacement, afterDirectoryReplacement)).toBe(false);
   });
 
   it("sends V4 from an authenticated paired session using the dedicated Android bearer", async () => {
