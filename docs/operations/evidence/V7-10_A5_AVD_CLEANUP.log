@@ -1,0 +1,6 @@
+$ adb -s emulator-5556 emu kill
+OK: killing emulator, bye bye
+OK
+supervised_emulator_pid=236477
+ 236477 qemu-system-x86
+emulator_process_still_running=YES

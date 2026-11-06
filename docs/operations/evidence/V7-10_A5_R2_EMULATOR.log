@@ -17,7 +17,7 @@ WARNING      | File System is not ext4, disable QuickbootFileBacked feature
 INFO         | Storing crashdata in: <TMP>/emu-crash-37.2.12.db, detection is enabled for process: 1778406
 INFO         | Initializing gfxstream backend
 INFO         | startOpenglesRendererImpl: gpu info
-INFO         | 
+INFO         |
 INFO         | Vulkan 1.4 is not supported for the guest and won't be enabled
 INFO         | initIcdPaths: ICD set to 'swiftshader', using Swiftshader ICD
 INFO         | Setting ICD filenames for the loader = <HOME>/Android/Sdk/emulator/lib64/vulkan/vk_swiftshader_icd.json
@@ -49,7 +49,7 @@ INFO         |     enableProtectedMemoryEmulation: false
 INFO         | Graphics Adapter Vendor Google (Google Inc.)
 INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
 INFO         | Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
-INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888
 INFO         | Graphics Device Extensions N/A
 INFO         | Disabling sparse binding feature support
 INFO         | Sending adb public key [QAAAACd84HppzNKJ8PMcBRkjvVSjlhZB+HNYtdYH8Cs0XHT32F8EMWW/zEbkG9yOd5QpCgTMBzhJVSfhKpdjULX0ZAfib+b8ITLP8ypRHrKjbwGyjNPCvqhONU4C+ZP6pDimO/6ZfMCJPRWSrS0mGECv4x5xFrvhYo6s3zla5Q+hQh5RMctClLzrlvXcJVqkdkgeQ9XR+C1Wy3mbduKzJUb21geJO2vSxXWTkWmWs1pvzYmta3pHSYNEy1Y9zLuLD7ko5G43f2t1pF0p7Ci65HkpOOUGL53xBn5ZC4WTIEKpDn3ENWexgVu0E4xyoM4EW6DsMAXPX5tnzNdS8nY2aPByp+kTsj/LkNX+M5yLTocTB3ksswx4TafDL5J3L14extwpvxfcJaGRgTpy4JAuLit4aEuZUAqNUcXBIinTMHbdOy42j3UiAAb71pbhVlbPSO1tVvvEOWxjJfbSD8wqxm36LDTWwZpVr4ZUM8wrqUYCDHIxJAa/CRKWv0P1nAtYv7OcG0oU02MxXfzORW2CP0fPk/6jiqkJd7W7GzfZJJnfbRfsFKk3j4HnPutnHznDSxTWU2BevWEJZnkBhUNZhXv7TWCAu/xHPKk4FS8vRuXzKT5D4zGUx0gTymcMFTWy3YJep1JQyQg48EaGNI4RNwKAysTRhuLtz9US/6gJKB2kS4iOqlQ3rAEAAQA= nill@unknown]
@@ -89,7 +89,7 @@ INFO         | Monitoring duration of emulator setup.
 INFO         | Activated packet streamer for uwb emulation
 INFO         | Successfully initialized netsim WiFi
 INFO         | Activated packet streamer for bluetooth emulation
-INFO         | Setting display: 0 configuration to: 1080x1920, dpi: 480x480 
+INFO         | Setting display: 0 configuration to: 1080x1920, dpi: 480x480
 INFO         | setDisplayActiveConfig: id:0, 1080x1920
 INFO         | emulatorSetupEnvironment: Environment scene is not required
 USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.

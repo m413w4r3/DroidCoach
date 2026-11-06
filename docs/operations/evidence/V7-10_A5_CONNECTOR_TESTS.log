@@ -1,0 +1,656 @@
+
+> @atlas/relay-pc@0.1.0-r3a-plus test:unit
+> npm run build && vitest run --exclude test/relay.integration.test.ts --exclude test/stale-client-timeout.test.ts
+
+
+> @atlas/relay-pc@0.1.0-r3a-plus build
+> tsc -p tsconfig.json
+
+
+ RUN  v3.2.7 /tmp/v7-10-a5-pc
+
+ ✓ test/secure-channel.test.ts (2 tests) 170ms
+ ✓ test/relay-url.test.ts (5 tests) 41ms
+ ✓ test/protocol.test.ts (6 tests) 45ms
+ ✓ test/r3c-compat.test.ts (1 test) 116ms
+{"timestamp":"2026-11-06T01:39:21.044Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.062Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"operation_received","result":"received","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.079Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_start","result":"in_flight","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.090Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_end","result":"in_flight","httpStatus":null,"resultCode":"PERSISTED","durationMs":10}
+{"timestamp":"2026-11-06T01:39:21.090Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"core_post_start","result":"started","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.092Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"core_post_end","result":"success","httpStatus":200,"resultCode":"ACCEPTED","durationMs":2}
+{"timestamp":"2026-11-06T01:39:21.093Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_start","result":"completed","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.107Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_end","result":"completed","httpStatus":null,"resultCode":"PERSISTED","durationMs":14}
+{"timestamp":"2026-11-06T01:39:21.107Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"response_ready","result":"ready","httpStatus":null,"resultCode":"OK","durationMs":45}
+{"timestamp":"2026-11-06T01:39:21.108Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"ws_send_attempt","result":"started","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.108Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"ws_send_result","result":"accepted","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.151Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.153Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"operation_received","result":"received","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.154Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_start","result":"in_flight","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.163Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_end","result":"in_flight","httpStatus":null,"resultCode":"PERSISTED","durationMs":8}
+{"timestamp":"2026-11-06T01:39:21.163Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"core_post_start","result":"started","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.163Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"core_post_end","result":"success","httpStatus":200,"resultCode":"ACCEPTED","durationMs":0}
+{"timestamp":"2026-11-06T01:39:21.163Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_start","result":"completed","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.173Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"journal_persist_end","result":"completed","httpStatus":null,"resultCode":"PERSISTED","durationMs":10}
+{"timestamp":"2026-11-06T01:39:21.174Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"response_ready","result":"ready","httpStatus":null,"resultCode":"OK","durationMs":21}
+{"timestamp":"2026-11-06T01:39:21.174Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"ws_send_attempt","result":"started","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.175Z","sessionOrdinal":1,"correlationTag":"371d09f8","operation":"v4.consent.state.upsert","stage":"ws_send_result","result":"rejected","httpStatus":null,"resultCode":"SEND_FAILED","durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.191Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.192Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.194Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.195Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.195Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.195Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.195Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.195Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.197Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.197Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.197Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.197Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.197Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.198Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.198Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.198Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.198Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.198Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.200Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.201Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.202Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.203Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.204Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.204Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.204Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.204Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.204Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.206Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.206Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.206Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.206Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.206Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.207Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.210Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.211Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+ ✓ test/diagnostics.test.ts (4 tests) 252ms
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.212Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.213Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_active","result":"active","httpStatus":null,"resultCode":null,"durationMs":null}
+{"timestamp":"2026-11-06T01:39:21.214Z","sessionOrdinal":1,"correlationTag":"00000000","operation":"session","stage":"session_changed","result":"changed","httpStatus":null,"resultCode":null,"durationMs":null}
+ ✓ test/device-registry.test.ts (4 tests) 745ms
+   ✓ device registry locking > serializes a revocation and a pairing while another process holds the lock  323ms
+ ✓ test/relay-reconnect.test.ts (1 test) 653ms
+   ✓ Relay control reconnect > recovers when a loopback relay is absent and later disconnects and returns  648ms
+ ✓ test/file-lock.test.ts (6 tests) 928ms
+   ✓ cross-process ticket lock > does not steal a live owner's ticket  409ms
+   ✓ cross-process ticket lock > removes only its own record on release  357ms
+ ❯ test/connector-resilience.test.ts (11 tests | 1 failed) 645ms
+   ✓ connector restart and configuration resilience > uses principal maps only in dual/principal modes and keeps legacy fallback isolated 3ms
+   ✓ connector restart and configuration resilience > keeps its identity and registry across restart and rejects a revoked device after restart  414ms
+   ✓ connector restart and configuration resilience > fails startup on a partially written registry without replacing it or creating an identity 38ms
+   ✓ connector restart and configuration resilience > fails startup when devices.json cannot be read and preserves that path 8ms
+   ✓ connector restart and configuration resilience > uses the exact environment opt-in and defaults loopback cleartext to denied 2ms
+   ✓ connector restart and configuration resilience > enables V4 only for the exact environment opt-in 1ms
+   ✓ connector restart and configuration resilience > accepts an assertion secret environment value only in tests and rejects dual sources 3ms
+   ✓ connector restart and configuration resilience > accepts only an owner-controlled mode-0600 Android token file 9ms
+   ✓ connector restart and configuration resilience > loads only owner-controlled principal maps and credentials without following symlinks 16ms
+   × connector restart and configuration resilience > loads a dedicated assertion key from a private file or a test environment value 48ms
+     → expected undefined to be 'test-key-1' // Object.is equality
+   ✓ connector restart and configuration resilience > sends V4 from an authenticated paired session using the dedicated Android bearer 100ms
+ ❯ test/config-env.test.ts (6 tests | 1 failed) 1118ms
+   ✓ restricted relay environment files > loads the documented V4 settings from a private environment file 35ms
+   ✓ restricted relay environment files > rejects environment keys outside the explicit allowlist 15ms
+   ✓ restricted relay environment files > accepts a mode 0600 V4 environment file through check-config 77ms
+   ✓ restricted relay environment files > requires and validates a private Android token file in check-secret 277ms
+   ✓ restricted relay environment files > accepts only 0 or 1 for ATLAS_V4_ENABLED  374ms
+   × restricted relay environment files > accepts assertion secret environment values only in tests and validates production secret files 336ms
+     → expected 1 to be +0 // Object.is equality
+ ✓ test/operations.test.ts (29 tests) 789ms
+ ✓ test/chat-r3b.test.ts (12 tests) 891ms
+ ✓ test/v7-06d-revocation.test.ts (5 tests) 1012ms
+ ✓ test/crash-resilience.test.ts (1 test) 946ms
+   ✓ crash-safe effect idempotency > keeps an uncertain backend POST locked after a real child process SIGKILL  943ms
+ ✓ test/r3c-race.test.ts (3 tests) 1341ms
+   ✓ R3-C consent and revocation races > polling revocation aborts an in-flight chat, sends DEVICE_REVOKED before close, and drops a late response  350ms
+   ✓ R3-C consent and revocation races > receive rejects a new request after revocation and aborts the earlier chat  317ms
+   ✓ R3-C consent and revocation races > waits for a blocked DEVICE_REVOKED write before closing and records abort/send/close order  638ms
+ ✓ test/session.test.ts (15 tests) 1803ms
+   ✓ device authentication and session controls > aborts an in-flight operation as soon as revocation starts  591ms
+ ✓ test/pairing.test.ts (8 tests) 1993ms
+   ✓ pair-device token delivery > writes one private token file and never prints the token  349ms
+   ✓ pair-device token delivery > does not authorize a device when the token file already exists  467ms
+   ✓ pair-device token delivery > does not authorize a device when its token directory is inaccessible  317ms
+   ✓ pair-device token delivery > does not authorize a device when token creation is denied with EACCES  305ms
+ ✓ test/lock-stress.test.ts (2 tests) 4197ms
+   ✓ ticket lock recovery stress > serializes concurrent recoverers after a dead owner  3577ms
+   ✓ ticket lock recovery stress > lets no contender enter after the first one has started  616ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/config-env.test.ts > restricted relay environment files > accepts assertion secret environment values only in tests and validates production secret files
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/config-env.test.ts:155:32
+    153|       NODE_ENV: "production",
+    154|     });
+    155|     expect(privateFile.status).toBe(0);
+       |                                ^
+    156|     expect(privateFile.stdout).toContain("ATLAS_V4_RELAY_ASSERTION_SEC…
+    157|     expect(`${privateFile.stdout}${privateFile.stderr}`).not.toContain…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/connector-resilience.test.ts > connector restart and configuration resilience > loads a dedicated assertion key from a private file or a test environment value
+AssertionError: expected undefined to be 'test-key-1' // Object.is equality
+
+- Expected:
+"test-key-1"
+
++ Received:
+undefined
+
+ ❯ test/connector-resilience.test.ts:193:29
+    191|     const fromFile = await readPrivateV4RelayAssertion("test-key-1", k…
+    192|     const fromEnvironment = await readPrivateV4RelayAssertion("test-ke…
+    193|     expect(fromFile?.keyId).toBe("test-key-1");
+       |                             ^
+    194|     expect(Buffer.from(fromFile?.secret ?? []).equals(key)).toBe(true);
+    195|     expect(Buffer.from(fromEnvironment?.secret ?? []).equals(key)).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 16 passed (18)
+      Tests  2 failed | 119 passed (121)
+   Start at  02:39:19
+   Duration  5.22s (transform 3.86s, setup 0ms, collect 12.39s, tests 17.68s, environment 11ms, prepare 3.66s)
