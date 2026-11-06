@@ -1,0 +1,10 @@
+resolved_activity=dev.atlas.coach/.app.MainActivity
+Starting: Intent { cmp=dev.atlas.coach/.app.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.atlas.coach/.app.MainActivity
+TotalTime: 4165
+WaitTime: 4183
+Complete
+4308
+force_stop=done

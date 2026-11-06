@@ -1,0 +1,22 @@
+    versionName=0.1.0
+    lastUpdateTime=2026-11-06 07:49:55
+      firstInstallTime=2026-11-06 07:49:08
+-rw-r--r-- 1 u0_a230 u0_a230  22 2026-11-06 07:49 files/v7_10_preservation_marker.txt
+-rw-r--r-- 1 u0_a230 u0_a230 169 2026-11-06 07:49 shared_prefs/atlas_relay_configuration.xml
+synthetic-v7-10-marker
+a4cc3a2d26a7efc7481da7257c5fd9e164834302f6e510d03876e314056ae59a  -
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="v4_chat_opt_in_v1" value="true" />
+    <string name="relay_mode">RELAY</string>
+</map>
+827b34480533d2540291ea87bf007a4f93686ebf30d7e50a886e9c7113ac7cf8  -
+Starting: Intent { cmp=dev.atlas.coach/.app.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.atlas.coach/.app.MainActivity
+TotalTime: 2718
+WaitTime: 2733
+Complete
+6038
+FATAL_EXCEPTION=absent

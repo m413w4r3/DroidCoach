@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="9" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-06T06:51:37" hostname="localhost">
+  <testsuite name="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" tests="9" failures="0" errors="0" skipped="0" time="14.574" timestamp="2026-11-06T06:51:37" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="disabledLocalCoachExplainsCapabilityWithoutAddingASendGate" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="3.740" />
+    <testcase name="nextV4RequestUsesTheFreshConversationId" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="1.088" />
+    <testcase name="disabledAgentExplainsSendGateAndOpensMandate" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="2.714" />
+    <testcase name="newConversationIsDisabledAndRejectedWhileAChatTurnIsSending" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="1.194" />
+    <testcase name="secondTriggerDuringOneSendingTurnAddsOneUserMessageAndOneRequest" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="1.197" />
+    <testcase name="conversationUsesDistinctUserAndAssistantBubbles" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="1.120" />
+    <testcase name="v4OptInSurvivesColdStartAndModeExitWithoutNegotiatingOrChangingConsent" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="0.805" />
+    <testcase name="authorizedNonEmptyDraftStaysEnabledWhenRelayNeedsPairing" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="2.146" />
+    <testcase name="newConversationArchivesAndRestoresThePreviousThreadWithoutChangingOtherStores" classname="dev.atlas.coach.app.AgentCoachConversationInstrumentationTest" time="0.570" />
+  </testsuite>
+</testsuites>

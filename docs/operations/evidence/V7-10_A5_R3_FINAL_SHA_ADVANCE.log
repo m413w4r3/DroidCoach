@@ -1,0 +1,14 @@
+Main checkout HEAD observed after the requested 739ad878 build/tests:
+d2f98265b1c4ca42fafc481d7b121f5d4f2bed01 fix(auth): use outermost atlas repository boundary
+
+Diff from the requested A5 target 739ad878 to this later checkout:
+M docs/DECISIONS_AUTOMATIQUES.md
+M docs/operations/V7-10_SECURITY_MIGRATION.md
+M docs/operations/evidence/V7-10_A1_FIX_EVIDENCE.md
+M integrations/relay/pc/README.md
+M integrations/relay/pc/scripts/lib/config.mjs
+M integrations/relay/pc/src/connector.ts
+M integrations/relay/pc/test/config-env.test.ts
+M integrations/relay/pc/test/connector-resilience.test.ts
+
+No backend or Android application/instrumentation sources differ between 739ad878 and the later checkout. Connector qualification in this report is explicitly against 739ad878 using a separate full clone.

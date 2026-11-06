@@ -1,0 +1,28 @@
+✔ configuration binds to loopback and rejects public addresses (19.905427ms)
+✔ HTTP allowlist proxies health and ready, and refuses other paths and methods (90.307465ms)
+✔ WebSocket upgrade forwards routing headers and preserves text and binary frames byte for byte (6.509249ms)
+✔ WebSocket tunnel preserves DEVICE_REVOKED and the upstream 4001 close code (4.316987ms)
+✔ WebSocket query rejects legacy, missing, duplicate, unknown, malformed, and oversized values (10.352439ms)
+✔ WebSocket upgrades with an HTTP body are rejected before contacting upstream (2.29631ms)
+▶ bounded failures cover header, response, connection, and timeout limits
+  ✔ oversized request headers return 431 (1.948006ms)
+  ✔ oversized upstream response becomes a bounded 502 (4.834201ms)
+  ✔ oversized forwarded WebSocket headers are rejected before connecting upstream (2.241537ms)
+  ✔ unavailable upstream returns a bounded 502 without raw error details (5.489506ms)
+  ✔ HTTP upstream timeout returns 502 (84.929668ms)
+  ✔ connection limit refuses the second accepted socket (7.291741ms)
+  ✔ WebSocket idle timeout closes the tunnel (88.102442ms)
+  ✔ WebSocket handshake timeout returns a bounded 502 (84.994351ms)
+✔ bounded failures cover header, response, connection, and timeout limits (282.114488ms)
+▶ SIGTERM and SIGINT stop the listener with exit code zero and release the port
+  ✔ SIGTERM (88.183052ms)
+  ✔ SIGINT (83.556848ms)
+✔ SIGTERM and SIGINT stop the listener with exit code zero and release the port (172.785836ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 726.152016

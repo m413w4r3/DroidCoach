@@ -1,0 +1,8 @@
+Command scope: emulator-5556, after AgentCoachConversationInstrumentationTest 9/9 and CoreV4SyncSchedulerInstrumentationTest 1/1.
+Observed output:
+--- post-instrumentation package state ---
+pm_path_output=
+package_metadata_output=
+AGP_TARGET_PACKAGE_NOT_PRESENT_AFTER_INSTRUMENTATION
+
+This is the AGP harness uninstall after instrumentation. The data-preservation and V4 cold-start gates were verified before instrumentation, so this post-test package removal is not counted as a preservation failure.

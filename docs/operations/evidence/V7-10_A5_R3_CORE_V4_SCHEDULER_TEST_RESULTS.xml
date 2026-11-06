@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="1" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-06T06:52:23" hostname="localhost">
+  <testsuite name="dev.atlas.coach.sync.v4.CoreV4SyncSchedulerInstrumentationTest" tests="1" failures="0" errors="0" skipped="0" time="0.662" timestamp="2026-11-06T06:52:23" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5556" />
+    </properties>
+    <testcase name="requestNowEnqueuesOneImmediateWorkForRepeatedTaps" classname="dev.atlas.coach.sync.v4.CoreV4SyncSchedulerInstrumentationTest" time="0.662" />
+  </testsuite>
+</testsuites>

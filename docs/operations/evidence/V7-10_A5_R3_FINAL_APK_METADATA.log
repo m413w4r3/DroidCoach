@@ -1,0 +1,30 @@
+Requested build target: 739ad878ea9c2822505bf35b9c345e0917578c38
+Pre-build checkout verification: git rev-parse HEAD returned 739ad878ea9c2822505bf35b9c345e0917578c38; worktree status was clean.
+Gradle command: ./gradlew :app:assembleDebug --offline --max-workers=1 --console=plain
+
+APK hashes:
+5f7719748ebfb29e997966c80465ea49ae13152ee1e9790d1686afed50c4c317  /tmp/v7-10-base-a5aca4b.apk
+2517f2415b7c109fd9739c350ad44282dc68c86fa40b0e27d4207140b82a3214  /tmp/v7-10-a5-final.apk
+
+Final APK badging:
+package: name='dev.atlas.coach' versionCode='1' versionName='0.1.0' platformBuildVersionName='17' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='17'
+sdkVersion:'26'
+targetSdkVersion:'36'
+
+Embedded provenance:
+{
+  "application_id": "dev.atlas.coach",
+  "compile_sdk": "37.2",
+  "min_sdk": 26,
+  "scenario_id": "unspecified",
+  "source_sha": "739ad878ea9c2822505bf35b9c345e0917578c38",
+  "source_tree_sha": "213b7ee872f0f3f99abd98ed9582b90f11a75928",
+  "target_sdk": 36,
+  "test_application_id": "dev.atlas.coach.test",
+  "variant": "debug",
+  "version_code": 1,
+  "version_name": "0.1.0",
+  "worktree_clean": true
+}
+
+During this qualification the main checkout was subsequently observed at d2f98265b1c4ca42fafc481d7b121f5d4f2bed01. That later commit changes connector/docs only; the embedded APK provenance confirms this APK was built from the requested SHA 739ad878.

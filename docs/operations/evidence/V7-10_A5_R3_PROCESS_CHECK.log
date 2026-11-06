@@ -1,0 +1,10 @@
+Independent post-cleanup process check
+
+Command: pgrep -a -x emulator
+Result: no output (no emulator process with that name).
+
+Command: jps -l
+Output:
+2 jdk.jcmd/sun.tools.jps.Jps
+
+The earlier cleanup log also records `./gradlew --stop` and `./gradlew --status` reporting `No Gradle daemons are running.`
