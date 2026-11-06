@@ -1,0 +1,135 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:generateDebugRFile
+> Task :app:compileDebugKotlin
+w: file://<REPO>/android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt:335:9 Condition is always 'true'.
+w: file://<REPO>/android/app/src/main/java/dev/atlas/coach/app/AtlasScreens.kt:415:9 Condition is always 'true'.
+w: file://<REPO>/android/app/src/main/java/dev/atlas/coach/app/PlanScreen.kt:619:47 Condition is always 'false'.
+
+> Task :app:javaPreCompileDebug
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+
+> Task :app:compileDebugUnitTestKotlin
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:590:74 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:676:77 Unchecked cast of 'Any?' to 'ThreadLocal<String?>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/app/GoalFocusStartTransactionTest.kt:715:68 Unchecked cast of 'Any?' to 'MutableState<AgentHomeState>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/app/V621ReviewFindingsTest.kt:82:78 Unchecked cast of 'Any?' to 'MutableState<AgentHomeState>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/data/AtlasStateRecoveryTest.kt:74:109 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:36:84 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/data/PersistedRepositoriesTest.kt:37:116 Unchecked cast of 'Any?' to 'Map<String, Any?>'.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/sync/relay/RelayNetworkClassificationTest.kt:123:45 The corresponding parameter in the supertype 'Listener' is named 'failure'. This may cause problems when calling this function with named arguments.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/sync/relay/RelayNetworkClassificationTest.kt:165:45 The corresponding parameter in the supertype 'Listener' is named 'failure'. This may cause problems when calling this function with named arguments.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/sync/relay/RelayNetworkClassificationTest.kt:216:45 The corresponding parameter in the supertype 'Listener' is named 'failure'. This may cause problems when calling this function with named arguments.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/sync/relay/RelayNetworkClassificationTest.kt:378:45 The corresponding parameter in the supertype 'Listener' is named 'failure'. This may cause problems when calling this function with named arguments.
+w: file://<REPO>/android/app/src/test/java/dev/atlas/coach/sync/relay/RelayNetworkClassificationTest.kt:415:45 The corresponding parameter in the supertype 'Listener' is named 'failure'. This may cause problems when calling this function with named arguments.
+
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:compileDebugUnitTestJavaWithJavac
+> Task :app:processDebugJavaRes
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:generateDebugAndroidTestLintModel
+> Task :app:extractProguardFiles
+> Task :app:generateDebugLintReportModel
+> Task :app:generateDebugUnitTestLintModel
+> Task :app:lintAnalyzeDebug
+> Task :app:lintAnalyzeDebugAndroidTest
+> Task :app:lintAnalyzeDebugUnitTest
+
+> Task :app:lintReportDebug
+Wrote HTML report to file://<REPO>/android/app/build/reports/lint-results-debug.html
+Wrote SARIF report to file://<REPO>/android/app/build/reports/lint-results-debug.sarif
+
+> Task :app:lintDebug
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:generateDebugAtlasBuildProvenance
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:generateDebugGlobalSynthetics
+> Task :app:mergeDebugJavaResource
+> Task :app:checkDebugDuplicateClasses
+> Task :app:desugarDebugFileDependencies
+> Task :app:mergeExtDexDebug
+> Task :app:mergeLibDexDebug
+> Task :app:dexBuilderDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugNativeLibs
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
+
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+> Task :app:generateDebugAndroidTestResources
+> Task :app:packageDebugAndroidTestResources
+> Task :app:processDebugAndroidTestNavigationResources
+> Task :app:parseDebugAndroidTestLocalResources
+> Task :app:generateDebugAndroidTestRFile
+
+> Task :app:compileDebugAndroidTestKotlin
+w: file://<REPO>/android/app/src/androidTest/java/dev/atlas/coach/app/PlanActivityNotificationInstrumentationTest.kt:207:85 'static field MODE_BACKGROUND_ACTIVITY_START_ALLOWED: Int' is deprecated. Deprecated in Java.
+
+> Task :app:javaPreCompileDebugAndroidTest
+> Task :app:compileDebugAndroidTestJavaWithJavac
+> Task :app:generateDebugAndroidTestAssets UP-TO-DATE
+> Task :app:mergeDebugAndroidTestAssets
+> Task :app:compressDebugAndroidTestAssets
+> Task :app:generateDebugAndroidTestGlobalSynthetics
+> Task :app:processDebugAndroidTestJavaRes
+> Task :app:mergeDebugAndroidTestJavaResource
+> Task :app:checkDebugAndroidTestDuplicateClasses
+> Task :app:desugarDebugAndroidTestFileDependencies
+> Task :app:mergeExtDexDebugAndroidTest
+> Task :app:mergeLibDexDebugAndroidTest
+> Task :app:checkDebugAndroidTestAarMetadata
+> Task :app:mapDebugAndroidTestSourceSetPaths
+> Task :app:compileDebugAndroidTestNavigationResources
+> Task :app:mergeDebugAndroidTestResources
+> Task :app:mergeDebugAndroidTestManifest
+> Task :app:processDebugAndroidTestManifest
+> Task :app:processDebugAndroidTestResources
+> Task :app:dexBuilderDebugAndroidTest
+> Task :app:mergeProjectDexDebugAndroidTest
+> Task :app:mergeDebugAndroidTestJniLibFolders
+> Task :app:mergeDebugAndroidTestNativeLibs NO-SOURCE
+> Task :app:stripDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebugAndroidTest
+> Task :app:writeDebugAndroidTestSigningConfigVersions
+> Task :app:packageDebugAndroidTest
+> Task :app:createDebugAndroidTestApkListingFileRedirect
+> Task :app:assembleDebugAndroidTest
+
+[Incubating] Problems report is available at: file://<REPO>/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.6.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 5m 42s
+84 actionable tasks: 84 executed

@@ -1,0 +1,22 @@
+.................................................s...................... [ 15%]
+........................................................................ [ 31%]
+........................................................................ [ 47%]
+........................................................................ [ 63%]
+........................................................................ [ 79%]
+........................................................................ [ 95%]
+....................                                                     [100%]
+=============================== warnings summary ===============================
+../../../../../../../tmp/v7-10-a5-backend-venv/lib/python3.12/site-packages/starlette/testclient.py:37
+  /tmp/v7-10-a5-backend-venv/lib/python3.12/site-packages/starlette/testclient.py:37: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_api.py::test_openapi_is_generated_and_describes_the_api
+  /tmp/v7-10-a5-backend-venv/lib/python3.12/site-packages/fastapi/openapi/utils.py:246: UserWarning: Duplicate Operation ID reject_unknown_v4_route_v4__path__post for function reject_unknown_v4_route at <REPO>/backend/atlas_backend/v4_router.py
+    warnings.warn(message, stacklevel=1)
+
+tests/test_api.py::test_openapi_is_generated_and_describes_the_api
+  /tmp/v7-10-a5-backend-venv/lib/python3.12/site-packages/fastapi/openapi/utils.py:246: UserWarning: Duplicate Operation ID reject_unknown_v4_route_internal_v4__path__post for function reject_unknown_v4_route at <REPO>/backend/atlas_backend/v4_router.py
+    warnings.warn(message, stacklevel=1)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+451 passed, 1 skipped, 3 warnings in 38.05s

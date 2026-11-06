@@ -43,7 +43,7 @@ Starting a Gradle Daemon, 5 stopped Daemons could not be reused, use --status fo
 > Task :app:createDebugApkListingFileRedirect UP-TO-DATE
 > Task :app:assembleDebug
 
-[Incubating] Problems report is available at: file:///home/nill/perso/AndroCoach/atlas-preparation/android/build/reports/problems/problems-report.html
+[Incubating] Problems report is available at: file://<REPO>/android/build/reports/problems/problems-report.html
 
 Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
 
