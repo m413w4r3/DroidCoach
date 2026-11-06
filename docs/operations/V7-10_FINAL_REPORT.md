@@ -5,7 +5,8 @@
 **Branche documentaire :** v7-10/d2-final-report
 **Base de code :** origin/main, a5aca4b54088d43f4829adf31049417dd8cf32a6
 **SHA du code final :** 3123dba4f89579d414406d8c790609d1e4a5adf6
-**HEAD documentaire avant ce rapport :** a8de7542573190f471b5d0af067425bc186aeaf5
+**HEAD documentaire examiné par A6 et avant cette mise à jour :** 0dd65d678b0625bd02efea6d240edb7e0e2ac96a
+**HEAD documentaire final :** le commit local de clôture A6 portant cette mise à jour
 
 ## Résumé exécutif et verdict
 
@@ -15,16 +16,16 @@
 | Qualification locale | **GO_WITH_LIMITATIONS** |
 | Opérations physiques et services live | **NON EXÉCUTÉES** |
 | Revue indépendante A4-delta sur le code final | **GO** |
-| Revue finale A6 | **EN ATTENTE** |
+| Revue finale A6 | **GO avec 4 réserves P2** |
 
 V7-10 implémente localement l’authentification V4 par principal/appareil, l’expiration serveur des propositions, la synchronisation Relay demandée par l’utilisateur et les corrections Coach prévues. Les suites backend, connecteur, proxy et Android sont étayées par leurs preuves. La qualification AVD Android 17/API 37 a validé une mise à jour in-place, la préservation de données synthétiques, un démarrage à froid et deux classes instrumentées.
 
-Ce résultat n’autorise ni installation produit, ni migration/révocation live, ni pilote E. Aucun Pixel physique, aucun E2E Relay/Core/Gateway live et aucune CI distante n’ont été exécutés. A4-delta a rendu GO sur le SHA de code final; A6 reste à compléter et ne doit pas être présenté comme acquis.
+Ce résultat n’autorise ni installation produit, ni migration/révocation live, ni pilote E. Aucun Pixel physique, aucun E2E Relay/Core/Gateway live et aucune CI distante n’ont été exécutés. A4-delta et A6 ont rendu GO sur le code final; les quatre réserves P2 A6 sont tracées ci-dessous et dans la [transcription des revues](evidence/V7-10_INDEPENDENT_REVIEWS.md). A6 (`3a1b7e11-ac93-458b-ae36-efb7663691a0`, Codex/gpt-6-luna/xhigh) a examiné le HEAD documentaire `0dd65d6` et le code `3123dba`.
 
 ## Périmètre et restrictions respectées
 
 - Le code examiné est la branche feat/atlas-v7-10-security-reliability, basée sur origin/main à a5aca4b54088d43f4829adf31049417dd8cf32a6. Son SHA final est 3123dba4f89579d414406d8c790609d1e4a5adf6.
-- Ce rapport et la transcription des revues sont rédigés sur v7-10/d2-final-report, à partir du HEAD documentaire a8de7542573190f471b5d0af067425bc186aeaf5.
+- Ce rapport et la transcription des revues sont rédigés sur v7-10/d2-final-report, après l’examen A6 du HEAD documentaire 0dd65d678b0625bd02efea6d240edb7e0e2ac96a. Le commit local de cette mise à jour constitue le HEAD documentaire final.
 - Aucun push, PR ou merge distant n’a été effectué. Les commits de ce travail sont locaux.
 - Aucun Pixel physique ni ADB dirigé vers un Pixel n’a été utilisé. La qualification instrumentée décrite plus bas était sur AVD API 37.
 - Aucun service ou volume live Core, Relay ou Gateway n’a été modifié. Aucun E2E réel, déploiement, migration, backfill, réconciliation ou révocation live n’a été exécuté.
@@ -56,10 +57,10 @@ Les résultats distinguent la QA A5, la vérification de l’orchestrateur et la
 
 | Domaine et SHA | Résultat | Qui / preuve |
 |---|---|---|
-| Backend V4, code final | **451 passed, 1 skipped, 3 warnings** avec adaptateur mock. | QA A1-FIX/A5; voir [A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md) et [rapport A5](V7-10_TEST_REPORT.md). Tests sur bases synthétiques temporaires. |
-| Connecteur Relay PC, 3123dba | **131/131**, 18 fichiers; TypeScript compilé. | Orchestrateur et revue indépendante A4-delta; [preuve A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md) et [revue A4-delta](evidence/V7-10_INDEPENDENT_REVIEWS.md). |
-| Proxy Relay | **18/18**, zéro échec. Le cas épinglé sur 4402 a été exclu de la commande. | QA A5; [log proxy](evidence/V7-10_A5_R3_PROXY_TESTS.log). |
-| Android JVM, lint et build, HEAD documentaire a8de754 | **934 tests, 0 failure, 0 error, 0 skipped**; lint **0 erreur, 89 avertissements**; APK debug et androidTest assemblés. Android est identique entre le SHA de code 3123dba et a8de754. | Rerun final de l’orchestrateur, commande et sortie dans /tmp/v7-10-final-android-suite.log. Agrégation des XML : 124 fichiers. A3 apporte aussi la preuve de la tranche Android dans [Android reliability](V7-10_ANDROID_RELIABILITY.md). |
+| Backend V4, code final | **451 passed, 1 skipped, 3 warnings** avec adaptateur mock. | QA A1-FIX/A5 et rerun indépendant A6 dans une archive temporaire; voir [A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md), [rapport A5](V7-10_TEST_REPORT.md) et [transcription A6](evidence/V7-10_INDEPENDENT_REVIEWS.md). Tests sur bases synthétiques temporaires. |
+| Connecteur Relay PC, 3123dba | **131/131**, 18 fichiers; TypeScript compilé. | Orchestrateur et revues indépendantes A4-delta/A6; [preuve A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md) et [transcription des revues](evidence/V7-10_INDEPENDENT_REVIEWS.md). |
+| Proxy Relay | **18/18**, zéro échec. Le cas épinglé sur 4402 a été exclu de la commande. | QA A5 et rerun indépendant A6 avec filtre explicite; [log proxy](evidence/V7-10_A5_R3_PROXY_TESTS.log) et [transcription A6](evidence/V7-10_INDEPENDENT_REVIEWS.md). |
+| Android JVM, lint et build, HEAD a8de754 | **934 tests, 0 failure, 0 error, 0 skipped**; lint **0 erreur, 89 avertissements**; APK debug et androidTest assemblés. Android est identique entre le SHA de code 3123dba et a8de754. | Rerun final de l’orchestrateur; commande, résumé, hash du log brut et copie expurgée versionnée dans [preuve Android finale](evidence/V7-10_FINAL_ANDROID_SUITE.md) et [log](evidence/V7-10_FINAL_ANDROID_SUITE.log). Agrégation locale des XML : 124 fichiers. A6 a lu ces XML et le log, sans lancer Gradle ni ADB. |
 | AVD Android 17/API 37 | APK debug final installé en mise à jour in-place; firstInstallTime inchangé; marqueur et préférences synthétiques préservés; démarrage COLD sans FATAL; AgentCoach **9/9**, scheduler V4 **1/1**. | QA A5, sur APK compilé au SHA 739ad878. Les sources Android de production/JVM sont identiques au SHA 3123dba. Preuves : logs [mise à jour](evidence/V7-10_A5_R3_AVD_UPDATE_INSTALL.log), [pré-instrumentation](evidence/V7-10_A5_R3_AVD_PREINSTRUMENTATION_PROOF.log), [Agent Coach](evidence/V7-10_A5_R3_AGENT_COACH_TESTS.log) et [scheduler](evidence/V7-10_A5_R3_CORE_V4_SCHEDULER_TESTS.log). |
 | A4 initiale et A4-delta | A4 initiale **NO_GO**; A4-delta intermédiaires **NO_GO**; A4-delta final **GO** sur 3123dba. | Revues indépendantes, IDs d’agents, SHA et limites dans [V7-10_INDEPENDENT_REVIEWS.md](evidence/V7-10_INDEPENDENT_REVIEWS.md). |
 
@@ -73,7 +74,7 @@ Les classes instrumentées AgentCoachConversationInstrumentationTest et CoreV4Sy
 
 A4 initiale sur fa82af3 a prononcé NO_GO avec deux findings P1 et des findings P2. Après les remédiations, A4-delta a relevé des défauts successifs de frontière sur 77dc105, 739ad87 et d2f9826, puis a prononcé **GO final sur 3123dba** après reproduction des contrôles EACCES, symlink/TOCTOU et du connecteur 131/131.
 
-La revue A4-delta n’a pas exécuté Android JVM/lint indépendamment ni un AVD et n’a touché à aucun service live. A6 est encore en attente. Voir la [transcription détaillée](evidence/V7-10_INDEPENDENT_REVIEWS.md).
+La revue A4-delta n’a pas exécuté Android JVM/lint indépendamment ni un AVD et n’a touché à aucun service live. A6 a rendu **GO avec 4 réserves P2** sur le HEAD documentaire `0dd65d6` et le code `3123dba`; elle a relancé les suites backend, connecteur et proxy dans une archive temporaire, puis lu les preuves Android existantes. Voir la [transcription détaillée](evidence/V7-10_INDEPENDENT_REVIEWS.md).
 
 ## Gates — 17 critères
 
@@ -91,13 +92,13 @@ La revue A4-delta n’a pas exécuté Android JVM/lint indépendamment ni un AVD
 | GO_ANDROID_DATA_PRESERVATION_AVD | **GO** | Mise à jour in-place et données synthétiques préservées sur AVD API 37. |
 | GO_BACKEND_TESTS | **GO** | 451 passés, 1 ignoré, 3 warnings. |
 | GO_ANDROID_JVM_LINT | **GO** | Rerun final orchestrateur : 934/934, lint 0 erreur/89 avertissements, APK et androidTest assemblés. |
-| GO_INDEPENDENT_SECURITY_REVIEW | **GO — A4-delta** | Revue finale du correctif au SHA 3123dba. A6 distincte reste en attente. |
+| GO_INDEPENDENT_SECURITY_REVIEW | **GO — A4-delta et A6** | A4-delta : revue du correctif au SHA 3123dba. A6 : GO avec réserves P2, HEAD documentaire 0dd65d6 et code 3123dba. |
 | GO_SOURCE_AND_CI | **GO local; CI distante NOT_RUN** | Sources et suites locales GO; aucune CI distante revendiquée sans push autorisé. |
 | GO_PRODUCT_INSTALL | **NO_GO / NOT_RUN** | Aucune installation sur Pixel produit. |
 | GO_LIVE_SECURITY | **NO_GO / NOT_RUN** | Aucun service live ni test de sécurité live. |
 | GO_DAILY_PILOT | **NO_GO / NOT_RUN** | Aucun pilote E ou pilote quotidien lancé. |
 
-Le GO d’A4-delta est un verdict de revue indépendant sur le correctif du connecteur et ses scénarios; il ne vaut pas preuve Android physique, migration live ou A6.
+Le GO des revues indépendantes ne vaut pas preuve Android physique, migration live ou autorisation de pilote. A6 a examiné le cache anti-rejeu et relève un risque multiworker détaillé ci-dessous.
 
 ## Risques, limites et incidents
 
@@ -110,7 +111,10 @@ Le GO d’A4-delta est un verdict de revue indépendant sur le correctif du conn
 - **Incident proxy 4402.** Deux exécutions A2 et une tentative de l’orchestrateur avec un filtre incorrect ont établi trois contacts en lecture seule avec le service local : GET /health, GET /ready, upgrade WebSocket puis fermeture. Aucune donnée ni configuration n’a été modifiée. Le cas est exclu des commandes canoniques depuis.
 - **Rerun Gradle A5 bloqué, puis vérification finale réussie.** La tentative A5 sur le SHA final s’est arrêtée avant l’exécution Gradle, car le wrapper ne pouvait pas ouvrir le verrou dans un cache en lecture seule. La commande finale exécutée ensuite par l’orchestrateur sur a8de754 a réussi avec 934/934, lint 0/89 et les deux APK assemblés; elle est la preuve JVM/lint finale.
 - **Harness AVD.** Le harness AGP a retiré l’application après les tests instrumentés; la relecture post-harness n’a pas été faite. La préservation avait été vérifiée avant instrumentation.
-- **A6 en attente.** Ajouter son agent ID, SHA examiné, verdict, findings, tests/limites et décision de gate après réception réelle de son rapport. Ne pas marquer A6 GO par anticipation.
+- **P2 A6 — cache anti-rejeu par processus.** Le cache est en mémoire et isolé par processus dans `backend/atlas_backend/v4_assertion.py`; une même assertion signée routée vers deux workers peut être acceptée par chacun. Avant tout GO live, utiliser un seul worker avec routage adapté ou un cache partagé et atomique. Voir [A1_IMPLEMENTATION_EVIDENCE](evidence/V7-10_A1_IMPLEMENTATION_EVIDENCE.md) et [migration sécurité](V7-10_SECURITY_MIGRATION.md).
+- **P2 A6 historique — handoff A4-delta périmé.** A6 avait relevé que le handoff attendait encore le résultat A4-delta. Le commit D1 `75fbdc4`, intégré sous `ad0d03b`, a aligné `V7-10_ARCHITECTURE.md` et `V7-10_PHYSICAL_MIGRATION_HANDOFF.md` sur le GO A4-delta/A6 et ajouté le risque multiworker à l’étape 13 et aux risques du pilote E. A6 n’a pas revu cette correction postérieure.
+- **P2 A6 historique — chemins locaux dans des logs.** A6 avait relevé des chemins personnels dans des preuves A5. Les commits `65f70ef` et `05bd5c8`, intégrés sous `27851ef` et `3b29320`, ont expurgé `/home/nill` des preuves A5 et normalisé les sept logs concernés. A6 n’a pas revu ces corrections postérieures ni relevé de secret réel ou contenu utilisateur.
+- **A6 — verdict reçu et réserves traitées dans la clôture.** L’agent `3a1b7e11-ac93-458b-ae36-efb7663691a0` (Codex/gpt-6-luna/xhigh) a rendu GO avec 4 réserves P2 après examen du code `3123dba` au HEAD documentaire `0dd65d6`. Le risque multiworker reste un prérequis avant GO live; le handoff et les logs A5 ont été corrigés par les commits d’intégration cités ci-dessus; la preuve Android finale est versionnée dans [le résumé](evidence/V7-10_FINAL_ANDROID_SUITE.md) et le [log expurgé](evidence/V7-10_FINAL_ANDROID_SUITE.log). Ces corrections documentaires postérieures n’ont pas été revues par A6. L’empreinte du log brut est conservée dans le résumé.
 
 ## Migration physique, sauvegarde et rollback
 
@@ -141,7 +145,7 @@ Les commandes ci-dessous sont reprises des logs ou preuves cités; elles ne sign
 | cd backend && ATLAS_AGENT_ADAPTER=mock /tmp/v7-10-a5-backend-venv/bin/python -m pytest -q | 451 passed, 1 skipped, 3 warnings; QA A1-FIX/A5, adaptateur mock. Voir [preuve A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md). |
 | cd integrations/relay/pc && npm ci --offline && npm run test:unit | 131/131 tests, 18 fichiers; TypeScript compilé; SHA 3123dba. QA/revue A4-delta; voir [A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md) et [revue indépendante](evidence/V7-10_INDEPENDENT_REVIEWS.md). |
 | node --test --test-skip-pattern='pinned relay integration on 4402' integrations/relay/proxy/test/proxy.test.mjs | 18 pass, 0 fail; test 4402 exclu. [Log proxy](evidence/V7-10_A5_R3_PROXY_TESTS.log). |
-| cd android && ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --offline --max-workers=1 --console=plain | BUILD SUCCESSFUL en 4m30s; 934 tests, 0 failure/error/skipped; lint 0 erreur/89 avertissements; APK debug et androidTest assemblés. Exécuté par l’orchestrateur sur a8de754; log /tmp/v7-10-final-android-suite.log. |
+| cd android && ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --offline --max-workers=1 --console=plain | BUILD SUCCESSFUL en 4m 30s; 934 tests, 0 failure/error/skipped; lint 0 erreur/89 avertissements; APK debug et androidTest assemblés. Exécuté par l’orchestrateur sur a8de754. Voir [preuve versionnée](evidence/V7-10_FINAL_ANDROID_SUITE.md) et [log expurgé](evidence/V7-10_FINAL_ANDROID_SUITE.log). |
 | ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.app.AgentCoachConversationInstrumentationTest --max-workers=1 --console=plain | 9/9, 0 échec/erreur/ignoré, sur AVD API 37 par A5. Log [Agent Coach](evidence/V7-10_A5_R3_AGENT_COACH_TESTS.log). |
 | ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.sync.v4.CoreV4SyncSchedulerInstrumentationTest --max-workers=1 --console=plain | 1/1, 0 échec/erreur/ignoré, sur AVD API 37 par A5. Log [scheduler](evidence/V7-10_A5_R3_CORE_V4_SCHEDULER_TESTS.log). |
 | adb -s emulator-5556 install -r /tmp/v7-10-a5-final.apk | Success; firstInstallTime inchangé et données synthétiques vérifiées avant instrumentation. [Logs update et preuve](evidence/V7-10_A5_R3_AVD_UPDATE_INSTALL.log). Aucun Pixel ciblé. |
@@ -154,6 +158,6 @@ Les commandes ci-dessous sont reprises des logs ou preuves cités; elles ne sign
 
 - Architecture et état du code : [V7-10_ARCHITECTURE.md](V7-10_ARCHITECTURE.md), [migration sécurité](V7-10_SECURITY_MIGRATION.md), [cycle d’expiration](V7-10_EXPIRATION_LIFECYCLE.md), [fiabilité Android](V7-10_ANDROID_RELIABILITY.md).
 - Conceptions/cartographies : [S1 auth](evidence/V7-10_S1_AUTH_DESIGN.md), [S2 expiration](evidence/V7-10_S2_EXPIRATION_DESIGN.md), [S3 Android](evidence/V7-10_S3_ANDROID_MAP.md).
-- Implémentation et remédiations : [A1](evidence/V7-10_A1_IMPLEMENTATION_EVIDENCE.md), [A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md), [A2](evidence/V7-10_A2_IMPLEMENTATION_EVIDENCE.md), [A5 test report](V7-10_TEST_REPORT.md), [revues indépendantes](evidence/V7-10_INDEPENDENT_REVIEWS.md).
+- Implémentation et remédiations : [A1](evidence/V7-10_A1_IMPLEMENTATION_EVIDENCE.md), [A1-FIX](evidence/V7-10_A1_FIX_EVIDENCE.md), [A2](evidence/V7-10_A2_IMPLEMENTATION_EVIDENCE.md), [A5 test report](V7-10_TEST_REPORT.md), [revues indépendantes](evidence/V7-10_INDEPENDENT_REVIEWS.md), [suite Android finale](evidence/V7-10_FINAL_ANDROID_SUITE.md) et son [log expurgé](evidence/V7-10_FINAL_ANDROID_SUITE.log).
 - Procédure opérateur, non exécutée : [handoff physique](V7-10_PHYSICAL_MIGRATION_HANDOFF.md).
 - Contexte du défaut d’expiration et de la clôture précédente : [rapport V7-09](V7-09_FINAL_REPORT.md).

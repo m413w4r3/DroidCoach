@@ -93,8 +93,54 @@ La suite connecteur sur le SHA final a compilé TypeScript et passé **131/131 t
 
 Le relecteur n’a pas relancé le backend ni le proxy sur le correctif final. Android JVM/lint n’a pas été exécuté indépendamment avec succès et aucun AVD n’a été utilisé par le relecteur. Aucun Pixel, ADB, service Relay/Core/Gateway live ni test E2E live n’a été utilisé. La revue finale porte sur le correctif de sécurité du connecteur et ne transforme pas ces absences en PASS.
 
-## A6 — en attente
+## A6 — 2026-11-06
 
-**Statut au 2026-11-06 : EN ATTENTE.** Aucun verdict A6 n’est disponible dans les preuves examinées. Ne pas l’inférer du GO A4-delta.
+| Champ | Valeur |
+|---|---|
+| Agent | 3a1b7e11-ac93-458b-ae36-efb7663691a0 |
+| Profil constaté | Codex / gpt-6-luna / xhigh, confirmé dans les métadonnées Paseo |
+| SHA de code examiné | 3123dba4f89579d414406d8c790609d1e4a5adf6 |
+| HEAD documentaire examiné | 0dd65d678b0625bd02efea6d240edb7e0e2ac96a |
+| Verdict | **GO avec 4 réserves P2**; aucun P0/P1 confirmé |
 
-Après réception réelle de la revue A6, compléter cette section avec l’identifiant agent, le profil constaté, la date, le SHA examiné, le verdict P0/P1/P2, les scénarios et tests reproduits, les limites d’exécution, ainsi que toute mise à jour justifiée des gates. Conserver le verdict A4-delta ci-dessus comme résultat séparé.
+Le verdict A6 porte sur le code final et la clôture documentaire locale. Il ne change pas les trois gates non qualifiées de produit/live/pilote, et ne constitue aucune autorisation de déploiement.
+
+### Findings P2
+
+1. **Cache anti-rejeu Relay limité au processus.** `backend/atlas_backend/v4_assertion.py` garde le cache en mémoire par processus. Une assertion signée identique routée vers deux workers peut être acceptée par chacun. Ce risque structurel n’est pas corrigé par la clôture documentaire : il est ajouté explicitement aux risques et demeure un prérequis avant tout GO live. Il faut imposer un worker unique avec routage adapté ou utiliser un mécanisme partagé et atomique. Voir [A1_IMPLEMENTATION_EVIDENCE](V7-10_A1_IMPLEMENTATION_EVIDENCE.md), [V7-10_SECURITY_MIGRATION](../V7-10_SECURITY_MIGRATION.md) et le rapport final.
+2. **Handoff A4-delta périmé au SHA examiné.** Le handoff physique et son étape 13 indiquaient encore que `GO_INDEPENDENT_SECURITY_REVIEW` attendait le résultat A4-delta, alors que la revue A4-delta finale est GO sur `3123dba`. **Résolution après la revue A6 :** le commit D1 `75fbdc4`, intégré sous `ad0d03b`, a aligné `V7-10_ARCHITECTURE.md` et `V7-10_PHYSICAL_MIGRATION_HANDOFF.md` sur les verdicts A4-delta et A6, et a ajouté le risque multiworker à l’étape 13 et aux risques du pilote E. A6 n’a pas revu ce changement.
+3. **Preuve Android finale non versionnée au SHA examiné.** A6 a constaté que le résumé final, le log et l’agrégation XML étaient alors seulement locaux. **Résolution dans cette clôture :** la preuve est versionnée dans [V7-10_FINAL_ANDROID_SUITE.md](V7-10_FINAL_ANDROID_SUITE.md) et le log expurgé [V7-10_FINAL_ANDROID_SUITE.log](V7-10_FINAL_ANDROID_SUITE.log). Le SHA-256 du log brut d’origine est conservé dans le résumé. A6 n’a pas revu cet ajout.
+4. **Chemins locaux dans des logs Android antérieurs au SHA examiné.** Des logs versionnés exposaient des chemins absolus du poste; A6 n’y a trouvé ni credential réel ni contenu utilisateur. **Résolution après la revue A6 :** les commits A5 `65f70ef` et `05bd5c8`, intégrés sous `27851ef` et `3b29320`, ont expurgé `/home/nill` des preuves A5 et normalisé sept logs. Le log Android final de cette clôture est également expurgé. A6 n’a pas revu ces corrections.
+
+### Vérifications indépendantes
+
+- Dans une archive temporaire du SHA examiné, le backend a passé **451 tests, 1 skipped, 3 warnings**. Le connecteur Relay a passé **131/131 tests dans 18 fichiers**, avec compilation TypeScript. Le proxy a passé **18/18** avec le filtre `--test-skip-pattern='pinned relay integration on 4402'`, excluant le cas épinglé 4402. Les premières tentatives sandboxées ont été bloquées par des restrictions de sous-processus/loopback; les reruns dans l’archive temporaire ont abouti.
+- A6 n’a exécuté ni Gradle ni ADB. La lecture des **124 XML** Android existants donne **934 tests, 0 échec, 0 erreur, 0 ignoré**; le XML lint indique **0 erreur et 89 avertissements**. Le log de build lu indique `BUILD SUCCESSFUL` et l’assemblage des APK debug et androidTest. La suite complète, exécutée par l’orchestrateur sur `a8de754` avec Android identique au code `3123dba`, est conservée dans la preuve Android dédiée.
+- A6 a lu les preuves AVD Android 17/API 37 : APK debug installé en mise à jour in-place, données synthétiques préservées, cold start `COLD` sans FATAL, instrumentation **9/9** et **1/1**. Ces essais AVD ont été exécutés par A5, pas par A6. Le contrôle post-harness reste `NOT_RUN`.
+- La revue confirme les scénarios de frontière du correctif final : erreur `EACCES` fail-closed, lien symbolique et course/TOCTOU avec vérification `dev/ino`, racine imbriquée, catalogue TOOL, propositions historiques `LEGACY NULL`, et connecteur final 131/131. `git diff --check` passe.
+
+### Gates consignés par A6
+
+| Gate | Statut établi | Portée |
+|---|---|---|
+| `GO_CORE_DEVICE_PRINCIPALS` | **GO** | Tests backend synthétiques |
+| `GO_RELAY_DEVICE_BINDING` | **GO** | Binding synthétique; aucun Relay live |
+| `GO_BEARER_MIGRATION_DESIGN` | **GO** | Conception locale; aucune migration live |
+| `GO_BEARER_REVOKE_FAIL_CLOSED` | **GO** | Tests synthétiques; aucune révocation réelle |
+| `GO_V4_PROPOSAL_EXPIRATION` | **GO** | SQLite temporaire |
+| `GO_V4_ACK_CONCURRENCY` | **GO** | Tests locaux |
+| `GO_RELAY_IMMEDIATE_SYNC` | **GO local** | E2E live `NOT_RUN` |
+| `GO_NEW_CONVERSATION` | **GO** | AVD 9/9, preuve A5 |
+| `GO_V4_COLD_START` | **GO** | AVD pré-instrumentation, preuve A5 |
+| `GO_ANDROID_DATA_PRESERVATION_AVD` | **GO** | Mise à jour in-place; preuve A5 |
+| `GO_BACKEND_TESTS` | **GO** | 451 / 1 / 3 |
+| `GO_ANDROID_JVM_LINT` | **GO** | 934 tests; lint 0/89; APK debug et androidTest assemblés |
+| `GO_INDEPENDENT_SECURITY_REVIEW` | **GO — A4-delta et A6** | A4-delta GO sur `3123dba`; A6 GO avec 4 réserves P2 |
+| `GO_SOURCE_AND_CI` | **GO local** | CI distante `NOT_RUN` |
+| `GO_PRODUCT_INSTALL` | **NO_GO / NOT_RUN** | Aucune installation produit |
+| `GO_LIVE_SECURITY` | **NO_GO / NOT_RUN** | Aucun service live |
+| `GO_DAILY_PILOT` | **NO_GO / NOT_RUN** | Aucun pilote E/quotidien |
+
+### Limites
+
+A6 n’a exécuté ni Gradle, ni ADB, ni AVD. Aucun Pixel physique, Relay/Core/Gateway live, test E2E live, déploiement, migration, révocation réelle ou CI distante n’a été utilisé ou observé. Les compteurs Android et AVD sont des lectures des preuves déjà exécutées par l’orchestrateur et A5. Aucun remote n’a été interrogé.
