@@ -2,7 +2,7 @@
 
 # V7-10 — Handoff opérateur de migration physique
 
-Base documentaire : `3123dba4f89579d414406d8c790609d1e4a5adf6` (branche d’intégration `feat/atlas-v7-10-security-reliability`). Le plan suit le registre Core V4, la migration additive SQLite v4/v5, le cycle d’expiration et les changements Android décrits dans [l’architecture V7-10](V7-10_ARCHITECTURE.md). Les gates `GO_PRODUCT_INSTALL`, `GO_LIVE_SECURITY` et `GO_DAILY_PILOT` sont **NO_GO / NOT_RUN**; `GO_INDEPENDENT_SECURITY_REVIEW` attend le verdict final A4-delta.
+Base documentaire : `3123dba4f89579d414406d8c790609d1e4a5adf6` (branche d’intégration `feat/atlas-v7-10-security-reliability`). Le plan suit le registre Core V4, la migration additive SQLite v4/v5, le cycle d’expiration et les changements Android décrits dans [l’architecture V7-10](V7-10_ARCHITECTURE.md). Les gates `GO_PRODUCT_INSTALL`, `GO_LIVE_SECURITY` et `GO_DAILY_PILOT` sont **NO_GO / NOT_RUN**; `GO_INDEPENDENT_SECURITY_REVIEW` est **GO** — A4-delta (`3123dba`) et A6 (`0dd65d6`), A6 **GO avec 4 réserves P2** (2026-11-06, agent `3a1b7e11-ac93-458b-ae36-efb7663691a0`, Codex/gpt-6-luna/xhigh).
 
 Ce protocole n’exécute aucune commande. Les chaînes entre chevrons sont des valeurs fictives à remplacer dans une session opérateur privée; ne jamais y mettre un bearer dans la ligne de commande. Les variables de chemin/id ci-dessous ne sont pas des secrets.
 
@@ -618,7 +618,7 @@ git -C '<CHEMIN_SOURCE_CORE>' status --short
 sha256sum -c "$BACKUP_DIR/SHA256SUMS"
 ```
 
-**Résultat attendu.** Le rapport final renvoie aux preuves A2/A3/A5/A4-delta/A6, cite le SHA relu et distingue `PASS`, `NO_GO`, `NOT_RUN` et les limitations. Le rapport A5 est disponible dans [V7-10_TEST_REPORT.md](V7-10_TEST_REPORT.md); la revue indépendante finale A4-delta est en cours et `GO_INDEPENDENT_SECURITY_REVIEW` attend son verdict; A6 n’est pas encore disponible. Les éléments qui en dépendent restent **à consolider dans le rapport final**. Sans preuve Android 17/API 37 Pixel spécifique à l’APK et à cette migration, `GO_PRODUCT_INSTALL` ne peut pas être levé. Les trois gates produit/live/pilote restent `NO_GO / NOT_RUN` jusqu’à décision explicite du propriétaire.
+**Résultat attendu.** Le rapport final renvoie aux preuves A2/A3/A5/A4-delta/A6, cite le SHA relu et distingue `PASS`, `NO_GO`, `NOT_RUN` et les limitations. La revue indépendante est **GO** — A4-delta sur `3123dba` et A6 sur `0dd65d6`; A6 est **GO avec 4 réserves P2** (2026-11-06, agent `3a1b7e11-ac93-458b-ae36-efb7663691a0`, Codex/gpt-6-luna/xhigh). Sans preuve Android 17/API 37 Pixel spécifique à l’APK et à cette migration, `GO_PRODUCT_INSTALL` ne peut pas être levé. Les trois gates produit/live/pilote restent `NO_GO / NOT_RUN` jusqu’à décision explicite du propriétaire. Avant tout GO live, le risque P2 multiworker doit être traité : le cache anti-rejeu `ReplayNonceCache` est en mémoire par processus (`backend/atlas_backend/v4_assertion.py`); exiger un worker unique avec routage adapté ou un cache partagé/atomique.
 
 **Preuve à conserver.** Rapport final signé par l’orchestrateur/relecteur, inventaire expurgé, hashes des preuves privées, chaîne des SHAs, écarts et personne qui autorise (ou refuse) E.
 
@@ -639,11 +639,12 @@ Une révocation de credential est monotone; le bearer révoqué ne peut pas êtr
 - **Expiration :** propositions échues, non livrées, `UNCERTAIN`, ACK et audit serveur doivent être réconciliés sans inventer d’ACK ni transformer un état incertain en terminal.
 - **Mapping :** map privée et binding `relay_principal_bindings_v4` doivent correspondre; absence ou erreur doit rester fail-closed.
 - **Secret :** keyring Core, secret de signature Relay, `key_id`, permissions `0600`, frontière du checkout ATLAS, horloge et anti-rejeu sont des prérequis d’exploitation.
+- **P2 multiworker / anti-rejeu :** le cache `ReplayNonceCache` de `backend/atlas_backend/v4_assertion.py` est en mémoire par processus. En déploiement multiworker, un nonce déjà accepté par un processus n’est pas connu des autres. Avant tout GO live, exiger un worker unique avec routage adapté ou un cache partagé/atomique.
 - **Données :** backup complet vérifié, restauration sur copie, WAL/SHM et fenêtre d’écritures post-backup doivent être maîtrisés; Keystore ne se restaure pas depuis le tar.
 - **Restauration app-only :** le manifeste lie l’archive au serial d’origine; le test AVD valide la mécanique avec une archive synthétique de ce même AVD, pas la restauration du backup Pixel sur un appareil différent.
 - **Signature APK :** paquet, versionCode et certificat doivent permettre la mise à jour in-place; désinstaller ferait perdre les clés Keystore et peut exiger un nouvel appairage.
 - **Absence de preuve Pixel :** aucune qualification Pixel V7-10 n’est présente. Une preuve historique V7-07 de backup/update ne valide ni l’APK final V7-10, ni les parcours auth/expiration actuels.
-- **Preuves de clôture :** le rapport A5 est présent; la revue indépendante finale A4-delta reste en cours et son verdict est en attente sous `GO_INDEPENDENT_SECURITY_REVIEW`; A6 n’est pas encore disponible. Le dossier final et la décision de pilote doivent intégrer ces éléments lorsqu’ils seront établis.
+- **Preuves de clôture :** `GO_INDEPENDENT_SECURITY_REVIEW` est **GO** — A4-delta sur `3123dba` et A6 sur `0dd65d6`; A6 est **GO avec 4 réserves P2** (2026-11-06, agent `3a1b7e11-ac93-458b-ae36-efb7663691a0`, Codex/gpt-6-luna/xhigh). Ces réserves n’ouvrent pas les gates produit/live/pilote, qui restent `NO_GO / NOT_RUN`.
 
 ## Références et traçabilité
 
