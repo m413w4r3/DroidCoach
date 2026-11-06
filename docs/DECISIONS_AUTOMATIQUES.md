@@ -348,6 +348,15 @@
 - **Réversibilité:** retirer un grant par `capability set` ou révoquer le credential/principal. Le mode `principal` refuse toujours les credentials `LEGACY`.
 - **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md`.
 
+## V7-10 A2 — cycle de vie d’expiration (2026-11-06)
+
+| Date | Décision | Raison |
+|---|---|---|
+| 2026-11-06 | Expiration Core paresseuse sur pull/ACK et balayeur FastAPI activé par défaut (30 s, batch 100); désactivation configurable pour les tests et opérations. Une transition serveur possède son propre audit append-only, distinct des reçus ACK Android. | Une proposition jamais tirée doit terminer côté serveur sans inventer un ACK; le balayeur couvre l’absence de trafic Android et l’appel paresseux répare immédiatement les propositions rencontrées. |
+| 2026-11-06 | `UNCERTAIN` reste hors expiration automatique; sa résolution exige un ACK `RECONCILED` explicite. La réconciliation de base est un outil offline dry-run par défaut; apply exige un backup vérifié et reste une décision opérateur. | Ne pas effacer un effet possiblement appliqué ni prétendre connaître son résultat; garder une voie de réparation auditable avec possibilité de restauration. |
+
+- **Référence:** `docs/operations/V7-10_EXPIRATION_LIFECYCLE.md`.
+
 ## V7-10-A3 — Fiabilité Android quotidienne (2026-11-06)
 
 | Date | Décision | Raison |
