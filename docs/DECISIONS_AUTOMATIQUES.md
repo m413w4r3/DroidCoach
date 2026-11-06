@@ -357,6 +357,18 @@
 
 - **Référence:** `docs/operations/V7-10_EXPIRATION_LIFECYCLE.md`.
 
+## V7-10 A1 FIX — constats A4
+
+- **Décision:** `/internal/v4/capabilities` reste une métadonnée accessible uniquement après authentification complète d’un principal TOOL; `tool_catalog.read` n’est pas ajouté aux grants ni au schéma SQLite.
+- **Raison:** le catalogue décrit les capabilities du principal authentifié et n’accorde aucun accès aux autres routes; une migration de grant n’est pas nécessaire.
+- **Réversibilité:** le contrôle peut devenir un grant explicite via une migration additive ultérieure, avec ses tests et son plan de migration.
+- **Décision:** en mode `dual`, `ATLAS_V4_LEGACY_PRINCIPAL_ID` choisit le seul principal LEGACY autorisé à lire les propositions historiques sans propriétaire; la variable absente refuse l’accès, et les lignes peuvent être attribuées hors ligne avec `backfill-proposals`.
+- **Raison:** empêcher un bearer legacy secondaire d’ACKer les lignes historiques d’un autre principal sans modifier la propriété déjà persistée.
+- **Réversibilité:** modifier la configuration pour un principal LEGACY actif différent après sauvegarde et validation du backfill.
+- **Décision:** les flags globaux absents restent `false` pour lectures/chat et valent `true` pour les mutations; `false` reste un kill switch avant mutation.
+- **Raison:** garder l’installation existante fonctionnelle tout en pouvant désactiver rapidement une écriture, un consentement ou un ACK.
+- **Référence:** `docs/operations/V7-10_SECURITY_MIGRATION.md` et `docs/operations/evidence/V7-10_A1_FIX_EVIDENCE.md`.
+
 ## V7-10-A3 — Fiabilité Android quotidienne (2026-11-06)
 
 | Date | Décision | Raison |

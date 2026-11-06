@@ -66,7 +66,12 @@ is the expected race with a concurrent release.
 | `ATLAS_BACKEND_URL` | Loopback FastAPI base URL. Non-loopback hosts, URL paths, query strings, and credentials are rejected. |
 | `ATLAS_SERVICE_TOKEN` | Bearer token used for authenticated FastAPI routes. It is read from the environment and never persisted or logged. |
 | `ATLAS_V4_ENABLED` | Explicit V4 opt-in. Only the exact value `1` enables V4; unset or any other value keeps V4 disabled. |
-| `ATLAS_V4_ANDROID_TOKEN_FILE` | Absolute path to the dedicated Core Android bearer file. Required for V4 requests; the file must be a regular, non-symlink file owned by the connector user with mode `0600`. |
+| `ATLAS_V4_AUTH_MODE` | Core V4 mode: `legacy`, `dual`, or `principal`. Principal-bound modes require a private principal map and Relay assertion key. |
+| `ATLAS_CORE_PRINCIPAL_MAP_FILE` | Absolute path to the private Relay device ID → principal/credential map used in `dual` and `principal` modes. |
+| `ATLAS_V4_RELAY_ASSERTION_KEY_ID` | Key ID included in Relay assertions and matched against Core's active key ring. |
+| `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE` | Production source for the Relay assertion secret. Use an absolute path outside the repository, owned by the connector user, regular, non-symlink, and mode `0600`. |
+| `ATLAS_V4_RELAY_ASSERTION_SECRET` | Test-only base64url assertion secret; accepted only when `NODE_ENV=test`. Production startup rejects this source. |
+| `ATLAS_V4_ANDROID_TOKEN_FILE` | Absolute path to the legacy development Core bearer file. Used only for the `legacy` fallback; the file must be regular, non-symlink, owned by the connector user, and mode `0600`. |
 | `ATLAS_ALLOW_LOOPBACK_WS` | Set to `1` only for explicit local loopback `ws://` development; default deny. |
 | `ATLAS_METRICS_PORT` | Loopback metrics port; defaults to `4401`. |
 | `ATLAS_TEST_RELAY_URL` | Optional loopback Relay URL used by the real-relay integration and stale-client tests. |
@@ -75,12 +80,16 @@ Do not place token values in command arguments, checked-in files, or logs.
 
 ### V4 Core access
 
-V4 remains unavailable unless `ATLAS_V4_ENABLED=1` is explicitly set. Put the
-Android bearer issued for Core in a separate file readable only by the connector
-user (mode `0600`), then set `ATLAS_V4_ANDROID_TOKEN_FILE` to its absolute path.
-The connector reads this file at startup. A missing file, wrong owner or mode,
-symlink, unreadable file, or invalid token contents leaves V4 unavailable and
-does not prevent V1/V2/V3 from using `ATLAS_SERVICE_TOKEN`.
+V4 remains unavailable unless `ATLAS_V4_ENABLED=1` is explicitly set. In
+`dual` and `principal` modes, configure `ATLAS_CORE_PRINCIPAL_MAP_FILE`,
+`ATLAS_V4_RELAY_ASSERTION_KEY_ID`, and `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE`.
+The assertion file must be outside the repository, owner-controlled, mode
+`0600`, and read without following symlinks. A missing or unsafe file leaves
+principal-bound V4 unavailable. The environment secret is accepted only in
+tests with `NODE_ENV=test`; `configFromEnvironment`, `check-config.mjs`, and
+`check-secret.mjs` fail closed for it outside tests and reject two configured
+secret sources. In `legacy` development mode without principal binding, the
+dedicated Core bearer can still be loaded from `ATLAS_V4_ANDROID_TOKEN_FILE`.
 
 The Android bearer is never taken from the service token, Relay pairing token,
 or request payload. The relay session authenticates and supplies the paired
@@ -92,13 +101,11 @@ pairing registry. Remove `ATLAS_V4_ENABLED` (or set it to anything other than
 `1`) and restart the connector to roll back: V4 requests then return
 `OPERATION_UNAVAILABLE` and make no Core call.
 
-For the systemd user service, set these two non-secret settings in the service
-environment, either in the restricted external environment file or in a unit
-drop-in using `Environment=`. The env-file allowlist accepts
-`ATLAS_V4_ENABLED` and `ATLAS_V4_ANDROID_TOKEN_FILE`. Run
-`check-config.mjs --env-file` to validate the configuration and
-`check-secret.mjs --env-file` to also require a private Android token file with
-mode `0600`; both tools hide token values and paths.
+For the systemd user service, keep credentials in owner-only files and put only
+their absolute paths and key IDs in the restricted external environment file.
+Run `check-config.mjs --env-file` to validate configuration and
+`check-secret.mjs --env-file` to check file ownership, mode `0600`, and private
+location. Both tools hide secret values and paths in their output.
 
 ## Pairing and identity
 
