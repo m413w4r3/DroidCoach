@@ -1,7 +1,8 @@
 import { constants } from "node:fs";
-import { lstat, open } from "node:fs/promises";
+import { lstat, open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BackendClient } from "./backend.js";
 import { DeviceRegistry } from "./device-registry.js";
 import { ConnectorDiagnostics } from "./diagnostics.js";
@@ -10,6 +11,8 @@ import { ConnectorMetrics } from "./metrics.js";
 import { OperationExecutor } from "./operations.js";
 import { RelayLink } from "./relay-link.js";
 import { SessionManager } from "./session.js";
+
+const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 export interface ConnectorConfig {
   stateDir: string;
@@ -49,6 +52,14 @@ export function configFromEnvironment(): ConnectorConfig {
   const requirePrincipalBinding = process.env.ATLAS_REQUIRE_PRINCIPAL_BINDING;
   if (requirePrincipalBinding !== undefined && !["0", "1"].includes(requirePrincipalBinding)) {
     throw new Error("ATLAS_REQUIRE_PRINCIPAL_BINDING must be 0 or 1");
+  }
+  const assertionSecretFile = process.env.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE;
+  const assertionSecret = process.env.ATLAS_V4_RELAY_ASSERTION_SECRET;
+  if (assertionSecret !== undefined && process.env.NODE_ENV !== "test") {
+    throw new Error("ATLAS_V4_RELAY_ASSERTION_SECRET is accepted only when NODE_ENV=test");
+  }
+  if (assertionSecretFile !== undefined && assertionSecret !== undefined) {
+    throw new Error("configure exactly one Relay assertion secret source");
   }
   return {
     stateDir,
@@ -260,7 +271,11 @@ export async function readPrivateV4RelayAssertion(
   secretFile: string | undefined,
   secretEnvironment: string | undefined,
 ): Promise<{ keyId: string; secret: Uint8Array } | undefined> {
-  if (!keyId || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId) || (secretFile && secretEnvironment)) return undefined;
+  const hasSecretFile = secretFile !== undefined;
+  const hasSecretEnvironment = secretEnvironment !== undefined;
+  if (!keyId || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId) || hasSecretFile === hasSecretEnvironment) return undefined;
+  if (hasSecretEnvironment && process.env.NODE_ENV !== "test") return undefined;
+  if (hasSecretFile && !(await isOutsideRepository(secretFile))) return undefined;
   const rawValue = secretEnvironment ?? await readPrivateFile(secretFile, 512);
   if (!rawValue) return undefined;
   const encoded = rawValue.endsWith("\r\n") ? rawValue.slice(0, -2) : rawValue.endsWith("\n") ? rawValue.slice(0, -1) : rawValue;
@@ -271,6 +286,17 @@ export async function readPrivateV4RelayAssertion(
     return { keyId, secret };
   } catch {
     return undefined;
+  }
+}
+
+async function isOutsideRepository(path: string): Promise<boolean> {
+  if (!isAbsolute(path)) return false;
+  try {
+    const actualPath = resolve(await realpath(dirname(path)), basename(path));
+    const fromRepository = relative(REPOSITORY_ROOT, actualPath);
+    return fromRepository === ".." || fromRepository.startsWith(`..${sep}`) || isAbsolute(fromRepository);
+  } catch {
+    return false;
   }
 }
 

@@ -1,4 +1,4 @@
-import { loadEnvironmentFile, inspectConfiguration, runtimeEnvironment, tokenPresent } from "./lib/config.mjs";
+import { loadEnvironmentFile, inspectConfiguration, isPrivateV4RelayAssertion, runtimeEnvironment, tokenPresent } from "./lib/config.mjs";
 import { isAbsolute } from "node:path";
 
 try {
@@ -22,6 +22,8 @@ try {
   const assertionKeyId = environment.ATLAS_V4_RELAY_ASSERTION_KEY_ID;
   const assertionSecretFile = environment.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE;
   const assertionSecret = environment.ATLAS_V4_RELAY_ASSERTION_SECRET;
+  const assertionSecretFilePresent = assertionSecretFile !== undefined;
+  const assertionSecretEnvPresent = assertionSecret !== undefined;
   if (v4Enabled !== undefined && v4Enabled !== "0" && v4Enabled !== "1") {
     errors.push("ATLAS_V4_ENABLED must be 0 or 1");
   }
@@ -45,13 +47,16 @@ try {
     if (principalBinding) {
       if (!principalMapFile) errors.push("ATLAS_CORE_PRINCIPAL_MAP_FILE is required for principal-bound V4");
       if (!assertionKeyId) errors.push("ATLAS_V4_RELAY_ASSERTION_KEY_ID is required for principal-bound V4");
-      if (Boolean(assertionSecretFile) === Boolean(assertionSecret)) {
+      if (!assertionSecretFilePresent && !assertionSecretEnvPresent) {
         errors.push("configure exactly one Relay assertion secret source");
+      }
+      if (assertionSecretFilePresent && !(await isPrivateV4RelayAssertion(environment))) {
+        errors.push("ATLAS_V4_RELAY_ASSERTION_SECRET_FILE must be an owner-controlled mode-0600 file outside the repository");
       }
       if (assertionSecret !== undefined && !/^[A-Za-z0-9_-]{43,}$/.test(assertionSecret)) {
         errors.push("ATLAS_V4_RELAY_ASSERTION_SECRET must be base64url with at least 32 bytes");
       }
-      if (principalMapFile && assertionKeyId && (assertionSecretFile || assertionSecret)) {
+      if (principalMapFile && assertionKeyId && (assertionSecretFilePresent || assertionSecretEnvPresent)) {
         checks.push("V4 principal map and Relay assertion settings are configured (values hidden)");
       }
     } else if (!androidTokenFile) {

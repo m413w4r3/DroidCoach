@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { loadEnvironmentFile, runtimeEnvironment, tokenPresent, modeString } from "./lib/config.mjs";
+import { isPrivateV4RelayAssertion, loadEnvironmentFile, runtimeEnvironment, tokenPresent, modeString } from "./lib/config.mjs";
 
 try {
   let environment = process.env;
@@ -23,7 +23,7 @@ try {
     const principalBound = authMode !== "legacy" || environment.ATLAS_REQUIRE_PRINCIPAL_BINDING === "1" || Boolean(environment.ATLAS_CORE_PRINCIPAL_MAP_FILE);
     if (principalBound) {
       const mapValid = await isPrivatePrincipalMap(environment.ATLAS_CORE_PRINCIPAL_MAP_FILE);
-      const assertionValid = await isPrivateAssertionSecret(environment);
+      const assertionValid = await isPrivateV4RelayAssertion(environment);
       process.stdout.write(`ATLAS_CORE_PRINCIPAL_MAP_FILE: ${mapValid ? "private mapping and credentials present" : "unavailable or permissions invalid"}\n`);
       process.stdout.write(`ATLAS_V4_RELAY_ASSERTION_SECRET: ${assertionValid ? "private key configured" : "unavailable or permissions invalid"}\n`);
       if (!mapValid || !assertionValid) process.exitCode = 1;
@@ -59,17 +59,6 @@ async function isPrivatePrincipalMap(path) {
         !(await isPrivateAndroidTokenFile(item.credential_file))) return false;
   }
   return true;
-}
-
-async function isPrivateAssertionSecret(environment) {
-  const keyId = environment.ATLAS_V4_RELAY_ASSERTION_KEY_ID;
-  const secretFile = environment.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE;
-  const secretEnv = environment.ATLAS_V4_RELAY_ASSERTION_SECRET;
-  if (typeof keyId !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId) || Boolean(secretFile) === Boolean(secretEnv)) return false;
-  const raw = secretFile ? await readPrivateFile(secretFile, 512) : secretEnv;
-  const encoded = typeof raw === "string" && raw.endsWith("\n") ? raw.slice(0, -1) : raw;
-  if (typeof encoded !== "string" || !/^[A-Za-z0-9_-]{43,}$/.test(encoded)) return false;
-  return Buffer.from(encoded, "base64url").length >= 32;
 }
 
 async function readPrivateFile(path, maximumSize) {

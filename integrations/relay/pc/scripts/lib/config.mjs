@@ -1,8 +1,12 @@
-import { lstat, readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readFile, realpath } from "node:fs/promises";
 import { lstatSync as lstatFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
 
 const ALLOWED_KEYS = new Set([
   "ATLAS_RELAY_URL",
@@ -68,6 +72,14 @@ export function inspectConfiguration(environment, { checkState = true } = {}) {
   const stateDir = environment.ATLAS_RELAY_STATE_DIR ?? join(homedir(), ".local", "state", "atlas-relay");
   const metricsRaw = environment.ATLAS_METRICS_PORT ?? "4401";
   const allowLoopbackRaw = environment.ATLAS_ALLOW_LOOPBACK_WS;
+  const assertionSecretFilePresent = environment.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE !== undefined;
+  const assertionSecretEnvPresent = environment.ATLAS_V4_RELAY_ASSERTION_SECRET !== undefined;
+  if (assertionSecretFilePresent && assertionSecretEnvPresent) {
+    errors.push("configure exactly one Relay assertion secret source");
+  }
+  if (assertionSecretEnvPresent && environment.NODE_ENV !== "test") {
+    errors.push("ATLAS_V4_RELAY_ASSERTION_SECRET is accepted only when NODE_ENV=test");
+  }
   const allowLoopbackWs = allowLoopbackRaw === "1";
   if (allowLoopbackRaw !== undefined && allowLoopbackRaw !== "0" && allowLoopbackRaw !== "1") {
     errors.push("ATLAS_ALLOW_LOOPBACK_WS must be 0 or 1");
@@ -217,6 +229,54 @@ export function modeString(mode) {
 
 export function tokenPresent(environment) {
   return typeof environment.ATLAS_SERVICE_TOKEN === "string" && environment.ATLAS_SERVICE_TOKEN.length > 0;
+}
+
+export async function isPrivateV4RelayAssertion(environment) {
+  const keyId = environment.ATLAS_V4_RELAY_ASSERTION_KEY_ID;
+  const secretFile = environment.ATLAS_V4_RELAY_ASSERTION_SECRET_FILE;
+  const secretEnv = environment.ATLAS_V4_RELAY_ASSERTION_SECRET;
+  const hasSecretFile = secretFile !== undefined;
+  const hasSecretEnv = secretEnv !== undefined;
+  if (typeof keyId !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId) || hasSecretFile === hasSecretEnv) return false;
+  if (hasSecretEnv && environment.NODE_ENV !== "test") return false;
+  const raw = hasSecretFile ? await readPrivateV4RelayAssertionFile(secretFile) : secretEnv;
+  const encoded = typeof raw === "string" && raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+  if (typeof encoded !== "string" || !/^[A-Za-z0-9_-]{43,}$/.test(encoded)) return false;
+  return Buffer.from(encoded, "base64url").length >= 32;
+}
+
+async function readPrivateV4RelayAssertionFile(path) {
+  if (!path || !isAbsolute(path) || !await isOutsideRepository(path) ||
+      typeof process.getuid !== "function" || constants.O_NOFOLLOW === undefined) return undefined;
+  let handle;
+  try {
+    const beforeOpen = await lstat(path);
+    if (!beforeOpen.isFile() || beforeOpen.isSymbolicLink()) return undefined;
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const file = await handle.stat();
+    const owner = process.getuid();
+    if (!file.isFile() || file.uid !== owner || beforeOpen.uid !== owner || (file.mode & 0o777) !== 0o600 ||
+        beforeOpen.dev !== file.dev || beforeOpen.ino !== file.ino || file.size < 1 || file.size > 512) return undefined;
+    const value = await handle.readFile("utf8");
+    const afterRead = await lstat(path);
+    if (afterRead.isSymbolicLink() || afterRead.dev !== file.dev || afterRead.ino !== file.ino) return undefined;
+    return value;
+  } catch {
+    return undefined;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+async function isOutsideRepository(path) {
+  if (typeof path !== "string" || !isAbsolute(path)) return false;
+  try {
+    const actualPath = resolve(await realpath(dirname(path)), basename(path));
+    const fromRepository = relative(REPOSITORY_ROOT, actualPath);
+    return fromRepository === ".." || fromRepository.startsWith(`..${sep}`) || isAbsolute(fromRepository);
+  } catch {
+    return false;
+  }
 }
 
 export function assertTokenNotInArgs(environment, args) {

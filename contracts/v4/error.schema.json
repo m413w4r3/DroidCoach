@@ -85,6 +85,7 @@
                 "usage_summary.write",
                 "goal_progress.write",
                 "training_plan.write",
+                "consent.state.write",
                 "proposal.ack",
                 "tool_catalog.read"
               ]

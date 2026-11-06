@@ -41,7 +41,7 @@ from .v4_assertion import (
     load_assertion_keys,
     verify_relay_assertion,
 )
-from .v4_auth import AuthContext, V4PrincipalRegistry
+from .v4_auth import CAPABILITY_ALLOWLIST, AuthContext, V4PrincipalRegistry
 from .v4_projection_store import (
     AckConflict,
     AckIdConflict,
@@ -98,7 +98,10 @@ _SYNC_ROUTES = {
     "/v4/sync/training-snapshots": ("training_plan.write", "training_snapshot"),
 }
 _READ_CAPABILITIES = tuple(_TOOL_CAPABILITIES.values())
-_CAPABILITY_ENV_ALLOWLIST = frozenset((*_READ_CAPABILITIES, "coach.chat"))
+_CAPABILITY_ENV_ALLOWLIST = CAPABILITY_ALLOWLIST
+_READ_ONLY_CAPABILITIES = frozenset(
+    capability for capability in (*_READ_CAPABILITIES, "coach.chat") if capability != "plan_revision.propose"
+)
 _CAPABILITY_TO_CONSENT_TABLE = {
     "DAY_PLAN": "day_plan_snapshots_v4",
     "ACTIVITY_STATUS": "activity_status_events_v4",
@@ -396,7 +399,7 @@ def _schema_failure(request: Request, capability: str | None, *, fallback: str |
 
 def _configured_capabilities() -> dict[str, bool]:
     raw = os.getenv("ATLAS_V4_CAPABILITIES_JSON")
-    result = {name: False for name in _CAPABILITY_ENV_ALLOWLIST}
+    result = {name: name not in _READ_ONLY_CAPABILITIES for name in _CAPABILITY_ENV_ALLOWLIST}
     if not raw:
         return result
     try:
@@ -585,14 +588,26 @@ def create_v4_router(
         *,
         fallback: str | None = None,
     ) -> JSONResponse | None:
-        if capability in _READ_CAPABILITIES or capability == "coach.chat":
-            if not active_capabilities.get(capability, False):
-                return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
-                                       status=403, fallback_request_id=fallback)
+        if capability in _CAPABILITY_ENV_ALLOWLIST and not active_capabilities.get(capability, False):
+            return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
+                                   status=403, fallback_request_id=fallback)
         if capability not in context.capabilities:
             return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability non accordée.", capability,
                                    status=403, fallback_request_id=fallback)
         return None
+
+    def validate_tool_envelope(request: Request, capability: str, request_id: str) -> str | JSONResponse:
+        if request.headers.get("x-atlas-contract-version") != "4" or request.headers.get("x-atlas-schema-version") != "4":
+            return _error_response(request, "UNSUPPORTED_VERSION", "Version de contrat ou schéma V4 requise.",
+                                   capability, status=400, fallback_request_id=request_id)
+        if request.headers.get("x-atlas-capability") != capability:
+            return _error_response(request, "BAD_REQUEST", "La capability de la route ne correspond pas.",
+                                   capability, status=400, fallback_request_id=request_id)
+        try:
+            return str(uuid.UUID(request.headers.get("x-atlas-request-id", "")))
+        except ValueError:
+            return _error_response(request, "BAD_REQUEST", "X-Atlas-Request-Id doit être un UUID.",
+                                   capability, status=400, fallback_request_id=request_id)
 
     def _assertion_present(request: Request) -> bool:
         return any(request.headers.get(name) is not None for name in RELAY_ASSERTION_HEADER_NAMES.values())
@@ -603,11 +618,41 @@ def create_v4_router(
             return context.principal_id, context.credential_id, context.device_ref
         return None
 
-    def _allow_legacy_null_proposals(request: Request) -> bool:
+    def _configured_legacy_proposal_owner(
+        request: Request, capability: str,
+    ) -> tuple[str | None, JSONResponse | None]:
+        context = getattr(request.state, "atlas_auth_context", None)
+        if auth_mode != "dual" or not isinstance(context, AuthContext) or context.principal_kind != "LEGACY":
+            return None, None
+        principal_id = os.getenv("ATLAS_V4_LEGACY_PRINCIPAL_ID")
+        if not principal_id:
+            return None, _error_response(
+                request, "CAPABILITY_UNAVAILABLE", "Le principal legacy historique n’est pas configuré.",
+                capability, status=403,
+            )
+        with store.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM principals_v4 WHERE principal_id=? AND kind='LEGACY' AND state='ACTIVE'",
+                (principal_id,),
+            ).fetchone()
+        if row is None:
+            return None, _error_response(
+                request, "CONFIG_REQUIRED", "Le principal legacy configuré est indisponible.",
+                capability, status=503,
+            )
+        return principal_id, None
+
+    def _allow_legacy_null_proposals(request: Request, configured_owner_id: str | None = None) -> bool:
         if auth_mode == "legacy":
             return True
         context = getattr(request.state, "atlas_auth_context", None)
-        return auth_mode == "dual" and isinstance(context, AuthContext) and context.principal_kind == "LEGACY"
+        return (
+            auth_mode == "dual"
+            and configured_owner_id is not None
+            and isinstance(context, AuthContext)
+            and context.principal_kind == "LEGACY"
+            and context.principal_id == configured_owner_id
+        )
 
     def tool_consent_categories(capability: str) -> tuple[str, ...]:
         category = _TOOL_CONSENT_CATEGORY[capability]
@@ -660,7 +705,9 @@ def create_v4_router(
     router = APIRouter()
     chat_lock = asyncio.Lock()
 
-    def require_tool(request: Request, capability: str) -> tuple[str, str] | JSONResponse:
+    def require_tool(
+        request: Request, capability: str, *, principal_metadata: bool = False,
+    ) -> tuple[str, str] | JSONResponse:
         request_id = _request_id(request)
         tool_secret = os.getenv("ATLAS_TOOL_TOKEN")
         supplied = _bearer(request)
@@ -691,22 +738,15 @@ def create_v4_router(
             ):
                 return generic_auth_failure(request, capability, request_id)
             context = credential_context
-            capability_failure = require_principal_capability(context, capability, request, fallback=request_id)
-            if capability_failure is not None:
-                return capability_failure
+            if not principal_metadata:
+                capability_failure = require_principal_capability(context, capability, request, fallback=request_id)
+                if capability_failure is not None:
+                    return capability_failure
         request.state.atlas_auth_context = context
-        if request.headers.get("x-atlas-contract-version") != "4" or request.headers.get("x-atlas-schema-version") != "4":
-            return _error_response(request, "UNSUPPORTED_VERSION", "Version de contrat ou schéma V4 requise.",
-                                   capability, status=400, fallback_request_id=request_id)
-        if request.headers.get("x-atlas-capability") != capability:
-            return _error_response(request, "BAD_REQUEST", "La capability de la route ne correspond pas.",
-                                   capability, status=400, fallback_request_id=request_id)
-        try:
-            parsed_id = str(uuid.UUID(request.headers.get("x-atlas-request-id", "")))
-        except ValueError:
-            return _error_response(request, "BAD_REQUEST", "X-Atlas-Request-Id doit être un UUID.",
-                                   capability, status=400, fallback_request_id=request_id)
-        if auth_mode == "legacy" and capability in _READ_CAPABILITIES and not active_capabilities.get(capability, False):
+        parsed_id = validate_tool_envelope(request, capability, request_id)
+        if isinstance(parsed_id, JSONResponse):
+            return parsed_id
+        if auth_mode == "legacy" and capability in _CAPABILITY_ENV_ALLOWLIST and not active_capabilities.get(capability, False):
             return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
                                    status=403, fallback_request_id=parsed_id)
         device_ref = context.device_ref
@@ -738,6 +778,9 @@ def create_v4_router(
                 return generic_auth_failure(request, capability, fallback)
             context = AuthContext("legacy-android", _device_ref(expected), "legacy-android", "LEGACY", "LEGACY", frozenset())
             request.state.atlas_auth_context = context
+            if capability in _CAPABILITY_ENV_ALLOWLIST and not active_capabilities.get(capability, False):
+                return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
+                                       status=403, fallback_request_id=fallback)
             return _request_id(request, fallback), context.device_ref
         if not supplied:
             return generic_auth_failure(request, capability, fallback)
@@ -860,7 +903,7 @@ def create_v4_router(
 
     @serialized_consent_route
     async def handle_consent_state_sync(request: Request) -> JSONResponse:
-        auth = await require_android(request, None)
+        auth = await require_android(request, "consent.state.write")
         if isinstance(auth, JSONResponse):
             return auth
         request_id, device_ref = auth
@@ -1003,7 +1046,7 @@ def create_v4_router(
 
     @router.get("/internal/v4/capabilities")
     async def get_capabilities(request: Request) -> JSONResponse:
-        auth = require_tool(request, "tool_catalog.read")
+        auth = require_tool(request, "tool_catalog.read", principal_metadata=True)
         if isinstance(auth, JSONResponse):
             return auth
         request_id, _device = auth
@@ -1121,6 +1164,18 @@ def create_v4_router(
     async def lookup_proposal(idempotency_key: str, request: Request) -> JSONResponse:
         capability = "plan_revision.propose"
         auth = require_tool(request, capability)
+        if isinstance(auth, JSONResponse) and auth_mode == "dual":
+            supplied_context = registry.resolve(_bearer(request) or "")
+            if supplied_context is not None and supplied_context.principal_kind == "LEGACY":
+                if not _loopback_client(request):
+                    return generic_auth_failure(request, capability)
+                auth = await require_android(request, capability)
+                if not isinstance(auth, JSONResponse):
+                    request_id, device_ref = auth
+                    parsed_id = validate_tool_envelope(request, capability, request_id)
+                    if isinstance(parsed_id, JSONResponse):
+                        return parsed_id
+                    auth = (parsed_id, device_ref)
         if isinstance(auth, JSONResponse):
             return auth
         request_id, device_ref = auth
@@ -1145,7 +1200,10 @@ def create_v4_router(
         if not active_capabilities.get(capability, False):
             return _error_response(request, "CAPABILITY_UNAVAILABLE", "Capability désactivée.", capability,
                                    status=403, fallback_request_id=request_id)
-        allow_legacy_null = _allow_legacy_null_proposals(request)
+        legacy_owner_id, owner_failure = _configured_legacy_proposal_owner(request, capability)
+        if owner_failure is not None:
+            return owner_failure
+        allow_legacy_null = _allow_legacy_null_proposals(request, legacy_owner_id)
         proposal = projections.proposal_by_idempotency_key(
             idempotency_key, device_ref=device_ref, allow_legacy_null=allow_legacy_null
         )
@@ -1730,7 +1788,10 @@ def create_v4_router(
             return auth
         request_id, device_ref = auth
         auth_context = getattr(request.state, "atlas_auth_context", None)
-        allow_legacy_null = _allow_legacy_null_proposals(request)
+        legacy_owner_id, owner_failure = _configured_legacy_proposal_owner(request, capability)
+        if owner_failure is not None:
+            return owner_failure
+        allow_legacy_null = _allow_legacy_null_proposals(request, legacy_owner_id)
         body, failure = await read_json_body(request, capability, fallback=request_id)
         if failure is not None:
             return failure
@@ -1848,6 +1909,9 @@ def create_v4_router(
         if isinstance(auth, JSONResponse):
             return auth
         request_id, device_ref = auth
+        legacy_owner_id, owner_failure = _configured_legacy_proposal_owner(request, capability)
+        if owner_failure is not None:
+            return owner_failure
         body, failure = await read_json_body(request, capability, fallback=request_id)
         if failure is not None:
             return failure
@@ -1876,7 +1940,7 @@ def create_v4_router(
                 "SELECT state,expires_at,device_ref FROM agent_proposals_v4 WHERE proposal_id=?",
                 (path_id,),
             ).fetchone()
-        allow_legacy_null = _allow_legacy_null_proposals(request)
+        allow_legacy_null = _allow_legacy_null_proposals(request, legacy_owner_id)
         if proposal_row is None or (
             proposal_row["device_ref"] != device_ref
             and not (allow_legacy_null and proposal_row["device_ref"] is None)
