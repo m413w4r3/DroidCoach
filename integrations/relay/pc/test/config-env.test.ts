@@ -98,6 +98,95 @@ describe("restricted relay environment files", () => {
     expect(invalid.status).toBe(1);
     expect(invalid.stderr).toContain("ATLAS_V4_ENABLED must be 0 or 1");
   });
+
+  it("accepts assertion secret environment values only in tests and validates production secret files", async () => {
+    const directory = await makeTemporaryDirectory();
+    const secret = Buffer.from("synthetic-relay-assertion-secret-for-config-tests").toString("base64url");
+    const envOnlyPath = join(directory, "env-only.env");
+    await writePrivateFile(envOnlyPath, [
+      "ATLAS_RELAY_URL=wss://relay.example.test",
+      "ATLAS_BACKEND_URL=http://127.0.0.1:8100",
+      `ATLAS_RELAY_STATE_DIR=${join(directory, "state")}`,
+      "ATLAS_V4_ENABLED=1",
+      "ATLAS_V4_AUTH_MODE=dual",
+      `ATLAS_CORE_PRINCIPAL_MAP_FILE=${join(directory, "principal-map.json")}`,
+      "ATLAS_V4_RELAY_ASSERTION_KEY_ID=synthetic-test-key",
+      `ATLAS_V4_RELAY_ASSERTION_SECRET=${secret}`,
+      "",
+    ].join("\n"));
+
+    const productionEnvironment = runScript(directory, "check-config.mjs", "--env-file", envOnlyPath, {
+      NODE_ENV: "production",
+    });
+    expect(productionEnvironment.status).toBe(1);
+    expect(productionEnvironment.stderr).toContain("accepted only when NODE_ENV=test");
+    expect(`${productionEnvironment.stdout}${productionEnvironment.stderr}`).not.toContain(secret);
+
+    const testEnvironment = runScript(directory, "check-config.mjs", "--env-file", envOnlyPath, {
+      NODE_ENV: "test",
+    });
+    expect(testEnvironment.status).toBe(0);
+    expect(`${testEnvironment.stdout}${testEnvironment.stderr}`).not.toContain(secret);
+
+    const credentialPath = join(directory, "core-credential");
+    const principalMapPath = join(directory, "principal-map.json");
+    const assertionPath = join(directory, "relay-assertion-key");
+    await writePrivateFile(credentialPath, "synthetic-core-credential-for-map\n");
+    await writePrivateFile(principalMapPath, JSON.stringify({
+      "relay-device-synthetic": { principal_id: "principal-synthetic", credential_file: credentialPath },
+    }));
+    await writePrivateFile(assertionPath, `${secret}\n`);
+    const fileEnvironmentPath = join(directory, "file-only.env");
+    await writePrivateFile(fileEnvironmentPath, [
+      "ATLAS_RELAY_URL=wss://relay.example.test",
+      "ATLAS_BACKEND_URL=http://127.0.0.1:8100",
+      `ATLAS_RELAY_STATE_DIR=${join(directory, "state")}`,
+      "ATLAS_V4_ENABLED=1",
+      "ATLAS_V4_AUTH_MODE=dual",
+      `ATLAS_CORE_PRINCIPAL_MAP_FILE=${principalMapPath}`,
+      "ATLAS_V4_RELAY_ASSERTION_KEY_ID=synthetic-test-key",
+      `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE=${assertionPath}`,
+      "",
+    ].join("\n"));
+
+    const privateFile = runScript(directory, "check-secret.mjs", "--env-file", fileEnvironmentPath, {
+      NODE_ENV: "production",
+    });
+    expect(privateFile.status).toBe(0);
+    expect(privateFile.stdout).toContain("ATLAS_V4_RELAY_ASSERTION_SECRET: private key configured");
+    expect(`${privateFile.stdout}${privateFile.stderr}`).not.toContain(secret);
+
+    const privateConfig = runScript(directory, "check-config.mjs", "--env-file", fileEnvironmentPath, {
+      NODE_ENV: "production",
+    });
+    expect(privateConfig.status).toBe(0);
+    expect(`${privateConfig.stdout}${privateConfig.stderr}`).not.toContain(secret);
+
+    await chmod(assertionPath, 0o640);
+    const nonPrivateConfig = runScript(directory, "check-config.mjs", "--env-file", fileEnvironmentPath, {
+      NODE_ENV: "production",
+    });
+    expect(nonPrivateConfig.status).toBe(1);
+    expect(nonPrivateConfig.stderr).toContain("owner-controlled mode-0600 file outside the repository");
+    await chmod(assertionPath, 0o600);
+
+    const bothSourcesPath = join(directory, "both-sources.env");
+    await writePrivateFile(bothSourcesPath, [
+      "ATLAS_V4_ENABLED=1",
+      "ATLAS_V4_AUTH_MODE=dual",
+      `ATLAS_CORE_PRINCIPAL_MAP_FILE=${principalMapPath}`,
+      "ATLAS_V4_RELAY_ASSERTION_KEY_ID=synthetic-test-key",
+      `ATLAS_V4_RELAY_ASSERTION_SECRET_FILE=${assertionPath}`,
+      `ATLAS_V4_RELAY_ASSERTION_SECRET=${secret}`,
+      "",
+    ].join("\n"));
+    const bothSources = runScript(directory, "check-secret.mjs", "--env-file", bothSourcesPath, {
+      NODE_ENV: "test",
+    });
+    expect(bothSources.status).toBe(1);
+    expect(bothSources.stdout).toContain("ATLAS_V4_RELAY_ASSERTION_SECRET: unavailable or permissions invalid");
+    expect(`${bothSources.stdout}${bothSources.stderr}`).not.toContain(secret);
+  });
 });
 
 async function makeTemporaryDirectory(): Promise<string> {
@@ -128,13 +217,18 @@ async function writePrivateFile(path: string, content: string): Promise<void> {
   await chmod(path, 0o600);
 }
 
-function runScript(directory: string, script: string, ...args: string[]) {
+function runScript(directory: string, script: string, ...input: Array<string | Record<string, string>>) {
+  const extraEnvironment = input.length > 0 && typeof input.at(-1) === "object"
+    ? input.pop() as Record<string, string>
+    : {};
+  const args = input as string[];
   const result = spawnSync(process.execPath, [join(PACKAGE_ROOT, "scripts", script), ...args], {
     cwd: PACKAGE_ROOT,
     encoding: "utf8",
     env: {
       HOME: directory,
       PATH: process.env.PATH ?? "/usr/bin:/bin",
+      ...extraEnvironment,
     },
     timeout: 5_000,
   });

@@ -114,6 +114,23 @@ describe("connector restart and configuration resilience", () => {
     });
   });
 
+  it("accepts an assertion secret environment value only in tests and rejects dual sources", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("ATLAS_V4_RELAY_ASSERTION_SECRET", Buffer.from("synthetic-assertion-secret-for-config-test").toString("base64url"));
+    vi.stubEnv("ATLAS_V4_RELAY_ASSERTION_SECRET_FILE", undefined);
+    expect(configFromEnvironment().v4RelayAssertionSecret).toBe(process.env.ATLAS_V4_RELAY_ASSERTION_SECRET);
+
+    vi.stubEnv("NODE_ENV", "production");
+    expect(() => configFromEnvironment()).toThrow("accepted only when NODE_ENV=test");
+
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("ATLAS_V4_RELAY_ASSERTION_SECRET_FILE", "/tmp/synthetic-assertion-secret-file");
+    expect(() => configFromEnvironment()).toThrow("exactly one Relay assertion secret source");
+    await expect(readPrivateV4RelayAssertion(
+      "test-key", "/tmp/synthetic-assertion-secret-file", process.env.ATLAS_V4_RELAY_ASSERTION_SECRET,
+    )).resolves.toBeUndefined();
+  });
+
   it("accepts only an owner-controlled mode-0600 Android token file", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "atlas-v4-token-file-"));
     activeDirectories.push(stateDir);
@@ -163,6 +180,7 @@ describe("connector restart and configuration resilience", () => {
   });
 
   it("loads a dedicated assertion key from a private file or a test environment value", async () => {
+    vi.stubEnv("NODE_ENV", "test");
     const directory = await mkdtemp(join(tmpdir(), "atlas-v4-relay-key-"));
     activeDirectories.push(directory);
     const key = Buffer.from("synthetic-relay-assertion-key-for-connector-tests");

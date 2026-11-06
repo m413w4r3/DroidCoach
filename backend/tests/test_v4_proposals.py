@@ -79,9 +79,9 @@ def stamp(value: datetime | None = None) -> str:
     return (value or datetime.now(timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def make_client(tmp_path: Path, monkeypatch) -> ASGITestClient:
+def make_client(tmp_path: Path, monkeypatch, *, capabilities: dict[str, bool] | None = None) -> ASGITestClient:
     monkeypatch.setenv("ATLAS_TOOL_TOKEN", TOOL_TOKEN)
-    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", json.dumps(CAPABILITIES))
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", json.dumps(CAPABILITIES if capabilities is None else capabilities))
     app = create_app(db_path=tmp_path / "atlas.sqlite3", token=ANDROID_TOKEN)
     return ASGITestClient(app, client_address=("127.0.0.1", 50200))
 
@@ -277,6 +277,28 @@ def test_proposal_validation_idempotency_lookup_and_plan_is_not_applied(tmp_path
     validate("tool-results.schema.json", stale.json())
     assert stale.json()["data"]["status"] == "STALE_VERSION"
     client.close()
+
+
+def test_global_proposal_ack_kill_switch_runs_before_ack_mutation(tmp_path, monkeypatch):
+    client = make_client(tmp_path, monkeypatch, capabilities={**CAPABILITIES, "proposal.ack": False})
+    post_plan(client)
+    created = post_proposal(client, "00000000-0000-4000-8000-000000000219")
+    assert created.status_code == 200, created.text
+    proposal_id = created.json()["data"]["proposal_id"]
+
+    denied = client.post(
+        f"/v4/agent/proposals/{proposal_id}/ack",
+        headers=android_headers(),
+        json=ack_body(proposal_id, "00000000-0000-4000-8000-00000000021a", "REJECTED", "USER_REJECTED"),
+    )
+    assert denied.status_code == 403
+    assert error_code(denied) == "CAPABILITY_UNAVAILABLE"
+    with client.app.state.store.connect() as connection:
+        proposal = connection.execute(
+            "SELECT state FROM agent_proposals_v4 WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()
+        assert proposal["state"] == "PENDING_ANDROID"
+        assert connection.execute("SELECT COUNT(*) FROM agent_proposal_events_v4").fetchone()[0] == 0
 
 
 def test_inbox_cursor_pagination_ack_states_and_replay_conflicts(tmp_path, monkeypatch):
