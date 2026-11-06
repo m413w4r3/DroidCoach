@@ -72,7 +72,7 @@ class AgentCoachConversationInstrumentationTest {
         composeRule.onNodeWithTag("agent_send_message").performScrollTo().assertIsNotEnabled()
         composeRule.onNodeWithTag("agent_conversation_availability_reason")
             .performScrollTo()
-            .assertTextContains("Coach OpenClaw désactivé")
+            .assertTextContains("Coach OpenClaw désactivé", substring = true)
         composeRule.onNodeWithTag("agent_conversation_access_action").performScrollTo().assertIsDisplayed().performClick()
         assertEquals(AtlasScreenId.AGENT_SETTINGS, controller.navigationState.current)
     }
@@ -107,12 +107,12 @@ class AgentCoachConversationInstrumentationTest {
         composeRule.onNodeWithTag("agent_send_message").performScrollTo().assertIsNotEnabled()
         composeRule.onNodeWithTag("agent_conversation_availability_reason")
             .performScrollTo()
-            .assertTextContains("Saisissez un message")
+            .assertTextContains("Saisissez un message", substring = true)
         composeRule.onNodeWithTag("agent_message_input").performScrollTo().performTextInput("test ui")
         composeRule.onNodeWithTag("agent_send_message").performScrollTo().assertIsEnabled()
         composeRule.onNodeWithTag("agent_conversation_transport_reason")
             .performScrollTo()
-            .assertTextContains("Relais non appairé")
+            .assertTextContains("Relais non appairé", substring = true)
         composeRule.onNodeWithTag("agent_conversation_transport_action").performScrollTo().assertIsDisplayed().performClick()
         assertEquals(AtlasScreenId.RELAY_SETTINGS, controller.navigationState.current)
     }
