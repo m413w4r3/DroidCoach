@@ -36,13 +36,13 @@ Aucune identité, session, donnée ou configuration personnelle n’est réutili
 | Git distant | `origin/main=3e0d1f4c9ca591f903a894be87183395d30fee0b` (identique) |
 | Branche | `feat/atlas-v7-06c-android-coach-loop` créée depuis ce SHA |
 | Paseo | provider Codex disponible ; modèle `gpt-6-luna` et effort `xhigh` disponibles |
-| Enfant V7-06C-01 | session `3b012d9f-efaf-424f-9668-52c42be6cefc`, `codex/gpt-6-luna/xhigh`, mode `full-access`, worktree `feat-v7-06c-harness` |
+| Enfant V7-06C-01 | session `<SESSION_ID>`, `codex/gpt-6-luna/xhigh`, mode `full-access`, worktree `feat-v7-06c-harness` |
 | Modèle réel | `DEEPSEEK_API_KEY` présente dans l’environnement (valeur non lue, non écrite) |
 | OpenClaw | `2026.10.5` (`1b58cb9`) |
 | Node / npm | `v24.18.0` / `11.16.0` |
 | Docker | `27.1.1` ; image `atlas-paseo-relay:r3a` = digest `sha256:75d68fd8bdb9d60a26203cd7c49c07c035f1f400c47740770056814e76846889` |
 | Backend | venv Python 3.12 présent ; `dist/main.js` du connecteur présent |
-| JDK / SDK | OpenJDK `21.0.12.1`, SDK Android 37, `sdk.dir=/home/nill/Android/Sdk` |
+| JDK / SDK | OpenJDK `21.0.12.1`, SDK Android 37, `sdk.dir=<ANDROID_SDK>` |
 | KVM | `/dev/kvm` présent ; émulateur `37.2.12.0` |
 | Images AVD | API 37.2 `google_apis_ps16k`, API 37.1 `google_apis_playstore_ps16k`, API 35 `google_apis`/`ps16k` (x86_64 et arm64) |
 | AVD existants | `atlas_v7_06a_api37` (blocage V7-06B documenté), `atlas_v62_disposable_api37`, `Pixel_9_Pro_XL*` |
@@ -81,36 +81,36 @@ seuls les APK AndroidTest ont changé pour le rejeu ACK.
 | TASK_ID | Objectif | Dépendance | Statut | Session Paseo | Worktree | Oracle |
 |---|---|---|---|---|---|---|
 | V7-06C-00-PREFLIGHT | SHA, CI, services live, ressources, harnais, identités | — | **ACCEPTED (lecture seule)** | parent | racine | SHA local=distant, inventaire complet, aucun service modifié |
-| V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **ACCEPTED (code + runtime backend)** — commits `64020d7`, `f9017f4`, `d0f7d48` intégrés jusqu’à `3b9b3d1` ; 17/17 tests harnais, backend positif et négatif PASS | `3b012d9f-efaf-424f-9668-52c42be6cefc` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; backend réel PASS |
+| V7-06C-01-HARNESS | Harnais reproductible Core/Relay/connecteur/Gateway + RUN Android + oracles | PREFLIGHT | **ACCEPTED (code + runtime backend)** — commits `64020d7`, `f9017f4`, `d0f7d48` intégrés jusqu’à `3b9b3d1` ; 17/17 tests harnais, backend positif et négatif PASS | `<SESSION_ID>` | `feat-v7-06c-harness` | py_compile, unittest, node --check, `git diff --check` ; backend réel PASS |
 | V7-06C-02-ANDROID-RUNTIME | Pré-vol physique, installation QA, Keystore/WorkManager | PREFLIGHT + autorisation | **ACCEPTED (runtime)** — Pixel 9 Pro XL API 37, paquets QA installés, Keystore/WorkManager exercés, produit intact | parent opérateur unique | racine | device stable, runner PASS, produit/HOME inchangés |
-| V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **ACCEPTED (code + runtime)** — commit `69feb5c`, merge `f7e6441` ; APPLY et REJECT ont émis `ack_replay=identical` | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | compilation QA, runtime APPLY + REJECT |
+| V7-06C-03B-ACK-REPLAY-TEST | Rejeu de l’enveloppe ACK exacte depuis Android avant révocation | 02 | **ACCEPTED (code + runtime)** — commit `69feb5c`, merge `f7e6441` ; APPLY et REJECT ont émis `ack_replay=identical` | `<SESSION_ID>` | `feat-v7-06c-ack-replay-test` | compilation QA, runtime APPLY + REJECT |
 | V7-06C-03-APPLY | DayPlan v2→v3 par Android, ACK APPLIED durable, rejeu sans second effet | 01 + 02 + 03B | **ACCEPTED (runtime local + public)** — local 12 étapes / 19,387 s ; public `network=public_wss` APPLIED v3 | parent opérateur | racine | proofs `v7-06c-apply-a49e3a3aa819.json`, `v7-06c-apply-e4557615f525.json` |
 | V7-06C-03-REJECT | Refus explicite sans modification du plan, ACK REJECTED durable | 01 + 02 + 03B | **ACCEPTED (runtime local + public)** — local runner PASS + proof post-hoc ; public `network=public_wss` REJECTED, plan v2 | parent opérateur | racine | proofs `v7-06c-reject-2fb57424d534.json`, `v7-06c-reject-be5168ed2070.json` |
-| V7-06C-P2-VALIDATION-422 | Aligner `VALIDATION_FAILED` sur HTTP 422 dans `invoke_tool` + test ciblé | — | **ACCEPTED** — commit `02be9c1`, intégré `b33d43b` ; test rouge→vert, backend **372 passed / 1 skipped** | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | `fix/v7-06c-validation-422` | test ciblé PASS, suite backend complète |
+| V7-06C-P2-VALIDATION-422 | Aligner `VALIDATION_FAILED` sur HTTP 422 dans `invoke_tool` + test ciblé | — | **ACCEPTED** — commit `02be9c1`, intégré `b33d43b` ; test rouge→vert, backend **372 passed / 1 skipped** | `<SESSION_ID>` | `fix/v7-06c-validation-422` | test ciblé PASS, suite backend complète |
 | V7-06C-04-WSS-PUBLIC | Même parcours via WSS public, réseau extérieur, sans `adb reverse` | 03 + endpoint public autorisé | **ACCEPTED (runtime, limitations P1)** — Pixel LTE → `wss://all.taildc7886.ts.net:8443` → relais isolé 4400 ; APPLY + REJECT PASS, TLS valide, Noise/auth, aucun `adb reverse`, Core/Gateway loopback | parent opérateur | racine | proofs `remote-apply2`, `remote-reject` |
-| V7-06C-04-REVOKE-PROBE | Reconnexion avec device QA révoqué et code de fermeture | 04 | **FAIL (observabilité P1)** — device révoqué, connecteur refuse (aucune nouvelle session, `errors_total=1`) ; app `state=ERROR`, `close_code=null`, pas `REVOKED`/4001 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | `feat-v7-06c-ack-replay-test` | probe instrumenté FAIL ; refus serveur confirmé par métriques |
-| V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–04 | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; P1 fiabilité, P1 A4-4 ; P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA suivi ; `GO_WITH_LIMITATIONS` pour QA APPLY/REJECT | `d4a996c5-d07a-45d2-ad7e-9c837159c60b` | `/tmp/atlas-v7-06c-review-ro` (a-w, `8cab6fc`) | matrice, P0/P1/P2, verdicts ; aucun fichier modifié |
+| V7-06C-04-REVOKE-PROBE | Reconnexion avec device QA révoqué et code de fermeture | 04 | **FAIL (observabilité P1)** — device révoqué, connecteur refuse (aucune nouvelle session, `errors_total=1`) ; app `state=ERROR`, `close_code=null`, pas `REVOKED`/4001 | `<SESSION_ID>` | `feat-v7-06c-ack-replay-test` | probe instrumenté FAIL ; refus serveur confirmé par métriques |
+| V7-06C-05-REVIEW | Revue indépendante lecture seule du SHA intégré | 01–04 | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; P1 fiabilité, P1 A4-4 ; P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA suivi ; `GO_WITH_LIMITATIONS` pour QA APPLY/REJECT | `<SESSION_ID>` | `/tmp/atlas-v7-06c-review-ro` (a-w, `8cab6fc`) | matrice, P0/P1/P2, verdicts ; aucun fichier modifié |
 
 ## 4. Journal des sessions
 
 | Date | Session | Rôle | Provider/modèle/effort constatés | Résultat |
 |---|---|---|---|---|
 | 2026-11-01 | parent | Pré-vol V7-06C-00 | session parente | `ACCEPTED` lecture seule ; aucune modification live |
-| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `64020d7`, `f9017f4`, `d0f7d48` ; 17/17 tests |
-| 2026-11-01 | `3b0bd988-c977-46ee-b1ff-c099874461d2` | V7-06C-03B rejeu ACK + sonde révocation | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `69feb5c`, `f1b6b30` intégrés `f7e6441`/`fa960d5` |
+| 2026-11-01 | `<SESSION_ID>` | V7-06C-01 harnais | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `64020d7`, `f9017f4`, `d0f7d48` ; 17/17 tests |
+| 2026-11-01 | `<SESSION_ID>` | V7-06C-03B rejeu ACK + sonde révocation | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | `ACCEPTED (code)` — `69feb5c`, `f1b6b30` intégrés `f7e6441`/`fa960d5` |
 | 2026-11-01 | parent + autorisation propriétaire | QA physique APPLY+REJECT | — | autorisation ciblée accordée ; produit/HOME/Keystore non touchés |
 | 2026-11-01 | parent | Backend reproductible positif | DeepSeek réel isolé | **PASS** — 3 tours proxy, 2 outils corrélés, 1 proposition A0, ACK APPLIED v3 |
 | 2026-11-01 | parent | Backend reproductible négatif | DeepSeek réel isolé | **PASS** — stale/unknown/terminal/injection/consent révoqué ; 0 proposition/ACK |
 | 2026-11-01 | parent | Android APPLY physique local | Pixel 9 Pro XL, API 37, paquet `…v706capply.a7f3c21e` | **PASS** — 12 étapes / 19,387 s, v2→v3, ACK APPLIED v3, rejeu identique |
 | 2026-11-01 | parent | Android REJECT physique local | Pixel 9 Pro XL, API 37, paquet `…v706creject.b4d9e602` | **PASS (post-hoc)** — 12 étapes / 21,214 s, plan v2, ACK REJECTED ; incident logcat multi-runs corrigé |
-| 2026-11-01 | `3b012d9f-efaf-424f-9668-52c42be6cefc` | Correctif attestation + port 4400 | codex / `gpt-6-luna` / `xhigh` | `f9017f4`/`d0f7d48` intégrés `5ca0a92`/`3b9b3d1` ; 17/17 tests |
-| 2026-11-01 | `a079b4bf-7252-4c61-b017-f9fab0370b6e` | P2 `VALIDATION_FAILED` 422 | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | **ACCEPTED** — `02be9c1`, intégré `b33d43b` ; backend 372/1 |
+| 2026-11-01 | `<SESSION_ID>` | Correctif attestation + port 4400 | codex / `gpt-6-luna` / `xhigh` | `f9017f4`/`d0f7d48` intégrés `5ca0a92`/`3b9b3d1` ; 17/17 tests |
+| 2026-11-01 | `<SESSION_ID>` | P2 `VALIDATION_FAILED` 422 | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | **ACCEPTED** — `02be9c1`, intégré `b33d43b` ; backend 372/1 |
 | 2026-11-01 | parent | Remote APPLY public WSS — 1er essai | Pixel LTE, stack `android-apply-1853166` | **BLOCKED (hang intermittent)** — USER persisté, aucune requête chat, session relay fermée ; root non confirmée |
 | 2026-11-01 | parent | Remote APPLY public WSS — 2e essai | Pixel LTE, stack `android-apply-1940890` | **PASS** — `network=public_wss`, v2→v3, ACK APPLIED v3, TLS/Noise, aucun `adb reverse` |
 | 2026-11-01 | parent | Remote REJECT public WSS | Pixel LTE, stack `android-reject-1968579` | **PASS** — `network=public_wss`, plan v2, ACK REJECTED, sonde incluse |
 | 2026-11-01 | parent | Sonde reconnexion device révoqué | Pixel LTE, device `968aff85…` révoqué | **FAIL observabilité** — connecteur refuse (aucune session, `errors_total=1`) ; app `ERROR`, `close_code=null` |
 | 2026-11-01 | parent + autorisation propriétaire | Nettoyage QA | — | 18 paquets `qa*` désinstallés ; produit `dev.atlas.coach`/HOME intacts ; Wi‑Fi restauré ; Funnel état initial |
-| 2026-11-01 | `d4a996c5-d07a-45d2-ad7e-9c837159c60b` | Revue indépendante finale | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; P1 fiabilité + A4-4 ; P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA ; `GO_WITH_LIMITATIONS` QA APPLY/REJECT |
+| 2026-11-01 | `<SESSION_ID>` | Revue indépendante finale | codex / `gpt-6-luna` / `xhigh` (métadonnées vérifiées) | **ACCEPTED_WITH_LIMITATIONS** — aucun P0 ; P1 fiabilité + A4-4 ; P2 pull corrigé `20445bf`, P2 traçabilité APK↔SHA ; `GO_WITH_LIMITATIONS` QA APPLY/REJECT |
 
 ## 5. Résultats runtime (2026-11-01)
 
@@ -184,7 +184,7 @@ n'étaient pas en cause.
 
 ### 5.5 Sonde de reconnexion après révocation — FAIL d’observabilité (P1)
 
-Le device QA `968aff85-ab1e-4b50-a398-10085e1d2c25` a été révoqué dans le registre
+Le device QA `<DEVICE_ID>` a été révoqué dans le registre
 du connecteur isolé (`revoked_at=2026-11-01T14:05:07Z`). La sonde instrumentée
 `V7_06C_RevokedDeviceReconnectInstrumentedTest` a reconnecté l’app QA existante :
 

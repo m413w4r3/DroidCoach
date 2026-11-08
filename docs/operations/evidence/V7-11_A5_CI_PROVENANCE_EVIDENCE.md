@@ -208,3 +208,25 @@ Le scan du contenu courant couvre 129 chemins modifiés depuis la base V7-09 (`a
 | GitHub Actions sur `c3dcaa1`, ADB/Pixel/émulateur, Core 8100, Relay 4402, Gateway 18789 et Funnel | **NOT_RUN**, conformément au ticket. |
 
 Le scan ne purge pas les valeurs déjà accessibles dans les objets Git historiques. L’image Docker reste locale et n’a pas été publiée.
+
+## F3 — comparaison d’image et sanitisation du registre
+
+- Date : 2026-11-08.
+- Image construite depuis l’archive propre `65759dded28380c52639059b9cee8febadbd799c`, tag `atlas-core-v7-11-code65759dd`, avec `docker build --build-context contracts=<tmp>/contracts -t atlas-core-v7-11-code65759dd <tmp>/backend`.
+- Image F3 : `sha256:91d456e7f7f45f94cd9e63c83f417bfe83f76d7957dc520ef76fcdd103b9caa6`, taille 150 498 981 octets. **Identique** à l’image finale construite au SHA `c3dcaa16daf0b67aa3ca5d35ba65fa7694e15c56` (`atlas-core-v7-11-final`). Les deux images ont le même `CMD` (`uvicorn atlas_backend.main:app --host 127.0.0.1 --port 8100`) et le même `ENTRYPOINT` (`python /usr/local/bin/atlas-core-entrypoint.py`), sans digest de dépôt.
+- Cause : les contextes utilisés par l’image (`backend` et `contracts`) sont identiques entre les deux SHA ; la comparaison Git des répertoires applicatifs depuis `65759dd` est vide et BuildKit a réutilisé les couches en cache. Aucun conteneur de service n’a été lancé.
+
+### Sanitisation de `REGISTRY_V7_06C.md`
+
+Le chemin SDK personnel à la ligne 45 a été remplacé par `sdk.dir=<ANDROID_SDK>`. Le scan du fichier a également révélé des UUID bruts de sessions Paseo et un identifiant UUID de device QA : ils ont été remplacés par 11 marqueurs `<SESSION_ID>` et un marqueur `<DEVICE_ID>`, en préservant les faits associés.
+
+Scan ciblé après modification : **0** chemin personnel, chemin SDK absolu, bearer/token brut, affectation de credential avec valeur, clé privée, serial brut, `device_id` brut ou UUID brut. Le nom `DEEPSEEK_API_KEY` reste cité comme variable observée ; aucune valeur n’est présente. Les anciennes valeurs restent dans l’historique Git et le côté suppression du présent commit ; aucun historique n’a été réécrit ni poussé.
+
+### Statut F3
+
+| Contrôle | Statut |
+|---|---|
+| Archive et build Core au SHA `65759dd` | **PASS** |
+| Égalité avec l’image `c3dcaa1` | **PASS** — ID, taille et configuration identiques. |
+| Sanitisation et scan ciblé `REGISTRY_V7_06C.md` | **PASS** — aucun chemin personnel ou identifiant/credential brut dans le contenu courant. |
+| Services live, ADB/Pixel, push | **NOT_RUN**, conformément au ticket. |
