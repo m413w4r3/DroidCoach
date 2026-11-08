@@ -102,11 +102,12 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay avec Android ; le stack isolé B1 ne vaut pas test AVD. |
 | `GO_V7_11_ISOLATED_STACK` | **GO local** | B1 PASS : Core/Relay/proxy health 200, DB neuve `user_version=5`, `/metrics` `relay_connected=true`, WS 101, loopback only, live inchangé. Déviation bridge non-`internal` documentée. |
 | `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** | B2 : base live `user_version=3`, tables V4 absentes, `device_ref` absent ; le libellé `pixel-v7` n'existe que côté connecteur. Vérification impossible avant migration live. |
+| `GO_V7_11_REAL_COPY_MIGRATION` | **GO local** | B5 : migration v3→v5 sur copie réelle PASS ; live toujours v3 ; 3 propositions sans propriétaire ; 1 candidate expiration ; aucun credential ; copie supprimée. |
 | `GO_V7_11_CONNECTOR_BACKUP_COVERAGE` | **GO local avec gap confirmé** | B3 : `operations.json` omis du backup/restore CLI ; procédure complète 3/3 testée sur état synthétique. Backup live non exécuté. |
 | `GO_V7_11_INDEPENDENT_ISOLATED_REVIEW` | **GO local avec P2 / NO-GO live** | B4 : 0 P0/P1, 2 P2 ; vérification Docker directe UNKNOWN ; aucun test/live exécuté par le relecteur. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Backup connecteur incomplet confirmé ; procédure complète uniquement synthétique ; backup live/Relay/Pixel non exécuté. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; base live encore `user_version=3` sans tables V4 ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; migration réelle validée sur copie mais **pas** sur le live ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -199,3 +200,24 @@ La revue indépendante B4 sur le SHA intégré `4b87c93` conclut **GO_WITH_LIMIT
 2. **Durabilité/atomicité du restore manuel** : le remplacement des trois fichiers n'est pas atomique, sans `fsync` ni rollback automatique, et la création de la destination a une fenêtre TOCTOU. La procédure complète reste **non déployée** et ne doit pas être utilisée sur le live avant durcissement (écriture temporaire, `fsync` fichiers+répertoire, rollback, contrôle d'absence de course) et test de restauration.
 
 La revue n'a pas interrogé Docker directement ; les faits live B2 sont recoupés avec l'inventaire et le registre mais marqués `UNKNOWN` pour la vérification indépendante. Les résultats B1/B3 sont examinés comme preuves fournies, non rejoués. Preuve : [`evidence/V7-11B_ISOLATED_REVIEW.md`](evidence/V7-11B_ISOLATED_REVIEW.md).
+
+## 10. Addendum — migration v3→v5 sur copie réelle (2026-11-08)
+
+Paquet autorisé par l'utilisateur : « Migration v3→v5 sur copie réelle ». Ticket B5 `codex/gpt-6-luna` / `xhigh` vérifié.
+
+- **Trois exports live** en lecture seule : SHA-256 identique `752919f2…`, `user_version=3`, `integrity_check=ok`, `foreign_key_check=[]`, 3 propositions V4 / 2 événements / 2 consentements / 1 ligne historique. Le live n'a pas été modifié.
+- **Migration de la copie** : `user_version=5`, ledger `[1,2,3,4,5]`, tables V4/V5 et colonne `device_ref` présentes, historique et compteurs inchangés. Sauvegarde pré-migration `df644a94…`, v3, intégrité ok, mode 0600.
+- **Backfill dry-run** : 3 propositions sans propriétaire ; cible LEGACY **synthétique** uniquement ; 0 credential ; hash inchangé. Aucun `--apply`.
+- **Expiration dry-run** : 3 propositions (APPLIED 1 / PENDING_ANDROID 1 / REJECTED 1) ; 1 candidate PENDING_ANDROID ; 0 candidat avec ACK ; 0 anomalie. Aucun `--apply`.
+- **Idempotence** : réouverture conserve v5, ledger, intégrité, FK, historique et compteurs ; l'empreinte du dump SQL reste stable. Le hash binaire du fichier change à chaque initialisation parce que l'initialiseur réassigne `PRAGMA user_version` pour les migrations déjà appliquées ; ce n'est pas une divergence sémantique.
+- **Nettoyage** : copie, sauvegardes et scripts supprimés ; live toujours actif, `restarts=0`, `user_version=3`.
+- Preuve : [`evidence/V7-11B_REAL_COPY_MIGRATION_EVIDENCE.md`](evidence/V7-11B_REAL_COPY_MIGRATION_EVIDENCE.md).
+
+### Conditions avant migration live
+
+1. Fenêtre de backup autorisée : arrêt Core/connecteur, snapshots Core/Relay/connecteur (3 fichiers) et Pixel, restauration testée.
+2. Autorisation nominative distincte pour appliquer la migration au volume live, avec sauvegarde pré-migration vérifiée et rollback.
+3. Décision explicite sur les **3 propositions sans propriétaire** : import du bearer LEGACY live (opération sensible) ou attribution explicite ; aucun backfill automatique.
+4. Décision sur la **1 candidate d'expiration PENDING_ANDROID** avant toute réconciliation ; ne pas l'appliquer silencieusement.
+5. Après migration : vérifier le principal/binding `pixel-v7`, sans créer de credential ni changer le bearer sans autorisation.
+6. `GO_V7_11_RELAY_SYNC_AVD` reste **NOT_RUN** ; `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
