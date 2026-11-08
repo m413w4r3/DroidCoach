@@ -81,14 +81,14 @@ Package, versionCode et certificat correspondent entre base et candidat; aucun `
 
 ## AVD et cible ADB
 
-Inventaire ADB filtré aux seules lignes `emulator-*` avant lancement : aucun émulateur actif. AVD existant utilisé : `atlas_v62_disposable_api37`, série ciblée `emulator-5556`. Commande de démarrage :
+Inventaire ADB filtré aux seules lignes `emulator-*` avant lancement : aucun émulateur actif. AVD existant utilisé : `atlas_v62_disposable_api37`, série ciblée `<AVD_SERIAL>`. Commande de démarrage :
 
 ```sh
 emulator -avd atlas_v62_disposable_api37 -no-window -no-audio -no-boot-anim \
   -gpu swiftshader_indirect -no-snapshot -memory 2048 -port 5556
 ```
 
-Boot : **PASS**, `sys.boot_completed=1`, `ro.build.version.sdk=37`; version émulateur `37.2.12.0`, image système x86_64 API 37. Le runtime de l’émulateur a signalé `Increasing RAM size to 4096MB` malgré l’argument `-memory 2048`; cette différence est conservée comme limite d’environnement. Toutes les opérations ADB visant un appareil ont utilisé explicitement `adb -s emulator-5556`; le test Gradle a également été épinglé à ce seul serial. Aucun serial physique n’a été conservé dans la preuve ni ciblé.
+Boot : **PASS**, `sys.boot_completed=1`, `ro.build.version.sdk=37`; version émulateur `37.2.12.0`, image système x86_64 API 37. Le runtime de l’émulateur a signalé `Increasing RAM size to 4096MB` malgré l’argument `-memory 2048`; cette différence est conservée comme limite d’environnement. Toutes les opérations ADB visant un appareil ont utilisé explicitement `adb -s <AVD_SERIAL>`; le test Gradle a également été épinglé à ce seul serial. Aucun serial physique n’a été conservé dans la preuve ni ciblé.
 
 ## Préservation et installation in-place
 
@@ -110,8 +110,8 @@ Une première vérification a confirmé que l’APK de base et l’APK candidat 
 
 | Étape | Commande / résultat observé |
 |---|---|
-| Installation base | `adb -s emulator-5556 install /tmp/v7-11-a3-base.apk` — **Success**; `firstInstallTime=2026-11-08 11:05:12` |
-| Mise à jour candidat | `adb -s emulator-5556 install -r android/app/build/outputs/apk/debug/app-debug.apk` — **Success**; `lastUpdateTime=11:13:07`, `firstInstallTime=11:05:12` |
+| Installation base | `adb -s <AVD_SERIAL> install /tmp/v7-11-a3-base.apk` — **Success**; `firstInstallTime=2026-11-08 11:05:12` |
+| Mise à jour candidat | `adb -s <AVD_SERIAL> install -r android/app/build/outputs/apk/debug/app-debug.apk` — **Success**; `lastUpdateTime=11:13:07`, `firstInstallTime=11:05:12` |
 | Cold start candidat | `am start -W -n dev.atlas.coach/.app.MainActivity` — `Status: ok`, `LaunchState: COLD`, `TotalTime: 1262 ms`, PID présent; aucune ligne `FATAL EXCEPTION` ni `Process: dev.atlas.coach` dans le logcat relevé |
 | HOME | rôle et résolution inchangés : `com.google.android.apps.nexuslauncher` |
 | État Relay / V4 | `relay_mode=RELAY`, `v4_chat_opt_in_v1=true`; URL `.invalid`, sans credential |
@@ -123,13 +123,13 @@ Les deux classes ont été exécutées séparément sur `atlas_v62_disposable_ap
 Commandes exécutées depuis `android/` (serial explicitement fixé) :
 
 ```sh
-ANDROID_SERIAL=emulator-5556 ./gradlew :app:connectedDebugAndroidTest --offline \
-  -Pandroid.injected.device.serial=emulator-5556 \
+ANDROID_SERIAL=<AVD_SERIAL> ./gradlew :app:connectedDebugAndroidTest --offline \
+  -Pandroid.injected.device.serial=<AVD_SERIAL> \
   -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.app.AgentCoachConversationInstrumentationTest \
   --max-workers=2 --console=plain
 
-ANDROID_SERIAL=emulator-5556 ./gradlew :app:connectedDebugAndroidTest --offline \
-  -Pandroid.injected.device.serial=emulator-5556 \
+ANDROID_SERIAL=<AVD_SERIAL> ./gradlew :app:connectedDebugAndroidTest --offline \
+  -Pandroid.injected.device.serial=<AVD_SERIAL> \
   -Pandroid.testInstrumentationRunnerArguments.class=dev.atlas.coach.sync.v4.CoreV4SyncSchedulerInstrumentationTest \
   --max-workers=2 --console=plain
 ```
@@ -148,12 +148,12 @@ Le parcours A0 synthétique expiration/APPLY/REJECT/idempotence est **NOT_RUN** 
 Commande de rollback :
 
 ```sh
-adb -s emulator-5556 install -r /tmp/v7-11-a3-base.apk
+adb -s <AVD_SERIAL> install -r /tmp/v7-11-a3-base.apk
 ```
 
 Résultat : **PASS — Success**. L’APK de base `dev.atlas.coach` versionCode `1` est réinstallé en place sur le candidat versionCode `1`. Aucun `-d`, désinstallation, `pm clear` ou changement HOME n’a été utilisé. `firstInstallTime` est resté `2026-11-08 11:05:12`; `lastUpdateTime=2026-11-08 11:14:57`. Les sept fichiers synthétiques ont les hashes indiqués après cold start; l’état capability reste `sync=true`.
 
-Arrêt : `adb -s emulator-5556 emu kill` a répondu `OK: killing emulator, bye bye` / `OK`. Le processus `atlas_v62_disposable_api37` n’était plus présent après l’arrêt. **État final AVD : arrêté.**
+Arrêt : `adb -s <AVD_SERIAL> emu kill` a répondu `OK: killing emulator, bye bye` / `OK`. Le processus `atlas_v62_disposable_api37` n’était plus présent après l’arrêt. **État final AVD : arrêté.**
 
 ## Verdicts et limites
 
