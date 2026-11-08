@@ -261,3 +261,31 @@ Scan ciblé après modification : **0** chemin personnel, chemin SDK absolu, bea
 | Build depuis l’archive seule sans métadonnées Git | **FAIL** — étape de provenance Gradle incapable d’exécuter `git rev-parse`; résolu en reconstruisant dans le worktree détaché propre au même SHA. |
 | Hashes, métadonnées et certificats APK | **PASS** — certificat attendu sur les deux artefacts. |
 | Installation, ADB/Pixel, tests instrumentés | **NOT_RUN**, conformément au ticket. |
+
+## V7-11B-P5 — image Core c031cb5
+
+- SHA source : `c031cb54615977f3535fce03a37c01fc65f266e2`. Build lancé depuis un worktree temporaire détaché et propre sous `<TMP>` avec la commande :
+
+  ```sh
+  docker build --build-context contracts=<tmp>/contracts -t atlas-core-v7-11-c031cb5 <tmp>/backend
+  ```
+
+- Résultat : **PASS**. Image ID/digest local : `sha256:49d26b7e3272a6e9fce944a899c929a0aa40f9ec8c8bfcdbb374200445e53c23`, taille 150 502 127 octets.
+- `ENTRYPOINT`: `python /usr/local/bin/atlas-core-entrypoint.py`.
+- `CMD`: `uvicorn atlas_backend.main:app --host 127.0.0.1 --port 8100`.
+- Vérification de contenu : un contrôle jetable `docker run --rm --network none` avec l’entrypoint remplacé par Python confirme la présence de `v4_auth.py`, `v4_assertion.py` et `main.py`. Les empreintes SHA-256 des trois fichiers dans l’image sont identiques aux fichiers du checkout. `main.py` contient `_acquire_core_database_lock`, `fcntl.flock`, `LOCK_EX` et `_release_core_database_lock`; `v4_assertion.py` contient `ReplayNonceCache`, la réservation de nonce et le rejet d’une assertion rejouée. Aucun service n’a été lancé.
+
+| Fichier dans l’image | SHA-256 |
+|---|---|
+| `main.py` | `c00a949d65356176d0083301bdae8e6d170bf52ff52091288b7a242d43f691e4` |
+| `v4_auth.py` | `19ec3d95e64ee7c61401209b6dce996e2bc2b8b03d0048dbcf6291ffd4182d87` |
+| `v4_assertion.py` | `e3dbd576d437ab58b2636779813f6b2742e85b627e69d7f1c1509081de6869dd` |
+
+- `git diff --stat 65759dd..c031cb5 -- android` est vide. Aucun APK n’a été reconstruit ; l’artefact Android de référence au SHA code `65759dd` reste `app-debug.apk`, SHA-256 `bb703ec770f4ebe7e20602db65fecfb75e7a783d1a30040f5f7d8796c29f1dff`.
+
+| Contrôle | Statut |
+|---|---|
+| Build image Core au SHA `c031cb5` | **PASS** |
+| Métadonnées, modules v4, verrou single-writer et garde anti-rejeu | **PASS** |
+| Diff Android et référence APK | **PASS** — diff vide, rebuild APK non requis. |
+| Services live, ADB/Pixel, push | **NOT_RUN**, conformément au ticket. |
