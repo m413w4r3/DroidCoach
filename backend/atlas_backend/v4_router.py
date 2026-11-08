@@ -35,6 +35,7 @@ from .openclaw_adapter import (
 )
 from .store import SQLiteStore
 from .v4_assertion import (
+    FileReplayNonceCache,
     HEADER_NAMES as RELAY_ASSERTION_HEADER_NAMES,
     RelayAssertionError,
     ReplayNonceCache,
@@ -525,7 +526,12 @@ def create_v4_router(
         file_path=os.getenv("ATLAS_V4_RELAY_ASSERTION_KEYS_FILE"),
         testing="PYTEST_CURRENT_TEST" in os.environ,
     )
-    relay_replay_cache = ReplayNonceCache()
+    replay_cache_dir = os.getenv("ATLAS_V4_REPLAY_CACHE_DIR")
+    relay_replay_cache = (
+        FileReplayNonceCache(replay_cache_dir)
+        if replay_cache_dir is not None
+        else ReplayNonceCache()
+    )
 
     class _RollbackRouteResponse(Exception):
         def __init__(self, response: JSONResponse) -> None:

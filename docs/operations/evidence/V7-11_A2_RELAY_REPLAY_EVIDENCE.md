@@ -2,21 +2,22 @@
 
 ## Contrat de tâche
 
-- `TASK_ID`: `V7-11-A2` (compléments `V7-11-A2-F1`, `V7-11B-P4`)
+- `TASK_ID`: `V7-11-A2` (compléments `V7-11-A2-F1`, `V7-11B-P4`, `V7-11B-P6`)
 - Statut sous-session: `REVIEW_REQUIRED`
 - `BASE_SHA`: `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`
 - Base du complément F1: `e4a4461059f5f0e8c57316533c61d63cee3b07c9`
 - Base du complément P4: `291b5f78d2f770dbb02dcf353b0fe6f6a4fd1030`
+- Base du complément P6: `168fc87c3c6461d427899dd10807f9f1fe988018`
 - Branche: `audit/v7-11-a2-relay-replay`
 - Profil transmis et vérifié par le parent: `provider=codex`, `model=gpt-6-luna`, `effort=xhigh`
-- Périmètre initial A2: inspection runtime et code en lecture seule; script(s) temporaires sous `/tmp`; preuve seule modifiée, commit local demandé, aucun push. P4 autorise en plus `backend/atlas_backend/v4_router.py` et `backend/tests/test_v4_principal_auth.py`.
+- Périmètre initial A2: inspection runtime et code en lecture seule; script(s) temporaires sous `/tmp`; preuve seule modifiée, commit local demandé, aucun push. P4/P6 autorisent `backend/atlas_backend/v4_router.py`, `backend/atlas_backend/v4_assertion.py`, un test backend ciblé et cette preuve.
 - Oracle: scénarios HMAC/cache ci-dessous, inventaire Docker/processus/sockets, tests connecteur et proxy.
 
 ## Verdict
 
-**`GO_V7_11_ANTI_REPLAY_TOPOLOGY = NO-GO` pour toute mise en service V4 Relay.** Le rejeu inter-worker est reproduit: deux caches Core distincts acceptent la même assertion. F1 a aussi reproduit le rejeu après redémarrage; P4 ajoute un garde qui refuse les assertions antérieures au démarrage de plus de 5 s, tout en acceptant les assertions dans cette tolérance. Ce garde ne partage pas les nonces entre workers. L’environnement observé n’a par ailleurs ni proxy `4400` ni connecteur `4401`; le trajet Relay→connecteur→Core n’est pas présent.
+**`GO_V7_11_ANTI_REPLAY_TOPOLOGY = NO-GO` pour toute mise en service V4 Relay.** P6 ajoute un cache fichier durable, atomique et partagé lorsque `ATLAS_V4_REPLAY_CACHE_DIR` est configuré; les tests synthétiques couvrent les workers, le redémarrage et le recul d’horloge. En l’absence de cette configuration, le Core garde le cache mémoire historique et reste vulnérable au multiworker/redémarrage. Le répertoire durable n’a pas été configuré ni validé sur l’instance live; l’environnement observé n’a par ailleurs ni proxy `4400` ni connecteur `4401`.
 
-Finding sécurité: **P2 — confirmé, gate live obligatoire**. Les caches isolés entre workers restent vulnérables; après redémarrage, une assertion datée dans les 5 s précédant le démarrage peut aussi passer le garde de tolérance si elle est encore dans la fenêtre ±120 s. Cette sévérité correspond au risque multiworker déjà documenté dans le handoff V7-10 (sections 12–13, lignes 621 et 642).
+Finding sécurité: **P2 — conditionnel à la configuration, gate live obligatoire**. Le cache mémoire reste vulnérable; le cache fichier réduit ce risque uniquement si son répertoire privé, persistant et commun à tous les workers est configuré sur le volume Core. Le garde P4 de 5 s reste une défense secondaire, pas une protection contre le recul d’horloge. Cette sévérité correspond au risque multiworker déjà documenté dans le handoff V7-10 (sections 12–13, lignes 621 et 642).
 
 ## Topologie observée en lecture seule
 
@@ -41,7 +42,7 @@ Ce n’est pas une interdiction de scale garantie par Compose: le service ne fix
 
 - La chaîne signée contient version, méthode, chemin, timestamp, nonce, ID Relay et hash SHA-256 du corps ([`v4_assertion.py`](../../../backend/atlas_backend/v4_assertion.py:105), [`backend.ts`](../../../integrations/relay/pc/src/backend.ts:136)). Le connecteur tire un nonce aléatoire par requête et émet les en-têtes d’assertion.
 - `verify_relay_assertion` vérifie la fenêtre de ±120 000 ms, le `key_id`, HMAC-SHA256 et l’égalité en temps constant avant la réservation du nonce ([`v4_assertion.py`](../../../backend/atlas_backend/v4_assertion.py:137)).
-- `ReplayNonceCache` est un `OrderedDict` protégé par un verrou **dans la mémoire d’un processus**; TTL 300 s, capacité 8192, clé `(key_id, nonce)`. Un doublon ou un cache plein renvoie `False` (refus) ([`v4_assertion.py`](../../../backend/atlas_backend/v4_assertion.py:113), [`v4_assertion.py`](../../../backend/atlas_backend/v4_assertion.py:119)). `create_v4_router` instancie le cache lors de la création du routeur ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:522)).
+- `ReplayNonceCache` reste le défaut si `ATLAS_V4_REPLAY_CACHE_DIR` est absent: `OrderedDict` et verrou en mémoire d’un processus, TTL 300 s, capacité 8192, clé `(key_id, nonce)` ([`v4_assertion.py`](../../../backend/atlas_backend/v4_assertion.py:113)). Si la variable est définie, `create_v4_router` sélectionne `FileReplayNonceCache`; une erreur de construction empêche le démarrage et ne retombe jamais silencieusement sur le cache mémoire ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:530)).
 - Core résout d’abord le bearer, vérifie l’assertion, puis exige l’audience `RELAY`, un binding actif et l’égalité du principal et du `device_ref` ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:805), [`v4_auth.py`](../../../backend/atlas_backend/v4_auth.py:236)). Le connecteur choisit son credential depuis la map privée de l’ID Relay de la session authentifiée ([`connector.ts`](../../../integrations/relay/pc/src/connector.ts:82), [`connector.ts`](../../../integrations/relay/pc/src/connector.ts:263)).
 - Le README décrit Noise NK avec mode `protected`; le connecteur impose `minimumMode: "protected"` au canal sécurisé ([README.md](../../../integrations/relay/pc/README.md:1), [`relay-link.ts`](../../../integrations/relay/pc/src/relay-link.ts:221)). Ce contrôle est une propriété du code, pas une observation runtime ici, car le connecteur est absent.
 - La configuration du connecteur désactive V4 si la map ou la clé privée manque/invalide; `check-config.mjs` exige les champs principal-bound et masque les valeurs, tandis que `check-secret.mjs` vérifie la map et les fichiers privés ([`config.mjs`](../../../integrations/relay/pc/scripts/lib/config.mjs:232), [`check-config.mjs`](../../../integrations/relay/pc/scripts/check-config.mjs:45), [`check-secret.mjs`](../../../integrations/relay/pc/scripts/check-secret.mjs:20)).
@@ -82,7 +83,7 @@ Le TTL de 300 s dépasse le seuil de dérive d’un seul côté (120 s), et de 6
 
 ### Complément P4 — garde d’assertion au démarrage Core
 
-`create_v4_router` capture une seule fois `int(time.time() * 1000)` au moment de la création de l’application/du routeur. Cette valeur est conservée dans la closure de `require_android`; chaque nouvelle app simulant un redémarrage a donc un nouveau repère de démarrage et un nouveau cache nonce. La constante documentée `CLOCK_SKEW_MS = 5_000` ne modifie pas la fenêtre HMAC ±120 000 ms. Pour une requête avec assertion Relay, après vérification HMAC/fenêtre et binding principal actif, `require_android` lit `x-atlas-relay-time`; un timestamp inférieur à `core_started_at_ms - CLOCK_SKEW_MS` renvoie l’échec d’authentification générique (401). Les credentials DIRECT sans assertion, les routes legacy sans assertion et les autres flux n’empruntent pas ce garde. Aucun nonce n’est persisté et aucun schéma SQLite n’est changé ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:70), [capture](../../../backend/atlas_backend/v4_router.py:504), [garde après binding](../../../backend/atlas_backend/v4_router.py:820)).
+`create_v4_router` capture une seule fois `int(time.time() * 1000)` au moment de la création de l’application/du routeur. Cette valeur est conservée dans la closure de `require_android`. La constante `CLOCK_SKEW_MS = 5_000` ne modifie pas la fenêtre HMAC ±120 000 ms; le garde P4 renvoie l’échec d’authentification générique si le timestamp est plus ancien que le démarrage moins 5 s. Les credentials DIRECT sans assertion et les routes non Relay n’empruntent pas ce garde. P4 seul ne persistait aucun nonce ni schéma SQLite; P6 ajoute le stockage fichier hors SQLite ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:71), [capture](../../../backend/atlas_backend/v4_router.py:505), [garde après binding](../../../backend/atlas_backend/v4_router.py:829)).
 
 Test ciblé `test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_tolerated`, horloge contrôlée et assertions synthétiques:
 
@@ -94,12 +95,35 @@ Test ciblé `test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_to
 
 La tolérance est une permission explicite: le garde borne l’ancienneté du timestamp par rapport au démarrage, pas le délai après lequel une assertion tolérée expire. Une assertion horodatée dans les 5 s précédant le démarrage peut donc rester admissible jusqu’à sa sortie de la fenêtre normale ±120 s; une fois réservée, le cache mono-processus bloque ses duplicatas pendant son TTL de 300 s. Le garde seul ne corrige pas le finding inter-worker et ne constitue pas un cache partagé/durable.
 
+### Complément P6 — cache fichier anti-rejeu durable
+
+`FileReplayNonceCache` est sélectionné quand `ATLAS_V4_REPLAY_CACHE_DIR` est défini. La configuration exige un chemin absolu, normalisé, hors racine du dépôt. Il ouvre les composants sans suivre de symlink; le répertoire cible doit appartenir à l’utilisateur Core et être en mode `0700` (les répertoires manquants sont créés ainsi). Une configuration invalide empêche la création du routeur; aucun fallback mémoire n’est appliqué.
+
+Pour chaque paire `(key_id, nonce)`, le nom est le SHA-256 hexadécimal de la concaténation UTF-8 `key_id`, d’un octet NUL, puis `nonce`. La réservation est atomique sous verrou de répertoire partagé (`flock`) et utilise aussi `os.open(O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW, 0o600)`. `EEXIST` signifie rejeu. Le fichier ne contient que l’expiration epoch en millisecondes; les noms sont hashés et le bearer/nonce ne sont pas écrits en clair. TTL par défaut 300 s, capacité 8192, nettoyage opportuniste limité à 128 entrées par réservation. Les erreurs de verrou, lecture, nettoyage, capacité, écriture ou `fsync` renvoient un refus; une marque partielle après échec reste présente et échoue fermée. Aucun schéma SQLite n’est modifié.
+
+Configuration de production attendue: `ATLAS_V4_REPLAY_CACHE_DIR=/data/relay-replay-cache`, sur un sous-répertoire privé du volume persistant Core monté au même chemin pour tous les workers et conservé aux redémarrages. Le volume doit garantir les sémantiques atomiques de `O_EXCL`, `flock` interprocessus et `fsync`; cette propriété n’a été testée ici que sur un répertoire local temporaire. Avec la variable absente, le cache mémoire historique reste actif: cette configuration par défaut n’est pas admissible pour le gate live.
+
+| Oracle P6 | Résultat | Observation |
+|---|---|---|
+| Même `(key_id, nonce)` réservé deux fois, même instance | PASS | La seconde réservation est refusée. |
+| Deux instances sur le même répertoire; appels concurrents | PASS | La seconde instance refuse; sur 8 tentatives concurrentes, exactement une réserve. |
+| Nonce différent | PASS | Réservation acceptée. |
+| TTL expiré | PASS | À `now=400 s`, une entrée réservée à `now=100 s` (expiration 400 000 ms) peut être réservée de nouveau. |
+| Permissions et confidentialité | PASS | Répertoire `0700`, fichier nonce `0600`, nom SHA-256; le contenu ne contient ni nonce ni bearer en clair, uniquement l’expiration. |
+| Symlink et chemin dans le dépôt | PASS | La construction refuse un répertoire symlink et tout chemin situé dans le dépôt. |
+| Capacité/erreurs disque ou lecture | PASS fail-closed | Capacité `1` pleine, `scandir` en `PermissionError`, et écriture simulée `ENOSPC` refusent la réservation; une marque partielle reste bloquante. |
+| Rejeu après recréation d’app et recul de l’horloge Core de 30 s | PASS | L’assertion devient un timestamp futur de 30 s et passe la fenêtre/P4; le cache fichier persistant trouve le nonce et répond `401`. |
+
+La réservation d’identité ne dépend pas de l’horloge: le nom déterministe et `O_EXCL` arbitrent le doublon; l’horloge epoch ne sert qu’à calculer/retirer les expirations. Un recul d’horloge retarde le nettoyage, donc peut prolonger un refus. Un saut vers l’avant peut au contraire rendre des fichiers expirés prématurément si le temps revient ensuite; ce risque dépend de l’horloge murale et reste une limite du TTL epoch exigé. Un fichier incomplet ou une erreur persistante peut bloquer des requêtes jusqu’à une maintenance contrôlée. Pas de test de crash système, de reboot hôte ou de sémantiques d’un volume Docker/NFS réel.
+
 ## Suites et preuves d’exécution
 
+- **PASS ciblé P6** — Depuis `backend/`, exécution des quatre tests `test_file_replay_nonce_cache_*` et `test_router_file_replay_cache_rejects_replay_after_clock_rollback` → **4 passed**; comprend la réservation concurrente, le TTL, les permissions, le refus sur symlink/capacité/I/O et le recul simulé de 30 s.
+- **PASS** — Depuis `backend/`, `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q` → **456 passed, 1 skipped**, 3 avertissements.
+- **FAIL hors périmètre** — Depuis la racine, `python3 -m pytest -q` → **9 failed, 501 passed, 1 skipped** (39 sous-cas passés). Les 9 erreurs restent dans `scripts/v7-06c/tests/test_harness.py`: l’INSERT fournit 10 valeurs à la table `agent_proposals_v4` qui compte 11 colonnes. Ce fichier n’est pas autorisé dans le périmètre P6 et n’a pas été modifié.
+- **PASS** — `git diff --check` après P6.
 - **PASS rouge/vert ciblé** — Depuis `backend/`, `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_v4_principal_auth.py::test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_tolerated`: avant le patch, l’assertion `401` échoue avec réponse réelle `200`; après patch, **1 passed**, couvrant rejeu post-redémarrage `401`, assertion post-démarrage `200` et tolérance de 3 s `200`.
-- **PASS** — Depuis `backend/`, `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q` → **452 passed, 1 skipped**, 3 avertissements. La suite couvre aussi rejeu mono-cache, timestamp ±120 s, rotation de clés, binding A/B et accès DIRECT sans assertion.
-- **FAIL hors périmètre** — Depuis la racine, `python3 -m pytest -q` → **9 failed, 497 passed, 1 skipped** (39 sous-cas passés). Les 9 échecs sont dans `scripts/v7-06c/tests/test_harness.py`: l’INSERT de test fournit 10 valeurs pour `agent_proposals_v4`, qui a 11 colonnes (`sqlite3.OperationalError`). Aucun de ces fichiers n’est dans le périmètre P4; aucun changement n’y a été apporté.
-- **PASS** — `git diff --check` après les modifications P4.
+- **PASS au commit P4** — La suite backend avait donné **452 passed, 1 skipped**; la suite racine, **9 failed, 497 passed, 1 skipped**. Les échecs étaient les mêmes insertions V7-06C documentées ci-dessus.
 - **PASS** — `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/backend" python3 -m pytest -q -p no:cacheprovider backend/tests/test_v4_principal_auth.py::test_relay_assertion_binds_credential_to_active_session_and_rejects_replay` → `1 passed`.
 - **PASS** — injection temporaire d’une erreur de cache via `/tmp/test_v7_11_a2_cache_error.py` → `1 passed`; assertion authentique refusée par réponse 500, aucun événement créé. Un premier essai du harnais avait un `key_id` synthétique incohérent et s’arrêtait en 401 avant le cache; l’essai corrigé est celui retenu.
 - **PASS** — `npm ci --offline` dans une copie temporaire, puis `npm run test:unit` depuis un checkout temporaire imbriqué (`/tmp/.../integrations/relay/pc` avec marqueur `AGENTS.md`), build TypeScript inclus → **131/131**. Une première exécution depuis une copie plate hors racine ATLAS avait 129 passés et 2 échecs de fixture (`findRepositoryRoot` indéfini); relancée dans la structure attendue, **131/131**. Aucun `node_modules` ni fichier de build n’a été créé dans le dépôt.
@@ -119,15 +143,12 @@ Une première tentative a utilisé `node --test --test-name-pattern='^(?!pinned 
 
 ## Gate avant tout live
 
-Ne lever `GO_V7_11_ANTI_REPLAY_TOPOLOGY` qu’après l’une des deux solutions suivantes:
-
-1. **Cache anti-rejeu partagé et durable**: réservation atomique cross-worker qui survit au redémarrage Core (par exemple `SET NX` avec expiration persistante), avec tests de rejeu entre processus indépendants, après redémarrage, ainsi que comportement fermé sur erreur/saturation; ou
-2. **Cache mémoire avec restrictions supplémentaires**: worker/instance Core unique vérifié à chaque déploiement, interdiction opérationnelle et automatisée de scale/instances parallèles, et garde P4 vérifié sur le code déployé avec le test de rejeu après redémarrage. Le seuil toléré de 5 s avant démarrage doit être accepté explicitement; une assertion dans cette tolérance peut rester valide jusqu’à sa limite ±120 s. Le worker unique seul n’est pas un gate suffisant sans le garde de redémarrage.
+Ne lever `GO_V7_11_ANTI_REPLAY_TOPOLOGY` qu’après configuration et vérification de `ATLAS_V4_REPLAY_CACHE_DIR` sur un volume persistant privé, absolu, hors dépôt, mode `0700`, monté au même chemin pour tous les workers Core. Vérifier sur l’environnement de déploiement que `O_EXCL`, `flock` et `fsync` ont des sémantiques interprocessus fiables, puis exécuter les tests de doublon entre workers, après recréation/redémarrage, recul d’horloge, saturation et erreur. Si la variable est absente, `ReplayNonceCache` mémoire reste actif et le gate reste NO-GO, même avec un worker unique. Le garde P4 est une défense secondaire; le cache partagé configuré est requis pour traiter le recul d’horloge A4-F2.
 
 Avant le live, vérifier aussi le routage complet `4400 → 4402`, la présence du connecteur et ses métriques `4401`, le binding principal réel, le keyring overlap puis le retrait contrôlé de la clé ancienne. La présence d’un seul worker à cet instant n’est pas une barrière contre un futur changement de commande ou de déploiement.
 
 ## Traçabilité finale
 
 - Base examinée: `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`.
-- Compléments F1/P4: reproduction puis mitigation conditionnelle du rejeu après recréation du cache; tests rouge/vert et limites documentés; commit local SHA rapporté dans la notification finale; aucun push.
+- Compléments F1/P4/P6: reproduction, garde d’horloge et cache fichier durable testés synthétiquement; configuration live et volume persistant non validés; commit local SHA rapporté dans la notification finale; aucun push.
 - Secrets, tokens, identifiants Relay personnels et valeurs de credentials exclus de ce document.
