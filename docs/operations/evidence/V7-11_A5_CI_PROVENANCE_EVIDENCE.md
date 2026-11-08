@@ -145,3 +145,66 @@ Scan après sanitisation : 107 chemins de la campagne V7-09→HEAD et 87 preuves
 - Sanitisation du contenu courant et scan ciblé : **PASS** ; historiques Git : **résidu P2 documenté**.
 - GitHub Actions au SHA intégré, Relay live 4402, Core 8100, Gateway 18789, Funnel, ADB et Pixel : **NOT_RUN**, conformément au périmètre.
 - Cette validation porte sur le SHA intégré `04fdc77` fourni pour F1. Elle ne remplace pas le rerun final demandé par le parent après intégration du correctif A1-F2.
+
+## Qualification finale `c3dcaa1`
+
+- Date : 2026-11-08.
+- SHA qualifié : `c3dcaa16daf0b67aa3ca5d35ba65fa7694e15c56`, branche `feat/atlas-v7-11-migration-readiness`, checkout temporaire détaché sous `/tmp`.
+- La commande `git diff --stat 65759dd..c3dcaa16daf0b67aa3ca5d35ba65fa7694e15c56 -- backend android integrations contracts` n’a produit aucune sortie : le code applicatif de ces répertoires est inchangé depuis `65759dd`.
+- Les commandes ci-dessous ont été exécutées localement sur ce SHA. Aucun ADB, Pixel, émulateur ni service live n’a été utilisé.
+
+### Suites de tests
+
+| Commande | Statut | Résultat exact |
+|---|---|---|
+| `python3 -m pytest -q` (racine) | **PASS** | 499 passés, 1 ignoré, 48 sous-cas passés, 4 warnings. |
+| `cd backend && python3 -m pytest -q` | **PASS** | 454 passés, 1 ignoré, 3 warnings. |
+| `cd integrations/relay/pc && npm ci --offline && npm run test:unit` | **PASS** | 18 fichiers, 131/131 tests passés ; installation hors ligne réussie. |
+| `node --test --test-skip-pattern='pinned relay integration on 4402' integrations/relay/proxy/test/proxy.test.mjs` | **PASS** | 18 tests, 18 passés, 0 échec. Le test épinglé sur 4402 a été filtré par son titre ; aucun Relay live contacté. |
+
+### Android JVM, lint et APK
+
+Commande exécutée depuis `android/` :
+
+```sh
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --offline --max-workers=2 --console=plain
+```
+
+Résultat : **PASS**, `BUILD SUCCESSFUL`, 84 tâches exécutées. Les rapports JUnit contiennent 934 tests, 0 échec, 0 erreur et 0 test ignoré. `lintDebug` signale **80 warnings et 0 erreur**. Les compilations Kotlin ont aussi émis 16 warnings (3 production, 12 tests unitaires, 1 tests androidTest) ; le packaging a signalé un avertissement non fatal de stripping et Gradle une synthèse de fonctionnalités dépréciées. Aucun test instrumentation ni émulateur n’a été lancé.
+
+| APK | Taille | SHA-256 |
+|---|---:|---|
+| `app-debug.apk` | 15 838 971 octets | `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1` |
+| `app-debug-androidTest.apk` | 1 578 548 octets | `12012e11c051392aabfab50c652434edb8a6462ddef950a235fcf939fc431f7b` |
+
+### Image Core
+
+Commande exécutée : `docker build --build-context contracts=<tmp>/contracts -t atlas-core-v7-11-final <tmp>/backend`.
+
+- Statut : **PASS** ; image ID `sha256:91d456e7f7f45f94cd9e63c83f417bfe83f76d7957dc520ef76fcdd103b9caa6`, taille 150 498 981 octets ; aucun digest de registre (`RepoDigests=[]`).
+- `ENTRYPOINT`: `python /usr/local/bin/atlas-core-entrypoint.py`.
+- `CMD`: `uvicorn atlas_backend.main:app --host 127.0.0.1 --port 8100`.
+- Une commande `docker run --rm --entrypoint /bin/sh` a vérifié la présence de `backend/atlas_backend/v4_auth.py` et `backend/atlas_backend/v4_assertion.py`. Le conteneur de vérification s’est terminé et a été supprimé ; aucun service Core n’a été démarré.
+
+### Scan secrets, chemins et identifiants
+
+Le scan du contenu courant couvre 129 chemins modifiés depuis la base V7-09 (`a5aca4b54088d43f4829adf31049417dd8cf32a6`) et les 95 preuves versionnées sous `docs/operations/evidence/`, soit 166 fichiers distincts. Il inclut les neuf preuves V7-11 et le scope précédent de 149 fichiers. `gitleaks` n’est pas disponible ; des motifs ciblés et la revue manuelle ont été employés.
+
+- Aucun token/credential réel, clé privée, chemin personnel concret, chemin SDK local, donnée personnelle réelle, adresse MAC, serial AVD brut ou identifiant `device_id` Relay brut n’a été trouvé.
+- Les motifs ont détecté 40 formes Bearer, 32 formes JWT et 18 affectations de credentials. La revue les classe comme descriptions d’authentification, code de validation ou fixtures synthétiques ; les occurrences Bearer des preuves V7-11 décrivent explicitement des tokens synthétiques/non importés. Les 5 correspondances email sont les annotations Kotlin de capacités `CAP_*`. Les 440 formes numériques détectées n’ont ni préfixe international ni contexte téléphone/contact et correspondent à des identifiants, horodatages et valeurs de test, pas à des numéros personnels.
+- Aucun `.env` ni chemin nommé credentials/secrets n’est suivi ; les 95 preuves ont le mode Git `100644`.
+- Les sanitizations P2 de F1 sont présentes dans l’arbre final. Le résidu historique Git documenté plus haut demeure dans les anciens commits et dans la suppression portée par le commit de sanitisation ; aucun historique n’a été réécrit ni poussé.
+
+### Statut final et limites
+
+| Contrôle | Statut |
+|---|---|
+| Vérification du diff applicatif depuis `65759dd` | **PASS** — vide pour backend/android/integrations/contracts. |
+| Pytest racine, backend, connecteur et proxy | **PASS** |
+| JVM Android, lint et assemblage des deux APK | **PASS** |
+| Build image Core et présence des modules v4 | **PASS** |
+| Scan du contenu courant | **PASS** — aucun secret réel détecté. |
+| `git diff --check` et arbre du checkout de qualification | **PASS** — aucun changement suivi produit par les suites. |
+| GitHub Actions sur `c3dcaa1`, ADB/Pixel/émulateur, Core 8100, Relay 4402, Gateway 18789 et Funnel | **NOT_RUN**, conformément au ticket. |
+
+Le scan ne purge pas les valeurs déjà accessibles dans les objets Git historiques. L’image Docker reste locale et n’a pas été publiée.
