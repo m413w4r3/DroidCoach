@@ -17,6 +17,14 @@
 
 Placeholders à remplacer par l'opérateur : `<backup-root>` (racine privée du backup frais, `0700`), `<compose-root>` (checkout Compose), `<rollback-override>` (fichier privé `0600`).
 
+Variable shell à définir avant les commandes :
+
+```sh
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+```
+
+`$TS` est transmis au conteneur helper via `-e TS="$TS"` pour renommer le sidecar B7 sans ambiguïté.
+
 ## 1. Arrêt et préservation de l'état en échec
 
 ```sh
@@ -66,6 +74,7 @@ Helper depuis l'image finale, en root, volume uniquement :
 
 ```sh
 docker run --rm --user 0 --entrypoint sh \
+  -e TS="$TS" \
   -v atlas-core-data:/data \
   -v <backup-root>/core/data:/backup:ro \
   sha256:1e4c8e6c599a3846e6870143b78cf3d39ae9d2da050db04e26d7cb3af8ecd35a -c '
@@ -74,7 +83,7 @@ docker run --rm --user 0 --entrypoint sh \
     chown 10001:10001 /data/atlas.sqlite3 &&
     chmod 600 /data/atlas.sqlite3 &&
     if [ -e /data/atlas.sqlite3.pre-v4.bak ]; then
-      mv /data/atlas.sqlite3.pre-v4.bak /data/atlas.sqlite3.pre-v4.bak.failed-migration-<timestamp>;
+      mv /data/atlas.sqlite3.pre-v4.bak /data/atlas.sqlite3.pre-v4.bak.failed-migration-$TS;
     fi &&
     rm -f /data/atlas.sqlite3.lock
   '
