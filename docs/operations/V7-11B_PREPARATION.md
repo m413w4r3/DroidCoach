@@ -88,7 +88,8 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | Gate | Statut | Portée |
 |---|---|---|
 | `GO_V7_11_MAIN_AND_CI` | **GO** sur `9f0c783` ; **à revalider** sur `c031cb5` après push | PR #3 verte ; nouveau code à pousser. |
-| `GO_V7_11_CODE_PROVENANCE` | **GO local** | APK exact `65759dd` `bb703ec7…` ; image Core finale `a3d72db` `528af664…` (cache durable + verrou). |
+| `GO_V7_11_CODE_PROVENANCE` | **GO local pour l'APK ; STALE pour l'image Core** | APK exact `bb703ec7…` inchangé ; image Core `528af664…` construite à `a3d72db`, **avant le correctif B7** ; rebuild au SHA code final requis avant tout live. |
+| `GO_V7_11_FINAL_IMAGE_PROVENANCE` | **NOT_RUN / STALE** | Aucune image Core reconstruite après B7 (`store.py` backup 0600/fail-closed). L'image `528af664…` ne doit pas être déployée en live. |
 | `GO_V7_11_ANTI_REPLAY_TOPOLOGY` | **GO local avec limitations P2** | A4-F3 GO ; verrou + garde + cache durable P6 + fiabilité P7 ; conditions live : cache dir persistant 0700, un seul Core/volume, secrets HMAC distincts par key_id, horloge stable. |
 | `GO_V7_11_AUTH_STAGING` | **GO local partiel** | Inchangé ; stack complète isolée non exécutée. |
 | `GO_V7_11_DEVICE_ISOLATION` | **GO local** | Inchangé. |
@@ -107,9 +108,10 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_INDEPENDENT_FINAL_COPY_REVIEW` | **GO local avec limites** | B10 : P1 fermé sur données live, 0 P0/P1 ; migration live NO-GO. |
 | `GO_V7_11_CONNECTOR_BACKUP_COVERAGE` | **GO local avec gap confirmé** | B3 : `operations.json` omis du backup/restore CLI ; procédure complète 3/3 testée sur état synthétique. Backup live non exécuté. |
 | `GO_V7_11_INDEPENDENT_ISOLATED_REVIEW` | **GO local avec P2 / NO-GO live** | B4 : 0 P0/P1, 2 P2 ; vérification Docker directe UNKNOWN ; aucun test/live exécuté par le relecteur. |
-| `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Backup connecteur incomplet confirmé ; procédure complète uniquement synthétique ; backup live/Relay/Pixel non exécuté. |
+| `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limites** | Backup live Core/Pixel/connecteur exécuté et restauration testée sur copies ; pas de restauration live, pas de copie hors site/chiffrée. |
+| `GO_V7_11_LIVE_BACKUP` | **GO local avec limites** | Fenêtre du 2026-11-08 : Core arrêté ~14 s, DB/sidecar copiés, Pixel V7-07 vérifié, connecteur 3/3 restauré sur copie, Relay jamais arrêté ; B11 GO local, 0 P0/P1, 2 P2 fermés. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; migration réelle validée sur copie mais **pas** sur le live ; ancien sidecar live `0644`/65 536 octets à vérifier et déplacer ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée ; autorisation nominative absente. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Image Core **stale** depuis B7 ; migration live non autorisée ; identité/binding non vérifiables ; Relay non administrable ; backup local uniquement (pas hors site/chiffré) ; procédure connecteur non déployée ; décisions 3 propositions/1 expiration absentes. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -248,3 +250,44 @@ La revue B10 confirme **P1 fermé sur données live**, GO local final, 0 P0/P1. 
 8. `GO_V7_11_RELAY_SYNC_AVD` reste **NOT_RUN** ; `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
 
 P2/P3 acceptés pour le chemin local, à surveiller avant live : `fsync` du répertoire parent non réalisé, snapshot entièrement en mémoire, fenêtre entre snapshot et `BEGIN IMMEDIATE` (écrivains à arrêter), `os.close` non normalisé, `docker cp` non coordonné pour la copie, sidecar live non validé, identifiants d'orchestration dans le registre, portabilité `O_NOFOLLOW`/`serialize`. Aucun n'est un P0/P1 confirmé.
+
+## 11. Addendum — fenêtre de backup live et archivage du sidecar (2026-11-08)
+
+Paquet autorisé par l'utilisateur : « Fenêtre de backup live + sidecar ». Opérateur unique parent ; Relay jamais arrêté ; aucune migration live.
+
+### 11.1 Fenêtre et disponibilité
+
+- Ouverture : 2026-11-08T20:28:23Z. Core arrêté à 20:29:04Z, redémarré à 20:29:18Z : **~14 s d'indisponibilité**.
+- Relay : jamais arrêté, `StartedAt=2026-11-07T10:05:46.958Z`, health 200 avant/après.
+- Connecteur : inactif avant/pendant/après (aucun processus, aucun listener 4400/4401).
+
+### 11.2 Artefacts vérifiés
+
+| Composant | Résultat |
+|---|---|
+| Pixel V7-07 | `preflight`/`backup`/`verify` PASS ; archive `7e5908cd…`, 25 fichiers, manifeste `2ac75fa7…`, 15 `shared_prefs` ; app relancée, HOME conservé |
+| Core DB | `752919f2…` identique avant/arrêt, v3, intégrité ok, FK vide, compteurs 3/2/2/1 |
+| Sidecar | `b8210d25…`, `user_version=0` stale, archivé `0600` sous `atlas.sqlite3.pre-v4.bak.v7-11b-archive` ; chemin exact **absent** |
+| Core après retour | health 200, DB v3 intègre, `restarts=0` (arrêt/démarrage manuel) |
+| Connecteur | 30 entrées ; 3 fichiers d'état live=backup ; restauration 3/3 identique sur copie ; aucun démarrage/arrêt |
+| Relay | métadonnées filtrées uniquement ; état volatile non sauvegardé ; aucune recréation |
+| Backup global | racine `0700`, fichiers `0600`, 427 K, manifeste `73a173ce…`, 14 fichiers couverts (10 principaux + 4 auxiliaires) |
+
+Restaurations testées **sur copies uniquement** : Core v3/intègre, connecteur 3/3, archive Pixel vérifiée ; copies de test supprimées. Aucune restauration live, aucune promotion.
+
+### 11.3 Revue indépendante et P2
+
+B11 : **GO_WITH_LIMITATIONS local / NO-GO live**, **0 P0/P1**. Deux P2 initialement ouverts ont été corrigés et revérifiés :
+
+1. nom de fichier de configuration credential exposé dans la preuve → remplacé par une description générique ; sanitisation PASS ;
+2. quatre fichiers auxiliaires hors manifeste → intégrés au manifeste global (14 fichiers) ; hashes/tailles/modes vérifiés.
+
+Preuves : [`evidence/V7-11B_LIVE_BACKUP_EVIDENCE.md`](evidence/V7-11B_LIVE_BACKUP_EVIDENCE.md), [`evidence/V7-11B_LIVE_BACKUP_REVIEW.md`](evidence/V7-11B_LIVE_BACKUP_REVIEW.md).
+
+### 11.4 Limites et condition critique avant live
+
+- Backup **local au même hôte**, sans chiffrement au repos ni copie hors site ; 56 G libres (97 % utilisé).
+- DB live toujours en mode `0644` ; le backup connecteur contient des tokens/secrets ; le sidecar archivé v0 n'est **pas** un rollback pré-migration valide.
+- **L'image Core `528af664…` est stale** : construite à `a3d72db`, avant le correctif B7 (backup `0600` + fail-closed). Elle ne doit pas être déployée en live.
+- Avant toute migration live : reconstruire l'image au SHA code final, rejouer le stack isolé sur une copie réelle migrée (health, migration, verrou, anti-rejeu, chemin legacy), puis obtenir une autorisation nominative distincte avec rollback et décision binding/3 propositions/1 expiration.
+- `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
