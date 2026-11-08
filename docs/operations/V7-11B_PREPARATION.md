@@ -99,10 +99,13 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | APK exact `bb703ec7…`, certificat correct. |
 | `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Inchangé ; APPLY A0 bloqué sur `DEMO`. |
 | `GO_V7_11_ANDROID_PRESERVATION_PHYSICAL` | **GO_WITH_LIMITATIONS** | Installation in-place sur Pixel 9 Pro XL API 37 : APK exact `bb703ec7…`, données byte-identiques, HOME/permissions conservés, aucun crash. QA fonctionnelle et APPLY NOT_RUN. |
-| `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay. |
-| `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Inchangé ; backup connecteur incomplet à compléter. |
+| `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay avec Android ; le stack isolé B1 ne vaut pas test AVD. |
+| `GO_V7_11_ISOLATED_STACK` | **GO local** | B1 PASS : Core/Relay/proxy health 200, DB neuve `user_version=5`, `/metrics` `relay_connected=true`, WS 101, loopback only, live inchangé. Déviation bridge non-`internal` documentée. |
+| `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** | B2 : base live `user_version=3`, tables V4 absentes, `device_ref` absent ; le libellé `pixel-v7` n'existe que côté connecteur. Vérification impossible avant migration live. |
+| `GO_V7_11_CONNECTOR_BACKUP_COVERAGE` | **GO local avec gap confirmé** | B3 : `operations.json` omis du backup/restore CLI ; procédure complète 3/3 testée sur état synthétique. Backup live non exécuté. |
+| `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Backup connecteur incomplet confirmé ; procédure complète uniquement synthétique ; backup live/Relay/Pixel non exécuté. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable, identité/binding non vérifiés, backup live absent, Pixel non testé. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; base live encore `user_version=3` sans tables V4 ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -137,3 +140,52 @@ L'utilisateur a choisi le paquet « Installation Pixel (physique) ». L'installa
 **Preuve :** [`evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`](evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md).
 
 **Limites :** QA fonctionnelle complète NOT_RUN ; APPLY A0 NOT_RUN/BLOCKED ; Keystore non introspectable sans root ; rollback disponible mais non exercé sur le Pixel ; autres utilisateurs Android non examinés. Aucune autorisation supplémentaire n'est consommée par cet addendum : la révocation, le cutover, la promotion `dual`/`principal`, le backup live et la modification Relay restent interdits.
+
+## 9. Addendum — qualification isolée, identité et backup connecteur (2026-11-08)
+
+Paquet autorisé par l'utilisateur : « Qualification isolée + identité lecture seule ». Trois tickets `codex/gpt-6-luna` / `xhigh` vérifiés, intégrés sur la branche.
+
+### 9.1 B1 — stack isolé : GO local
+
+- Endpoints `127.0.0.1:18100/14400/14401/14402` uniquement ; Core `mock`, token synthétique, SQLite neuve `user_version=5`, `integrity_check=ok`.
+- Core/Relay/proxy `/health` = 200 ; connecteur `/metrics` = 200 avec `relay_connected=true`, `errors_total=0` ; proxy `ws_upgrade status=101` ; registration Relay observée.
+- État connecteur : `identity.json` 0600 ; `devices.json`/`operations.json` absents sans appairage.
+- Live `atlas-core-atlas-core-1` et `atlas-v7-relay` : `restarts=0`, `StartedAt` identiques avant/après ; ports live inchangés.
+- Déviation : bridge dédié **non-`internal`** avec publication `127.0.0.1` seulement, car `--internal` + publication loopback ne crée aucun listener hôte (test parent `000`). Pas de capture paquets exhaustive.
+- Preuve : [`evidence/V7-11B_ISOLATED_STACK_EVIDENCE.md`](evidence/V7-11B_ISOLATED_STACK_EVIDENCE.md).
+
+### 9.2 B2 — identité/binding live : BLOCKED
+
+- Base live toujours `user_version=3`, `integrity_check=ok`.
+- Tables `principals_v4`, `credentials_v4`, `principal_capabilities_v4`, `relay_principal_bindings_v4` **absentes** ; `agent_proposals_v4` contient 3 lignes mais **aucune colonne `device_ref`**.
+- `ATLAS_V4_AUTH_MODE` et `ATLAS_V4_ENABLED` sont unset ; le code retombe sur `legacy`.
+- Connecteur : `identity.json` (clé publique 32 octets, fingerprint cohérent), `devices.json` 20 entrées dont le libellé `pixel-v7`, `operations.json` 9 entrées ; modes 0600, mtimes inchangés.
+- Conséquence : l'association `pixel-v7` → principal RELAY → propositions **ne peut pas être établie** sur le live actuel. Le binding n'est pas « absent » : il est **non observable** faute de schéma V4. La migration v3→v5 reste à exécuter sur une copie vérifiée, puis sur le live avec autorisation distincte.
+- Preuve : [`evidence/V7-11B_IDENTITY_BINDING_EVIDENCE.md`](evidence/V7-11B_IDENTITY_BINDING_EVIDENCE.md).
+
+### 9.3 B3 — backup connecteur : GO local avec gap
+
+- `backup-state.mjs` et `restore-state.mjs` ne traitent que `identity.json` et `devices.json` ; `operations.json` est absent du backup, du manifeste et de la restauration.
+- Gap reproduit par le parent : le backup valide contient `identity.json`, `devices.json`, `manifest.json` et **pas** `operations.json`.
+- Procédure complète manuelle testée sur état synthétique : 3/3 fichiers, hashes source = manifeste = cible, modes 0700/0600.
+- Le backup live n'a pas été exécuté ; le connecteur live n'a pas été arrêté.
+- Preuve : [`evidence/V7-11B_CONNECTOR_BACKUP_EVIDENCE.md`](evidence/V7-11B_CONNECTOR_BACKUP_EVIDENCE.md).
+
+### 9.4 Gates et conditions
+
+| Gate | Statut |
+|---|---|
+| `GO_V7_11_ISOLATED_STACK` | **GO local** (PASS B1) |
+| `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** (B2) |
+| `GO_V7_11_CONNECTOR_BACKUP_COVERAGE` | **GO local avec gap** (B3) |
+| `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** |
+
+Conditions avant toute action live :
+
+1. Sauvegarde live Core/Relay/connecteur/Pixel dans une fenêtre autorisée, avec restauration testée.
+2. Migration SQLite v3→v5 sur copie vérifiée, puis décision distincte pour le live.
+3. Création/vérification du principal et du binding `pixel-v7` après migration ; aucune revendication avant preuve.
+4. Procédure de backup connecteur complète (3 fichiers) déployée ou exécutée manuellement, service arrêté.
+5. Relay identifié/administrable et recréation testée hors live.
+6. Aucun APPLY, aucune révocation, aucun changement de bearer sans autorisation nominative distincte.
