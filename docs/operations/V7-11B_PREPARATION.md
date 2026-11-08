@@ -102,12 +102,14 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay avec Android ; le stack isolé B1 ne vaut pas test AVD. |
 | `GO_V7_11_ISOLATED_STACK` | **GO local** | B1 PASS : Core/Relay/proxy health 200, DB neuve `user_version=5`, `/metrics` `relay_connected=true`, WS 101, loopback only, live inchangé. Déviation bridge non-`internal` documentée. |
 | `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** | B2 : base live `user_version=3`, tables V4 absentes, `device_ref` absent ; le libellé `pixel-v7` n'existe que côté connecteur. Vérification impossible avant migration live. |
-| `GO_V7_11_REAL_COPY_MIGRATION` | **GO local** | B5 : migration v3→v5 sur copie réelle PASS ; live toujours v3 ; 3 propositions sans propriétaire ; 1 candidate expiration ; aucun credential ; copie supprimée. |
+| `GO_V7_11_REAL_COPY_MIGRATION` | **GO local final** | B5 puis B9/B10 : migration v3→v5 sur copie réelle PASS avec le code corrigé ; backup 0600, fail-closed, 3 propositions sans propriétaire, 1 candidate expiration, live toujours v3. |
+| `GO_V7_11_BACKUP_PERMISSIONS` | **GO local avec limites P2/P3** | B7/B8/B9/B10 : backup `0600` avec `O_EXCL`/`O_NOFOLLOW`, fail-closed, P1 fermé sur copie réelle ; fsync répertoire, mémoire, `os.close` et portabilité restent P2/P3. |
+| `GO_V7_11_INDEPENDENT_FINAL_COPY_REVIEW` | **GO local avec limites** | B10 : P1 fermé sur données live, 0 P0/P1 ; migration live NO-GO. |
 | `GO_V7_11_CONNECTOR_BACKUP_COVERAGE` | **GO local avec gap confirmé** | B3 : `operations.json` omis du backup/restore CLI ; procédure complète 3/3 testée sur état synthétique. Backup live non exécuté. |
 | `GO_V7_11_INDEPENDENT_ISOLATED_REVIEW` | **GO local avec P2 / NO-GO live** | B4 : 0 P0/P1, 2 P2 ; vérification Docker directe UNKNOWN ; aucun test/live exécuté par le relecteur. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Backup connecteur incomplet confirmé ; procédure complète uniquement synthétique ; backup live/Relay/Pixel non exécuté. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; migration réelle validée sur copie mais **pas** sur le live ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; migration réelle validée sur copie mais **pas** sur le live ; ancien sidecar live `0644`/65 536 octets à vérifier et déplacer ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée ; autorisation nominative absente. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -213,11 +215,36 @@ Paquet autorisé par l'utilisateur : « Migration v3→v5 sur copie réelle ». 
 - **Nettoyage** : copie, sauvegardes et scripts supprimés ; live toujours actif, `restarts=0`, `user_version=3`.
 - Preuve : [`evidence/V7-11B_REAL_COPY_MIGRATION_EVIDENCE.md`](evidence/V7-11B_REAL_COPY_MIGRATION_EVIDENCE.md).
 
+### 10.1 Correctif P1/P2 du backup pré-migration
+
+La revue B6 a trouvé un **P1** dans `_create_coherent_pre_migration_backup` : le backup était créé par `sqlite3.connect(backup_path)` sans mode `0600` explicite ni `O_EXCL`/`O_NOFOLLOW`, et un backup préexistant était réutilisé après un simple `integrity_check`. Le live possède justement un ancien `.pre-v4.bak` en **0644**, taille **65 536 octets**, qui ne doit pas servir de sauvegarde pré-migration.
+
+Le correctif B7 crée désormais le backup avec `O_CREAT|O_EXCL|O_RDWR|O_NOFOLLOW`, mode demandé `0600`, `fchmod`, vérifications inode/propriétaire/mode/taille, snapshot mémoire sérialisé, `fsync`, relecture et contrôles `integrity_check`/`user_version`. Tout fichier, symlink ou lien cassé préexistant provoque `MigrationIntegrityError` avec instruction de vérifier puis déplacer l'ancien backup. Le P1 et le P2 de provenance sont fermés (B8), sans nouveau P0/P1.
+
+### 10.2 Rejeu final sur copie réelle
+
+B9 a rejoué la migration avec le code corrigé sur une nouvelle copie privée de la base live :
+
+- exports live identiques SHA `752919f2…`, v3, intégrité ok, FK vide, compteurs 3/2/2/1 ;
+- migration v5, ledger `[1,2,3,4,5]`, tables V4/V5 et `device_ref`, compteurs conservés ;
+- nouveau backup régulier, propriétaire euid, **0600**, v3, intègre, 249 856 octets ;
+- fail-closed vérifié sur backup préexistant et symlink, sans modification de la copie ni de la cible ;
+- backfill dry-run 3 propositions sans propriétaire, 0 credential ; expiration dry-run 1 candidate `PENDING_ANDROID`, 0 anomalie ;
+- réouverture v5 idempotente ; live final identique au hash initial, toujours v3 ;
+- ancien sidecar live `0644`/65 536 octets documenté, ni copié ni ouvert ;
+- copie, backups et scripts supprimés.
+
+La revue B10 confirme **P1 fermé sur données live**, GO local final, 0 P0/P1. Preuves : [`evidence/V7-11B_BACKUP_PERMISSIONS_FIX_EVIDENCE.md`](evidence/V7-11B_BACKUP_PERMISSIONS_FIX_EVIDENCE.md), [`evidence/V7-11B_BACKUP_FIX_REVIEW.md`](evidence/V7-11B_BACKUP_FIX_REVIEW.md), [`evidence/V7-11B_REAL_COPY_MIGRATION_FINAL_EVIDENCE.md`](evidence/V7-11B_REAL_COPY_MIGRATION_FINAL_EVIDENCE.md), [`evidence/V7-11B_FINAL_COPY_REVIEW.md`](evidence/V7-11B_FINAL_COPY_REVIEW.md).
+
 ### Conditions avant migration live
 
 1. Fenêtre de backup autorisée : arrêt Core/connecteur, snapshots Core/Relay/connecteur (3 fichiers) et Pixel, restauration testée.
-2. Autorisation nominative distincte pour appliquer la migration au volume live, avec sauvegarde pré-migration vérifiée et rollback.
-3. Décision explicite sur les **3 propositions sans propriétaire** : import du bearer LEGACY live (opération sensible) ou attribution explicite ; aucun backfill automatique.
-4. Décision sur la **1 candidate d'expiration PENDING_ANDROID** avant toute réconciliation ; ne pas l'appliquer silencieusement.
-5. Après migration : vérifier le principal/binding `pixel-v7`, sans créer de credential ni changer le bearer sans autorisation.
-6. `GO_V7_11_RELAY_SYNC_AVD` reste **NOT_RUN** ; `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
+2. **Ancien sidecar** : vérifier puis déplacer `/data/atlas.sqlite3.pre-v4.bak` (0644, 65 536 octets), confirmer l'absence du chemin avant redémarrage ; le nouveau backup doit être régulier, propriétaire euid, mode `0600`, v3 et intègre. Sans ce déplacement, le nouveau Core échoue volontairement en fail-closed.
+3. Autorisation nominative distincte pour appliquer la migration au volume live, avec sauvegarde pré-migration vérifiée et rollback.
+4. Décision explicite sur les **3 propositions sans propriétaire** : import du bearer LEGACY live (opération sensible) ou attribution explicite ; aucun backfill automatique.
+5. Décision sur la **1 candidate d'expiration PENDING_ANDROID** avant toute réconciliation ; ne pas l'appliquer silencieusement.
+6. Après migration : vérifier le principal/binding `pixel-v7`, sans créer de credential ni changer le bearer sans autorisation.
+7. Relay administrable et recréation testée hors live ; backup connecteur complet (3 fichiers) exécuté et restauration vérifiée.
+8. `GO_V7_11_RELAY_SYNC_AVD` reste **NOT_RUN** ; `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
+
+P2/P3 acceptés pour le chemin local, à surveiller avant live : `fsync` du répertoire parent non réalisé, snapshot entièrement en mémoire, fenêtre entre snapshot et `BEGIN IMMEDIATE` (écrivains à arrêter), `os.close` non normalisé, `docker cp` non coordonné pour la copie, sidecar live non validé, identifiants d'orchestration dans le registre, portabilité `O_NOFOLLOW`/`serialize`. Aucun n'est un P0/P1 confirmé.
