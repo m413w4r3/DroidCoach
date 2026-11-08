@@ -152,3 +152,98 @@ Les résultats h1/h2 nécessitent une écriture SQL directe de la base; aucun ap
 | P1 | 0 | F1 fermé pour les révocations du registre et le rollback/restart normal |
 | P2 | 5 | Capabilities vide; anti-rejeu multiworker; permissions/identité SQLite; chemins locaux dans les preuves; intégrité du tombstone sous écriture SQLite directe |
 
+## Re-revue A4-F2 sur c031cb5
+
+Cette re-revue porte sur l’arbre intégré `c031cb54615977f3535fce03a37c01fc65f266e2`, parent `132f17bd4cb3ac7e3e0005d284c7ca53891b315f`, extrait en lecture seule par `git archive` dans `/tmp/v7-11-a4-f2-final`. La branche d’intégration est `feat/atlas-v7-11-migration-readiness`. Seuls les tests temporaires dans `/tmp` et le présent rapport de revue ont été écrits.
+
+| Champ | Résultat |
+|---|---|
+| Verdict F2 | **GO avec réserves P2**; `GO_V7_11_INDEPENDENT_SECURITY_REVIEW: GO` pour un seul Core par base canonique, des CLI exécutés Core arrêté et une horloge suffisamment stable |
+| `132f17b` | `backend/atlas_backend/main.py`, `backend/tests/test_core_db_lock.py`, preuve A1 |
+| `c031cb5` | `backend/atlas_backend/v4_router.py`, `backend/tests/test_v4_principal_auth.py`, preuve A2 Relay |
+| P0 / P1 | **0 / 0** nouveau finding P0/P1 dans cette re-revue; le finding F1 reste fermé sur le chemin normal de révocation et de redémarrage |
+
+### Findings F2
+
+#### P2 — Le watermark de démarrage ne bloque pas tout rejeu après redémarrage
+
+**Emplacements :** `backend/atlas_backend/v4_router.py:502-504,821-826`; fenêtre HMAC dans `backend/atlas_backend/v4_assertion.py:161-173`.
+
+**Scénario :** le contrôle ne refuse que les timestamps sous `core_started_at_ms - 5000`. La vérification HMAC autorise aussi un timestamp jusqu’à 120 secondes dans le futur. Une assertion acceptée avant un redémarrage peut donc être rejouée après celui-ci si l’horloge du connecteur est en avance, ou si l’horloge murale Core recule : son timestamp paraît alors récent/futur, le cache nonce est neuf et le plancher de démarrage ne la rejette pas.
+
+**Reproduction/oracle :** avec une clé, un bearer, un principal et une base synthétiques, une assertion HMAC a reçu `200`; après reconstruction de l’application avec l’horloge Core reculée de 30 secondes, la même assertion et le même nonce ont de nouveau reçu `200`. Le résultat applicatif était idempotent dans cette fixture; aucun effet dupliqué n’a été démontré. Les tests existants confirment aussi que `started_at - 3000 ms` est accepté, tandis qu’un probe à `-5001 ms` est refusé.
+
+**Recommandation :** si le contrat exige un refus du rejeu après redémarrage, conserver les nonces dans un stockage partagé/durable ou lier les assertions à une époque/session Core renouvelée. Documenter explicitement le rejeu résiduel permis par la tolérance de 5 s et la dérive d’horloge future jusqu’à ±120 s. Les timestamps exactement à ±120 000 ms passent la vérification HMAC; ±120 001 ms sont refusés.
+
+#### P2 — Le verrou est pris après l’initialisation/migration SQLite
+
+**Emplacements :** `backend/atlas_backend/main.py:334-336,381-384`.
+
+**Scénario :** `create_app()` construit `SQLiteStore` avant que le lifespan n’appelle `_acquire_core_database_lock()`. Un second Core qui sera ensuite refusé peut donc quand même ouvrir la base et exécuter son initialisation/migration pendant que le premier Core tient le verrou.
+
+**Reproduction/oracle :** après création d’une application et acquisition du verrou Core sur sa base temporaire, un second `create_app()` sur cette même base a terminé; le `mtime` SQLite a changé. Son lifespan aurait ensuite été refusé par le verrou. Le test `test_same_database_lifespan_is_exclusive_and_released` couvre le refus du second lifespan, mais ne couvre pas l’écriture antérieure de `SQLiteStore`.
+
+**Recommandation :** acquérir le verrou avant toute construction de `SQLiteStore` ou toute migration, et relâcher ce verrou si la construction de l’application échoue.
+
+#### P2 — Les CLI SQLite ne consultent pas le verrou Core
+
+**Emplacements :** `backend/scripts/atlas_v4_principals.py:300-302,331-339`; `backend/scripts/atlas_v4_expiration_reconcile.py:233-247`.
+
+**Scénario :** le verrou empêche un autre Core d’acquérir le même fichier lock, mais les commandes administratives SQLite ne le consultent pas. Une commande de mutation peut modifier le registre ou les propositions pendant que Core tourne.
+
+**Reproduction/oracle :** avec un verrou acquis par le helper Core sur une base temporaire, la CLI `credential revoke` a réussi et a révoqué un credential synthétique. La commande `list` a aussi réussi après relâchement du verrou/Core arrêté. La documentation qualifie ces outils d’offline et demande l’arrêt du Core, mais le code n’impose pas cette précondition.
+
+**Recommandation :** faire prendre aux commandes mutantes le même verrou exclusif, ou échouer clairement si Core tient déjà le verrou. Garder l’usage offline des opérations de sauvegarde/réconciliation.
+
+#### P2 — Deux lifespans Core sur des bases distinctes ne terminent pas leur arrêt dans le test ciblé
+
+**Emplacement observé :** `backend/atlas_backend/main.py:428-438`, attente des tâches de fond avant la libération du lock.
+
+**Scénario :** deux applications sur deux bases distinctes acquièrent chacune leur lock, mais le contexte externe ne termine pas lorsque le contexte interne est arrêté.
+
+**Reproduction/oracle :** `test_different_databases_can_start_together` est entré dans les deux contextes et a vu les deux fichiers lock, puis n’a pas terminé après plus de 70 secondes. Le stack observé attendait la collecte des tâches de fond à la fermeture du lifespan externe. Les tests des autres cas de verrou passent isolément. Le helper lock synchrone confirme que deux chemins distincts peuvent être verrouillés en même temps.
+
+**Recommandation :** corriger ou borner l’arrêt des tâches de fond, puis conserver un test avec délai maximal vérifiant que les deux lifespans terminent et libèrent leurs locks.
+
+### Scénarios et contrôles exécutés
+
+Les cas d’authentification utilisent de vraies signatures HMAC synthétiques, l’application ASGI et SQLite temporaire; ils ne remplacent pas le vérificateur par un mock.
+
+| Contrôle | Résultat |
+|---|---|
+| Même base, deux lifespans dans un processus | **PASS** — le premier tient le lock, le second est refusé; après fermeture, le second peut acquérir le lock |
+| Bases distinctes | **PASS partiel** — les deux locks sont acquis; le test ASGI ne termine pas son arrêt externe (finding P2 ci-dessus) |
+| Alias symlink de base | **PASS** — `Path.resolve(strict=False)` fait partager le lock canonique |
+| Fichier `.lock` symlink | **PASS** — `O_NOFOLLOW` le refuse et la cible reste intacte |
+| Mode et propriétaire du lock créé | **PASS** — mode `0600`; UID/GID correspondent au processus effectif dans la fixture temporaire |
+| `:memory:` | **PASS** — aucun fichier lock adjacent |
+| Chemins relatif/absolu dans le même répertoire courant | **PASS** — ils se résolvent sur le même lock; un changement de répertoire courant après démarrage n’a pas été testé |
+| Libération après arrêt / Core arrêté | **PASS** dans `test_same_database_lifespan_is_exclusive_and_released`; l’intégrité SQLite vaut `ok` et le second lifespan acquiert le lock |
+| CLI pendant le lock / après arrêt | **CONFIRMÉ** — une révocation CLI fonctionne pendant que le lock est tenu; `list` fonctionne après relâchement |
+| Relay A/A et B/B | **PASS** — assertions et credentials correctement liés acceptés (`200`) |
+| Relay A/B, assertion inconnue ou altérée | **PASS** — credential/session croisés et identité, clé, méthode, chemin, timestamp, nonce ou corps modifiés refusés (`401`/erreur de vérification) |
+| Rejeu mono-cache et sans assertion pour audience RELAY | **PASS** — rejeu refusé (`401`); RELAY sans assertion refusé (`401`) |
+| DIRECT sans assertion | **PASS** — le credential DIRECT de test reste accepté sans assertion |
+| Redémarrage, timestamp post-démarrage | **PASS** — ancienne assertion à 10 s avant le nouveau démarrage refusée; assertion à +1 s acceptée |
+| Skew de démarrage et borne exacte | **PASS** — `-3000 ms` et `-5000 ms` acceptés; `-5001 ms` refusé; assertion juste après le démarrage acceptée |
+| Fenêtre HMAC ±120 s | **PASS** — ±120 000 ms acceptés par le vérificateur; ±120 001 ms refusés |
+| Rejeu avec recul d’horloge Core de 30 s | **FAIL du garde-fou après redémarrage** — assertion antérieure acceptée une seconde fois (`200`) car son timestamp est futur de 30 s et reste dans la fenêtre HMAC |
+
+### Suites de tests et limites
+
+- `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -vv tests/test_v4_principal_auth.py` : **22 passed, 1 warning, 2.67 s**. Les cas couvrent l’assertion A/A, B/B, A/B, le nonce mono-cache, la rotation et clé inconnue, le binding, le redémarrage normal, le skew de 3 s et l’audience DIRECT.
+- `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -vv tests/test_core_db_lock.py -k 'not different_databases'` : **4 passed, 1 deselected, 1 warning, 0.32 s**.
+- La commande ciblée demandée `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py tests/test_v4_principal_auth.py` a été interrompue après plus de 70 s sans résultat final; un seul point était affiché avant le blocage sur le cas à deux bases. Le fichier auth a ensuite passé seul; le cas distinct-databases a aussi été exercé indépendamment jusqu’à l’arrêt bloqué.
+- `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q` : **non terminé**. 37 points étaient affichés, puis aucune nouvelle sortie pendant 30 s; commande interrompue après environ 60 s, sans compte total ni résultat final.
+- Aucun Core/Relay live, accès réseau, ADB, émulateur ou Pixel physique. Aucune donnée personnelle ni credential réel. La dérive a été simulée par horloge contrôlée.
+
+### État après F2
+
+Les réserves P2 précédentes restent applicables : valeur capabilities explicitement vide, permissions/identité de la base SQLite, chemins locaux dans d’anciennes preuves et modification directe SQLite de tombstones. Le verrou réduit le risque de rejeu entre workers qui partagent une même base en refusant le second lifespan; le cache nonce reste local au processus si des déploiements utilisent des copies indépendantes de la base. Le finding F2 sur l’horloge complète cette réserve anti-rejeu. S’y ajoutent les trois réserves de portée du verrou et d’arrêt concurrent décrites ci-dessus.
+
+| Sévérité | Nombre | Résumé |
+|---|---:|---|
+| P0 | 0 | Aucun |
+| P1 | 0 | Aucun nouveau P1 confirmé; F1 fermé pour le chemin standard |
+| P2 | 8 | Capabilities vides; rejeu/horloge et cache par processus; permissions SQLite; chemins locaux historiques; intégrité tombstone sous SQL direct; verrou acquis après init DB; CLI hors verrou; arrêt concurrent de deux lifespans |
+
