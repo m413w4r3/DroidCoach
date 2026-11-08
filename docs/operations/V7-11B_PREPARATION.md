@@ -98,11 +98,12 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_EXPIRATION_DRY_RUN` | **GO local** | Inchangé. |
 | `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | APK exact `bb703ec7…`, certificat correct. |
 | `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Inchangé ; APPLY A0 bloqué sur `DEMO`. |
+| `GO_V7_11_ANDROID_PRESERVATION_PHYSICAL` | **GO_WITH_LIMITATIONS** | Installation in-place sur Pixel 9 Pro XL API 37 : APK exact `bb703ec7…`, données byte-identiques, HOME/permissions conservés, aucun crash. QA fonctionnelle et APPLY NOT_RUN. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Inchangé ; backup connecteur incomplet à compléter. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable, identité/binding non vérifiés, backup live absent, Pixel non testé. |
-| `GO_PRODUCT_INSTALL` | **NO-GO / NOT_RUN** | Aucune installation Pixel. |
+| `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
 
@@ -122,3 +123,17 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
    - **Cutover irréversible** : révocation, rotation, `principal`, avec autorisation nominative distincte.
 
 Aucun de ces blocs n'est autorisé par le présent addendum.
+
+## 8. Addendum — installation Pixel (2026-11-08)
+
+L'utilisateur a choisi le paquet « Installation Pixel (physique) ». L'installation in-place de l'APK exact `bb703ec7…` a été exécutée sur le Pixel 9 Pro XL physique (Android 17 / API 37, utilisateur 0) après sauvegarde app-only.
+
+- Sauvegarde préalable hors dépôt : APK antérieur `c7b0f71f…55a0` ; données `115acfbd…f048` (26 fichiers, archive extraite et vérifiée) ; permissions et rôle HOME capturés.
+- `adb install -r` : **Success**, 2026-11-08T16:08:42Z → 16:08:51Z.
+- Après installation : APK installé = candidat exact `bb703ec7…f1dff`, certificat `da301466…eeee`, `versionCode=1`, `versionName=0.1.0`, `firstInstallTime` inchangé, 23/23 permissions identiques, rôle HOME conservé, archive données **byte-identique**.
+- Après démarrage : 15/15 `shared_prefs` identiques (consentements et configuration de synchronisation préservés) ; seuls le marqueur ART `profileInstalled` et les journaux WorkManager changent ; cold start 399 ms ; intent HOME 101 ms ; aucun FATAL/ANR/Keystore.
+- Core/Relay live inchangés : `restarts=0`, démarrés 2026-11-07T10:05:46Z, health 200, ports 8100/4402, 4400/4401 absents.
+
+**Preuve :** [`evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`](evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md).
+
+**Limites :** QA fonctionnelle complète NOT_RUN ; APPLY A0 NOT_RUN/BLOCKED ; Keystore non introspectable sans root ; rollback disponible mais non exercé sur le Pixel ; autres utilisateurs Android non examinés. Aucune autorisation supplémentaire n'est consommée par cet addendum : la révocation, le cutover, la promotion `dual`/`principal`, le backup live et la modification Relay restent interdits.
