@@ -247,3 +247,76 @@ Les réserves P2 précédentes restent applicables : valeur capabilities explici
 | P1 | 0 | Aucun nouveau P1 confirmé; F1 fermé pour le chemin standard |
 | P2 | 8 | Capabilities vides; rejeu/horloge et cache par processus; permissions SQLite; chemins locaux historiques; intégrité tombstone sous SQL direct; verrou acquis après init DB; CLI hors verrou; arrêt concurrent de deux lifespans |
 
+## Re-revue A4-F3 sur a3d72db
+
+Cette re-revue porte sur le SHA intégré `a3d72db19c6d98135d366d5a1aead43b45ea37b5` (`feat/atlas-v7-11-migration-readiness`), avec le correctif de verrou `827dc63016632e3656e9eac2796ba9a7caf3a4f3`. L’archive a été extraite dans `/tmp/v7-11-a4-f3-final`. Le worktree de revue était sur `audit/v7-11-a4-security-review`, HEAD initial `ca221890b93e012d2e16bdb9b8440442f4b1a625`. Seul ce rapport est modifié ici; aucun code de l’archive n’a été changé.
+
+| Champ | Résultat |
+|---|---|
+| Verdict F3 | **GO avec limitations P2**, sous les conditions de déploiement ci-dessous |
+| Gate | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW: GO` avec réserves documentées |
+| Fichiers examinés | `backend/atlas_backend/main.py`, `v4_assertion.py`, `v4_router.py`; `backend/tests/test_core_db_lock.py`, `test_v4_principal_auth.py` |
+| P0 / P1 nouveaux | **0 / 0** |
+| P2 nouveaux confirmés | **3** : saut d’horloge avant/arrière, réutilisation de clé entre `key_id`, marqueur de nonce corrompu qui bloque les réservations |
+
+### Findings F3
+
+#### P2 — Une avance puis un recul de l’horloge peut rendre un rejeu valide
+
+**Emplacements :** `backend/atlas_backend/v4_assertion.py:311-330,405-426,474-486`; plancher de démarrage dans `backend/atlas_backend/v4_router.py:831-832`.
+
+**Scénario et reproduction :** un marqueur expire après 300 secondes selon l’horloge murale. Sur la même application, une assertion synthétique a reçu `200` à l’instant T. Une requête distincte à T+301 s a déclenché le nettoyage du marqueur et reçu `200`. Après retour de l’horloge à T, la même assertion, le même nonce et le même corps ont reçu `200` une seconde fois. Le garde de démarrage ne change pas dans ce scénario sans redémarrage. L’opération de fixture était idempotente; aucun effet métier dupliqué n’a été démontré, mais le contrôle d’authentification a accepté le rejeu.
+
+**Recommandation :** garder un état anti-retour d’horloge durable ou refuser les assertions après une discontinuité temporelle jusqu’à resynchronisation; ne pas supprimer des marqueurs sur la seule base d’une horloge murale qui peut reculer. À défaut, imposer et surveiller une borne de correction inférieure au TTL de 300 s.
+
+#### P2 — `key_id` n’est pas signé et sépare les espaces de nonces
+
+**Emplacements :** `backend/atlas_backend/v4_assertion.py:106-108,221-226,477-486`; configuration des clés `backend/atlas_backend/v4_assertion.py:32-52`.
+
+**Scénario et reproduction :** `canonical_message()` ne contient pas `key_id`, alors que le nom de fichier anti-rejeu est le SHA-256 de `key_id + NUL + nonce`. Avec deux IDs configurés pour la même clé synthétique, la même requête signée a été envoyée une première fois avec `key_id=test-key-1`, puis avec `test-key-2` sans recalculer la signature. L’endpoint ASGI a répondu `200` aux deux demandes et a créé deux marqueurs. Avec des secrets distincts, changer seulement l’ID invalide la signature; le cas est donc conditionné à la réutilisation du même secret sous plusieurs IDs, configuration que le chargeur accepte.
+
+**Recommandation :** inclure l’ID de clé dans une version signée de la chaîne canonique, ou refuser les clés identiques et partager l’espace des nonces entre IDs actifs. Le simple changement d’en-tête `key_id` ne doit pas créer un nouvel espace de rejeu pour une signature inchangée.
+
+#### P2 — Un marqueur nonce tronqué fait échouer toutes les réservations
+
+**Emplacements :** `backend/atlas_backend/v4_assertion.py:311-333,365-403`.
+
+**Scénario et reproduction :** si le processus s’arrête ou le stockage se remplit après la création O_EXCL mais avant l’écriture complète de l’expiration, le fichier de nom hashé reste vide/tronqué. Le cache refuse ensuite de réserver un autre nonce car le nettoyage rencontre ce fichier invalide et échoue fermé. Un test ciblé injecte une erreur d’écriture; un probe avec un fichier vide confirme que la réservation d’un nonce différent est également refusée. Il n’y a pas de fallback mémoire.
+
+**Recommandation :** documenter une procédure de récupération hors ligne qui inspecte et retire les marqueurs corrompus après arrêt du Core, ou rendre la création du contenu récupérable atomiquement. Le comportement actuel protège contre l’acceptation silencieuse mais peut interrompre toute authentification Relay jusqu’à intervention.
+
+### Contrôles et scénarios F3
+
+| Contrôle | Résultat |
+|---|---|
+| Deux instances de cache, même répertoire, même nonce | **PASS** — première réservation acceptée, seconde refusée; concurrence sur deux objets : exactement une réservation acceptée |
+| Nonce différent, TTL et redémarrage simulé | **PASS** — nonce distinct accepté; à 300 s le nonce expiré peut être réservé; une nouvelle instance partage le refus du rejeu non expiré |
+| Retour d’horloge de 30 s après reconstruction d’application | **PASS** — le test ciblé reçoit `401` grâce au marqueur durable |
+| Avance de 301 s, nettoyage, puis retour à T | **FAIL anti-rejeu** — la même assertion reçoit de nouveau `200`, finding P2 ci-dessus |
+| `key_id` différent, mêmes octets de clé et signature inchangée | **FAIL anti-rejeu** — deux réponses `200`, deux marqueurs; des clés synthétiques distinctes refusent l’ID modifié |
+| Répertoires de cache différents | **PASS de cloisonnement local** — chacun accepte indépendamment le nonce; ils ne partagent pas l’anti-rejeu |
+| Permissions et contenu persistant | **PASS** — répertoire `0700`, marqueur `0600`, UID du processus; noms hashés et contenu limité à l’expiration, aucun nonce/bearer en clair |
+| Répertoire/fichier `.lock` symlink, fichier de nonce symlink | **PASS fail-closed** — refus; les cibles externes restent inchangées |
+| Chemin relatif et répertoire symlink | **PASS fail-closed** — chemin relatif refusé; constructeur refuse le répertoire symlink |
+| Variable cache absente / présente mais invalide | **PASS** — absence sélectionne explicitement le cache mémoire; chemin relatif configuré fait échouer la construction de l’app, sans fallback silencieux |
+| Cache plein, illisible ou erreur d’écriture | **PASS fail-closed** — tests utilisent une capacité réduite à 1 et injectent `PermissionError`/erreur disque; la capacité configurée par défaut est 8192, sans stress-test de 8192 créations |
+| Verrou avant initialisation SQLite et libérations d’erreur | **PASS** — ordre `main.py:334-341`; tests couvrent l’erreur d’initialisation, le démarrage et le corps du lifespan, avec vérification des tâches restantes |
+| Même base, bases distinctes, alias de base, `:memory:` | **PASS** dans `test_core_db_lock.py`; les deux bases terminent sous délai, l’alias partage le verrou, le mode mémoire ne crée pas de fichier |
+| Répétition du fichier de verrou | **PASS** — 10 exécutions; chacune rapporte `9 passed`, sans tâche résiduelle |
+| CLI administrative pendant le verrou Core | **P2 toujours ouvert** — les scripts CLI n’acquièrent pas ce verrou (finding F2 inchangé) |
+
+### Commandes, findings hérités et limites
+
+- `cd /tmp/v7-11-a4-f3-final/backend && ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py tests/test_v4_principal_auth.py` : **35 passed, 1 warning, 6.42 s**. Ces tests utilisent l’application ASGI, de vraies signatures HMAC synthétiques et SQLite temporaire; les vérifications de cache ne sont pas des mocks tautologiques.
+- Répétition ciblée de `tests/test_core_db_lock.py` : **10/10 exécutions réussies, 9 passed par exécution**.
+- `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q` : **non terminé**. 37 points de progression ont été affichés sans résumé final; la commande a été interrompue après absence prolongée de progression. Aucun total de suite complète n’est revendiqué.
+- Le rejeu après recul simple de 30 s, les écritures SQLite avant prise du verrou et le blocage à l’arrêt des deux lifespans sont corrigés lorsque le cache durable est actif. Restent documentés des P2 hérités : configuration capabilities explicitement vide; permissions/identité SQLite; CLI qui ne respecte pas le verrou; chemins locaux historiques dans les preuves; mutations SQL directes possibles des champs audience/hash des credentials.
+- **Conditions de déploiement pour ce GO :** définir `ATLAS_V4_REPLAY_CACHE_DIR` vers le même chemin absolu sur un volume persistant partagé à travers les redémarrages, avec répertoire possédé par Core en mode `0700`; exécuter un seul Core par volume/base; ne pas répartir les Core sur des répertoires de cache distincts; configurer des secrets HMAC distincts par `key_id`; maintenir une horloge stable et prévoir une reprise hors ligne en cas de marqueur corrompu. Si la variable est absente, la protection redevient uniquement mémoire.
+- Tous les tokens, clés, IDs et données SQLite de ces probes étaient synthétiques dans des répertoires temporaires. Aucun service live, accès externe, ADB, émulateur ou Pixel physique n’a été utilisé; aucun push ni changement de code n’a été effectué.
+
+| Sévérité F3 | Nombre | Résultat |
+|---|---:|---|
+| P0 | 0 | Aucun |
+| P1 | 0 | Aucun nouveau P1 confirmé |
+| P2 | 3 nouveaux | Rejeu après avance/recul d’horloge; alias de `key_id` avec clé réutilisée; déni global de réservations par marqueur corrompu |
+
