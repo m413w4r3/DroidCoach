@@ -7,6 +7,8 @@
 **SHA de clôture documentaire :** HEAD de la branche après le commit qui contient ce rapport (voir `git rev-parse HEAD`).
 **Frontière :** V7-11A uniquement. Aucune mutation live, aucun Pixel, aucun push.
 
+> **Addendum V7-11B (post-clôture) :** la CI PR #3 est verte ; les correctifs préparatoires verrou single-writer (`132f17b`) et garde anti-rejeu après redémarrage (`c031cb5`), l'APK exact `bb703ec7…`, l'image Core `49d26b7e…` et la reconnaissance Relay sont documentés dans [V7-11B_PREPARATION.md](V7-11B_PREPARATION.md). Le présent rapport reste la référence V7-11A pour le code `65759dd`.
+
 ## 1. Résumé exécutif
 
 V7-11A avait pour but de qualifier intégralement la migration V7-10 avant toute mutation irréversible sur le Pixel ou les services personnels. La qualification locale est terminée et a produit des preuves exécutables : correctif CI, garde anti-réactivation legacy, migration SQLite v3→v5 sur copie, backfill/expiration sur copie, tests négatifs d'authentification, anti-rejeu, APK reconstruit, préservation et rollback AVD API 37, rôle HOME, image Core et scan secrets.
@@ -127,6 +129,8 @@ Cinq preuves historiques ont été expurgées (`<HOME>`, `<REPO>`, `<ANDROID_SDK
 | APK debug A5 (source 04fdc77) | `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e` |
 | **APK debug final (source c3dcaa1)** | `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1` |
 | **AndroidTest APK final (source c3dcaa1)** | `12012e11c051392aabfab50c652434edb8a6462ddef950a235fcf939fc431f7b` |
+| **APK debug exact code SHA `65759dd`** | `bb703ec770f4ebe7e20602db65fecfb75e7a783d1a30040f5f7d8796c29f1dff` (15 838 971 octets) |
+| **AndroidTest APK exact code SHA `65759dd`** | `6a99030de3cefd67dd65aa249fe53c83dcb6a73b4acc517dfe52cf0bd58d5f15` |
 | AndroidTest APK A3 / A5 | `8d9287db…676cc07` / `9db0a3ff…32e1bff` |
 | Certificat de signature | `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Image Core candidate (04fdc77) | `sha256:2c5ae216e1ed292cd11cbc87ec392b9e546187a52727156754afb440c2f1cd57` |
@@ -171,7 +175,7 @@ A4-F1 sur `65759dd` : **GO avec réserves P2**. P1 fermé pour les révocations 
 
 ### Revue finale indépendante A6
 
-A6-F1 sur `c3dcaa1` (code `65759dd`) : **V7-11A GO local avec limitations ; live NO-GO**. Le diff applicatif `65759dd..c3dcaa1` est vide. A6 confirme le P1 legacy fermé pour le parcours normal du registre, le BLOCKED APPLY sur origine `DEMO`, l'anomalie FATAL HOME non reproduite, la déviation A2 4402 exclue des preuves, et l'absence de redémarrage Core/Relay (`restart_count=0`, démarrage du 7 novembre). A6 recommande de **ne pas autoriser maintenant les blocs B–E, l'installation Pixel, l'APPLY sur données réelles ni la révocation**, et de préparer d'abord : CI verte, Relay administrable, geste Android, sanitisation résiduelle, mitigation anti-rejeu, rebuild exact de l'image Core au SHA code. **Réserve image Core fermée par A5-F3** : l'image construite au SHA code `65759dd` est identique à `sha256:91d456e7…` (même ID, même taille, même CMD/ENTRYPOINT). **Réserve chemin résiduel fermée** : `REGISTRY_V7_06C.md` a été sanitisé.
+A6-F1 sur `c3dcaa1` (code `65759dd`) : **V7-11A GO local avec limitations ; live NO-GO**. Le diff applicatif `65759dd..c3dcaa1` est vide. A6 confirme le P1 legacy fermé pour le parcours normal du registre, le BLOCKED APPLY sur origine `DEMO`, l'anomalie FATAL HOME non reproduite, la déviation A2 4402 exclue des preuves, et l'absence de redémarrage Core/Relay (`restart_count=0`, démarrage du 7 novembre). A6 recommande de **ne pas autoriser maintenant les blocs B–E, l'installation Pixel, l'APPLY sur données réelles ni la révocation**, et de préparer d'abord : CI verte, Relay administrable, geste Android, sanitisation résiduelle, mitigation anti-rejeu, rebuild exact de l'image Core au SHA code. **Réserve image Core fermée par A5-F3** : l'image construite au SHA code `65759dd` est identique à `sha256:91d456e7…` (même ID, même taille, même CMD/ENTRYPOINT). **Réserve APK exact fermée par A5-P3** : l'APK construit au SHA code `65759dd` est `bb703ec7…`, certificat `da301466…eeee`, provenance `source_sha=65759dd`. **Réserve chemin résiduel fermée** : `REGISTRY_V7_06C.md` a été sanitisé. **CI distante verte** : PR #3, run `42478131908`, `verify` et `relay-node` PASS.
 
 ## 13. Gates V7-11
 
@@ -186,7 +190,7 @@ A6-F1 sur `c3dcaa1` (code `65759dd`) : **V7-11A GO local avec limitations ; live
 | `GO_V7_11_SQLITE_MIGRATION_DRY_RUN` | **GO local** | Migration v3→v5 sur copie. |
 | `GO_V7_11_HISTORICAL_BACKFILL_DRY_RUN` | **GO local** | Dry-run/apply sur copie ; attribution live ouverte. |
 | `GO_V7_11_EXPIRATION_DRY_RUN` | **GO local** | Expiration sur copie ; `UNCERTAIN` préservé. |
-| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local avec limitations** | Code/cert/version/manifeste ; rebuild exact avant installation. |
+| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | Code/cert/version/manifeste ; artefact exact au SHA code `65759dd` = `bb703ec7…` ; AVD testé sur arbre Android identique. |
 | `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Update/preservation/HOME/rollback PASS ; A0 APPLY BLOCKED ; anomalie framework documentée. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun Relay/Core E2E. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Plan audité ; aucun backup/restore Pixel/live exécuté. |
@@ -233,7 +237,7 @@ Révocation du bearer LEGACY, rotation de credential, révocation Relay, passage
 4. Anti-rejeu tranché (cache partagé durable ou worker unique renforcé).
 5. Geste Android de bascule Relay/DIRECT et état local/offline définis.
 6. Backup Core/Relay/Pixel, test de restauration et gates Pixel exécutés.
-7. APK rebuild au SHA final et re-testé. L'image Core au SHA code exact (`65759dd`) a déjà été reconstruite et est identique à `sha256:91d456e7…` (A5-F3).
+7. APK exact au SHA code `65759dd` produit (`bb703ec7…`) et testé sur l'arbre Android identique ; re-tester l'artefact exact lors de l'installation Pixel. L'image Core au SHA code exact (`65759dd`) a déjà été reconstruite et est identique à `sha256:91d456e7…` (A5-F3).
 8. Sanitiser le chemin personnel résiduel de `docs/operations/REGISTRY_V7_06C.md:45` — **fait par A5-F3**, scan ciblé à zéro chemin/bearer/credential/serial/device_id brut.
 
 ## 16. Rollback

@@ -1,7 +1,7 @@
 # V7-11B — Plan de changement live corrigé
 
 **Statut : dossier de préparation, non autorisé. Aucune opération live n'a été exécutée.**
-**Base d'audit :** [V7-11_A6_CUTOVER_GATES.md](evidence/V7-11_A6_CUTOVER_GATES.md), [V7-11_LIVE_INVENTORY.md](evidence/V7-11_LIVE_INVENTORY.md).
+**Base d'audit :** [V7-11_A6_CUTOVER_GATES.md](evidence/V7-11_A6_CUTOVER_GATES.md), [V7-11_LIVE_INVENTORY.md](evidence/V7-11_LIVE_INVENTORY.md), [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON.md).
 **Règle :** chaque bloc ci-dessous exige une autorisation ciblée distincte. Une autorisation de backup ne vaut pas autorisation de migration, d'installation ou de révocation.
 
 ## État runtime constaté (2026-11-08, lecture seule)
@@ -10,7 +10,7 @@
 |---|---|
 | Core | Conteneur `atlas-core-atlas-core-1`, image du 2026-11-04, **sans `v4_auth.py`/`v4_assertion.py`** (pré-V7-10), réseau host, 1 uvicorn sur `127.0.0.1:8100`, volume `atlas-core-data:/data`. |
 | Base Core | `user_version=3`, `integrity_check=ok`, 0 violation FK, 3 propositions (`APPLIED` 1, `PENDING_ANDROID` 1, `REJECTED` 1), 2 ACK. |
-| Relay | Conteneur `atlas-v7-relay`, image `atlas-paseo-relay:r3a` du 2026-10-26, bridge, `127.0.0.1:4402→4000`, aucun label Compose, aucun volume, aucune unité systemd. |
+| Relay | Conteneur `atlas-v7-relay`, image `atlas-paseo-relay:r3a` du 2026-10-26, bridge, `127.0.0.1:4402→4000`, aucun label Compose, aucun volume, aucun healthcheck, aucune unité systemd. Supervisé uniquement par `restart=unless-stopped`. Origine/commande de création inconnues ; état probablement volatil. `scripts/r3a/start-relay.sh` n'est pas idempotent (`docker rm -f`) et ne doit pas être utilisé sur le live. |
 | Proxy 4400 / connecteur 4401 | **Absents** ; le Funnel `all.taildc7886.ts.net:8443` pointe vers 4400 sans listener. |
 | Gateway | `openclaw-gateway.service` actif sur `127.0.0.1:18789`. |
 | Pixel | Présent sur ADB USB (`<PIXEL_SERIAL>`) ; nœud Tailscale offline depuis 33 jours ; aucune commande ADB de mutation exécutée en V7-11A. |
@@ -35,7 +35,7 @@
 
 1. **Déployer le code V7-11** : construire l'image Core depuis le SHA final, vérifier la présence de `v4_auth.py`/`v4_assertion.py`, l'entrypoint et les secrets, puis remplacer le conteneur live uniquement dans la fenêtre autorisée. Le Compose actuel ne fournit pas le keyring V4 ; ajouter le montage privé nécessaire.
 2. Sur une copie vérifiée : `preview-migration`, migration v3→v5, import LEGACY explicite, création des principaux Android/Relay/Tool, credentials distincts, grants minimaux, binding Relay, backfill dry-run puis `--apply --backup`, expiration dry-run. Aucune promotion de copie sans contrôles d'intégrité, FK, version, comptes et ACK.
-3. **Rétablir et qualifier le Relay/connecteur** : identifier le propriétaire du conteneur `atlas-v7-relay`, son fichier de configuration, son identité de session, son volume/état et sa commande de recréation. Démarrer le proxy 4400 et le connecteur 4401, vérifier le trajet `Android → Funnel 8443 → proxy 4400 → Relay 4402 → connecteur → Core 8100`.
+3. **Rétablir et qualifier le Relay/connecteur** : identifier le propriétaire du conteneur `atlas-v7-relay`, son fichier de configuration, son identité de session, son volume/état et sa commande de recréation. Aucune commande de remplacement sûre n'est démontrée à ce jour ; ne pas utiliser `start-relay.sh` sur le live. Démarrer le proxy 14400 et le connecteur 14401 **sur des ports isolés** pour la qualification, puis seulement ensuite envisager les ports live. Vérifier le trajet `Android → Funnel 8443 → proxy 4400 → Relay 4402 → connecteur → Core 8100`. Le script `run-isolated-relay-tests.sh` doit être lancé avec un port distinct de 4402 (par défaut il vise le Relay live).
 4. Passer en `dual` avec principal LEGACY explicite et secret curseur. Vérifier `check-config`, `check-secret`, les modes 0600/0700, les chemins absolus hors dépôt, l'absence de symlink et le fail-closed.
 5. Décider et documenter la topologie anti-rejeu : cache partagé durable, ou worker unique + blocage V4 vérifiable ≥240 s après redémarrage.
 6. **Stop** : image/code non prouvé, Relay non administrable, map/binding incohérents, assertion absente, anti-rejeu non tranché, DB non vérifiée.
@@ -79,6 +79,8 @@
 4. **Anti-rejeu** : choisir cache partagé durable ou worker unique renforcé, et l'inscrire comme stop condition à chaque redémarrage.
 5. **Relay** : établir le propriétaire, le fichier de configuration, le volume/état, le supervisor et la procédure de recréation avant tout arrêt.
 6. **Autorisation** : le propriétaire des données/Pixel autorise l'installation et les consentements ; le propriétaire Core/Relay autorise les arrêts/configs ; le responsable sécurité accepte les risques résiduels ; l'orchestrateur n'exécute que les scopes autorisés.
+7. **Sauvegarde connecteur incomplète** : `backup-state.mjs`/`state-backup.mjs` sauvegardent `identity.json` et `devices.json` mais **pas `operations.json`**. Une sauvegarde complète de l'état connecteur doit inclure ce fichier et être testée avant toute opération sur l'identité/l'appairage.
+8. **Ne pas exécuter `show-identity`, `pair-device` ou `revoke-device`** sur le connecteur live sans autorisation distincte : `show-identity` peut créer une identité si elle manque. Les fichiers d'état existent en `0600`, mais leur appairage effectif n'est pas établi.
 
 ## Verdict
 

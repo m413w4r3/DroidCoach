@@ -6,6 +6,8 @@
 **SHA final d'intégration :** `65759dded28380c52639059b9cee8febadbd799c` (code) ; HEAD documentaire au commit de clôture
 **Frontière :** V7-11A uniquement. Aucune mutation live, aucun Pixel, aucun push.
 
+> **Addendum V7-11B (post-clôture) :** CI PR #3 verte ; verrou single-writer (`132f17b`), garde anti-rejeu après redémarrage (`c031cb5`), APK exact `bb703ec7…`, image Core `49d26b7e…` et reconnaissance Relay dans [V7-11B_PREPARATION.md](V7-11B_PREPARATION.md). Les gates de cet addendum complètent ceux ci-dessous.
+
 ## Résumé exécutif
 
 V7-11A a qualifié le code V7-10/V7-11 sur base synthétique, reconstruit l'APK et l'image Core, rejoué la migration SQLite v3→v5, testé l'authentification négative, l'anti-rejeu, l'expiration et la préservation Android sur AVD API 37. Le code local est globalement sain, mais **le cutover live reste NO-GO** : la CI distante est rouge, le code V7-11 n'est pas déployé, le Relay/connecteur n'est pas administrable, l'identité/binding `pixel-v7` n'est pas vérifiée, l'anti-rejeu multi-worker n'est pas fermé et la bascule Android n'est pas définie au niveau opérateur.
@@ -79,7 +81,8 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 - Certificat : `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`.
 - Hash A3 (testé AVD, source 8dac699) : `97ac580d2cdcc5384a1f1ab8e15f2f3b4d57ca468177dede55166be154c321d5`.
 - Hash A5 (build intégré, source 04fdc77) : `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e`.
-- **Hash final (build au SHA de clôture c3dcaa1)** : `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1`. L'APK testé sur AVD reste `97ac580d…` ; l'arbre Android est identique, seul le SHA de provenance embarqué diffère.
+- **Hash final (build au SHA de clôture c3dcaa1)** : `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1`.
+- **Hash exact au SHA code `65759dd`** : `bb703ec770f4ebe7e20602db65fecfb75e7a783d1a30040f5f7d8796c29f1dff` (provenance `source_sha=65759dd`, certificat `da301466…eeee`). L'APK testé sur AVD reste `97ac580d…` ; l'arbre Android est identique, seul le SHA de provenance embarqué diffère.
 - AVD API 37 : install -r, firstInstallTime stable, 7 fixtures préservées, cold start OK, Coach 9/9, scheduler 1/1, rollback PASS.
 - JVM/lint/build indépendants A5 : **934 tests, 0 échec, lint 0 erreur/80 avertissements**.
 - HOME (A3-F1) : **PASS** — rôle attribué à `dev.atlas.coach`, intent HOME → `LauncherActivity` à froid, rôle et données conservés après réinstallation et rollback. Anomalie unique `FATAL EXCEPTION` framework lors du premier remplacement avec HOME actif ; non reproduite au rollback final.
@@ -106,7 +109,7 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 | `GO_V7_11_SQLITE_MIGRATION_DRY_RUN` | **GO local** | Migration v3→v5 sur copie synthétique. |
 | `GO_V7_11_HISTORICAL_BACKFILL_DRY_RUN` | **GO local** | Dry-run + apply sur copie ; attribution live ouverte. |
 | `GO_V7_11_EXPIRATION_DRY_RUN` | **GO local** | Expiration/réconciliation sur copie ; `UNCERTAIN` préservé. |
-| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local avec limitations** | Code/cert/version/manifeste ; rebuild exact avant installation. |
+| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | Code/cert/version/manifeste ; artefact exact `65759dd` = `bb703ec7…` ; AVD testé sur arbre identique. |
 | `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Update/preservation/rollback/HOME PASS ; A0 APPLY BLOCKED ; anomalie framework documentée. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun Relay/Core E2E ; scheduler local seulement. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Plan audité ; aucun backup/restore Pixel ou live exécuté. |
@@ -123,7 +126,7 @@ Aucun.
 
 ### P1
 1. **CI distante rouge** : le correctif local n'est pas poussé ; la CI de `8dac699` reste en échec. Un push/PR nécessite l'accord explicite de l'utilisateur.
-2. **Relay live non administrable** : conteneur sans labels Compose, sans volume, sans unité systemd ; le handoff V7-10 utilise `$RELAY_UNIT` et un script de backup qui ne correspondent pas.
+2. **Relay live non administrable** : conteneur sans labels Compose, sans volume, sans healthcheck, sans unité systemd, supervisé uniquement par `restart=unless-stopped` ; origine/commande de création inconnues et état probablement volatil. `start-relay.sh` est destructif (`docker rm -f`) et le script de test isolé vise 4402 par défaut. La sauvegarde connecteur omet `operations.json`. Le handoff V7-10 utilise `$RELAY_UNIT` et un script de backup qui ne correspondent pas.
 3. **Identité/binding `pixel-v7` inconnus** : non observables sans accès live/ADB supplémentaire ; un binding révoqué ne peut pas être réactivé.
 4. **Bascule Android non définie** : `install -r` ne change pas l'identité ; il faut un geste UI/API Relay ou DIRECT et un état local/offline fail-closed.
 5. **Anti-rejeu non fermé** : cache process-local ; choisir cache partagé durable ou worker unique renforcé.
@@ -156,7 +159,7 @@ Aucun.
 4. Trancher l'anti-rejeu : cache partagé durable ou worker unique renforcé + test après redémarrage.
 5. Décrire le geste Android de bascule Relay/DIRECT et l'état local/offline en cas de refus Core.
 6. Exécuter le backup live, le test de restauration et les gates Pixel sous autorisation ciblée.
-7. Rebuild l'APK au SHA final et re-tester. L'image Core au SHA code exact `65759dd` a déjà été reconstruite et est identique à `sha256:91d456e7…` (A5-F3).
+7. APK exact au SHA code `65759dd` produit (`bb703ec7…`, certificat correct) ; re-tester cet artefact lors de l'installation Pixel. L'image Core au SHA code exact `65759dd` a déjà été reconstruite et est identique à `sha256:91d456e7…` (A5-F3).
 8. Sanitiser le chemin personnel résiduel de `docs/operations/REGISTRY_V7_06C.md:45` — **fait par A5-F3**, scan ciblé propre.
 
 ## Autorisations V7-11B à demander séparément
