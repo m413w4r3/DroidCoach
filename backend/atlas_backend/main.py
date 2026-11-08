@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import errno
+import fcntl
 import hashlib
 import hmac
 import json
 import logging
 import os
+import stat
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as datetime_time
@@ -73,6 +76,53 @@ API_CONTRACT_VERSION = 1
 BASE_DIR = Path(__file__).resolve().parents[1]
 V2_PROPOSAL_ADAPTER = TypeAdapter(ProposalV2)
 DEMO_DIRECTIVE_ID = "demo-focus-001"
+
+
+def _acquire_core_database_lock(database_path: Path) -> int | None:
+    if str(database_path) == ":memory:":
+        return None
+
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("Core database locking requires O_NOFOLLOW support")
+
+    lock_path = Path(f"{database_path.resolve(strict=False)}.lock")
+    if not lock_path.parent.is_dir():
+        raise RuntimeError("Core database lock parent directory must already exist")
+
+    flags = os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW
+    try:
+        lock_fd = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise RuntimeError("Core database lock file must not be a symlink") from None
+        raise RuntimeError("Unable to open Core database lock file") from exc
+
+    try:
+        if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+            raise RuntimeError("Core database lock path must be a regular file")
+        os.fchmod(lock_fd, 0o600)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EAGAIN}:
+                raise RuntimeError("Core database is already in use by another instance") from None
+            raise RuntimeError("Unable to acquire Core database lock") from exc
+        os.ftruncate(lock_fd, 0)
+        return lock_fd
+    except BaseException:
+        os.close(lock_fd)
+        raise
+
+
+def _release_core_database_lock(lock_fd: int | None) -> None:
+    if lock_fd is None:
+        return
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+    finally:
+        os.close(lock_fd)
+
+
 DIRECTIVE_CHOICES = ("start", "discuss", "alternative", "postpone", "pause")
 _LOGGER = logging.getLogger(__name__)
 _PROPOSAL_EXPIRY_LOCK_TIMEOUT_SECONDS = 0.25
@@ -281,7 +331,8 @@ def create_app(
     agent: AgentAdapter | None = None,
     capabilities: dict[str, bool] | None = None,
 ) -> FastAPI:
-    database_path = Path(db_path or os.getenv("ATLAS_DB_PATH", BASE_DIR / "data" / "atlas.sqlite3"))
+    database_setting = db_path or os.getenv("ATLAS_DB_PATH") or BASE_DIR / "data" / "atlas.sqlite3"
+    database_path = Path(database_setting)
     store = SQLiteStore(database_path)
 
     def env_flag(name: str, default: bool) -> bool:
@@ -329,15 +380,22 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        database_lock_fd = _acquire_core_database_lock(database_path)
+        _app.state.core_database_lock_fd = database_lock_fd
         stop_expiry_sweeper = asyncio.Event()
 
         async def maintain_chat_cache() -> None:
-            while True:
+            while not stop_expiry_sweeper.is_set():
                 try:
                     await asyncio.to_thread(cleanup_v4_chat_cache, store)
                 except Exception:  # noqa: BLE001 - cache maintenance must not stop the API
                     _LOGGER.warning("V4 chat cache cleanup failed")
-                await asyncio.sleep(CHAT_CACHE_CLEANUP_INTERVAL_SECONDS)
+                try:
+                    await asyncio.wait_for(
+                        stop_expiry_sweeper.wait(), timeout=CHAT_CACHE_CLEANUP_INTERVAL_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    pass
 
         def expire_one_batch() -> int:
             with store.transaction(timeout=_PROPOSAL_EXPIRY_LOCK_TIMEOUT_SECONDS) as connection:
@@ -359,21 +417,25 @@ def create_app(
                 except asyncio.TimeoutError:
                     pass
 
-        cleanup_task = asyncio.create_task(maintain_chat_cache())
-        expiry_task = (
-            asyncio.create_task(maintain_proposal_expirations()) if expiry_sweeper_enabled else None
-        )
+        cleanup_task: asyncio.Task[None] | None = None
+        expiry_task: asyncio.Task[None] | None = None
         try:
+            cleanup_task = asyncio.create_task(maintain_chat_cache())
+            expiry_task = (
+                asyncio.create_task(maintain_proposal_expirations()) if expiry_sweeper_enabled else None
+            )
             yield
         finally:
             stop_expiry_sweeper.set()
-            if expiry_task is not None:
-                await expiry_task
-            cleanup_task.cancel()
+            background_tasks = [task for task in (cleanup_task, expiry_task) if task is not None]
             try:
-                await cleanup_task
-            except asyncio.CancelledError:
-                pass
+                if background_tasks:
+                    await asyncio.gather(*background_tasks, return_exceptions=True)
+            finally:
+                try:
+                    del _app.state.core_database_lock_fd
+                finally:
+                    _release_core_database_lock(database_lock_fd)
 
     app = FastAPI(
         title="ATLAS Core",

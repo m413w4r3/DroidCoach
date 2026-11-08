@@ -173,3 +173,54 @@ git diff --check
 Le test de table absente retire `credentials_v4` après le démarrage de l’application. L’initialiseur normal met automatiquement à niveau les bases avant le service; ce test vérifie directement le chemin de repli de lecture sans émuler tout un processus de démarrage pré-v4. Une erreur SQLite autre que l’absence de table continue à remonter au gestionnaire existant.
 
 **Prochaine action :** relecture parent et intégration du commit local; aucun push n’a été effectué.
+
+## V7-11B-P2 — verrou single-writer Core
+
+- **Base de travail :** `2c3e1788601d1640f1207cfbc2e1418f10cbd83f`.
+- **Branche :** `audit/v7-11-a1-core-migration`.
+- **Scope d’écriture :** `backend/atlas_backend/main.py`, `backend/tests/test_core_db_lock.py` et ce rapport.
+- **Périmètre runtime :** aucun service live, ADB ou appareil utilisé; toutes les bases sont sous les répertoires temporaires des tests.
+
+Le lifespan acquiert maintenant un `flock(LOCK_EX | LOCK_NB)` sur le fichier adjacent à la base résolue (`<base>.lock`). Le fichier est ouvert avec `O_CREAT | O_RDWR | O_NOFOLLOW`, son parent est vérifié, les liens symboliques et fichiers non réguliers sont refusés, et son mode est forcé à `0600`. Le contenu est vidé après obtention du verrou; aucun PID, bearer ou secret n’y est écrit. Le descripteur reste détenu jusqu’à la fin du nettoyage des tâches du lifespan, puis le verrou est explicitement libéré et le descripteur fermé. Les chemins de base qui sont des symlinks convergent vers le même verrou. `:memory:` n’obtient pas de fichier de verrou.
+
+Les CLI et outils offline ne prennent pas ce verrou, conformément au périmètre; ils restent utilisables lorsque Core est arrêté. Comme `flock` est advisory, ces outils doivent être exécutés Core arrêté pour éviter une écriture concurrente.
+
+### Oracles et commandes
+
+| Oracle | Statut | Résultat |
+|---|---|---|
+| Rouge avant patch sur la base `2c3e178` | **FAIL attendu avant correction** | Le second lifespan sur la même base est entré sans erreur; pytest a échoué avec `DID NOT RAISE RuntimeError`. |
+| Verrou exclusif, libération et mode du fichier | **PASS** | Deuxième application refusée pendant que la première détient le verrou; fichier régulier, non symlink, mode `0600`, vide; après arrêt, seconde application et ouverture offline réussissent. |
+| Bases distinctes | **PASS** | Les deux applications démarrent en même temps. |
+| Alias symlink de la base | **PASS** | Le second chemin converge vers le verrou de la base cible et le démarrage concurrent est refusé. |
+| Symlink au chemin `.lock` | **PASS** | Démarrage refusé; la cible du symlink n’est pas touchée. |
+| `:memory:` | **PASS** | Aucun fichier `:memory:.lock` n’est créé. |
+| Tests ciblés du verrou | **PASS** | `5 passed, 1 warning`. |
+| Tests existants du lifespan d’expiration | **PASS** | Avec les tests du verrou : `6 passed, 1 warning`. |
+| Suite backend | **PASS** | `459 passed, 1 skipped, 3 warnings` en 28,01 s. |
+| Suite racine | **PASS** | `504 passed, 1 skipped, 4 warnings, 48 subtests passed` en 35,83 s. |
+| `git diff --check` | **PASS** | Aucune erreur whitespace. |
+
+Commande rouge exécutée depuis `backend/` avec le contenu de `main.py` restauré temporairement à la base `2c3e178` :
+
+```sh
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py::test_same_database_lifespan_is_exclusive_and_released
+```
+
+Sortie : `1 failed`; le second lifespan démarrait au lieu de lever l’erreur attendue.
+
+Commandes vertes exécutées :
+
+```sh
+# Depuis backend/
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py tests/test_v4_proposal_expiration.py::test_lifespan_sweeper_logs_tick_error_and_stops_cleanly tests/test_v4_proposal_expiration.py::test_lifespan_sweeper_can_be_disabled
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q
+# Depuis la racine du worktree
+python3 -m pytest -q
+git diff --check
+```
+
+Les tests d’exclusivité ouvrent deux applications/lifespans dans le même processus sur des descripteurs séparés; aucune campagne multi-processus distincte n’a été faite. Le mécanisme s’appuie sur `flock` advisory fourni par le système de fichiers. Les CLI offline ne consultent pas le verrou et doivent rester arrêtées pendant l’exécution de Core.
+
+**Prochaine action :** revue parent du commit local; aucun push effectué.
