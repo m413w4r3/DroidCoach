@@ -230,3 +230,34 @@ Scan ciblé après modification : **0** chemin personnel, chemin SDK absolu, bea
 | Égalité avec l’image `c3dcaa1` | **PASS** — ID, taille et configuration identiques. |
 | Sanitisation et scan ciblé `REGISTRY_V7_06C.md` | **PASS** — aucun chemin personnel ou identifiant/credential brut dans le contenu courant. |
 | Services live, ADB/Pixel, push | **NOT_RUN**, conformément au ticket. |
+
+## V7-11B-P3 — APK exact 65759dd
+
+- SHA source : `65759dded28380c52639059b9cee8febadbd799c`. Les diffs Android demandés (`8dac699..65759dd` et `65759dd..c3dcaa1`) sont vides.
+- Checkout de build : worktree temporaire détaché et propre à ce SHA sous `<TMP>`. L’essai initial depuis une archive `git archive` seule a échoué dans `:app:generateDebugAtlasBuildProvenance`, car cette archive ne contient pas `.git` (`git rev-parse failed`). La commande demandée a ensuite réussi dans le worktree détaché, sans modifier la branche d’audit :
+
+  ```sh
+  ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --offline --max-workers=2 --console=plain
+  ```
+
+- Résultat : **BUILD SUCCESSFUL**, 69 tâches exécutées, en 27 s. Ces tâches assemblent les APK et ne lancent ni tests JVM ni tests instrumentés. Aucun émulateur ou appareil n’a été utilisé.
+
+| Artefact | Application ID | SHA-256 | Taille |
+|---|---|---|---:|
+| `app-debug.apk` | `dev.atlas.coach` | `bb703ec770f4ebe7e20602db65fecfb75e7a783d1a30040f5f7d8796c29f1dff` | 15 838 971 octets |
+| `app-debug-androidTest.apk` | `dev.atlas.coach.test` | `6a99030de3cefd67dd65aa249fe53c83dcb6a73b4acc517dfe52cf0bd58d5f15` | 1 578 552 octets |
+
+- Les deux APK contiennent `atlas-build-provenance.json` avec `source_sha=65759dded28380c52639059b9cee8febadbd799c` et le même `source_tree_sha=5a31da052e70d14ea828f2232037ade7ff7a21d2`. Les hashes diffèrent de ceux du build de qualification `c3dcaa1` ci-dessus, dont le manifeste embarque une provenance de commit différente ; la taille debug est identique et celle de l’APK androidTest augmente de 4 octets. Les variations d’octets ne sont pas isolées au niveau des entrées ZIP.
+- Métadonnées de l’application debug : `versionCode=1`, `versionName=0.1.0`, `compileSdk=37` (minor API level 2), `minSdk=26`, `targetSdk=36`, `allowBackup=false`, `debuggable=true`.
+- Permissions présentes dans l’APK fusionné : `android.permission.ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION`, `ACCESS_NETWORK_STATE`, `AUTHENTICATE_ACCOUNTS`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `INTERNET`, `PACKAGE_USAGE_STATS`, `POST_NOTIFICATIONS`, `READ_CALENDAR`, `READ_SYNC_SETTINGS`, `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, `WRITE_CALENDAR`, `WRITE_SYNC_SETTINGS`, et la permission applicative `dev.atlas.coach.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
+- `apksigner verify --print-certs` confirme pour les deux APK le certificat SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` (**PASS**, valeur attendue).
+- Le `applicationId` et le certificat correspondent à l’identité de signature attendue ; le `versionCode=1` permet une mise à jour in-place si l’application installée a le même identifiant, le même certificat et un `versionCode` inférieur ou égal. Aucune installation n’a été tentée ; l’état de l’appareil cible n’a pas été vérifié.
+- Avertissements observés : trois avertissements Kotlin (conditions constantes dans `AtlasScreens.kt` et `PlanScreen.kt`), un avertissement de dépréciation Java dans un test instrumenté, une bibliothèque native non strippée et les avertissements généraux de dépréciation Gradle. Ils n’ont pas fait échouer l’assemblage.
+
+| Contrôle | Statut |
+|---|---|
+| Diffs Android aux deux plages de SHA | **PASS** — vides. |
+| Build APK depuis le worktree Git détaché | **PASS** — deux APK assemblés au SHA exact. |
+| Build depuis l’archive seule sans métadonnées Git | **FAIL** — étape de provenance Gradle incapable d’exécuter `git rev-parse`; résolu en reconstruisant dans le worktree détaché propre au même SHA. |
+| Hashes, métadonnées et certificats APK | **PASS** — certificat attendu sur les deux artefacts. |
+| Installation, ADB/Pixel, tests instrumentés | **NOT_RUN**, conformément au ticket. |
