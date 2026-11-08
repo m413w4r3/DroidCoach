@@ -2,9 +2,10 @@
 
 ## Contrat de tâche
 
-- `TASK_ID`: `V7-11-A2`
+- `TASK_ID`: `V7-11-A2` (complément `V7-11-A2-F1`)
 - Statut sous-session: `REVIEW_REQUIRED`
 - `BASE_SHA`: `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`
+- Base du complément F1: `e4a4461059f5f0e8c57316533c61d63cee3b07c9`
 - Branche: `audit/v7-11-a2-relay-replay`
 - Profil transmis et vérifié par le parent: `provider=codex`, `model=gpt-6-luna`, `effort=xhigh`
 - Périmètre: inspection runtime et code en lecture seule; script(s) temporaires sous `/tmp`; seul fichier de dépôt modifié: cette preuve; commit local demandé, aucun push.
@@ -12,9 +13,9 @@
 
 ## Verdict
 
-**`GO_V7_11_ANTI_REPLAY_TOPOLOGY = NO-GO` pour toute mise en service V4 Relay.** Le contrôle HMAC/binding est correct dans le processus testé, mais le rejeu inter-worker est reproduit: deux caches Core distincts acceptent la même assertion. L’environnement observé n’a par ailleurs ni proxy `4400` ni connecteur `4401`; le trajet Relay→connecteur→Core n’est pas présent.
+**`GO_V7_11_ANTI_REPLAY_TOPOLOGY = NO-GO` pour toute mise en service V4 Relay.** Le contrôle HMAC/binding est correct dans le processus testé, mais le rejeu inter-worker est reproduit: deux caches Core distincts acceptent la même assertion. F1 reproduit également l’acceptation du rejeu après recréation du cache (simulation de redémarrage Core). Un worker unique ne protège donc pas contre la perte du cache lors d’un redémarrage. L’environnement observé n’a par ailleurs ni proxy `4400` ni connecteur `4401`; le trajet Relay→connecteur→Core n’est pas présent.
 
-Finding sécurité: **P2 — confirmé, gate live obligatoire**. Cette sévérité correspond au risque multiworker déjà documenté dans le handoff V7-10 (sections 12–13, lignes 621 et 642).
+Finding sécurité: **P2 — confirmé, gate live obligatoire**. Le défaut porte sur les caches isolés entre workers et sur la perte complète des nonces en mémoire au redémarrage. Cette sévérité correspond au risque multiworker déjà documenté dans le handoff V7-10 (sections 12–13, lignes 621 et 642).
 
 ## Topologie observée en lecture seule
 
@@ -64,6 +65,20 @@ Commande: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/backend" python3 /tmp/v7_1
 
 Le test d’intégration existant `test_relay_assertion_binds_credential_to_active_session_and_rejects_replay` confirme également A/A et B/B, le refus d’un bearer B signé pour le binding A, le rejeu, l’expiration, l’altération de corps/chemin/timestamp, la clé inconnue et la révocation du binding ([`test_v4_principal_auth.py`](../../../backend/tests/test_v4_principal_auth.py:383)).
 
+### Complément F1 — perte du cache au redémarrage
+
+Commande: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/backend" python3 /tmp/v7_11_a2_f1_restart_probe.py`. Le script fabrique une assertion HMAC et un nonce synthétiques, appelle le vérificateur réel avec des horloges contrôlées et ne contacte aucun service. Le routeur crée un nouveau `ReplayNonceCache` lors de son initialisation ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:522)); les entrées sont un `OrderedDict` local au processus ([`v4_assertion.py`](../../../backend/atlas_backend/v4_assertion.py:110)).
+
+| Cas F1 | Résultat | Observation |
+|---|---|---|
+| Assertion synthétique dans la fenêtre, premier cache | PASS | Première vérification acceptée. |
+| Même assertion encore valide, nouvelle instance de cache (redémarrage simulé) | **FAIL — rejeu après redémarrage reproduit** | La nouvelle instance accepte l’assertion: le nonce de l’ancien processus n’a pas persisté. |
+| Assertion synthétique horodatée à plus de +120 s après le redémarrage, cache neuf | PASS | Refusée par la vérification temporelle, même sans nonce préexistant dans le cache. |
+| TTL et fenêtre temporelle | PASS — analyse des bornes | TTL cache 300 s; fenêtre du timestamp ±120 s. La fenêtre totale de validité peut couvrir 240 s. Avec une horloge stable, le cache retient donc le nonce 60 s de plus que la durée maximale pendant laquelle une assertion acceptée peut rester temporellement valide. |
+| Rejeu près de +240 s avec cache d’origine, puis cache neuf | **FAIL — conséquence du redémarrage confirmée** | Le cache d’origine bloque le doublon; un cache neuf l’accepte tant que son timestamp est encore dans la fenêtre. Au-delà de +240 s, le contrôle d’horodatage le refuse, bien que le TTL initial de 300 s ne soit pas écoulé. |
+
+Le TTL de 300 s dépasse le seuil de dérive d’un seul côté (120 s), et de 60 s la borne complète de 240 s à partir d’une acceptation au timestamp futur maximal. Avant redémarrage, le cache local bloque le nonce pendant son TTL; le contrôle de timestamp fournit aussi un refus lorsque l’assertion sort de ±120 s. Après redémarrage, le cache est vide: le même rejeu est accepté si le timestamp reste dans la fenêtre, puis refusé par le timestamp hors fenêtre. La borne de 240 s suppose une horloge Core stable et des assertions antérieures au redémarrage; elle n’est pas une protection contre des horloges incohérentes.
+
 ## Suites et preuves d’exécution
 
 - **PASS** — `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/backend" python3 -m pytest -q -p no:cacheprovider backend/tests/test_v4_principal_auth.py::test_relay_assertion_binds_credential_to_active_session_and_rejects_replay` → `1 passed`.
@@ -87,13 +102,13 @@ Une première tentative a utilisé `node --test --test-name-pattern='^(?!pinned 
 
 Ne lever `GO_V7_11_ANTI_REPLAY_TOPOLOGY` qu’après l’une des deux solutions suivantes:
 
-1. **Worker unique imposé**: un processus Uvicorn/une instance Core vérifié à chaque déploiement, commande sans `--workers`/`--reload`, et interdiction opérationnelle et automatisée de scale/instances parallèles; ou
-2. **Cache anti-rejeu partagé atomique**: réservation cross-worker avec opération atomique (par exemple `SET NX` avec expiration), et test de rejeu entre processus indépendants ainsi que refus sur erreur/saturation.
+1. **Cache anti-rejeu partagé et durable**: réservation atomique cross-worker qui survit au redémarrage Core (par exemple `SET NX` avec expiration persistante), avec tests de rejeu entre processus indépendants, après redémarrage, ainsi que comportement fermé sur erreur/saturation; ou
+2. **Cache mémoire avec restrictions supplémentaires**: worker/instance Core unique vérifié à chaque déploiement, interdiction opérationnelle et automatisée de scale/instances parallèles, et blocage vérifiable de toute entrée V4 Relay pendant au moins 240 s après chaque redémarrage Core. Cette durée ne couvre les assertions antérieures au redémarrage que sous hypothèse d’horloges stables. Le worker unique seul n’est pas un gate suffisant.
 
 Avant le live, vérifier aussi le routage complet `4400 → 4402`, la présence du connecteur et ses métriques `4401`, le binding principal réel, le keyring overlap puis le retrait contrôlé de la clé ancienne. La présence d’un seul worker à cet instant n’est pas une barrière contre un futur changement de commande ou de déploiement.
 
 ## Traçabilité finale
 
 - Base examinée: `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`.
-- Commit local contenant cette preuve: SHA rapporté dans la notification finale; aucun push.
+- Complément F1: reproduction du rejeu après recréation du cache et refus temporel hors fenêtre; commit local SHA rapporté dans la notification finale; aucun push.
 - Secrets, tokens, identifiants Relay personnels et valeurs de credentials exclus de ce document.
