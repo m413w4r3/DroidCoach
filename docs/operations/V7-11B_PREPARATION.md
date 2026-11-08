@@ -103,6 +103,7 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_ISOLATED_STACK` | **GO local** | B1 PASS : Core/Relay/proxy health 200, DB neuve `user_version=5`, `/metrics` `relay_connected=true`, WS 101, loopback only, live inchangé. Déviation bridge non-`internal` documentée. |
 | `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** | B2 : base live `user_version=3`, tables V4 absentes, `device_ref` absent ; le libellé `pixel-v7` n'existe que côté connecteur. Vérification impossible avant migration live. |
 | `GO_V7_11_CONNECTOR_BACKUP_COVERAGE` | **GO local avec gap confirmé** | B3 : `operations.json` omis du backup/restore CLI ; procédure complète 3/3 testée sur état synthétique. Backup live non exécuté. |
+| `GO_V7_11_INDEPENDENT_ISOLATED_REVIEW` | **GO local avec P2 / NO-GO live** | B4 : 0 P0/P1, 2 P2 ; vérification Docker directe UNKNOWN ; aucun test/live exécuté par le relecteur. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Backup connecteur incomplet confirmé ; procédure complète uniquement synthétique ; backup live/Relay/Pixel non exécuté. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable ; base live encore `user_version=3` sans tables V4 ; identité/binding non vérifiables ; backup live absent ; procédure complète connecteur non déployée. |
@@ -189,3 +190,12 @@ Conditions avant toute action live :
 4. Procédure de backup connecteur complète (3 fichiers) déployée ou exécutée manuellement, service arrêté.
 5. Relay identifié/administrable et recréation testée hors live.
 6. Aucun APPLY, aucune révocation, aucun changement de bearer sans autorisation nominative distincte.
+
+### 9.5 Revue indépendante B4
+
+La revue indépendante B4 sur le SHA intégré `4b87c93` conclut **GO_WITH_LIMITATIONS local / NO-GO live**, avec **0 P0/P1** et **2 P2** :
+
+1. **UUID de sessions d'agents dans le registre** : ils sont conservés pour la traçabilité d'orchestration ; aucun ID d'appareil, secret ou donnée personnelle n'est exposé. Ce point est accepté comme P2 documentaire, sans retrait des identifiants de sessions nécessaire à la reproductibilité.
+2. **Durabilité/atomicité du restore manuel** : le remplacement des trois fichiers n'est pas atomique, sans `fsync` ni rollback automatique, et la création de la destination a une fenêtre TOCTOU. La procédure complète reste **non déployée** et ne doit pas être utilisée sur le live avant durcissement (écriture temporaire, `fsync` fichiers+répertoire, rollback, contrôle d'absence de course) et test de restauration.
+
+La revue n'a pas interrogé Docker directement ; les faits live B2 sont recoupés avec l'inventaire et le registre mais marqués `UNKNOWN` pour la vérification indépendante. Les résultats B1/B3 sont examinés comme preuves fournies, non rejoués. Preuve : [`evidence/V7-11B_ISOLATED_REVIEW.md`](evidence/V7-11B_ISOLATED_REVIEW.md).
