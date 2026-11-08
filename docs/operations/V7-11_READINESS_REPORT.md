@@ -14,7 +14,7 @@ V7-11A a qualifié le code V7-10/V7-11 sur base synthétique, reconstruit l'APK 
 |---|---|
 | Code et tests locaux | **GO local** (suites vertes après correctifs) |
 | Migration/backfill/expiration sur copie | **GO local** |
-| APK et préservation AVD | **GO local sous réserve HOME/A0** |
+| APK et préservation AVD | **GO local** (HOME/preservation/rollback PASS ; A0 APPLY en retry) |
 | Sécurité indépendante | **GO avec réserves P2** (A4-F1 sur `65759dd`) |
 | CI distante | **NO-GO** (run rouge, aucun push autorisé) |
 | Cutover live / Pixel / révocation | **NO-GO / NOT_RUN** |
@@ -81,7 +81,8 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 - Hash A5 (build intégré, source 04fdc77) : `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e`.
 - AVD API 37 : install -r, firstInstallTime stable, 7 fixtures préservées, cold start OK, Coach 9/9, scheduler 1/1, rollback PASS.
 - JVM/lint/build indépendants A5 : **934 tests, 0 échec, lint 0 erreur/80 avertissements**.
-- HOME non exercé et A0 isolé NOT_RUN dans la première passe ; suivi A3-F1 en cours.
+- HOME (A3-F1) : **PASS** — rôle attribué à `dev.atlas.coach`, intent HOME → `LauncherActivity` à froid, rôle et données conservés après réinstallation et rollback. Anomalie unique `FATAL EXCEPTION` framework lors du premier remplacement avec HOME actif ; non reproduite au rollback final.
+- A0 isolé (A3-F1) : pull/inbox PASS, REJECT + rejeu ACK PASS, expiration API Core PASS (UI NOT_RUN) ; APPLY **BLOCKED** par mismatch plan local/fixture Core, retry A3-F2 en cours.
 - Image Core : `sha256:2c5ae216e1ed292cd11cbc87ec392b9e546187a52727156754afb440c2f1cd57` (150 498 024 octets, v4 présent).
 
 ### Live (lecture seule)
@@ -105,7 +106,7 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 | `GO_V7_11_HISTORICAL_BACKFILL_DRY_RUN` | **GO local** | Dry-run + apply sur copie ; attribution live ouverte. |
 | `GO_V7_11_EXPIRATION_DRY_RUN` | **GO local** | Expiration/réconciliation sur copie ; `UNCERTAIN` préservé. |
 | `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | Code/cert/version/manifeste ; artefact final à rebuilder. |
-| `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO local sous réserve A3-F1** | Update/preservation/rollback PASS ; HOME/A0 en cours. |
+| `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO local** | Update/preservation/rollback/HOME PASS ; A0 APPLY en retry ; anomalie framework documentée. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun Relay/Core E2E ; scheduler local seulement. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Plan audité ; aucun backup/restore Pixel ou live exécuté. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec réserves P2** | A4-F1 sur `65759dd` : 0 P0/P1, 5 P2 ; P1 legacy fermé. |
@@ -134,7 +135,8 @@ Aucun.
 - Résidu historique Git des chemins/IDs sanitisés.
 - APK non bit-reproductible entre SHAs (provenance embarquée) ; l'artefact final doit être rebuild et re-testé.
 - `UNCERTAIN` sans terminaison automatique ; réconciliation explicite requise.
-- Preuve AVD limitée : pas de Pixel physique, pas de Relay réel.
+- Preuve AVD limitée : pas de Pixel physique, pas de Relay réel, A0 APPLY encore bloqué.
+- Remplacement d'APK avec HOME actif : anomalie framework transitoire sur AVD, à re-tester sur Pixel avec sauvegarde.
 
 ## Ce qui est prêt pour V7-11B
 

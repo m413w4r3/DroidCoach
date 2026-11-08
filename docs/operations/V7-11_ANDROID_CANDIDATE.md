@@ -1,6 +1,6 @@
 # V7-11 — Candidat Android et préservation AVD API 37
 
-**Statut : GO local sur AVD API 37 pour l'APK reconstruit ; Pixel physique, transport Relay réel et parcours A0 isolé NOT_RUN.**
+**Statut : GO local sur AVD API 37 pour l'APK reconstruit, le rôle HOME, la préservation et le rollback ; A0 pull/REJECT/expiration PASS ; A0 APPLY en retry ciblé ; Pixel physique et transport Relay réel NOT_RUN.**
 **Base :** `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`.
 **Preuve détaillée :** [V7-11_A3_ANDROID_CANDIDATE_EVIDENCE.md](evidence/V7-11_A3_ANDROID_CANDIDATE_EVIDENCE.md).
 
@@ -39,22 +39,31 @@ AVD `atlas_v62_disposable_api37` (image x86_64 API 37.2.12.0), serial `<AVD_SERI
 | JVM/lint/build indépendants A5 (04fdc77) | **PASS** — 934 tests, 0 échec/erreur/ignoré ; lint 0 erreur, 80 avertissements ; APK debug et androidTest assemblés |
 | Image Core indépendante A5 (04fdc77) | **PASS** — `sha256:2c5ae216…f1cd57`, 150 498 024 octets, `v4_auth.py`/`v4_assertion.py` présents, aucun service lancé |
 | Rollback in-place vers l'APK de base | PASS — `install -r` sans `-d`, données et `firstInstallTime` conservés |
-| Rôle HOME | **non exercé dans la première passe** (HOME resté Nexus Launcher) — suivi A3-F1 |
+| Rôle HOME (A3-F1) | **PASS** — manifeste HOME/DEFAULT, `cmd role add-role-holder`, intent HOME → `LauncherActivity` à froid, rôle et données conservés après réinstallation candidat et rollback base |
+| A0 pull/inbox (A3-F1) | **PASS** — Core mock local 18100, app en Direct, proposition synthétique visible dans l'inbox ; pull rejoué identique |
+| A0 REJECT + rejeu ACK (A3-F1) | **PASS** — `REJECTED / USER_REJECTED`, ACK livré, rejeu `x-atlas-replayed: true` |
+| A0 expiration (A3-F1) | **PASS côté API Core/SQLite isolée** — pull à zéro, état `EXPIRED`, source `PULL` ; expiration UI Android **NOT_RUN** |
+| A0 APPLY (A3-F1) | **BLOCKED** — mismatch plan local (`12000000-…-001`, v2, DEMO) vs fixture Core (`00000000-…-811`, v1) ; garde-fou `VALIDATION_REJECTED`, plan inchangé ; retry A3-F2 en cours |
 | Transport Relay réel | **NOT_RUN** — aucun service live/pairing |
-| Parcours A0 APPLY/REJECT/expiration/idempotence | **NOT_RUN** — suivi A3-F1 (tentative Core isolé) |
 
 L'émulateur a signalé 4096 MB de RAM effective malgré `-memory 2048` ; c'est une limite d'environnement, pas un échec du test. L'émulateur a été arrêté après la passe.
+
+**Anomalie HOME** : lors du premier remplacement de l'APK de base avec HOME actif, un `FATAL EXCEPTION` du framework Android (`ResourcesManager`/`ConfigurationController`, NPE de configuration) a été observé une fois. Les données sont restées intactes ; le rollback final et le lancement HOME suivant n'ont produit aucun nouveau FATAL. Le risque de remplacement d'APK avec HOME actif doit être testé sur le Pixel en V7-11B, avec sauvegarde préalable.
+
+**Continuité de données** : le package n'était pas installé au pré-vol A3-F1 ; les fixtures ont été créées après la première installation. La conservation est donc démontrée entre la réinstallation candidat et le rollback, mais pas la continuité depuis une passe antérieure.
 
 ## Limites
 
 - AVD ≠ Pixel physique. La préservation réelle du Keystore, du rôle HOME, des permissions et des données du Pixel reste à qualifier en V7-11B.
 - L'instrumentation ne prouve pas un envoi Relay de bout en bout.
-- Le parcours A0 isolé n'est pas encore qualifié ; s'il reste NOT_RUN, il sera listé comme gap résiduel.
+- Le parcours A0 APPLY est encore BLOCKED ; si A3-F2 ne le débloque pas, il restera un gap résiduel documenté.
+- L'expiration UI Android et le transport Relay réel ne sont pas qualifiés.
+- Le remplacement d'APK avec HOME actif a produit une anomalie framework transitoire sur l'AVD.
 - Le backup app-only réel du Pixel et sa restauration ne sont pas couverts par l'AVD.
 
 ## Verdict
 
 `GO_V7_11_ANDROID_APK_CANDIDATE` : **GO local** pour le code Android et deux builds indépendants (package, version, signature, permissions, manifeste identiques) ; l'artefact exact de V7-11B doit être reconstruit au SHA final et re-testé.
-`GO_V7_11_ANDROID_PRESERVATION_AVD` : **GO local** pour la mise à jour in-place et le rollback ; rôle HOME à confirmer par A3-F1.
+`GO_V7_11_ANDROID_PRESERVATION_AVD` : **GO local** pour la mise à jour in-place, le rôle HOME et le rollback, avec les limites de continuité et l'anomalie framework documentées.
 `GO_V7_11_RELAY_SYNC_AVD` : **NOT_RUN**.
 `GO_PRODUCT_INSTALL` : **NO-GO / NOT_RUN** — aucune installation Pixel en V7-11A.
