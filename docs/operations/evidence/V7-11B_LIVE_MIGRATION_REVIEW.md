@@ -52,3 +52,16 @@ Aucun défaut P1 confirmé dans les preuves examinées.
 ## Limites
 
 Cette revue ne vérifie pas les valeurs live de la base, des secrets, de l’override Compose, des ports ou des fichiers dans le volume. Les commandes `docker inspect`, `docker logs`, liste d’images/réseaux et `curl` n’ont pas fourni de preuve exploitable dans le sandbox. Aucun test Android, tour OpenClaw, sync, migration ou restauration n’a été exécuté par le relecteur.
+
+## Re-revue après correction
+
+**Verdict révisé : GO_WITH_LIMITATIONS local / NO-GO pour le cutover complet.** Aucun P0/P1 confirmé. Le contrôle logique ferme le P2 de conservation. Le P2 de rollback n’est pas entièrement clos : le runbook couvre le parcours demandé, mais conserve une ambiguïté d’exécution à corriger avant de s’y fier.
+
+| Point repris | Statut | Vérification |
+|---|---|---|
+| P2 #2 — rollback | **FAIL — reste ouvert** | Le runbook identifie l’image précédente, l’override de rollback, le volume persistant, le backup frais par empreinte, sa restauration, le renommage du backup B7, le retrait du verrou, les permissions/propriétaire, les contrôles v3/intégrité/FK/compteurs, le démarrage avec l’image précédente et l’échec de démarrage (`V7-11B_LIVE_ROLLBACK_RUNBOOK.md:10`, `:15`, `:41`, `:69`, `:74`, `:77`, `:107`, `:133`). Toutefois, la commande de renommage contient un marqueur d’horodatage entre chevrons non déclaré parmi les placeholders ; inséré tel quel dans le programme shell, il est interprété comme une redirection et rend la commande invalide (`V7-11B_LIVE_ROLLBACK_RUNBOOK.md:77`). Le chemin d’échec couvre l’image ancienne qui ne démarre pas, mais ne précise pas quoi faire si la copie de restauration échoue ou s’interrompt. Remplacer le marqueur par une expression shell valide et expliciter cette branche d’échec avant de fermer ce P2. |
+| P2 #4 — conservation logique | **PASS — clos** | Le document compare 19 tables v3 aux 25 tables v5 : 17 tables sont MATCH, les seules différences rapportées sont une modification de `state` autorisée pour la ligne expirée et l’ajout de deux entrées au ledger ; six tables nouvelles sont listées (`V7-11B_LIVE_MIGRATION_LOGICAL_CHECK.md:15`, `:16`, `:26`, `:35`, `:43`, `:44`, `:46`). Le hash SHA-256 déterministe des tuples triés sur les colonnes communes, sans publier les valeurs, est une méthode convaincante pour détecter une altération accidentelle des données existantes. |
+| P2 #1 — vérification Docker indépendante | **UNKNOWN — reste ouvert** | Cette re-revue n’a exécuté aucune commande Docker, conformément au mandat. L’UNKNOWN précédent n’est pas promu en PASS. |
+| P2 #3 — protection/reprise des backups | **Risque accepté — reste une limite** | Le backup demeure local au même hôte, sans chiffrement au repos ni copie hors site ; la DB live est documentée en `0644`. Cette limite n’est pas transformée en PASS. |
+
+Le contrôle logique est convaincant dans sa portée déclarée, mais ne compare pas les nouvelles colonnes ni les données des six tables nouvelles et n’a pas été rejoué indépendamment : sa copie cible a été supprimée (`V7-11B_LIVE_MIGRATION_LOGICAL_CHECK.md:48`, `:52`). Le runbook est explicitement non exécuté ; aucune restauration ou mutation n’a été tentée. Les gates Android post-migration et binding restent `NOT_RUN`, et `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
