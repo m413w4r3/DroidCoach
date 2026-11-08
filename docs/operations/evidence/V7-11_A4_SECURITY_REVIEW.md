@@ -102,3 +102,53 @@ Un P1 confirmé empêche le GO : le mode `legacy` réaccepte un bearer après sa
 | P1 | 1 | Bearer LEGACY révoqué réaccepté après rollback en mode `legacy` |
 | P2 | 4 | Variable capabilities vide; rejeu entre workers; permissions/identité SQLite; chemins locaux dans les preuves |
 
+## Re-revue A4-F1 sur 65759dd
+
+Cette re-revue porte sur l’arbre intégré `65759dded28380c52639059b9cee8febadbd799c`, qui contient `2c3e1788601d1640f1207cfbc2e1418f10cbd83f`. Elle complète et remplace le verdict P1 de la revue ci-dessus pour ce correctif intégré; elle ne change pas les réserves P2 déjà consignées.
+
+| Champ | Résultat |
+|---|---|
+| Verdict de la re-revue | **GO avec réserves P2**; `GO_V7_11_INDEPENDENT_SECURITY_REVIEW: GO` |
+| P1 V7-11-A4-F1 | **Fermé** pour le chemin normal du registre et les redémarrages/reconstructions d’application |
+| Archive examinée | `/tmp/v7-11-a4-final` extraite par `git archive 65759dd`; aucun fichier de code du worktree partagé modifié |
+| Fichiers touchés par `2c3e178` | `backend/atlas_backend/v4_auth.py`, `backend/atlas_backend/v4_router.py`, `backend/tests/test_v4_principal_auth.py`, `docs/operations/evidence/V7-11_A1_CORE_MIGRATION_EVIDENCE.md` |
+
+Le correctif ajoute `V4PrincipalRegistry.credential_state(token)`, qui cherche uniquement le hash d’un credential d’audience `LEGACY`, renvoie `None` si la table n’existe pas et propage les autres erreurs SQLite. `require_android()` refuse ensuite un credential LEGACY dont l’état est `REVOKED` avec la réponse générique `401 AUTH_REQUIRED` (`backend/atlas_backend/v4_auth.py:78-96`, `backend/atlas_backend/v4_router.py:767-786`).
+
+### Reproduction des scénarios a–h
+
+Tous les scénarios ci-dessous ont utilisé des bearers synthétiques, des bases SQLite temporaires dans `/tmp` et des requêtes via `httpx.ASGITransport` vers l’application et le routeur réels. `ATLAS_TOKEN` a été configuré par l’environnement. Aucun mock d’authentification, service live ou donnée utilisateur n’a été utilisé.
+
+Pour d, l’application a d’abord initialisé sa base temporaire, puis le test a supprimé `credentials_v4` et fixé `PRAGMA user_version=3` afin d’exercer le chemin « table d’auth absente / schéma inférieur à 4 ». Ce n’est pas une migration indépendante depuis une image de base V3 historique.
+
+| Cas | Scénario | Résultat |
+|---|---|---|
+| a | Credential `LEGACY` actif, mode `legacy` | **PASS** — état `ACTIVE`, requête `200` |
+| b | Credential `LEGACY` révoqué, puis application reconstruite avec la même base et le même `ATLAS_TOKEN` | **PASS** — état `REVOKED`, requête `401` |
+| c | Bearer jamais importé, mode `legacy` | **PASS** — aucun tombstone, requête `200` pour préserver la compatibilité historique |
+| d | Table `credentials_v4` absente et `user_version=3` dans la base temporaire | **PASS** — requête `200`, aucun `500` |
+| e | Bearer configuré comme `ATLAS_TOKEN`, seule entrée correspondante révoquée avec l’audience `DIRECT` | **PASS** — `credential_state()` ignore cette audience, requête Legacy `200` |
+| f | Principal `LEGACY` révoqué par `revoke_principal()` | **PASS** — ses credentials passent à `REVOKED`, requête `401` |
+| g | Modes `dual` et `principal`, credential `DIRECT` actif puis révoqué | **PASS** — actif `200`, révoqué `401` dans les deux modes |
+| h1 | Révocation LEGACY, puis `UPDATE` SQLite direct de l’audience `LEGACY` vers `DIRECT` | **OBSERVÉ** — le lookup ne trouve plus de tombstone et le mode Legacy répond `200` |
+| h2 | Révocation LEGACY, puis `UPDATE` SQLite direct du `token_hash` vers un autre hash | **OBSERVÉ** — le lookup ne trouve plus de tombstone et le mode Legacy répond `200` |
+| h3 | `ATLAS_TOKEN` remplacé après révocation | **PASS** — ancien bearer `401`; nouveau bearer jamais importé `200`, selon le comportement de compatibilité Legacy |
+
+Les résultats h1/h2 nécessitent une écriture SQL directe de la base; aucun appel de l’API/registre standard n’a changé l’audience ou le hash. Ils exposent une **limite P2 d’intégrité de la base** : le trigger protège la monotonie du champ `state`, mais les colonnes `audience` et `token_hash` ne sont pas immuables (`backend/atlas_backend/store.py:51,60`; lookup `backend/atlas_backend/v4_auth.py:84-96`). La réponse `200` si la table est absente est aussi une compatibilité explicitement testée dans `test_legacy_mode_accepts_historical_bearer_when_registry_table_is_absent`; ces chemins ne protègent donc pas contre un acteur qui peut modifier ou retirer le registre SQLite. Garder la base inaccessible en écriture aux identités autres que Core; des triggers d’immutabilité sur `audience` et `token_hash` réduiraient les erreurs de modification accidentelle. Ce cas requiert un accès d’écriture direct à la base et ne reproduit pas l’ancien contournement à distance par simple présentation du bearer révoqué.
+
+### Tests sur l’archive et limites
+
+- `python -m pytest tests/test_v4_principal_auth.py -q` depuis `/tmp/v7-11-a4-final/backend` : **21 passed, 1 warning** (avertissement de dépréciation Starlette/httpx TestClient).
+- `python -m pytest --collect-only -q` : **455 tests collected**.
+- `python -m pytest -q` a commencé mais n’a pas fourni de résultat final après plus de trois minutes; la commande a été interrompue. Aucun compte partiel n’est annoncé comme un PASS. Le parent rapporte séparément **499 passed, 1 skipped, 48 subtests** sur la suite racine; ce compte n’est pas un rerun indépendant de cette archive.
+- Le correctif `2c3e178` ne modifie ni les quatre constats P2 de la revue initiale ni leurs emplacements vérifiés dans l’archive : configuration capabilities explicitement vide, cache anti-rejeu par processus, durcissement permissions/identité SQLite et chemins locaux dans trois anciennes preuves. S’ajoute la limite P2 d’intégrité SQLite h1/h2 décrite ci-dessus.
+- Aucun Core/Relay live, ADB, émulateur ou Pixel physique n’a été utilisé; aucune modification de code ni aucun push n’a été effectué.
+
+### État des findings après F1
+
+| Sévérité | Nombre | Résultat |
+|---|---:|---|
+| P0 | 0 | Aucun |
+| P1 | 0 | F1 fermé pour les révocations du registre et le rollback/restart normal |
+| P2 | 5 | Capabilities vide; anti-rejeu multiworker; permissions/identité SQLite; chemins locaux dans les preuves; intégrité du tombstone sous écriture SQLite directe |
+
