@@ -928,6 +928,86 @@ def test_revoked_legacy_credential_stays_revoked_after_store_restart_and_reimpor
         ).fetchone()["state"] == "ACTIVE"
 
 
+def test_legacy_mode_rejects_explicitly_revoked_imported_bearer(tmp_path, monkeypatch):
+    token = "x" * 48
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
+    monkeypatch.setenv("ATLAS_V4_CURSOR_SECRET", "synthetic-cursor-secret-for-tests-only-0001")
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", "synthetic-tool-token-unique")
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", "{}")
+    app = create_app(db_path=tmp_path / "legacy-revoked-bearer" / "atlas.sqlite3", token=token)
+    registry = V4PrincipalRegistry(app.state.store)
+    client = Client(app)
+    assert registry.credential_state(token) is None
+    historical = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+    assert historical.status_code == 200
+
+    _principal_id, _device_ref, credential_id = registry.import_legacy(token)
+    assert registry.credential_state(token) == "ACTIVE"
+    active = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+    assert active.status_code == 200
+    assert registry.revoke_credential(credential_id)
+    assert registry.credential_state(token) == "REVOKED"
+
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "AUTH_REQUIRED"
+
+
+def test_legacy_mode_accepts_historical_bearer_when_registry_table_is_absent(tmp_path, monkeypatch):
+    token = "y" * 48
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
+    monkeypatch.setenv("ATLAS_V4_CURSOR_SECRET", "synthetic-cursor-secret-for-tests-only-0001")
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", "synthetic-tool-token-unique")
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", "{}")
+    app = create_app(db_path=tmp_path / "legacy-without-registry" / "atlas.sqlite3", token=token)
+    client = Client(app)
+    with app.state.store.connect() as connection:
+        connection.execute("DROP TABLE credentials_v4")
+
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+
+    assert response.status_code == 200
+
+
+def test_legacy_mode_does_not_treat_revoked_nonlegacy_credential_as_tombstone(tmp_path, monkeypatch):
+    token = "z" * 48
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
+    monkeypatch.setenv("ATLAS_V4_CURSOR_SECRET", "synthetic-cursor-secret-for-tests-only-0001")
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", "synthetic-tool-token-unique")
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", "{}")
+    app = create_app(db_path=tmp_path / "legacy-with-revoked-direct" / "atlas.sqlite3", token=token)
+    registry = V4PrincipalRegistry(app.state.store)
+    client = Client(app)
+    principal_id, _device_ref = registry.create_principal(principal_id="revoked-direct-credential")
+    credential_id = registry.add_credential(principal_id, token, audience="DIRECT")
+    assert registry.revoke_credential(credential_id)
+
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+
+    assert response.status_code == 200
+
+
 def test_legacy_dual_rollback_preserves_proposals_and_ack_events(tmp_path, monkeypatch):
     database = tmp_path / "legacy-dual-rollback.sqlite3"
     token = "synthetic-legacy-dual-rollback-token"

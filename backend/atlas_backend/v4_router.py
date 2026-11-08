@@ -776,6 +776,8 @@ def create_v4_router(
                 or not hmac.compare_digest(supplied, expected)
             ):
                 return generic_auth_failure(request, capability, fallback)
+            if registry.credential_state(supplied) == "REVOKED":
+                return generic_auth_failure(request, capability, fallback)
             context = AuthContext("legacy-android", _device_ref(expected), "legacy-android", "LEGACY", "LEGACY", frozenset())
             request.state.atlas_auth_context = context
             if capability in _CAPABILITY_ENV_ALLOWLIST and not active_capabilities.get(capability, False):

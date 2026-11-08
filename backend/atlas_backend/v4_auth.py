@@ -75,6 +75,26 @@ class V4PrincipalRegistry:
     def __init__(self, store: SQLiteStore) -> None:
         self.store = store
 
+    def credential_state(self, token: str) -> str | None:
+        """Return the state of a registered LEGACY bearer without exposing it."""
+        try:
+            digest = bearer_sha256(token)
+        except PrincipalAuthError:
+            return None
+        try:
+            with self.store.connect() as connection:
+                row = connection.execute(
+                    "SELECT token_hash,state FROM credentials_v4 WHERE token_hash=? AND audience='LEGACY'",
+                    (digest,),
+                ).fetchone()
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return None
+            raise
+        if row is None or not hmac.compare_digest(digest, str(row["token_hash"])):
+            return None
+        return str(row["state"])
+
     def create_principal(
         self,
         *,

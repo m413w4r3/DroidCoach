@@ -121,3 +121,55 @@ python backend/scripts/atlas_v4_expiration_reconcile.py --db "$TMP/core.sqlite3"
 ## Prochaine action
 
 Le parent doit relire le diff et intégrer localement le commit après cette preuve. Aucun changement hors du périmètre autorisé n’a été nécessaire.
+
+## Correction V7-11-A1-F2 — tombstone LEGACY en mode legacy
+
+- **Base de travail :** `b9392a581f2353509dc711a6438053a71e02e826`
+- **Branche :** `audit/v7-11-a1-core-migration`
+- **Profil de session transmis par le parent Paseo :** `codex:gpt-6-luna`, effort `xhigh`.
+- **Périmètre d’écriture :** `backend/atlas_backend/v4_auth.py`, `backend/atlas_backend/v4_router.py`, `backend/tests/test_v4_principal_auth.py` et ce rapport. Aucun schéma SQLite n’a été modifié.
+
+Le mode legacy consultait uniquement `ATLAS_TOKEN`. Après `legacy-import` puis révocation, l’ancien bearer restait donc accepté. `V4PrincipalRegistry.credential_state()` calcule le hash du bearer et effectue un `SELECT` en lecture seule filtré sur `audience='LEGACY'`; le bearer n’est ni stocké ni journalisé. La branche legacy renvoie le même échec générique `AUTH_REQUIRED` (401) si l’état vaut `REVOKED`. Un bearer inconnu ou une table de registre absente garde le comportement de compatibilité existant. Les modes dual et principal ne changent pas.
+
+### Résultats et commandes
+
+| Oracle | Statut | Résultat |
+|---|---|---|
+| Reproduction indépendante avant correctif | **FAIL attendu avant correction** | La requête Android legacy après révocation a obtenu `200`; l’assertion attendait `401`. Cela confirme le contournement sur base synthétique v5. |
+| Bearer LEGACY révoqué après correctif | **PASS** | Réponse `401`, code générique `AUTH_REQUIRED`. |
+| Bearer historique non importé et credential LEGACY ACTIVE | **PASS** | Les deux requêtes restent acceptées en mode legacy. |
+| Table `credentials_v4` absente | **PASS** | La requête reste acceptée, sans exception/500. La table a été retirée après initialisation de l’app pour simuler l’absence du registre pré-v4. |
+| Credential DIRECT révoquée, audiences séparées | **PASS** | Elle n’est pas traitée comme tombstone LEGACY; le chemin legacy historique reste accepté. |
+| Modes dual et principal | **PASS** | Tests d’authentification et suite complète sans régression ni fallback ajouté. |
+| Suite backend | **PASS** | `454 passed, 1 skipped, 3 warnings` en 32,76 s. |
+| Suite racine | **PASS** | `499 passed, 1 skipped, 4 warnings, 48 subtests passed` en 58,18 s. |
+| `git diff --check` | **PASS** | Aucune erreur whitespace. |
+| Services live, ADB, appareils | **NOT_RUN** | Exclu par le ticket; uniquement des bases et bearer synthétiques dans les tests locaux. |
+
+La commande rouge, exécutée avant tout changement de production depuis `backend/`, était :
+
+```sh
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_v4_principal_auth.py::test_legacy_mode_rejects_explicitly_revoked_imported_bearer
+```
+
+Résultat rouge : `1 failed`; `response.status_code` valait `200` au lieu de `401`.
+
+Après correction, les tests ciblés du fichier ont été exécutés depuis `backend/` :
+
+```sh
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_v4_principal_auth.py
+```
+
+Résultat : `21 passed, 1 warning`. Suites finales exécutées :
+
+```sh
+# Depuis backend/
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q
+# Depuis la racine du worktree
+python3 -m pytest -q
+git diff --check
+```
+
+Le test de table absente retire `credentials_v4` après le démarrage de l’application. L’initialiseur normal met automatiquement à niveau les bases avant le service; ce test vérifie directement le chemin de repli de lecture sans émuler tout un processus de démarrage pré-v4. Une erreur SQLite autre que l’absence de table continue à remonter au gestionnaire existant.
+
+**Prochaine action :** relecture parent et intégration du commit local; aucun push n’a été effectué.
