@@ -65,3 +65,9 @@ Cette revue ne vérifie pas les valeurs live de la base, des secrets, de l’ove
 | P2 #3 — protection/reprise des backups | **Risque accepté — reste une limite** | Le backup demeure local au même hôte, sans chiffrement au repos ni copie hors site ; la DB live est documentée en `0644`. Cette limite n’est pas transformée en PASS. |
 
 Le contrôle logique est convaincant dans sa portée déclarée, mais ne compare pas les nouvelles colonnes ni les données des six tables nouvelles et n’a pas été rejoué indépendamment : sa copie cible a été supprimée (`V7-11B_LIVE_MIGRATION_LOGICAL_CHECK.md:48`, `:52`). Le runbook est explicitement non exécuté ; aucune restauration ou mutation n’a été tentée. Les gates Android post-migration et binding restent `NOT_RUN`, et `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
+
+## Re-revue rollback
+
+**P2 rollback : PASS — clos sur la documentation.** Le runbook déclare le timestamp UTC avant les commandes (`V7-11B_LIVE_ROLLBACK_RUNBOOK.md:23`), le transmet au helper et l’utilise dans le script du conteneur (`:77`, `:86`) ; aucune occurrence de l’ancien placeholder ne reste. L’analyse syntaxique `sh -n` du script interne réussit. Aucune commande Docker, ADB, restauration ou migration n’a été exécutée ; le runbook reste non exercé.
+
+**Verdict final : GO_WITH_LIMITATIONS local / NO-GO pour le cutover complet ; 0 P0/P1.** Le P2 Docker demeure `UNKNOWN`. La DB `0644` et le backup local sans chiffrement ni copie hors site restent des limites acceptées. Les gates Android post-migration et binding restent `NOT_RUN`, et `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
