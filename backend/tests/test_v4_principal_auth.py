@@ -6,10 +6,14 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
+import atlas_backend.v4_assertion as v4_assertion_module
+import atlas_backend.v4_router as v4_router_module
 
 from atlas_backend.main import create_app
 from atlas_backend.store import SQLiteStore
@@ -508,6 +512,99 @@ def test_relay_assertion_binds_credential_to_active_session_and_rejects_replay(t
         ),
     )
     assert revoked_identity.status_code == 401
+
+
+def test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_tolerated(tmp_path, monkeypatch):
+    secret = b"synthetic-restart-assertion-key-only-for-tests"
+    encoded = base64.urlsafe_b64encode(secret).decode("ascii").rstrip("=")
+    monkeypatch.setenv("ATLAS_V4_RELAY_ASSERTION_KEYS_JSON", json.dumps({"test-key-1": encoded}))
+
+    now_ms = [1_800_000_000_000]
+    controlled_clock = SimpleNamespace(time=lambda: now_ms[0] / 1000)
+    monkeypatch.setattr(v4_router_module, "time", controlled_clock)
+    monkeypatch.setattr(v4_assertion_module, "time", controlled_clock)
+
+    _first_app, registry, first_client = make_app(tmp_path, monkeypatch)
+    principal_id, _device_ref = registry.create_principal(
+        principal_id="restart-principal", device_ref="restart-device"
+    )
+    token = "synthetic-restart-relay-credential-token"
+    registry.add_credential(principal_id, token, audience="RELAY")
+    grant_consent_capability(registry, principal_id)
+    registry.add_binding("restart-relay-session", principal_id)
+
+    def signed_body() -> bytes:
+        return json.dumps(
+            {
+                **CONSENT_BODY,
+                "request_id": str(uuid.uuid4()),
+                "idempotency_key": str(uuid.uuid4()),
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def relay_post(client, *, timestamp: int, nonce: str, body: bytes):
+        return client.post(
+            "/v4/sync/consent-state",
+            content=body,
+            headers=_relay_headers(
+                token,
+                secret,
+                "restart-relay-session",
+                nonce=nonce,
+                timestamp=timestamp,
+                body=body,
+            ),
+        )
+
+    # The assertion is created after the first app starts and is accepted once.
+    assertion_timestamp_ms = now_ms[0] + 10_000
+    now_ms[0] = assertion_timestamp_ms
+    assertion_body = signed_body()
+    accepted_before_restart = relay_post(
+        first_client,
+        timestamp=assertion_timestamp_ms,
+        nonce="restart-replay-nonce",
+        body=assertion_body,
+    )
+    assert accepted_before_restart.status_code == 200
+
+    # Recreating the app simulates a Core restart: the SQLite identity remains,
+    # while the router gets a new in-memory replay cache and startup timestamp.
+    restart_started_at_ms = 1_800_000_020_000
+    now_ms[0] = restart_started_at_ms
+    _restarted_app, _restarted_registry, restarted_client = make_app(tmp_path, monkeypatch)
+    replay_after_restart = relay_post(
+        restarted_client,
+        timestamp=assertion_timestamp_ms,
+        nonce="restart-replay-nonce",
+        body=assertion_body,
+    )
+    assert replay_after_restart.status_code == 401
+
+    # Fresh assertions at/after startup pass, and a connector clock 3 s behind
+    # is within the explicit 5 s startup tolerance.
+    after_start_timestamp_ms = restart_started_at_ms + 1_000
+    now_ms[0] = after_start_timestamp_ms
+    accepted_after_start = relay_post(
+        restarted_client,
+        timestamp=after_start_timestamp_ms,
+        nonce="restart-new-assertion-nonce",
+        body=signed_body(),
+    )
+    assert accepted_after_start.status_code == 200
+
+    tolerated_started_at_ms = restart_started_at_ms + 2_000
+    now_ms[0] = tolerated_started_at_ms
+    _tolerated_app, _tolerated_registry, tolerated_client = make_app(tmp_path, monkeypatch)
+    tolerated_timestamp_ms = tolerated_started_at_ms - 3_000
+    accepted_with_clock_skew = relay_post(
+        tolerated_client,
+        timestamp=tolerated_timestamp_ms,
+        nonce="restart-tolerated-skew-nonce",
+        body=signed_body(),
+    )
+    assert accepted_with_clock_skew.status_code == 200
 
 
 def test_relay_assertion_key_file_requires_private_regular_file(tmp_path):

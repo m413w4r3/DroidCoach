@@ -2,20 +2,21 @@
 
 ## Contrat de tâche
 
-- `TASK_ID`: `V7-11-A2` (complément `V7-11-A2-F1`)
+- `TASK_ID`: `V7-11-A2` (compléments `V7-11-A2-F1`, `V7-11B-P4`)
 - Statut sous-session: `REVIEW_REQUIRED`
 - `BASE_SHA`: `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`
 - Base du complément F1: `e4a4461059f5f0e8c57316533c61d63cee3b07c9`
+- Base du complément P4: `291b5f78d2f770dbb02dcf353b0fe6f6a4fd1030`
 - Branche: `audit/v7-11-a2-relay-replay`
 - Profil transmis et vérifié par le parent: `provider=codex`, `model=gpt-6-luna`, `effort=xhigh`
-- Périmètre: inspection runtime et code en lecture seule; script(s) temporaires sous `/tmp`; seul fichier de dépôt modifié: cette preuve; commit local demandé, aucun push.
+- Périmètre initial A2: inspection runtime et code en lecture seule; script(s) temporaires sous `/tmp`; preuve seule modifiée, commit local demandé, aucun push. P4 autorise en plus `backend/atlas_backend/v4_router.py` et `backend/tests/test_v4_principal_auth.py`.
 - Oracle: scénarios HMAC/cache ci-dessous, inventaire Docker/processus/sockets, tests connecteur et proxy.
 
 ## Verdict
 
-**`GO_V7_11_ANTI_REPLAY_TOPOLOGY = NO-GO` pour toute mise en service V4 Relay.** Le contrôle HMAC/binding est correct dans le processus testé, mais le rejeu inter-worker est reproduit: deux caches Core distincts acceptent la même assertion. F1 reproduit également l’acceptation du rejeu après recréation du cache (simulation de redémarrage Core). Un worker unique ne protège donc pas contre la perte du cache lors d’un redémarrage. L’environnement observé n’a par ailleurs ni proxy `4400` ni connecteur `4401`; le trajet Relay→connecteur→Core n’est pas présent.
+**`GO_V7_11_ANTI_REPLAY_TOPOLOGY = NO-GO` pour toute mise en service V4 Relay.** Le rejeu inter-worker est reproduit: deux caches Core distincts acceptent la même assertion. F1 a aussi reproduit le rejeu après redémarrage; P4 ajoute un garde qui refuse les assertions antérieures au démarrage de plus de 5 s, tout en acceptant les assertions dans cette tolérance. Ce garde ne partage pas les nonces entre workers. L’environnement observé n’a par ailleurs ni proxy `4400` ni connecteur `4401`; le trajet Relay→connecteur→Core n’est pas présent.
 
-Finding sécurité: **P2 — confirmé, gate live obligatoire**. Le défaut porte sur les caches isolés entre workers et sur la perte complète des nonces en mémoire au redémarrage. Cette sévérité correspond au risque multiworker déjà documenté dans le handoff V7-10 (sections 12–13, lignes 621 et 642).
+Finding sécurité: **P2 — confirmé, gate live obligatoire**. Les caches isolés entre workers restent vulnérables; après redémarrage, une assertion datée dans les 5 s précédant le démarrage peut aussi passer le garde de tolérance si elle est encore dans la fenêtre ±120 s. Cette sévérité correspond au risque multiworker déjà documenté dans le handoff V7-10 (sections 12–13, lignes 621 et 642).
 
 ## Topologie observée en lecture seule
 
@@ -79,8 +80,26 @@ Commande: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/backend" python3 /tmp/v7_1
 
 Le TTL de 300 s dépasse le seuil de dérive d’un seul côté (120 s), et de 60 s la borne complète de 240 s à partir d’une acceptation au timestamp futur maximal. Avant redémarrage, le cache local bloque le nonce pendant son TTL; le contrôle de timestamp fournit aussi un refus lorsque l’assertion sort de ±120 s. Après redémarrage, le cache est vide: le même rejeu est accepté si le timestamp reste dans la fenêtre, puis refusé par le timestamp hors fenêtre. La borne de 240 s suppose une horloge Core stable et des assertions antérieures au redémarrage; elle n’est pas une protection contre des horloges incohérentes.
 
+### Complément P4 — garde d’assertion au démarrage Core
+
+`create_v4_router` capture une seule fois `int(time.time() * 1000)` au moment de la création de l’application/du routeur. Cette valeur est conservée dans la closure de `require_android`; chaque nouvelle app simulant un redémarrage a donc un nouveau repère de démarrage et un nouveau cache nonce. La constante documentée `CLOCK_SKEW_MS = 5_000` ne modifie pas la fenêtre HMAC ±120 000 ms. Pour une requête avec assertion Relay, après vérification HMAC/fenêtre et binding principal actif, `require_android` lit `x-atlas-relay-time`; un timestamp inférieur à `core_started_at_ms - CLOCK_SKEW_MS` renvoie l’échec d’authentification générique (401). Les credentials DIRECT sans assertion, les routes legacy sans assertion et les autres flux n’empruntent pas ce garde. Aucun nonce n’est persisté et aucun schéma SQLite n’est changé ([`v4_router.py`](../../../backend/atlas_backend/v4_router.py:70), [capture](../../../backend/atlas_backend/v4_router.py:504), [garde après binding](../../../backend/atlas_backend/v4_router.py:820)).
+
+Test ciblé `test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_tolerated`, horloge contrôlée et assertions synthétiques:
+
+| Oracle rouge/vert | Avant le garde | Après le garde |
+|---|---|---|
+| Assertion acceptée par l’app initiale puis rejouée 10 s avant la nouvelle app, cache neuf | FAIL attendu: réponse réelle `200` | PASS: `401` générique |
+| Assertion signée à/après le démarrage de la nouvelle app | — | PASS: `200` |
+| Assertion signée 3 s avant le démarrage (tolérance 5 s) | — | PASS: `200` |
+
+La tolérance est une permission explicite: le garde borne l’ancienneté du timestamp par rapport au démarrage, pas le délai après lequel une assertion tolérée expire. Une assertion horodatée dans les 5 s précédant le démarrage peut donc rester admissible jusqu’à sa sortie de la fenêtre normale ±120 s; une fois réservée, le cache mono-processus bloque ses duplicatas pendant son TTL de 300 s. Le garde seul ne corrige pas le finding inter-worker et ne constitue pas un cache partagé/durable.
+
 ## Suites et preuves d’exécution
 
+- **PASS rouge/vert ciblé** — Depuis `backend/`, `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_v4_principal_auth.py::test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_tolerated`: avant le patch, l’assertion `401` échoue avec réponse réelle `200`; après patch, **1 passed**, couvrant rejeu post-redémarrage `401`, assertion post-démarrage `200` et tolérance de 3 s `200`.
+- **PASS** — Depuis `backend/`, `ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q` → **452 passed, 1 skipped**, 3 avertissements. La suite couvre aussi rejeu mono-cache, timestamp ±120 s, rotation de clés, binding A/B et accès DIRECT sans assertion.
+- **FAIL hors périmètre** — Depuis la racine, `python3 -m pytest -q` → **9 failed, 497 passed, 1 skipped** (39 sous-cas passés). Les 9 échecs sont dans `scripts/v7-06c/tests/test_harness.py`: l’INSERT de test fournit 10 valeurs pour `agent_proposals_v4`, qui a 11 colonnes (`sqlite3.OperationalError`). Aucun de ces fichiers n’est dans le périmètre P4; aucun changement n’y a été apporté.
+- **PASS** — `git diff --check` après les modifications P4.
 - **PASS** — `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/backend" python3 -m pytest -q -p no:cacheprovider backend/tests/test_v4_principal_auth.py::test_relay_assertion_binds_credential_to_active_session_and_rejects_replay` → `1 passed`.
 - **PASS** — injection temporaire d’une erreur de cache via `/tmp/test_v7_11_a2_cache_error.py` → `1 passed`; assertion authentique refusée par réponse 500, aucun événement créé. Un premier essai du harnais avait un `key_id` synthétique incohérent et s’arrêtait en 401 avant le cache; l’essai corrigé est celui retenu.
 - **PASS** — `npm ci --offline` dans une copie temporaire, puis `npm run test:unit` depuis un checkout temporaire imbriqué (`/tmp/.../integrations/relay/pc` avec marqueur `AGENTS.md`), build TypeScript inclus → **131/131**. Une première exécution depuis une copie plate hors racine ATLAS avait 129 passés et 2 échecs de fixture (`findRepositoryRoot` indéfini); relancée dans la structure attendue, **131/131**. Aucun `node_modules` ni fichier de build n’a été créé dans le dépôt.
@@ -103,12 +122,12 @@ Une première tentative a utilisé `node --test --test-name-pattern='^(?!pinned 
 Ne lever `GO_V7_11_ANTI_REPLAY_TOPOLOGY` qu’après l’une des deux solutions suivantes:
 
 1. **Cache anti-rejeu partagé et durable**: réservation atomique cross-worker qui survit au redémarrage Core (par exemple `SET NX` avec expiration persistante), avec tests de rejeu entre processus indépendants, après redémarrage, ainsi que comportement fermé sur erreur/saturation; ou
-2. **Cache mémoire avec restrictions supplémentaires**: worker/instance Core unique vérifié à chaque déploiement, interdiction opérationnelle et automatisée de scale/instances parallèles, et blocage vérifiable de toute entrée V4 Relay pendant au moins 240 s après chaque redémarrage Core. Cette durée ne couvre les assertions antérieures au redémarrage que sous hypothèse d’horloges stables. Le worker unique seul n’est pas un gate suffisant.
+2. **Cache mémoire avec restrictions supplémentaires**: worker/instance Core unique vérifié à chaque déploiement, interdiction opérationnelle et automatisée de scale/instances parallèles, et garde P4 vérifié sur le code déployé avec le test de rejeu après redémarrage. Le seuil toléré de 5 s avant démarrage doit être accepté explicitement; une assertion dans cette tolérance peut rester valide jusqu’à sa limite ±120 s. Le worker unique seul n’est pas un gate suffisant sans le garde de redémarrage.
 
 Avant le live, vérifier aussi le routage complet `4400 → 4402`, la présence du connecteur et ses métriques `4401`, le binding principal réel, le keyring overlap puis le retrait contrôlé de la clé ancienne. La présence d’un seul worker à cet instant n’est pas une barrière contre un futur changement de commande ou de déploiement.
 
 ## Traçabilité finale
 
 - Base examinée: `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`.
-- Complément F1: reproduction du rejeu après recréation du cache et refus temporel hors fenêtre; commit local SHA rapporté dans la notification finale; aucun push.
+- Compléments F1/P4: reproduction puis mitigation conditionnelle du rejeu après recréation du cache; tests rouge/vert et limites documentés; commit local SHA rapporté dans la notification finale; aucun push.
 - Secrets, tokens, identifiants Relay personnels et valeurs de credentials exclus de ce document.
