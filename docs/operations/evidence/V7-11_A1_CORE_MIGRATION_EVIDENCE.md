@@ -1,0 +1,123 @@
+# V7-11-A1 — preuve Core, registre V4 et migration SQLite
+
+- **TASK_ID :** `V7-11-A1`
+- **Date :** 2026-11-08
+- **BASE_SHA :** `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`
+- **Branche :** `audit/v7-11-a1-core-migration`
+- **Profil vérifié par les métadonnées Paseo du parent :** `codex:gpt-6-luna`, `xhigh`
+- **État Git initial :** propre
+- **Sortie :** commit local indiqué dans le compte-rendu final; aucun push.
+
+## Périmètre
+
+Audit en lecture seule de `backend/atlas_backend/{store.py,v4_auth.py,v4_assertion.py,v4_router.py,v4_projection_store.py,main.py}`, `backend/scripts/atlas_v4_principals.py` et `backend/scripts/atlas_v4_expiration_reconcile.py`, à la base SHA ci-dessus. Correctif borné à `scripts/v7-06c/tests/test_harness.py`. La seule autre écriture est ce rapport.
+
+Le dépôt ne contient pas `.codegraph/`; l’inventaire s’est donc appuyé sur les fichiers source et tests. Aucun ADB, appareil, Pixel, service live, volume Docker, secret réel, fichier `.env` ou base personnelle n’a été consulté.
+
+## Résultats de l’audit V7-10
+
+- Les migrations 4 et 5 sont additives : la v4 crée le registre principal/credentials/grants/bindings, ajoute `device_ref` et ses index/triggers; la v5 ajoute l’audit d’expiration. Le ledger vérifie les checksums, les versions contiguës, applique sous `BEGIN IMMEDIATE` et prend un backup pré-migration. La table historique V2 est restée intacte dans la répétition synthétique.
+- Les événements de consentement, ACK, principal et expiration sont append-only. Les triggers interdisent un propriétaire de proposition nul, le changement ultérieur de propriétaire, la réactivation d’un principal/credential/binding révoqué et le retour de `device_ref` d’un principal à une autre valeur.
+- `legacy-import` exige le choix explicite `--grant-defaults`; il calcule et conserve uniquement SHA-256 du bearer ASCII. La résolution vérifie digest, audience et états actifs. Le registre admet `DIRECT`, `RELAY`, `TOOL` et `LEGACY`; le mode `principal` refuse `LEGACY`.
+- Les capacités sont allowlistées. Une route exige à la fois son flag global actif et son grant principal. `tool_catalog.read` est une métadonnée TOOL spéciale non accordable. Le principal de test `pixel-v7` n’a reçu que `consent.state.write`, `plan_revision.propose` et `proposal.ack`.
+- Le chemin Relay lie l’assertion HMAC (méthode, chemin, timestamp, nonce, ID Relay et hash du corps) au credential d’audience `RELAY`, puis vérifie le binding actif vers le même principal et `device_ref`. L’identité ne vient pas du payload client.
+- Les propositions sont créées avec le `device_ref` du contexte authentifié. Le pull, la recherche d’idempotence et l’ACK filtrent le propriétaire; l’accès inter-principal est masqué en `404`. Les lignes sans propriétaire ne sont exposées en mode `dual` qu’au principal LEGACY explicitement configuré.
+- L’ACK contrôle propriétaire, consentement courant, hash de replay et séquence sous transaction immédiate; les mises à jour d’état sont conditionnelles. La transition `UNCERTAIN → RECONCILED` est explicite. L’expiration traite uniquement `PENDING_ANDROID`, `RECEIVED` et `AWAITING_USER`, par lot déterministe, avec mise à jour et audit atomiques. `UNCERTAIN` reste inchangé.
+- Le backfill est dry-run par défaut; l’application exige une cible LEGACY non ambiguë/explicite et une sauvegarde exclusive vérifiée. La réconciliation d’expiration vérifie v5/checksum, intégrité et FK, sauvegarde avant application et traite des lots transactionnels.
+- La concurrence est sérialisée par `BEGIN IMMEDIATE`, contraintes uniques et mises à jour conditionnelles. Les suites couvrent ACK concurrents, expiration, incertitude, révocation et isolation; elles passent dans l’oracle racine.
+
+## Oracles et commandes
+
+| Oracle | Statut | Résultat |
+|---|---|---|
+| Reproduction CI avant patch | **FAIL attendu avant correction** | Deux méthodes de `CoreOracleTests` échouaient (9 sous-cas) : `agent_proposals_v4` avait 11 colonnes et l’INSERT de fixture en fournissait 10. Le trigger propriétaire n’était pas affaibli; l’échec arrivait au nombre de valeurs. |
+| Harness après patch | **PASS** | `27 passed, 43 subtests passed`. |
+| Suite racine complète | **PASS** | `496 passed, 1 skipped, 4 warnings, 48 subtests passed` en 50,12 s. |
+| Migration synthétique v3→v5 | **PASS** | `user_version=5`, 5 migrations, `integrity_check=ok`, `foreign_key_check=[]`; la ligne V2 historique subsiste et la ligne V4 préexistante reste sans propriétaire avant backfill. |
+| Import LEGACY et provisioning | **PASS** | Bearer synthétique généré à l’exécution (58 caractères), jamais imprimé ni enregistré dans ce rapport. `pixel-v7` a des credentials distincts `DIRECT` et `RELAY`; principal et credential TOOL séparés; grants minimaux et binding Relay actif vérifiés. Les trois audiences ont été validées par `verify-token`; les hashes DIRECT/RELAY diffèrent. |
+| Backfill dry-run/apply + backup | **PASS** | Dry-run : 1 proposition sans propriétaire. Apply : 1 mise à jour, backup vérifié, SHA-256 `29d21f704447bc1081edb2915bb763c16a236621930dac6d86d707b191cb1365`. Après application : 0 ligne sans propriétaire; la ligne historique appartient au principal LEGACY importé. |
+| Isolation propriétaire | **PASS** | Le propriétaire LEGACY retrouve sa proposition; le principal `pixel-v7` ne peut pas la retrouver. Le trigger rejette aussi un INSERT sans `device_ref` et une modification de propriétaire. |
+| Expiration / UNCERTAIN | **PASS** | Le dry-run a trouvé 2 propositions actives échues et exclu la proposition `UNCERTAIN`. Apply par lots de 1 : 2 expirations, 2 audits, 1 `UNCERTAIN` conservé, aucune anomalie d’audit. Le dry-run suivant trouve 0 candidat. |
+| Redémarrage / idempotence | **PASS** | Une nouvelle initialisation `SQLiteStore` conserve v5, les 5 migrations, 3 propositions, 2 audits, les grants et le hash logique `9ef8546916ef0cd9028b71a7bf969b96d7c80237d567e74ece7847a4d8bf26bd`. Le dry-run du backfill relancé retourne 0 propriétaire manquant. |
+| Migration / services live, Android ou Pixel physique | **NOT_RUN** | Exclus par les interdictions du ticket; la preuve porte uniquement sur `/tmp` synthétique et les tests locaux. |
+| Vérification whitespace | **PASS** | `git diff --check`. |
+
+### Harness rouge puis vert
+
+Commande exécutée avant le patch :
+
+```sh
+python -m pytest -q scripts/v7-06c/tests/test_harness.py
+```
+
+Sortie résumée avant : `9 failed, 27 passed, 34 subtests passed`; les erreurs proviennent des deux méthodes `test_apply_and_reject_core_oracles_pass` et `test_core_oracle_rejects_required_falsifications`.
+
+Même commande après le patch : `27 passed, 43 subtests passed`.
+
+Correctif : passer 11 valeurs à l’INSERT de fixture, avec `device_ref="synthetic-device"`. Le trigger de production reste intact.
+
+### Oracle racine
+
+Commande exacte depuis la racine du worktree :
+
+```sh
+python -m pytest -q
+```
+
+Résultat : **496 passed, 1 skipped, 4 warnings, 48 subtests passed**. Avertissements : dépréciation Starlette/httpx, marqueur `real_gateway` non enregistré et deux Operation IDs FastAPI dupliqués; aucun échec.
+
+### Répétition SQLite synthétique
+
+La base et les fichiers de backup/credentials ont été créés sous `/tmp/v7-11-a1-core-migration.NdhvgW`. La fixture v3, construite avec `sqlite3` et les migrations v1–v3/checksums du code, contenait une ligne de proposition V4 sans `device_ref` et une ligne dans la table historique. Contrôle initial : `user_version=3`, `integrity_check=ok`, `foreign_key_check=[]`, une ligne historique.
+
+Commandes de CLI exécutées, avec les variables de chemin et d’identifiant temporaire dépliées ici :
+
+```sh
+TMP=/tmp/v7-11-a1-core-migration.NdhvgW
+LEGACY_PRINCIPAL_ID=legacy_W0p8BqHAZB6nD31VGyt0wXRo
+python -c "import json,sqlite3; c=sqlite3.connect('$TMP/core.sqlite3.pre-v4.bak'); print(json.dumps({'user_version':c.execute('PRAGMA user_version').fetchone()[0],'integrity_check':c.execute('PRAGMA integrity_check').fetchone()[0],'foreign_key_check':[list(x) for x in c.execute('PRAGMA foreign_key_check')],'legacy_rows':c.execute('SELECT COUNT(*) FROM agent_proposals').fetchone()[0],'v4_rows_without_owner_column':c.execute('SELECT COUNT(*) FROM agent_proposals_v4').fetchone()[0]},sort_keys=True))"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" preview-migration
+PYTHONPATH=backend python -c "from atlas_backend.store import SQLiteStore; SQLiteStore('$TMP/core.sqlite3')"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" preview-migration
+cp "$TMP/core.sqlite3.pre-v4.bak" "$TMP/core-migration-cli.sqlite3"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core-migration-cli.sqlite3" preview-migration
+PYTHONPATH=backend python -c "from atlas_backend.store import SQLiteStore; SQLiteStore('$TMP/core-migration-cli.sqlite3')"
+python -c 'import secrets,sys; sys.stdout.write("synthetic-"+secrets.token_urlsafe(36)+"\n")' | python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" legacy-import --grant-defaults
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" principal add --principal-id pixel-v7 --kind ANDROID --device-ref synthetic-device
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" credential add --principal-id pixel-v7 --audience DIRECT --generate --output "$TMP/pixel-direct.credential"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" credential add --principal-id pixel-v7 --audience RELAY --generate --output "$TMP/pixel-relay.credential"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" principal add --principal-id atlas-tool-test --kind TOOL --device-ref synthetic-tool-device
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" credential add --principal-id atlas-tool-test --audience TOOL --generate --output "$TMP/tool.credential"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" capability set --principal-id pixel-v7 --capability consent.state.write --grant
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" capability set --principal-id pixel-v7 --capability plan_revision.propose --grant
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" capability set --principal-id pixel-v7 --capability proposal.ack --grant
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" binding add --relay-device-id relay-pixel-v7-test --principal-id pixel-v7
+cat "$TMP/pixel-direct.credential" | python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" verify-token
+cat "$TMP/pixel-relay.credential" | python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" verify-token
+cat "$TMP/tool.credential" | python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" verify-token
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" backfill-proposals --legacy-principal-id "$LEGACY_PRINCIPAL_ID"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" backfill-proposals --legacy-principal-id "$LEGACY_PRINCIPAL_ID" --apply --backup "$TMP/pre-backfill.sqlite3"
+python backend/scripts/atlas_v4_principals.py --db "$TMP/core.sqlite3" backfill-proposals --legacy-principal-id "$LEGACY_PRINCIPAL_ID"
+python backend/scripts/atlas_v4_expiration_reconcile.py --db "$TMP/core.sqlite3" --now 2026-11-08T00:00:00Z
+python backend/scripts/atlas_v4_expiration_reconcile.py --db "$TMP/core.sqlite3" --now 2026-11-08T00:00:00Z --apply --backup "$TMP/pre-expiration-reconcile.sqlite3" --batch-size 1
+python backend/scripts/atlas_v4_expiration_reconcile.py --db "$TMP/core.sqlite3" --now 2026-11-08T00:00:00Z
+```
+
+`LEGACY_PRINCIPAL_ID` est l’identifiant opaque temporaire retourné par l’import. Aucun bearer ni contenu de fichier credential ne figure dans les sorties ou ce commit. Les contrôles finaux ont vérifié intégrité, FK, `user_version`, compte des lignes, hashes distincts des credentials sans afficher ces hashes, hash de backup et triggers append-only.
+
+## Fichiers modifiés
+
+- `scripts/v7-06c/tests/test_harness.py` — ajoute le 11e champ de fixture et le propriétaire synthétique attendu.
+- `docs/operations/evidence/V7-11_A1_CORE_MIGRATION_EVIDENCE.md` — cette preuve.
+
+## Risques et limites
+
+- Le cache anti-rejeu Relay est en mémoire par processus; un déploiement multi-worker doit assurer l’affinité/routage ou un stockage de nonce partagé.
+- La réconciliation `--apply` est transactionnelle par batch, pas sur l’ensemble du run. Une interruption après des lots exige la procédure de restauration depuis la sauvegarde vérifiée.
+- Le mode d’authentification par défaut reste `legacy`; le cutover vers `principal` et la configuration des flags globaux restent des décisions d’exploitation distinctes.
+- Cette preuve n’est pas une autorisation de migration ni une validation live. Aucun service, volume Docker, ADB ou appareil n’a été utilisé.
+- Pendant la préparation de la fixture synthétique, un premier ledger v3 généré manuellement avait des checksums mal encodés; l’initialiseur l’a correctement refusé (`MigrationChecksumConflict`). Les checksums ont été recalculés avec la formule du code, puis la migration v3→v5 a réussi. Ce faux départ concerne uniquement la fixture jetable.
+
+## Prochaine action
+
+Le parent doit relire le diff et intégrer localement le commit après cette preuve. Aucun changement hors du périmètre autorisé n’a été nécessaire.

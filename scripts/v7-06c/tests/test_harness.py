@@ -60,10 +60,10 @@ class CoreOracleTests(unittest.TestCase):
         connection = sqlite3.connect(path)
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute(
-            "INSERT INTO agent_proposals_v4 VALUES(?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO agent_proposals_v4 VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (proposal_id, "synthetic-idempotency", "a" * 64, plan_id, 2,
              "plan_revision.propose", "2026-01-01T10:00:00Z", "2026-01-01T10:01:00Z",
-             expected_proposal, json.dumps(proposal_json, separators=(",", ":"))),
+             expected_proposal, json.dumps(proposal_json, separators=(",", ":")), "synthetic-device"),
         )
         if mutation == "wrong_plan_version" and action == "apply":
             applied_version = 4
