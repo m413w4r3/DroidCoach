@@ -217,3 +217,110 @@ Avant les blocs B–E, l’opérateur fournit un change packet privé comprenant
 9. Pour E uniquement : liste exacte des credentials/bindings/keys à révoquer, vérification nouvelle paire, rotation de `ATLAS_TOKEN` si le chemin legacy serait autrement possible, plan de tombstone après restauration, et autorisation spécifique du propriétaire des données et du service.
 
 **Décision actuelle :** dossier incomplet; n’autorise ni staging live, ni installation Pixel, ni révocation. À reprendre uniquement après intégration des preuves A1–A5 au SHA V7-11A, correction des points P1, et nouvelle autorisation ciblée du propriétaire.
+
+## Revue finale V7-11-A6-F1 — clôture V7-11A
+
+**TASK_ID :** `V7-11-A6-F1`
+
+**SHA documentaire examiné :** `c3dcaa16daf0b67aa3ca5d35ba65fa7694e15c56` (`feat/atlas-v7-11-migration-readiness`)
+
+**SHA de code final :** `65759dded28380c52639059b9cee8febadbd799c`
+
+**Date :** 2026-11-08. Revue documentaire et runtime en lecture seule; aucun ADB, Pixel, push ou changement de service.
+
+### Verdict de clôture
+
+- **V7-11A local : GO avec limitations.** Les tests locaux et les répétitions synthétiques sont étayés; la correction A1-F2 ferme le P1 legacy dans le parcours normal du registre, et A4-F1 la revoit indépendamment sur `65759dd`.
+- **V7-11A live : NO-GO.** Aucun staging, cutover, installation Pixel, révocation ou pilote n’a été exécuté. Le code V7-11 n’est pas déployé sur Core; le Relay/connecteur ne forme pas une chaîne opérationnelle; les blockers d’exploitation demeurent.
+- **P0 : aucun constat établi.** Le P1 legacy historique est fermé dans le cas testé. Les bloqueurs opérationnels P1 restent la CI distante rouge, le Relay non administrable, l’identité/binding non vérifiés, la bascule Android incomplète, l’anti-rejeu non fermé et le backup/restore live non éprouvé.
+
+### Cohérence des SHA et portée des preuves
+
+| Référence | Ce qu’elle prouve | Limite retenue |
+|---|---|---|
+| `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c` | Base des passes A1–A3 et de l’audit A4 initial; la CI distante `42467740775` est rouge sur ce SHA. | Ce n’est pas le SHA de code final après A1-F2. |
+| `04fdc77f38a8d215644cecfa4d5707030fbfa2ee` | A5-F1: suites locales, APK debug et image Core candidate; l’APK est `27baca…d13e`, l’image `2c5ae216…1cd57`. | Le correctif auth A1-F2 n’est pas inclus dans l’image Core. Aucun build image exact `65759dd` n’est documenté. |
+| `65759dded28380c52639059b9cee8febadbd799c` | SHA de code final déclaré; A1-F2 rapporte `454 passed / 1 skipped` backend et `499 passed / 1 skipped / 48 subtests` racine; A4-F1 le revoit indépendamment. | La CI distante n’a pas été relancée après le correctif. |
+| `c3dcaa16daf0b67aa3ca5d35ba65fa7694e15c56` | SHA de clôture documentaire sur la branche d’intégration. | `git diff --stat 65759dd..c3dcaa1 -- backend android integrations contracts` est vide; aucun changement applicatif postérieur non revu n’est détecté. |
+
+Le code Android est inchangé entre `8dac699` et `65759dd`; cela relie le comportement Android testé par A3 au code intégré, mais pas l’APK à reconstruire pour V7-11B. Les preuves A1–A5 se raccordent au SHA final par les commits d’intégration et le registre; leurs résultats ne doivent pas être présentés comme un rerun distant sur `c3dcaa1`.
+
+### Contradictions, preuves manquantes et risques
+
+1. **P1 legacy : fermé sous condition de registre intact.** A1-F2 ajoute le refus `401 AUTH_REQUIRED` d’un credential LEGACY révoqué en mode legacy; A4-F1 confirme les scénarios a–h sur `65759dd`. La compatibilité reste volontaire pour un bearer jamais importé et lorsque la table est absente. Une écriture SQLite directe qui change `audience`/`token_hash` peut masquer le tombstone (P2); l’accès en écriture à la DB doit rester réservé à Core. La mention du P1 legacy comme ouvert dans la partie initiale de cet audit décrit le SHA antérieur au correctif et est supersédée ici.
+2. **A0 APPLY : BLOCKED, pas PASS.** A3-F2 a aligné plan, version, révision et activité, mais le Core refuse toujours l’origine `DEMO` avec `503 DATA_UNAVAILABLE`. Aucun `proposal_id`, changement appliqué ni ACK `APPLIED` n’est revendiqué. L’APPLY sur une projection Android admissible reste NOT_RUN.
+3. **HOME : anomalie conservée.** Un `FATAL EXCEPTION` framework a été observé lors d’un remplacement avec HOME actif; une passe ultérieure ne l’a pas reproduit. Les données sont restées intactes. Cela justifie `GO_WITH_LIMITATIONS` AVD, et ne qualifie pas le Pixel.
+4. **Déviation A2 / port 4402 : correctement exclue.** Le premier proxy-test a contacté le Relay live pour health/ready et handshake WebSocket. A2 l’étiquette comme violation de restriction et ne la compte pas comme preuve; la suite retenue a explicitement sauté ce cas depuis une copie. Aucun payload applicatif ni mutation n’est documenté.
+5. **Dossier d’autorisation D : ambiguïté de réversibilité.** `V7-11_LIVE_CHANGE_PLAN.md`, D.0 propose un APPLY sur un plan/projection Android « réel » avec proposition synthétique. Un APPLY accepté modifie le plan et ne peut pas être classé réversible par défaut. Le test doit viser un plan jetable/synthétique isolé; sinon il faut une autorisation Pixel et données séparée, un backup vérifié et une procédure de restauration approuvée. Cette condition devient un stop avant D.
+
+### Assainissement du contenu et résidu Git
+
+Un scan ciblé des livrables et preuves V7-11 au SHA `c3dcaa1` n’a trouvé aucun chemin personnel brut, argument ADB avec serial non expurgé, bearer/JWT/token fournisseur correspondant aux motifs testés, bloc de clé privée, ni valeur UUID dans un champ `device_id`. Le scan est ciblé et n’équivaut pas à un audit exhaustif de secrets; `gitleaks` n’est pas déclaré disponible dans A5-F1.
+
+Le contrôle plus large de `docs/operations/` trouve toutefois un chemin absolu personnel encore présent dans [REGISTRY_V7_06C.md](../REGISTRY_V7_06C.md#L45), hors des livrables/preuves V7-11 assainis. Il n’est pas recopié ici. C’est un **P2 de confidentialité courant** à expurger dans le fichier propriétaire avant de déclarer tout `docs/operations/` nettoyé. A5-F1 documente honnêtement l’autre limite : les chaînes retirées restent dans les anciens commits et dans les lignes supprimées du commit de sanitisation; aucun historique n’a été réécrit. L’assainissement courant n’est donc pas une purge historique.
+
+### Vérification runtime en lecture seule
+
+Le contrôle final a utilisé `docker ps`, `docker inspect`, `systemctl --user list-units`, `ss -ltnp` et un `docker exec` limité à une connexion SQLite `mode=ro`, PRAGMA et comptes agrégés. Aucun contenu de secret, ligne de proposition, payload ou contenu personnel n’a été lu; aucune opération d’écriture ou de redémarrage n’a été lancée.
+
+| Oracle | État observé |
+|---|---|
+| Core `atlas-core-atlas-core-1` | Même image `sha256:8604535e…`, `started=2026-11-07T10:05:46Z`, `restart_count=0`, healthy. |
+| Relay `atlas-v7-relay` | Même image `sha256:75d68fd…`, `started=2026-11-07T10:05:46Z`, `restart_count=0`; bridge, port publié 4402, aucun volume ni unité systemd Relay. |
+| Unités et sockets | `openclaw-gateway.service` actif; aucune unité Relay chargée. Core 8100 et Relay 4402 écoutent; ports 4400 et 4401 absents. |
+| SQLite Core | `user_version=3`, `integrity_check=ok`, 0 violation FK, `journal_mode=delete`; propositions V4 : APPLIED=1, PENDING_ANDROID=1, REJECTED=1; 2 événements ACK (APPLIED=1, REJECTED=1). Mtime `2026-11-07T10:05:49Z`, cohérent avec la capture au démarrage. |
+| ADB/AVD | Aucun ADB n’a été lancé par cette revue; aucun processus emulator/QEMU n’est actif. Un serveur ADB préexistant écoute sur 5037; son rôle antérieur n’a pas été vérifié et il n’a pas été arrêté. |
+
+Ces observations concordent avec l’inventaire V7-11 du 8 novembre. Le contrôle ne prouve pas un hash bit-à-bit de la DB antérieur à l’inventaire; il confirme le mtime, le schéma, l’intégrité et les comptes publiés.
+
+### Matrice finale des 18 gates
+
+Les états ci-dessous concernent V7-11A; `GO_LOCAL` ne vaut jamais autorisation live ou Pixel. Les alias ci-dessous normalisent les noms abrégés de la matrice de clôture.
+
+| Gate | Statut retenu | SHA / preuve et constat |
+|---|---|---|
+| `GO_V7_11_MAIN_AND_CI` | **NO-GO distant / PASS local** | CI run `42467740775` rouge sur `8dac699`; suites locales vertes après correction jusqu’à `65759dd`; aucun rerun CI distant. |
+| `CODE_PROVENANCE` | **GO local avec limitations** | APK A3 testé depuis `8dac699`; APK/image A5 construits depuis `04fdc77`; Android inchangé à `65759dd`, mais image Core exacte `65759dd` NOT_RUN. Rebuild requis avant B. |
+| `ANTI_REPLAY_TOPOLOGY` | **NO-GO live** | A2/F1 reproduit acceptation inter-cache et après recréation; code `8dac699`; mitigation non choisie. |
+| `AUTH_STAGING` | **GO local partiel** | A1/A4 sur copies; auth après F2 intégrée `65759dd`; stack Core+Relay+connecteur complète NOT_RUN. |
+| `DEVICE_ISOLATION` | **GO local** | Tests synthétiques A/B, ownership/binding A1/A2/A4; live NOT_RUN. |
+| `LEGACY_COMPATIBILITY` | **GO local avec limitation SQLite** | A1-F2 et A4-F1 sur `65759dd`; tombstone refusé dans le registre intact; l’écriture SQLite directe reste P2. |
+| `SQLITE_MIGRATION_DRY_RUN` | **GO local** | A1: migration synthétique v3→v5, intégrité/FK/checksum/idempotence; aucune migration live. |
+| `HISTORICAL_BACKFILL_DRY_RUN` | **GO local, attribution live ouverte** | A1: dry-run/apply et backup sur copie synthétique; propriétaire des lignes live non décidé. |
+| `EXPIRATION_DRY_RUN` | **GO local** | A1: copies synthétiques, audit vérifié, `UNCERTAIN` conservé; live NOT_RUN. |
+| `ANDROID_APK_CANDIDATE` | **GO local avec limitations** | A3 APK `8dac699`, A5 build `04fdc77`; arbre Android identique à `65759dd`; rebuild exact demandé avant installation. |
+| `ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | A3-F1/F2 API 37: update, données synthétiques, HOME et rollback; FATAL ponctuel non reproduit; APPLY reste BLOCKED; Pixel NOT_RUN. |
+| `RELAY_SYNC_AVD` | **NOT_RUN** | Le scheduler local 1/1 ne prouve pas le transport Relay/Core. |
+| `BACKUP_ROLLBACK_PLAN` | **GO avec limitations** | Plan et répétitions locales/copies; aucun backup/restore live ou restauration Pixel. |
+| `INDEPENDENT_SECURITY_REVIEW` | **GO avec 5 P2** | A4-F1 indépendant sur `65759dd`, 0 P0/P1 dans sa portée; le chemin documentaire courant ci-dessus est un finding distinct. |
+| `LIVE_CHANGE_READINESS` | **NO-GO** | Relay non administrable, chemin V4 absent du Core, identité/binding non vérifiés, anti-rejeu non clos, backup live absent. |
+| `GO_PRODUCT_INSTALL` | **NO-GO / NOT_RUN** | Aucune installation Pixel pendant V7-11A. |
+| `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun E2E authentifié live ni test anti-rejeu runtime. |
+| `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Gate E interdit jusqu’à levée des précédentes et autorisation explicite. |
+
+Les corrections de libellé par rapport au rapport final sont : `CODE_PROVENANCE` et `ANDROID_APK_CANDIDATE` sont locaux avec limitations, pas preuve d’un artefact Core final; `ANDROID_PRESERVATION_AVD` est `GO_WITH_LIMITATIONS` à cause du FATAL observé et de l’APPLY bloqué. Aucun statut live/Pixel n’est promu.
+
+### Décisions sur les questions ouvertes
+
+| Question | Décision d’audit |
+|---|---|
+| Appairage Relay `pixel-v7` | Le préserver si la session et le binding actif sont confirmés; provisionner/mettre à jour le credential Core derrière cette identité. Ne pas révoquer le binding pour tester. Si tombstoné, utiliser une nouvelle identité/binding approuvés; aucune réactivation n’est promise. |
+| Historique et consentements | Garder les propositions sous le principal LEGACY. Backfill des lignes nulles seulement après attribution explicite et certaine; ne copier ni grants ni consentements vers le nouveau principal. Une archive/reprise historique exige une décision et une migration auditée séparées. |
+| Bascule Android | En Relay, conserver la session Android et changer le mapping authentifié Relay→principal/credential côté connecteur/Core. En Direct, installer une credential DIRECT distincte sans effacer l’ancienne avant test réussi. Le geste UI/API exact manque encore; V4 reste opt-in et le refus Core doit rester fail-closed/local. |
+| App installée, identité refusée | Couper les retries distants, conserver données/Keystore, rester local/hors ligne avec pause et launcher accessibles; aucun effacement/restauration automatique. |
+| Sens du rollback après révocation | Avant révocation, revenir en dual/legacy seulement si l’ancien credential est ACTIVE et avec risque accepté. Après révocation, ne jamais réactiver tombstone ou restaurer une DB pré-révocation active; restaurer une copie neuve, réappliquer tombstones, émettre credential/binding neufs. Faire tourner `ATLAS_TOKEN` avant tout retour legacy. |
+| Autorité de cutover | Approbation explicite du propriétaire des données/Pixel pour sauvegarde, installation et consentements; du propriétaire opérationnel Core/Relay pour interruptions/config/DB; et du responsable sécurité pour risques résiduels. L’orchestrateur exécute le scope approuvé; le relecteur ne s’autorise pas lui-même. Autorisation E séparée, listant les IDs à révoquer et les critères de stop/reprise. |
+
+### Recommandation d’autorisation V7-11B
+
+**Ne pas autoriser maintenant les blocs B–E, l’installation Pixel, l’APPLY sur données réelles ni la révocation.** La prochaine décision peut autoriser un paquet préparatoire limité : obtenir une CI verte après autorisation de publication; identifier et rendre administrable le Relay, son état persistant et son supervisor; fixer le geste Android; assainir le chemin documentaire résiduel; choisir et prouver la mitigation anti-rejeu; reconstruire l’image Core au SHA `65759dd` et revalider les artefacts.
+
+Après ces prérequis, demander séparément une autorisation A de sauvegarde (incluant sa fenêtre d’interruption Core et l’archive app-only Pixel), puis autorisations distinctes pour promotion B, installation C, tests D sur plan jetable synthétique et cutover E. Le bloc E doit nommer les identifiants à révoquer, les opérateurs et approbateurs, la preuve d’acceptation de la nouvelle identité, la rotation du bearer legacy, le snapshot restaurable et les seuils d’arrêt. La notification de fin de revue ne constitue pas une acceptation par le parent.
+
+### Limites de cette revue
+
+- Aucune suite logicielle n’a été relancée; les statuts de tests viennent des livrables liés aux SHA indiqués.
+- Le runtime a été inspecté en lecture seule; la base n’a pas été comparée bit-à-bit à un hash antérieur documenté.
+- Aucun ADB, commande Pixel, installation, backup Pixel, accès au contenu des secrets ou lecture de lignes utilisateur n’a été effectué.
+- Les motifs de sanitisation sont ciblés; le scan ne remplace pas un scanner dédié. L’historique Git garde les valeurs expurgées.
+- Le présent rapport ne donne aucune autorisation de changement live.
