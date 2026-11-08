@@ -178,27 +178,27 @@ Cette section complète et actualise les verdicts de la première passe. Le cand
 
 ### Rôle HOME et réinstallations
 
-AVD utilisé : `atlas_v62_disposable_api37`, Android 17/API 37, serial `emulator-5556`. Démarrage :
+AVD utilisé : `atlas_v62_disposable_api37`, Android 17/API 37, serial `<AVD_SERIAL>`. Démarrage :
 
 ```sh
 emulator -avd atlas_v62_disposable_api37 -no-window -no-audio -no-boot-anim \
   -gpu swiftshader_indirect -no-snapshot -memory 2048 -port 5556
-adb -s emulator-5556 shell getprop sys.boot_completed
+adb -s <AVD_SERIAL> shell getprop sys.boot_completed
 ```
 
 Le boot a atteint `1`; l’émulateur a signalé une RAM effective de 4096 MiB malgré `-memory 2048`. Aucun autre appareil n’a reçu de commande. À ce démarrage, `pm path dev.atlas.coach` ne retournait aucun chemin et `run-as` répondait `unknown package`; des fixtures synthétiques neuves ont donc été créées après la première installation du candidat. `dumpsys package` indiquait déjà `firstInstallTime=2026-11-08 11:05:12`, valeur restée identique à chaque contrôle suivant; l’absence initiale du package signifie que cette valeur de pré-vol ne prouve pas la conservation de données applicatives d’une passe précédente.
 
-Le manifeste fusionné de l’APK candidat déclare `dev.atlas.coach.app.LauncherActivity` avec `MAIN`, `HOME` et `DEFAULT`; `MainActivity` conserve son filtre `MAIN`/`LAUNCHER`. Après `adb -s emulator-5556 install -r android/app/build/outputs/apk/debug/app-debug.apk`, ces commandes ont été exécutées :
+Le manifeste fusionné de l’APK candidat déclare `dev.atlas.coach.app.LauncherActivity` avec `MAIN`, `HOME` et `DEFAULT`; `MainActivity` conserve son filtre `MAIN`/`LAUNCHER`. Après `adb -s <AVD_SERIAL> install -r android/app/build/outputs/apk/debug/app-debug.apk`, ces commandes ont été exécutées :
 
 ```sh
-adb -s emulator-5556 shell cmd role add-role-holder android.app.role.HOME dev.atlas.coach
-adb -s emulator-5556 shell cmd role get-role-holders android.app.role.HOME
-adb -s emulator-5556 shell am start -W -a android.intent.action.MAIN -c android.intent.category.HOME
+adb -s <AVD_SERIAL> shell cmd role add-role-holder android.app.role.HOME dev.atlas.coach
+adb -s <AVD_SERIAL> shell cmd role get-role-holders android.app.role.HOME
+adb -s <AVD_SERIAL> shell am start -W -a android.intent.action.MAIN -c android.intent.category.HOME
 ```
 
 Résultats : le détenteur retourné est `dev.atlas.coach`; le premier lancement HOME a répondu `Status: ok`, `LaunchState: COLD`, `Activity: dev.atlas.coach/.app.LauncherActivity`, puis `topResumedActivity` a confirmé `LauncherActivity`. L’écran ATLAS s’est affiché. Aucun `FATAL EXCEPTION` n’a été relevé pendant ce premier cold start.
 
-Après création des fixtures synthétiques, la réinstallation candidat `adb -s emulator-5556 install -r android/app/build/outputs/apk/debug/app-debug.apk` a répondu `Success`; `firstInstallTime` et le rôle HOME sont restés identiques. Le rollback final `adb -s emulator-5556 install -r /tmp/v7-11-a3-base.apk` a également répondu `Success`, sans `-d`, `pm clear`, désinstallation ni suppression de rôle. `firstInstallTime=2026-11-08 11:05:12`, rôle `dev.atlas.coach` et résolution de l’intent HOME vers `LauncherActivity` ont été confirmés après rollback. `lastUpdateTime=2026-11-08 11:51:16`.
+Après création des fixtures synthétiques, la réinstallation candidat `adb -s <AVD_SERIAL> install -r android/app/build/outputs/apk/debug/app-debug.apk` a répondu `Success`; `firstInstallTime` et le rôle HOME sont restés identiques. Le rollback final `adb -s <AVD_SERIAL> install -r /tmp/v7-11-a3-base.apk` a également répondu `Success`, sans `-d`, `pm clear`, désinstallation ni suppression de rôle. `firstInstallTime=2026-11-08 11:05:12`, rôle `dev.atlas.coach` et résolution de l’intent HOME vers `LauncherActivity` ont été confirmés après rollback. `lastUpdateTime=2026-11-08 11:51:16`.
 
 Les hashes avant réinstallation candidat, après réinstallation candidat et après rollback base sont identiques :
 
@@ -217,7 +217,7 @@ Anomalie observée une seule fois pendant le premier remplacement de l’APK de 
 
 ### Tentative A0 avec Core local et mock
 
-Un worktree détaché et propre au SHA source `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c` a été créé sous `/tmp/v7-11-a3-core-8dac`. Aucun Docker ni service live n’a été lancé ou contacté. Le Core a écouté seulement `127.0.0.1:18100`, avec SQLite `/tmp/v7-11-a3-core.sqlite3`, `ATLAS_AGENT_ADAPTER=mock`, `ATLAS_V4_AUTH_MODE=legacy`, des capacités V4 synthétiques et des jetons temporaires synthétiques. La liaison AVD a été faite avec `adb -s emulator-5556 reverse tcp:18100 tcp:18100`; l’app a été réglée dans son UI sur Direct et `http://127.0.0.1:18100`. Aucun bearer n’est enregistré dans cette preuve; Android Keystore l’a chiffré. L’identité legacy Core dérivée de ce bearer était synthétique.
+Un worktree détaché et propre au SHA source `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c` a été créé sous `/tmp/v7-11-a3-core-8dac`. Aucun Docker ni service live n’a été lancé ou contacté. Le Core a écouté seulement `127.0.0.1:18100`, avec SQLite `/tmp/v7-11-a3-core.sqlite3`, `ATLAS_AGENT_ADAPTER=mock`, `ATLAS_V4_AUTH_MODE=legacy`, des capacités V4 synthétiques et des jetons temporaires synthétiques. La liaison AVD a été faite avec `adb -s <AVD_SERIAL> reverse tcp:18100 tcp:18100`; l’app a été réglée dans son UI sur Direct et `http://127.0.0.1:18100`. Aucun bearer n’est enregistré dans cette preuve; Android Keystore l’a chiffré. L’identité legacy Core dérivée de ce bearer était synthétique.
 
 Le chemin `backend/.venv/bin/python` documenté dans le README était absent; la commande de lancement équivalente a utilisé le `python3` hôte (3.12.3) et ses dépendances FastAPI `0.141.1` / Uvicorn `0.52.3`, avec `PYTHONPATH` pointant sur le checkout détaché. Le serveur a démarré et servi les routes ci-dessous.
 
@@ -233,7 +233,7 @@ Un premier `POST /v4/agent/chat` sans capacités activées a renvoyé `403 CAPAB
 | Expiration | **PASS API Core uniquement** — proposition synthétique `7892a880-3476-4576-bd97-9f093b3ff409`; échéance forcée dans la SQLite temporaire, puis pull local `HTTP 200` avec `proposals=[]`; état réconcilié `EXPIRED`, événement `PULL`. Ce test ne simule pas l’écoulement de l’horloge Android ni l’expiration UI. |
 | Chat mock générant A0 | **NOT_RUN** — résultat précis du mock V4 : `tool_state=none`, aucun `proposal_id`; création possible seulement par la route outil locale synthétique. |
 
-Le serveur local a été arrêté, le reverse ADB supprimé et le port `18100` vérifié fermé avant le rollback final. Aucun appel n’a visé Core `8100`, Relay `4402`, Gateway `18789`, Funnel ou Tailscale. L’émulateur a répondu `OK: killing emulator, bye bye`; ensuite `adb -s emulator-5556 get-state` a répondu `device ... not found`. **État final AVD : arrêté.**
+Le serveur local a été arrêté, le reverse ADB supprimé et le port `18100` vérifié fermé avant le rollback final. Aucun appel n’a visé Core `8100`, Relay `4402`, Gateway `18789`, Funnel ou Tailscale. L’émulateur a répondu `OK: killing emulator, bye bye`; ensuite `adb -s <AVD_SERIAL> get-state` a répondu `device ... not found`. **État final AVD : arrêté.**
 
 ### Verdicts actualisés du suivi
 
@@ -254,7 +254,7 @@ Cette passe reprend le candidat `97ac580d2cdcc5384a1f1ab8e15f2f3b4d57ca468177ded
 
 ### Plan AVD relu et remplacement HOME
 
-Seul l’AVD `atlas_v62_disposable_api37` / `emulator-5556` a été utilisé. Le plan relu par `run-as` depuis `files/plans/day-plan-2026-11-08.json` est l’état `schema3_state` :
+Seul l’AVD `atlas_v62_disposable_api37` / `<AVD_SERIAL>` a été utilisé. Le plan relu par `run-as` depuis `files/plans/day-plan-2026-11-08.json` est l’état `schema3_state` :
 
 | Champ | Valeur observée |
 |---|---|
@@ -266,7 +266,7 @@ Seul l’AVD `atlas_v62_disposable_api37` / `emulator-5556` a été utilisé. Le
 | activité | `8a01f432-5534-4a54-a9a3-0aa4bcece8d9`, `FOCUS`, `A0-synthetic-plan`, `PLANNED`, début minute `540`, durée `50` |
 | SHA-256 du fichier plan | `dcbb33476fdf5591d48a283604f403c2c2be2d37c33b4be65a08961d48122820` |
 
-Le détenteur du rôle HOME avant remplacement était `dev.atlas.coach`. Après lancement de l’intent HOME, `adb -s emulator-5556 install -r android/app/build/outputs/apk/debug/app-debug.apk` a retourné `Success`. `firstInstallTime=2026-11-08 11:05:12` est resté inchangé; `lastUpdateTime=2026-11-08 12:02:20`, `versionCode=1`. `cmd role get-role-holders android.app.role.HOME` a toujours retourné `dev.atlas.coach`; l’intent HOME a répondu `Status: ok`, activité `dev.atlas.coach/.app.LauncherActivity`.
+Le détenteur du rôle HOME avant remplacement était `dev.atlas.coach`. Après lancement de l’intent HOME, `adb -s <AVD_SERIAL> install -r android/app/build/outputs/apk/debug/app-debug.apk` a retourné `Success`. `firstInstallTime=2026-11-08 11:05:12` est resté inchangé; `lastUpdateTime=2026-11-08 12:02:20`, `versionCode=1`. `cmd role get-role-holders android.app.role.HOME` a toujours retourné `dev.atlas.coach`; l’intent HOME a répondu `Status: ok`, activité `dev.atlas.coach/.app.LauncherActivity`.
 
 La reproduction contrôlée n’a pas produit de nouvelle ligne correspondant à `FATAL EXCEPTION`, `ConfigurationController.updateLocaleListFromAppContext` ou `Resources.getConfiguration` dans le logcat après le remplacement. Le hash du plan est resté `dcbb33476fdf5591d48a283604f403c2c2be2d37c33b4be65a08961d48122820`; les hashes du marqueur `files/v7_11_a3_followup_marker.txt`, du JSON synthétique `files/v7_11_a3_synthetic.json` et des préférences synthétiques `shared_prefs/v7_11_a3_synthetic.xml` sont restés respectivement `3473f13926c74b7a0996fb69320b8c4cc6e22a1ffec6ab0bf6473eec2e7de823`, `a3a1342a062012317ad2920bf948bad29e873708dbae7521a8e181fb361ac874` et `cc824ef0b296bdab844f7625da91cbd031c701176d2ac0a30ae84f5046cd9560`. L’inbox existante est restée au hash F1 `96be19894f2b454a9dac43cac19bdae803923c6d190ea2055fa9c2309671120c`; aucune nouvelle proposition n’y a été ajoutée.
 
@@ -299,4 +299,4 @@ Le garde-fou a refusé avant le calcul du diff : aucun `proposal_id` ni `scope_h
 | Version/hash du plan après APPLY, ACK `APPLIED`, rejeu idempotent et absence de second ACK | **NOT_RUN** | Aucun APPLY n’a été possible; aucune preuve de succès n’est revendiquée. Le plan et les marqueurs sont restés inchangés après remplacement APK. |
 | Reproduction FATAL framework avec HOME actif | **NOT_REPRODUCED** | Aucun motif FATAL ciblé après le remplacement candidat; l’occurrence F1 reste une occurrence unique. |
 
-Le Core a été arrêté; `127.0.0.1:18100` n’écoutait plus. L’AVD a ensuite répondu `OK: killing emulator, bye bye`; `adb -s emulator-5556 get-state` a répondu `device 'emulator-5556' not found`. **État final Core et AVD : arrêtés.** Aucun accès n’a visé Core `8100`, Relay `4402`, Gateway `18789`, Funnel ou Tailscale. Les verdicts valent uniquement pour cet AVD Android 17/API 37, pas pour le Pixel physique.
+Le Core a été arrêté; `127.0.0.1:18100` n’écoutait plus. L’AVD a ensuite répondu `OK: killing emulator, bye bye`; `adb -s <AVD_SERIAL> get-state` a répondu `device '<AVD_SERIAL>' not found`. **État final Core et AVD : arrêtés.** Aucun accès n’a visé Core `8100`, Relay `4402`, Gateway `18789`, Funnel ou Tailscale. Les verdicts valent uniquement pour cet AVD Android 17/API 37, pas pour le Pixel physique.

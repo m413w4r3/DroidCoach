@@ -52,6 +52,7 @@
 
 ## Bloc D — Qualification sécurité (réversible jusqu'au cutover)
 
+0. Rejouer sur le Pixel, avec un plan/projection Android réel et une proposition synthétique, le parcours A0 APPLY (version incrémentée, ACK `APPLIED`, rejeu idempotent) et REJECT. Le test AVD sur plan `DEMO` est bloqué par la sémantique produit et ne remplace pas cette preuve ; V7-08 est historique.
 1. A/A et B/B sur identités synthétiques et sessions Relay authentifiées.
 2. A avec credential B refusé, sans lecture/mutation croisée.
 3. Credential révoqué refusé après redémarrage ; nouvelle credential acceptée.

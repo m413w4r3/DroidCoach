@@ -43,7 +43,7 @@ AVD `atlas_v62_disposable_api37` (image x86_64 API 37.2.12.0), serial `<AVD_SERI
 | A0 pull/inbox (A3-F1) | **PASS** — Core mock local 18100, app en Direct, proposition synthétique visible dans l'inbox ; pull rejoué identique |
 | A0 REJECT + rejeu ACK (A3-F1) | **PASS** — `REJECTED / USER_REJECTED`, ACK livré, rejeu `x-atlas-replayed: true` |
 | A0 expiration (A3-F1) | **PASS côté API Core/SQLite isolée** — pull à zéro, état `EXPIRED`, source `PULL` ; expiration UI Android **NOT_RUN** |
-| A0 APPLY (A3-F1) | **BLOCKED** — mismatch plan local (`12000000-…-001`, v2, DEMO) vs fixture Core (`00000000-…-811`, v1) ; garde-fou `VALIDATION_REJECTED`, plan inchangé ; retry A3-F2 en cours |
+| A0 APPLY (A3-F1/F2) | **BLOCKED — produit** : avec plan/version/activité alignés, le Core refuse une proposition sur un plan d'origine `DEMO` (`503 DATA_UNAVAILABLE — un plan de démonstration n'est pas une projection Android`) avant calcul du diff ; aucun `proposal_id`, aucun ACK `APPLIED`, plan inchangé. Aucun APPLY réel n'est revendiqué sur AVD. |
 | Transport Relay réel | **NOT_RUN** — aucun service live/pairing |
 
 L'émulateur a signalé 4096 MB de RAM effective malgré `-memory 2048` ; c'est une limite d'environnement, pas un échec du test. L'émulateur a été arrêté après la passe.
@@ -56,7 +56,7 @@ L'émulateur a signalé 4096 MB de RAM effective malgré `-memory 2048` ; c'est 
 
 - AVD ≠ Pixel physique. La préservation réelle du Keystore, du rôle HOME, des permissions et des données du Pixel reste à qualifier en V7-11B.
 - L'instrumentation ne prouve pas un envoi Relay de bout en bout.
-- Le parcours A0 APPLY est encore BLOCKED ; si A3-F2 ne le débloque pas, il restera un gap résiduel documenté.
+- Le parcours A0 APPLY est **BLOCKED par la sémantique produit** : le Core refuse une proposition sur un plan `DEMO`. Il reste à qualifier sur le Pixel avec un plan/projection Android réel, sous autorisation V7-11B. La preuve APPLY V7-08 est historique et ne qualifie pas automatiquement le code V7-10/V7-11.
 - L'expiration UI Android et le transport Relay réel ne sont pas qualifiés.
 - Le remplacement d'APK avec HOME actif a produit une anomalie framework transitoire sur l'AVD.
 - Le backup app-only réel du Pixel et sa restauration ne sont pas couverts par l'AVD.

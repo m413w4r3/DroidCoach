@@ -3,7 +3,7 @@
 **Date :** 2026-11-08
 **Branche d'intégration :** `feat/atlas-v7-11-migration-readiness`
 **BASE_SHA :** `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`
-**SHA final d'intégration :** `<FINAL_SHA>` (commit de clôture)
+**SHA final d'intégration :** `65759dded28380c52639059b9cee8febadbd799c` (code) ; HEAD documentaire au commit de clôture
 **Frontière :** V7-11A uniquement. Aucune mutation live, aucun Pixel, aucun push.
 
 ## Résumé exécutif
@@ -82,7 +82,7 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 - AVD API 37 : install -r, firstInstallTime stable, 7 fixtures préservées, cold start OK, Coach 9/9, scheduler 1/1, rollback PASS.
 - JVM/lint/build indépendants A5 : **934 tests, 0 échec, lint 0 erreur/80 avertissements**.
 - HOME (A3-F1) : **PASS** — rôle attribué à `dev.atlas.coach`, intent HOME → `LauncherActivity` à froid, rôle et données conservés après réinstallation et rollback. Anomalie unique `FATAL EXCEPTION` framework lors du premier remplacement avec HOME actif ; non reproduite au rollback final.
-- A0 isolé (A3-F1) : pull/inbox PASS, REJECT + rejeu ACK PASS, expiration API Core PASS (UI NOT_RUN) ; APPLY **BLOCKED** par mismatch plan local/fixture Core, retry A3-F2 en cours.
+- A0 isolé (A3-F1/F2) : pull/inbox PASS, REJECT + rejeu ACK PASS, expiration API Core PASS (UI NOT_RUN). APPLY **BLOCKED par la sémantique produit** : même avec plan/version/activité alignés, le Core refuse une proposition sur un plan d'origine `DEMO` (`503 DATA_UNAVAILABLE`) avant calcul du diff ; aucun `proposal_id`/ACK `APPLIED`. L'APPLY réel reste à qualifier sur Pixel en V7-11B ; la preuve V7-08 est historique et ne qualifie pas V7-10.
 - Image Core : `sha256:2c5ae216e1ed292cd11cbc87ec392b9e546187a52727156754afb440c2f1cd57` (150 498 024 octets, v4 présent).
 
 ### Live (lecture seule)
@@ -135,7 +135,7 @@ Aucun.
 - Résidu historique Git des chemins/IDs sanitisés.
 - APK non bit-reproductible entre SHAs (provenance embarquée) ; l'artefact final doit être rebuild et re-testé.
 - `UNCERTAIN` sans terminaison automatique ; réconciliation explicite requise.
-- Preuve AVD limitée : pas de Pixel physique, pas de Relay réel, A0 APPLY encore bloqué.
+- Preuve AVD limitée : pas de Pixel physique, pas de Relay réel, A0 APPLY bloqué par l'origine `DEMO` du plan. L'APPLY/REJECT réel sur projection Android doit être rejoué sur Pixel en V7-11B ; V7-08 ne qualifie pas le code V7-10/V7-11.
 - Remplacement d'APK avec HOME actif : anomalie framework transitoire sur AVD, à re-tester sur Pixel avec sauvegarde.
 
 ## Ce qui est prêt pour V7-11B
