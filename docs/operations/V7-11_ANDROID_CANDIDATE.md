@@ -10,6 +10,8 @@
 |---|---|
 | APK debug SHA-256 (build A3, testé AVD, SHA source 8dac699) | `97ac580d2cdcc5384a1f1ab8e15f2f3b4d57ca468177dede55166be154c321d5` |
 | APK debug SHA-256 (build A5 indépendant, SHA intégré 04fdc77) | `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e` |
+| **APK debug SHA-256 final (build au SHA de clôture c3dcaa1)** | `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1` |
+| **AndroidTest APK SHA-256 final (c3dcaa1)** | `12012e11c051392aabfab50c652434edb8a6462ddef950a235fcf939fc431f7b` |
 | AndroidTest APK SHA-256 (A3 / A5) | `8d9287db…676cc07` / `9db0a3ff…32e1bff` |
 | applicationId | `dev.atlas.coach` |
 | versionCode / versionName | `1` / `0.1.0` |

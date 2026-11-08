@@ -109,7 +109,7 @@ Cinq preuves historiques ont été expurgées (`<HOME>`, `<REPO>`, `<ANDROID_SDK
 | Expiration | PASS — 2 expirations/audits, `UNCERTAIN` conservé | A1 |
 | Rejeu mono-cache | PASS — refusé | A2 |
 | Rejeu inter-worker / après redémarrage | **FAIL — P2 confirmé** | A2 |
-| Android JVM/lint/build | **934/934**, 0 échec, lint 0 erreur/80 avertissements | A5 (04fdc77) |
+| Android JVM/lint/build | **934/934**, 0 échec, lint 0 erreur/80 avertissements | A5 (04fdc77 et c3dcaa1) |
 | AVD API 37 | install -r, firstInstallTime stable, 7 fixtures préservées, cold start, Coach 9/9, scheduler 1/1, rollback | A3 |
 | HOME AVD | PASS — rôle `dev.atlas.coach`, intent HOME `LauncherActivity`, rôle/données conservés | A3-F1 |
 | A0 pull/inbox | PASS (Core mock 18100) | A3-F1 |
@@ -124,10 +124,13 @@ Cinq preuves historiques ont été expurgées (`<HOME>`, `<REPO>`, `<ANDROID_SDK
 | Artefact | SHA-256 / ID |
 |---|---|
 | APK debug A3 (source 8dac699, testé AVD) | `97ac580d2cdcc5384a1f1ab8e15f2f3b4d57ca468177dede55166be154c321d5` |
-| APK debug A5 (source 04fdc77, JVM/lint/build) | `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e` |
+| APK debug A5 (source 04fdc77) | `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e` |
+| **APK debug final (source c3dcaa1)** | `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1` |
+| **AndroidTest APK final (source c3dcaa1)** | `12012e11c051392aabfab50c652434edb8a6462ddef950a235fcf939fc431f7b` |
 | AndroidTest APK A3 / A5 | `8d9287db…676cc07` / `9db0a3ff…32e1bff` |
 | Certificat de signature | `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee` |
 | Image Core candidate (04fdc77) | `sha256:2c5ae216e1ed292cd11cbc87ec392b9e546187a52727156754afb440c2f1cd57` |
+| **Image Core finale (c3dcaa1)** | `sha256:91d456e7f7f45f94cd9e63c83f417bfe83f76d7957dc520ef76fcdd103b9caa6` (150 498 981 octets) |
 | applicationId / version | `dev.atlas.coach` / `1` (`0.1.0`) |
 
 Les deux APK diffèrent par la provenance embarquée et l'horodatage de build ; package, version, certificat, manifeste et permissions sont identiques. L'artefact exact de V7-11B doit être reconstruit au SHA final et re-testé.

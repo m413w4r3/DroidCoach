@@ -79,11 +79,12 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 - Certificat : `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`.
 - Hash A3 (testé AVD, source 8dac699) : `97ac580d2cdcc5384a1f1ab8e15f2f3b4d57ca468177dede55166be154c321d5`.
 - Hash A5 (build intégré, source 04fdc77) : `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e`.
+- **Hash final (build au SHA de clôture c3dcaa1)** : `3feabac7b328fed21fe08ce879fc0b9d19b453ed32516e9831c838521c466cc1`. L'APK testé sur AVD reste `97ac580d…` ; l'arbre Android est identique, seul le SHA de provenance embarqué diffère.
 - AVD API 37 : install -r, firstInstallTime stable, 7 fixtures préservées, cold start OK, Coach 9/9, scheduler 1/1, rollback PASS.
 - JVM/lint/build indépendants A5 : **934 tests, 0 échec, lint 0 erreur/80 avertissements**.
 - HOME (A3-F1) : **PASS** — rôle attribué à `dev.atlas.coach`, intent HOME → `LauncherActivity` à froid, rôle et données conservés après réinstallation et rollback. Anomalie unique `FATAL EXCEPTION` framework lors du premier remplacement avec HOME actif ; non reproduite au rollback final.
 - A0 isolé (A3-F1/F2) : pull/inbox PASS, REJECT + rejeu ACK PASS, expiration API Core PASS (UI NOT_RUN). APPLY **BLOCKED par la sémantique produit** : même avec plan/version/activité alignés, le Core refuse une proposition sur un plan d'origine `DEMO` (`503 DATA_UNAVAILABLE`) avant calcul du diff ; aucun `proposal_id`/ACK `APPLIED`. L'APPLY réel reste à qualifier sur Pixel en V7-11B ; la preuve V7-08 est historique et ne qualifie pas V7-10.
-- Image Core : `sha256:2c5ae216e1ed292cd11cbc87ec392b9e546187a52727156754afb440c2f1cd57` (150 498 024 octets, v4 présent).
+- Image Core : `sha256:2c5ae216…f1cd57` (04fdc77, 150 498 024 octets, v4 présent) ; **image finale** `sha256:91d456e7f7f45f94cd9e63c83f417bfe83f76d7957dc520ef76fcdd103b9caa6` (c3dcaa1, 150 498 981 octets, v4 présent).
 
 ### Live (lecture seule)
 
