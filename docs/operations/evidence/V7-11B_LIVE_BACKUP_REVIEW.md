@@ -35,8 +35,8 @@ Aucun.
 
 ### P2
 
-1. **DEFECT_CONFIRMED — sanitisation incohérente.** `docs/operations/evidence/V7-11B_LIVE_BACKUP_EVIDENCE.md:77` et `:132` : un nom de fichier de configuration credential est publié, contrairement à l'affirmation de sanitisation. Retirer ce nom dans une correction documentaire autorisée et garder la description au niveau « configuration credential sauvegardée ».
-2. **EVIDENCE_GAP — couverture des auxiliaires.** `docs/operations/evidence/V7-11B_LIVE_BACKUP_EVIDENCE.md:96` décrit l'empreinte globale. Le manifeste global et les manifestes de composants couvrent les artefacts Pixel, Core, Relay et connecteur vérifiés, mais pas quatre fichiers auxiliaires présents dans la racine privée. Leurs modes sont privés ; leur contenu n'a pas été ouvert. Les inclure dans l'inventaire ou documenter explicitement leur exclusion afin que l'empreinte globale décrive sans ambiguïté le contenu conservé.
+1. **DEFECT_CONFIRMED — sanitisation incohérente.** Dans la preuve opérateur, lignes 77 et 132 : un nom de fichier de configuration credential est publié, contrairement à l'affirmation de sanitisation. Retirer ce nom dans une correction documentaire autorisée et garder la description au niveau « configuration credential sauvegardée ».
+2. **EVIDENCE_GAP — couverture des auxiliaires.** La ligne 96 de la preuve opérateur décrit l'empreinte globale. Le manifeste global et les manifestes de composants couvrent les artefacts Pixel, Core, Relay et connecteur vérifiés, mais pas quatre fichiers auxiliaires présents dans la racine privée. Leurs modes sont privés ; leur contenu n'a pas été ouvert. Les inclure dans l'inventaire ou documenter explicitement leur exclusion afin que l'empreinte globale décrive sans ambiguïté le contenu conservé.
 
 ## Conditions avant toute opération live
 
@@ -54,3 +54,16 @@ Aucun.
 - Aucune commande ADB, aucun Docker en écriture, aucune migration/restauration, aucun test destructif ; aucune base, donnée applicative ou valeur de credential ouverte. Les vérifications privées ont porté sur les métadonnées et les hashes autorisés.
 - Les résultats Pixel, SQLite, health, connecteur live et nettoyage des copies sont examinés comme preuve opérateur lorsqu'ils ne sont pas recoupables indépendamment.
 - Revue du snapshot local uniquement ; elle n'autorise ni promotion, ni migration, ni changement de bearer, ni restauration live.
+
+## Re-revue après correction
+
+Cette section actualise les deux P2 relevés lors de la première revue.
+
+| Vérification | Résultat | Preuve |
+|---|---|---|
+| Sanitisation | **PASS** | Aucun des quatre noms ciblés n'apparaît dans les sections 6 et 11, ni ailleurs dans la preuve. La déclaration de sanitisation de la section 11 est cohérente. |
+| Couverture du manifeste | **PASS** | Le hash global annoncé `73a173ce714b3db0d1e14c88aa2e4d27d48534d5a0a9893d34d36c6a3167dade` correspond au manifeste privé. Ses 14 entrées correspondent toutes aux tailles et hashes des fichiers ; les quatre auxiliaires ajoutées sont présentes. Racine et répertoires en 0700, fichiers en 0600 ; aucun fichier world-readable. |
+
+**Verdict final : GO_WITH_LIMITATIONS pour le backup local ; NO-GO live.** Les deux P2 sont clos ; aucun P0/P1 confirmé.
+
+**Limites :** vérification documentaire et des métadonnées/hashes seulement. Aucun contenu credential ou applicatif ouvert ; aucun Docker, ADB, contrôle live, restore ou migration exécuté. Les états runtime restent `UNKNOWN` comme indiqué ci-dessus.
