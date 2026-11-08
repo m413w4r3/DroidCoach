@@ -169,12 +169,16 @@ A4-F1 sur `65759dd` : **GO avec réserves P2**. P1 fermé pour les révocations 
 4. Chemins locaux dans d'anciennes preuves (sanitisés dans l'arbre courant, résidu historique Git).
 5. Intégrité du tombstone sous écriture SQLite directe (`audience`/`token_hash` non immuables) — nécessite un accès en écriture à la base.
 
+### Revue finale indépendante A6
+
+A6-F1 sur `c3dcaa1` (code `65759dd`) : **V7-11A GO local avec limitations ; live NO-GO**. Le diff applicatif `65759dd..c3dcaa1` est vide. A6 confirme le P1 legacy fermé pour le parcours normal du registre, le BLOCKED APPLY sur origine `DEMO`, l'anomalie FATAL HOME non reproduite, la déviation A2 4402 exclue des preuves, et l'absence de redémarrage Core/Relay (`restart_count=0`, démarrage du 7 novembre). A6 recommande de **ne pas autoriser maintenant les blocs B–E, l'installation Pixel, l'APPLY sur données réelles ni la révocation**, et de préparer d'abord : CI verte, Relay administrable, geste Android, sanitisation résiduelle, mitigation anti-rejeu, rebuild exact de l'image Core au SHA code. **Réserve image Core fermée par A5-F3** : l'image construite au SHA code `65759dd` est identique à `sha256:91d456e7…` (même ID, même taille, même CMD/ENTRYPOINT). **Réserve chemin résiduel fermée** : `REGISTRY_V7_06C.md` a été sanitisé.
+
 ## 13. Gates V7-11
 
 | Gate | Statut | Portée |
 |---|---|---|
 | `GO_V7_11_MAIN_AND_CI` | **NO-GO (remote) / PASS local** | Suite locale verte ; CI distante rouge non poussée. |
-| `GO_V7_11_CODE_PROVENANCE` | **GO local** | SHA, APK, certificat, image Core ; artefact final à rebuilder. |
+| `GO_V7_11_CODE_PROVENANCE` | **GO local** | SHA, APK, certificat ; image Core construite au SHA code `65759dd` identique à `sha256:91d456e7…` (A5-F3). |
 | `GO_V7_11_ANTI_REPLAY_TOPOLOGY` | **NO-GO live** | Rejeu inter-worker/après redémarrage P2. |
 | `GO_V7_11_AUTH_STAGING` | **GO local partiel** | Tests négatifs composants PASS ; stack complète NOT_RUN. |
 | `GO_V7_11_DEVICE_ISOLATION` | **GO local** | A/B refusé, ownership/isolation testés ; live NOT_RUN. |
@@ -182,11 +186,11 @@ A4-F1 sur `65759dd` : **GO avec réserves P2**. P1 fermé pour les révocations 
 | `GO_V7_11_SQLITE_MIGRATION_DRY_RUN` | **GO local** | Migration v3→v5 sur copie. |
 | `GO_V7_11_HISTORICAL_BACKFILL_DRY_RUN` | **GO local** | Dry-run/apply sur copie ; attribution live ouverte. |
 | `GO_V7_11_EXPIRATION_DRY_RUN` | **GO local** | Expiration sur copie ; `UNCERTAIN` préservé. |
-| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | Code/cert/version ; artefact final à rebuilder. |
-| `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO local** | Update/preservation/HOME/rollback PASS ; A0 APPLY BLOCKED ; anomalie framework documentée. |
+| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local avec limitations** | Code/cert/version/manifeste ; rebuild exact avant installation. |
+| `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Update/preservation/HOME/rollback PASS ; A0 APPLY BLOCKED ; anomalie framework documentée. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun Relay/Core E2E. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Plan audité ; aucun backup/restore Pixel/live exécuté. |
-| `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec 5 P2** | A4-F1 sur `65759dd`. |
+| `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec 5 P2** | A4-F1 sur `65759dd` ; A6-F1 confirme le verdict. |
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO / dossier incomplet** | Relay, identité, anti-rejeu, bascule Android, backup live. |
 | `GO_PRODUCT_INSTALL` | **NO-GO / NOT_RUN** | Aucune installation Pixel. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
@@ -217,7 +221,7 @@ Backup et copies, provisioning sur copie, tests isolés, build APK/image, dry-ru
 Arrêt/redémarrage Core, arrêt/redémarrage connecteur, bascule `dual`, redémarrage Relay, promotion de copie SQLite. Fenêtre et opérateur uniques à nommer.
 
 ### 15.3 Nécessite le Pixel physique
-Inventaire ADB, backup app-only, installation in-place, vérification HOME/Keystore/plans/consentements, tests de connexion et A0 APPLY/REJECT sur projection Android réelle.
+Inventaire ADB, backup app-only, installation in-place, vérification HOME/Keystore/plans/consentements, tests de connexion et A0 APPLY/REJECT sur projection Android réelle. **Attention :** un APPLY accepté modifie le plan et n'est pas réversible par défaut. Le test D doit viser un plan jetable/synthétique isolé ; sinon il exige une autorisation Pixel/données séparée, un backup vérifié et une procédure de restauration approuvée.
 
 ### 15.4 Irréversible
 Révocation du bearer LEGACY, rotation de credential, révocation Relay, passage en `principal`, restauration écrasante. Autorisation distincte et nominative obligatoire.
@@ -229,7 +233,8 @@ Révocation du bearer LEGACY, rotation de credential, révocation Relay, passage
 4. Anti-rejeu tranché (cache partagé durable ou worker unique renforcé).
 5. Geste Android de bascule Relay/DIRECT et état local/offline définis.
 6. Backup Core/Relay/Pixel, test de restauration et gates Pixel exécutés.
-7. APK et image Core rebuilds au SHA final, puis re-testés.
+7. APK rebuild au SHA final et re-testé. L'image Core au SHA code exact (`65759dd`) a déjà été reconstruite et est identique à `sha256:91d456e7…` (A5-F3).
+8. Sanitiser le chemin personnel résiduel de `docs/operations/REGISTRY_V7_06C.md:45` — **fait par A5-F3**, scan ciblé à zéro chemin/bearer/credential/serial/device_id brut.
 
 ## 16. Rollback
 
@@ -260,6 +265,8 @@ La matrice complète est dans [V7-11_ROLLBACK_MATRIX.md](V7-11_ROLLBACK_MATRIX.m
 - Le scan secrets est ciblé, pas un scanner dédié ; le résidu historique Git est documenté.
 - Une déviation A2 a contacté le Relay 4402 en lecture seule ; elle n'est pas comptée comme preuve et n'a produit aucune mutation.
 - Les résultats de tests sont liés aux SHAs indiqués ; les builds APK ne sont pas bit-reproductibles entre SHAs à cause de la provenance embarquée.
+- A6 n'a pas relancé les suites ; il a relu les preuves et inspecté le runtime en lecture seule. La base n'a pas été comparée bit-à-bit à un hash antérieur ; le mtime, le schéma, l'intégrité et les comptes concordent.
+- A6 avait signalé un résidu P2 de confidentialité dans `REGISTRY_V7_06C.md:45`, hors du périmètre d'écriture de son ticket ; il a été sanitisé par A5-F3 et le scan ciblé est propre.
 
 ## 19. Index des preuves
 
@@ -281,4 +288,4 @@ La matrice complète est dans [V7-11_ROLLBACK_MATRIX.md](V7-11_ROLLBACK_MATRIX.m
 
 ## 20. Conclusion
 
-V7-11A est **terminé** : le code local, la migration sur copie, l'APK, la préservation AVD, le rôle HOME et la sécurité ont été qualifiés, avec deux correctifs revus indépendamment. Le cutover live est **NO-GO** et aucune opération V7-11B n'a été exécutée. La prochaine étape autorisable est une fenêtre V7-11B ciblée, après résolution des bloqueurs P1 et autorisation explicite de l'utilisateur.
+V7-11A est **terminé avec un verdict GO local avec limitations / live NO-GO** : le code local, la migration sur copie, l'APK, la préservation AVD, le rôle HOME et la sécurité ont été qualifiés, avec deux correctifs revus indépendamment. Le cutover live est **NO-GO** et aucune opération V7-11B n'a été exécutée. A6 recommande de ne pas autoriser les blocs B–E, l'installation Pixel, l'APPLY sur données réelles ni la révocation avant d'avoir préparé la CI verte, l'administration du Relay, le geste Android, la mitigation anti-rejeu et les artefacts finaux. La prochaine décision autorisable est un paquet préparatoire limité, puis des autorisations séparées pour la sauvegarde, la promotion, l'installation, les tests sur plan jetable et le cutover irréversible.

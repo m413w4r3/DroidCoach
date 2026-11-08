@@ -98,19 +98,19 @@ Tous : `provider=codex`, `model=gpt-6-luna`, `thinkingOptionId=xhigh`, vérifié
 | Gate | Statut V7-11A | Portée |
 |---|---|---|
 | `GO_V7_11_MAIN_AND_CI` | **NO-GO (remote) / PASS local** | Suite locale verte ; CI distante rouge et non poussée. |
-| `GO_V7_11_CODE_PROVENANCE` | **GO local** | SHA source, APK reconstruits, certificat, image Core ; artefact final à rebuilder au SHA final. |
+| `GO_V7_11_CODE_PROVENANCE` | **GO local** | SHA source, APK reconstruits, certificat ; image Core au SHA code `65759dd` identique à `sha256:91d456e7…` (A5-F3). |
 | `GO_V7_11_ANTI_REPLAY_TOPOLOGY` | **NO-GO live** | Rejeu inter-worker/après redémarrage P2 confirmé ; mitigation non tranchée. |
 | `GO_V7_11_AUTH_STAGING` | **GO local partiel** | Tests négatifs composants PASS ; stack Core+Relay complète NOT_RUN. |
 | `GO_V7_11_DEVICE_ISOLATION` | **GO local** | A/B refusé, ownership et isolation testés ; live NOT_RUN. |
-| `GO_V7_11_LEGACY_COMPATIBILITY` | **GO local sous réserve A4-F1** | P1 legacy fermé par A1-F2 ; re-revue en cours. |
+| `GO_V7_11_LEGACY_COMPATIBILITY` | **GO local avec limitation SQLite** | P1 legacy fermé par A1-F2 et A4-F1 ; écriture SQLite directe du tombstone reste P2. |
 | `GO_V7_11_SQLITE_MIGRATION_DRY_RUN` | **GO local** | Migration v3→v5 sur copie synthétique. |
 | `GO_V7_11_HISTORICAL_BACKFILL_DRY_RUN` | **GO local** | Dry-run + apply sur copie ; attribution live ouverte. |
 | `GO_V7_11_EXPIRATION_DRY_RUN` | **GO local** | Expiration/réconciliation sur copie ; `UNCERTAIN` préservé. |
-| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local** | Code/cert/version/manifeste ; artefact final à rebuilder. |
-| `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO local** | Update/preservation/rollback/HOME PASS ; A0 APPLY en retry ; anomalie framework documentée. |
+| `GO_V7_11_ANDROID_APK_CANDIDATE` | **GO local avec limitations** | Code/cert/version/manifeste ; rebuild exact avant installation. |
+| `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Update/preservation/rollback/HOME PASS ; A0 APPLY BLOCKED ; anomalie framework documentée. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun Relay/Core E2E ; scheduler local seulement. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limitations** | Plan audité ; aucun backup/restore Pixel ou live exécuté. |
-| `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec réserves P2** | A4-F1 sur `65759dd` : 0 P0/P1, 5 P2 ; P1 legacy fermé. |
+| `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec 5 P2** | A4-F1 sur `65759dd` : 0 P0/P1 ; A6-F1 confirme. |
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO / dossier incomplet** | Relay non administrable, identité/binding inconnus, anti-rejeu, bascule Android, backup live. |
 | `GO_PRODUCT_INSTALL` | **NO-GO / NOT_RUN** | Aucune installation Pixel. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
@@ -156,7 +156,8 @@ Aucun.
 4. Trancher l'anti-rejeu : cache partagé durable ou worker unique renforcé + test après redémarrage.
 5. Décrire le geste Android de bascule Relay/DIRECT et l'état local/offline en cas de refus Core.
 6. Exécuter le backup live, le test de restauration et les gates Pixel sous autorisation ciblée.
-7. Rebuild l'APK et l'image Core au SHA final, puis re-tester.
+7. Rebuild l'APK au SHA final et re-tester. L'image Core au SHA code exact `65759dd` a déjà été reconstruite et est identique à `sha256:91d456e7…` (A5-F3).
+8. Sanitiser le chemin personnel résiduel de `docs/operations/REGISTRY_V7_06C.md:45` — **fait par A5-F3**, scan ciblé propre.
 
 ## Autorisations V7-11B à demander séparément
 
@@ -168,4 +169,8 @@ Aucun.
 
 ## Verdict
 
-**V7-11A est terminé sur le plan local avec des preuves solides, mais le cutover live est NO-GO.** La qualification a produit des correctifs et des artefacts vérifiables ; elle a aussi mis en évidence des bloqueurs d'exploitation qui ne peuvent pas être résolus sans autorisation live ciblée. Aucune opération V7-11B n'a été franchie. Le dossier d'autorisation ci-dessus doit être complété par le SHA final, la CI verte, l'identité Relay/binding réelle et le choix anti-rejeu avant toute fenêtre de migration.
+**V7-11A est terminé avec un verdict GO local avec limitations / live NO-GO.** La qualification a produit des correctifs et des artefacts vérifiables ; elle a aussi mis en évidence des bloqueurs d'exploitation qui ne peuvent pas être résolus sans autorisation live ciblée. Aucune opération V7-11B n'a été franchie.
+
+La revue finale indépendante A6 (sur `c3dcaa1`, code `65759dd`) confirme ce verdict et recommande de **ne pas autoriser maintenant les blocs B–E, l'installation Pixel, l'APPLY sur données réelles ni la révocation**. Elle demande de préparer d'abord : CI verte, Relay administrable, geste Android, mitigation anti-rejeu, rebuild APK au SHA final, puis des autorisations séparées pour sauvegarde, promotion, installation, tests sur plan jetable et cutover irréversible. L'image Core au SHA code `65759dd` a depuis été reconstruite et est identique à `sha256:91d456e7…` (A5-F3) ; le chemin résiduel `REGISTRY_V7_06C.md:45` a été sanitisé.
+
+Le dossier d'autorisation ci-dessus doit être complété par le SHA final, la CI verte, l'identité Relay/binding réelle, le choix anti-rejeu et les artefacts finaux avant toute fenêtre de migration.
