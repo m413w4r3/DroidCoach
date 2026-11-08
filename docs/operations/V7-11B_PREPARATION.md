@@ -89,7 +89,7 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 |---|---|---|
 | `GO_V7_11_MAIN_AND_CI` | **GO** sur `9f0c783` ; **à revalider** sur `c031cb5` après push | PR #3 verte ; nouveau code à pousser. |
 | `GO_V7_11_CODE_PROVENANCE` | **GO local pour l'APK ; STALE pour l'image Core** | APK exact `bb703ec7…` inchangé ; image Core `528af664…` construite à `a3d72db`, **avant le correctif B7** ; rebuild au SHA code final requis avant tout live. |
-| `GO_V7_11_FINAL_IMAGE_PROVENANCE` | **NOT_RUN / STALE** | Aucune image Core reconstruite après B7 (`store.py` backup 0600/fail-closed). L'image `528af664…` ne doit pas être déployée en live. |
+| `GO_V7_11_FINAL_IMAGE_PROVENANCE` | **GO local avec P2** | B12 : image `sha256:1e4c8e6c…`, 150 520 138 octets, build propre à `7efbefc`, tag unique, marqueurs B7 + `FileReplayNonceCache` ; image/tag live `8604535e…` inchangés. P2 : inspection Docker indépendante `UNKNOWN` (B13), image non poussée en registre. |
 | `GO_V7_11_ANTI_REPLAY_TOPOLOGY` | **GO local avec limitations P2** | A4-F3 GO ; verrou + garde + cache durable P6 + fiabilité P7 ; conditions live : cache dir persistant 0700, un seul Core/volume, secrets HMAC distincts par key_id, horloge stable. |
 | `GO_V7_11_AUTH_STAGING` | **GO local partiel** | Inchangé ; stack complète isolée non exécutée. |
 | `GO_V7_11_DEVICE_ISOLATION` | **GO local** | Inchangé. |
@@ -101,7 +101,7 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_ANDROID_PRESERVATION_AVD` | **GO_WITH_LIMITATIONS** | Inchangé ; APPLY A0 bloqué sur `DEMO`. |
 | `GO_V7_11_ANDROID_PRESERVATION_PHYSICAL` | **GO_WITH_LIMITATIONS** | Installation in-place sur Pixel 9 Pro XL API 37 : APK exact `bb703ec7…`, données byte-identiques, HOME/permissions conservés, aucun crash. QA fonctionnelle et APPLY NOT_RUN. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay avec Android ; le stack isolé B1 ne vaut pas test AVD. |
-| `GO_V7_11_ISOLATED_STACK` | **GO local** | B1 PASS : Core/Relay/proxy health 200, DB neuve `user_version=5`, `/metrics` `relay_connected=true`, WS 101, loopback only, live inchangé. Déviation bridge non-`internal` documentée. |
+| `GO_V7_11_ISOLATED_STACK` | **GO local final** | B1 (stack neuf) + B12 (image finale sur **copie réelle** migrée) : health 200, v5, backup 0600, verrou, cache 0700, legacy 200/401, Relay/proxy/connecteur, fail-closed ; live inchangé. Déviation bridge/`0.0.0.0` interne documentée. |
 | `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** | B2 : base live `user_version=3`, tables V4 absentes, `device_ref` absent ; le libellé `pixel-v7` n'existe que côté connecteur. Vérification impossible avant migration live. |
 | `GO_V7_11_REAL_COPY_MIGRATION` | **GO local final** | B5 puis B9/B10 : migration v3→v5 sur copie réelle PASS avec le code corrigé ; backup 0600, fail-closed, 3 propositions sans propriétaire, 1 candidate expiration, live toujours v3. |
 | `GO_V7_11_BACKUP_PERMISSIONS` | **GO local avec limites P2/P3** | B7/B8/B9/B10 : backup `0600` avec `O_EXCL`/`O_NOFOLLOW`, fail-closed, P1 fermé sur copie réelle ; fsync répertoire, mémoire, `os.close` et portabilité restent P2/P3. |
@@ -111,7 +111,7 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limites** | Backup live Core/Pixel/connecteur exécuté et restauration testée sur copies ; pas de restauration live, pas de copie hors site/chiffrée. |
 | `GO_V7_11_LIVE_BACKUP` | **GO local avec limites** | Fenêtre du 2026-11-08 : Core arrêté ~14 s, DB/sidecar copiés, Pixel V7-07 vérifié, connecteur 3/3 restauré sur copie, Relay jamais arrêté ; B11 GO local, 0 P0/P1, 2 P2 fermés. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Image Core **stale** depuis B7 ; migration live non autorisée ; identité/binding non vérifiables ; Relay non administrable ; backup local uniquement (pas hors site/chiffré) ; procédure connecteur non déployée ; décisions 3 propositions/1 expiration absentes. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Image finale qualifiée localement mais **migration live non autorisée** ; décision sur la proposition `PENDING_ANDROID` à prendre **avant le premier démarrage** (le sweeper l'expire immédiatement) ; binding réel non vérifié ; Relay non administrable ; backup local sans hors-site/chiffrement ; procédure connecteur non déployée. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -291,3 +291,53 @@ Preuves : [`evidence/V7-11B_LIVE_BACKUP_EVIDENCE.md`](evidence/V7-11B_LIVE_BACKU
 - **L'image Core `528af664…` est stale** : construite à `a3d72db`, avant le correctif B7 (backup `0600` + fail-closed). Elle ne doit pas être déployée en live.
 - Avant toute migration live : reconstruire l'image au SHA code final, rejouer le stack isolé sur une copie réelle migrée (health, migration, verrou, anti-rejeu, chemin legacy), puis obtenir une autorisation nominative distincte avec rollback et décision binding/3 propositions/1 expiration.
 - `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO**.
+
+## 12. Addendum — image finale et stack isolé sur copie réelle (2026-11-08)
+
+Paquet autorisé : « Reconstruire l'image finale + stack isolé sur copie migrée ». Aucune mutation live.
+
+### 12.1 Image finale
+
+- Source : `git archive 7efbefcc5b747823cfd6d8da34b0c402953a0b0f` (B7 inclus).
+- Build : `docker build --build-context contracts=… -t atlas-core-v7-11b-final-7efbefc …/backend`.
+- Image : `sha256:1e4c8e6c599a3846e6870143b78cf3d39ae9d2da050db04e26d7cb3af8ecd35a`, **150 520 138 octets**.
+- CMD : `uvicorn atlas_backend.main:app --host 127.0.0.1 --port 8100` ; ENTRYPOINT : `python /usr/local/bin/atlas-core-entrypoint.py`.
+- Marqueurs présents : `O_NOFOLLOW`, `MigrationIntegrityError`, `_create_coherent_pre_migration_backup`, `FileReplayNonceCache`.
+- Image/tag live `atlas-core-atlas-core` = `sha256:8604535e…`, inchangés ; tag final conservé localement uniquement.
+
+### 12.2 Stack isolé sur copie réelle
+
+- Export live courant : `9f5c8fd2…`, v3, integrity ok, FK 0, propositions V4 3 (APPLIED/PENDING_ANDROID/REJECTED), événements 2, consentements 2, événements de consentement 4, historique 1.
+- Incident d'oracle initial : B12 avait comparé au hash antérieur `752919f2…` et compté des tables V1/V2 (`0/0/4/0`). Correction : hash courant accepté, compteurs V4 vérifiés ; aucune perte.
+- Migration sur copie : v5, ledger `[1..5]`, `device_ref`, compteurs conservés.
+- Backup B7 : `atlas.sqlite3.pre-v4.bak`, régulier, **0600**, v3, intègre, `193fcae4…`.
+- Verrou `atlas.sqlite3.lock` 0600 ; cache `/data/replay` 0700.
+- Legacy : token synthétique **200** sur `/v1/directives/current`, faux token **401**.
+- Relay/proxy/connecteur : health 200, `relay_connected=true`, WS 101, enregistrement synthétique.
+- Fail-closed : backup préexistant → exit 1, `MigrationIntegrityError`, message « vérifier puis déplacer », DB/backup inchangés, aucune santé.
+- Live, image/tag, conteneurs, ports et `StartedAt` inchangés ; ressources isolées nettoyées ; image finale conservée.
+
+### 12.3 Décision opératoire critique
+
+Le **premier démarrage** du Core migré exécute le sweeper d'expiration : la proposition `PENDING_ANDROID` (expirée depuis le 2026-11-06) passe à `EXPIRED` et un événement d'expiration est écrit. Le backup v3 pré-migration conserve l'état antérieur. Cette décision doit être prise **avant** la migration live ; elle n'est pas réversible par le seul redémarrage.
+
+### 12.4 Revue B13 et P2
+
+B13 : **GO_WITH_LIMITATIONS local / NO-GO live**, 0 P0/P1, 4 P2 :
+
+1. inspection Docker indépendante `UNKNOWN` (sandbox) ; le parent a vérifié directement image/tag/conteneurs ;
+2. égalité logique complète non démontrée par les seuls compteurs (hash fichier différent après redémarrage) ;
+3. expiration automatique à prendre avant le premier démarrage ;
+4. matrice de gates à réconcilier (fait dans cet addendum).
+
+L'image est locale, non poussée en registre. La qualification utilise l'adaptateur `mock`, sans Android/appairage réel.
+
+### 12.5 Conditions avant migration live
+
+1. **Autorisation nominative distincte** pour arrêter Core, remplacer l'image et migrer le volume live.
+2. **Décision explicite sur la proposition PENDING_ANDROID** : accepter son expiration au premier démarrage, ou suspendre/arrêter pour une autre décision (aucune écriture live sans autorisation).
+3. **Backup frais immédiatement avant migration** : la base live actuelle a évolué (`9f5c8fd2…`) depuis le backup de fenêtre (`752919f2…`) ; produire une copie v3 à l'arrêt, vérifier intégrité/FK/compteurs, et conserver le nouveau backup B7 `0600`.
+4. **Déploiement** : recréer le conteneur Core avec l'image `1e4c8e6c…` en préservant `network_mode: host`, `read_only`, tmpfs, secrets, volume, `cap_drop`, `no-new-privileges`, restart policy et healthcheck ; ne jamais retagger `atlas-core-atlas-core`.
+5. **Rollback** : image live `8604535e…` + backup v3 frais + procédure de restauration testée ; toute écriture post-backup perdue en cas de rollback.
+6. Après migration : vérifier v5, compteurs, health, sync legacy de l'app, absence d'erreurs, puis seulement envisager principal/binding, Relay admin et la suite V4.
+7. `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO** jusqu'à cette autorisation.
