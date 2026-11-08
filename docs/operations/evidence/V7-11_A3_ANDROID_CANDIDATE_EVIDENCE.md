@@ -247,3 +247,56 @@ Le serveur local a été arrêté, le reverse ADB supprimé et le port `18100` v
 | A0 REJECT utilisateur / rejeu ACK | **PASS** |
 | A0 expiration | **PASS** côté API Core/SQLite isolée uniquement; expiration UI Android **NOT_RUN**. |
 | Pixel physique / services live | **NOT_RUN**; l’AVD ne qualifie pas un Pixel.
+
+## Suivi V7-11-A3-F2 — retry APPLY A0 et reproduction contrôlée du FATAL
+
+Cette passe reprend le candidat `97ac580d2cdcc5384a1f1ab8e15f2f3b4d57ca468177dede55166be154c321d5`, construit depuis `BASE_SHA=8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`; application `dev.atlas.coach`, `versionCode=1`, certificat SHA-256 `da3014662eb65e50a87ef364a2e583c331398795b222e3b37b1a16553a00eeee`. Branche de preuve : `audit/v7-11-a3-android-candidate`.
+
+### Plan AVD relu et remplacement HOME
+
+Seul l’AVD `atlas_v62_disposable_api37` / `emulator-5556` a été utilisé. Le plan relu par `run-as` depuis `files/plans/day-plan-2026-11-08.json` est l’état `schema3_state` :
+
+| Champ | Valeur observée |
+|---|---|
+| `plan_id` | `12000000-0000-4000-8000-000000000001` |
+| version | `2` |
+| révision courante | `f28f8ef5-cd33-4c3b-9f09-ab3a879ddb12` |
+| date / fuseau | `2026-11-08` / `Europe/Paris` |
+| état / origine | `APPROVED` / `DEMO` |
+| activité | `8a01f432-5534-4a54-a9a3-0aa4bcece8d9`, `FOCUS`, `A0-synthetic-plan`, `PLANNED`, début minute `540`, durée `50` |
+| SHA-256 du fichier plan | `dcbb33476fdf5591d48a283604f403c2c2be2d37c33b4be65a08961d48122820` |
+
+Le détenteur du rôle HOME avant remplacement était `dev.atlas.coach`. Après lancement de l’intent HOME, `adb -s emulator-5556 install -r android/app/build/outputs/apk/debug/app-debug.apk` a retourné `Success`. `firstInstallTime=2026-11-08 11:05:12` est resté inchangé; `lastUpdateTime=2026-11-08 12:02:20`, `versionCode=1`. `cmd role get-role-holders android.app.role.HOME` a toujours retourné `dev.atlas.coach`; l’intent HOME a répondu `Status: ok`, activité `dev.atlas.coach/.app.LauncherActivity`.
+
+La reproduction contrôlée n’a pas produit de nouvelle ligne correspondant à `FATAL EXCEPTION`, `ConfigurationController.updateLocaleListFromAppContext` ou `Resources.getConfiguration` dans le logcat après le remplacement. Le hash du plan est resté `dcbb33476fdf5591d48a283604f403c2c2be2d37c33b4be65a08961d48122820`; les hashes du marqueur `files/v7_11_a3_followup_marker.txt`, du JSON synthétique `files/v7_11_a3_synthetic.json` et des préférences synthétiques `shared_prefs/v7_11_a3_synthetic.xml` sont restés respectivement `3473f13926c74b7a0996fb69320b8c4cc6e22a1ffec6ab0bf6473eec2e7de823`, `a3a1342a062012317ad2920bf948bad29e873708dbae7521a8e181fb361ac874` et `cc824ef0b296bdab844f7625da91cbd031c701176d2ac0a30ae84f5046cd9560`. L’inbox existante est restée au hash F1 `96be19894f2b454a9dac43cac19bdae803923c6d190ea2055fa9c2309671120c`; aucune nouvelle proposition n’y a été ajoutée.
+
+L’occurrence unique F1 pendant un remplacement antérieur reste documentée : NPE framework sur `Resources.getConfiguration()` nul dans `android.app.ConfigurationController.updateLocaleListFromAppContext(ConfigurationController.java:286)`, vers 11:25:53. Elle ne s’est pas reproduite lors de ce remplacement candidat avec HOME détenu par l’application. Cette absence de reproduction ne qualifie pas un Pixel.
+
+### Fixture Core locale et garde-fou A0
+
+Le checkout Core détaché était propre au SHA source `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`. Le serveur Uvicorn a écouté uniquement `127.0.0.1:18100`, avec `ATLAS_AGENT_ADAPTER=mock`, `ATLAS_V4_AUTH_MODE=legacy` et la base synthétique `/tmp/v7-11-a3-f2-core.sqlite3`. Les jetons Android/outils étaient synthétiques et ne sont pas consignés. Aucun conteneur ni service externe n’a été démarré ou contacté.
+
+Commandes et routes tentées :
+
+```sh
+python3 -m uvicorn atlas_backend.main:app --host 127.0.0.1 --port 18100 --no-access-log
+POST /v4/sync/consent-state
+POST /v4/sync/day-plan-snapshots
+POST /internal/v4/plan-revision-proposals
+```
+
+Le consentement local synthétique a répondu `HTTP 200 ACCEPTED`. Le snapshot V4 a répondu `HTTP 200 ACCEPTED` et a été vérifié dans SQLite avec les champs du plan AVD : même `plan_id`, version `2`, révision, date, fuseau et activité. Son origine réelle `DEMO` a été préservée. Son hash Core est `sha256:088bcdc17490e75f1e5d9a1e67f838d493ebd39901ddb40c2208fa3d0b0c6696`.
+
+La proposition tentée était un déplacement valide de cinq minutes de l’activité existante : `activity_id=8a01f432-5534-4a54-a9a3-0aa4bcece8d9`, départ `540`, cible `545`, `plan_id=12000000-0000-4000-8000-000000000001`, `base_version=2`. Une première requête de qualification a été rejetée `400 BAD_REQUEST` car la clé d’idempotence n’était pas un UUID; la requête corrigée avec un UUID valide a atteint le garde-fou et répondu exactement `HTTP 503 DATA_UNAVAILABLE — un plan de démonstration n'est pas une projection Android`.
+
+Le garde-fou a refusé avant le calcul du diff : aucun `proposal_id` ni `scope_hash` n’a été généré (`scope_hash=NOT_GENERATED_BEFORE_DEMO_ORIGIN_GUARD`) et SQLite ne contient aucune ligne de proposition dans cette base de passe. Aucune origine n’a été réécrite et aucun contrôle n’a été affaibli. Le refus observé est distinct du mismatch de plan de F1 : ici plan, version, révision et activité correspondent, mais l’origine `DEMO` interdit la proposition.
+
+| Oracle F2 | Verdict | Observation |
+|---|---|---|
+| Snapshot Core synthétique aligné sur le plan AVD | **PASS** | Même plan ID/version/révision/fuseau/activité; hash `sha256:088bcdc17490e75f1e5d9a1e67f838d493ebd39901ddb40c2208fa3d0b0c6696`; origine `DEMO` conservée. |
+| Proposition A0 via route V4 réelle | **BLOCKED** | `503 DATA_UNAVAILABLE` à cause de l’origine `DEMO`; les champs d’activité et version étaient valides. |
+| Pull inbox, revue et APPLY dans l’app | **NOT_RUN** | Le Core n’a créé aucune proposition; l’inbox AVD n’a donc pas reçu de nouvel élément à examiner. |
+| Version/hash du plan après APPLY, ACK `APPLIED`, rejeu idempotent et absence de second ACK | **NOT_RUN** | Aucun APPLY n’a été possible; aucune preuve de succès n’est revendiquée. Le plan et les marqueurs sont restés inchangés après remplacement APK. |
+| Reproduction FATAL framework avec HOME actif | **NOT_REPRODUCED** | Aucun motif FATAL ciblé après le remplacement candidat; l’occurrence F1 reste une occurrence unique. |
+
+Le Core a été arrêté; `127.0.0.1:18100` n’écoutait plus. L’AVD a ensuite répondu `OK: killing emulator, bye bye`; `adb -s emulator-5556 get-state` a répondu `device 'emulator-5556' not found`. **État final Core et AVD : arrêtés.** Aucun accès n’a visé Core `8100`, Relay `4402`, Gateway `18789`, Funnel ou Tailscale. Les verdicts valent uniquement pour cet AVD Android 17/API 37, pas pour le Pixel physique.
