@@ -289,3 +289,25 @@ Scan ciblé après modification : **0** chemin personnel, chemin SDK absolu, bea
 | Métadonnées, modules v4, verrou single-writer et garde anti-rejeu | **PASS** |
 | Diff Android et référence APK | **PASS** — diff vide, rebuild APK non requis. |
 | Services live, ADB/Pixel, push | **NOT_RUN**, conformément au ticket. |
+
+## V7-11B-P8 — image Core a3d72db
+
+- SHA source : `a3d72db19c6d98135d366d5a1aead43b45ea37b5`. Build depuis un worktree temporaire détaché propre sous `<TMP>` avec :
+
+  ```sh
+  docker build --build-context contracts=<tmp>/contracts -t atlas-core-v7-11-a3d72db <tmp>/backend
+  ```
+
+- Résultat : **PASS**. Image ID/digest local : `sha256:528af66423839c189720982007e9ea6e16ef8eb463a8a7d0a30af67c696c83c3`, taille 150 514 788 octets.
+- `ENTRYPOINT`: `python /usr/local/bin/atlas-core-entrypoint.py`.
+- `CMD`: `uvicorn atlas_backend.main:app --host 127.0.0.1 --port 8100`.
+- Contrôle du contenu avec un conteneur jetable `docker run --rm --network none` et un entrypoint Python de vérification : `v4_auth.py`, `v4_assertion.py`, `main.py` et `v4_router.py` sont présents et leurs SHA-256 dans l’image correspondent à ceux du checkout.
+- `v4_assertion.py` contient `FileReplayNonceCache`; `v4_router.py` l’instancie à partir de `ATLAS_V4_REPLAY_CACHE_DIR`. Dans `main.py`, `initialization_lock_fd = _acquire_core_database_lock(database_path)` précède `store = SQLiteStore(database_path)`, puis le verrou d’initialisation est libéré. Le verrou persistant et la garde de rejeu sont présents dans les fichiers effectivement copiés dans l’image. Aucun service n’a été lancé.
+- `git diff --stat 65759dd..a3d72db -- android` est vide. Aucun APK n’a été reconstruit. Le fichier APK debug de référence reste disponible et son hash vérifié est `bb703ec770f4ebe7e20602db65fecfb75e7a783d1a30040f5f7d8796c29f1dff` (SHA code `65759dd`).
+
+| Contrôle | Statut |
+|---|---|
+| Build de l’image Core au SHA `a3d72db` et métadonnées | **PASS** |
+| Modules, cache durable de nonces et ordre verrou/SQLiteStore dans l’image | **PASS** |
+| Diff Android et APK de référence | **PASS** — diff vide, hash de référence confirmé. |
+| Services live, ADB/Pixel, push | **NOT_RUN**, conformément au ticket. |
