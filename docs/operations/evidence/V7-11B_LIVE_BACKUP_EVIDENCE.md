@@ -74,12 +74,12 @@ Le connecteur n'était pas en cours d'exécution. Son état a été copié à fr
 
 | Contrôle | Résultat |
 |---|---|
-| État copié | 30 entrées, dont `identity.json`, `devices.json`, `operations.json`, `relay.env` et archives historiques |
+| État copié | 30 entrées, dont 3 fichiers d'état principaux, une configuration credential et des archives historiques |
 | Manifeste | `469fb0432995d5ad4d797cf970324ce12fc3872979ee2f2f5d922383023aedb7` |
-| `relay.env` | `46106b8cb9cdddb139a1f45a4cd255061cece3b72b9cecd157bc7d51dfaa33de` |
-| `identity.json` live = backup | `cf172580f8cfa8e2ebea936e268857e9aa006923cf265e57f8fc78516d47f926` |
-| `devices.json` live = backup | `d27a6bede136747f0ac01d6747964146f6e314c65864a7adf354b89a0ed78a9d` |
-| `operations.json` live = backup | `7946db8ada4c0ec32182b30bd8373286dbef68e62e3c4ad843160f915eb30f01` |
+| Configuration credential | `46106b8cb9cdddb139a1f45a4cd255061cece3b72b9cecd157bc7d51dfaa33de` |
+| Identité live = backup | `cf172580f8cfa8e2ebea936e268857e9aa006923cf265e57f8fc78516d47f926` |
+| Registre live = backup | `d27a6bede136747f0ac01d6747964146f6e314c65864a7adf354b89a0ed78a9d` |
+| Journal live = backup | `7946db8ada4c0ec32182b30bd8373286dbef68e62e3c4ad843160f915eb30f01` |
 | Restauration sur copie | **3/3 fichiers identiques** (manifeste source/restauré `1a0946a3…`) |
 | Modes | état `0700`, fichiers `0600` |
 | Mutation live | aucune : aucun processus, aucun démarrage/arrêt |
@@ -93,7 +93,8 @@ L'état contient des credentials/tokens ; ils restent dans le backup privé et n
 | Racine privée | `0700`, hors dépôt |
 | Fichiers | `0600`, aucun world-readable |
 | Taille | 427 K |
-| Manifeste global | `bc92c095ee615e7401248f004d7352c53c51df98189668c2aa5f20395b349bad` |
+| Manifeste global | `73a173ce714b3db0d1e14c88aa2e4d27d48534d5a0a9893d34d36c6a3167dade` |
+| Couverture | 14 fichiers : 10 artefacts principaux + 4 auxiliaires (1 digest, 3 logs) |
 | Copies de test temporaires | supprimées après capture des hashes |
 
 ## 8. État final
