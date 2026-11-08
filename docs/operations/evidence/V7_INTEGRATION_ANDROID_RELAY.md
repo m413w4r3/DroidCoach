@@ -14,7 +14,7 @@ sont dans le rapport E2E séparé ; ce document ne les anticipe pas.
 - Tests rejoués par le parent dans le worktree : `npm run build` PASS,
   `npm run test:unit` **96 tests / 16 fichiers, 0 échec**.
 - Redémarrage du connecteur par le chemin documenté
-  `scripts/start.sh /home/nill/.config/atlas/relay.env` :
+  `scripts/start.sh <HOME>/<REPO>` :
   - `check-config` : PASS (URL loopback explicite, état `0700`, identité/devices `0600`,
     chemin token V4 configuré, bearer service présent sans affichage) ;
   - `check-secret` : PASS (`environment-file`, mode `0600`, fichier bearer Android privé) ;
@@ -67,7 +67,7 @@ sont dans le rapport E2E séparé ; ce document ne les anticipe pas.
 - Compilation AndroidTest PASS ; APK test SHA-256
   `efd39d6fddcdcfcc60dfe3d5d3ad7cdd4d8bcac8328f3c961e7bcfaa298aee9e`.
 - Exécution Pixel : **PASS**, `OK (1 test)`, code processus 0.
-  Plan synthétique `b0902f1b-8404-4ed7-a614-96aeb93a6bb1`, version 2, 1 activité.
+  Plan synthétique `<PLAN_ID>`, version 2, 1 activité.
   APK test final SHA-256
   `94f24d4917e6fe01a91e60f43cbc4b1b10019e193df1cb6191ec345051b53250`.
   Le seed n’est pas une preuve produit.

@@ -20,7 +20,7 @@ Autorisation : scopes A–D. Ce document couvre C ; le Pixel et le chemin V4 And
 ## Preuve publique V1
 
 Client `scripts/r3b-public-e2e.mjs`, WSS public, Noise NK protégé, appareil appairé
-`pixel-v7` (`device_id=563a01fa-b7a0-4a37-a401-d511499a553a`) :
+`pixel-v7` (`device_id=<RELAY_DEVICE_ID>`) :
 - `hello_ok` protégé et authentifié ;
 - `backend.health` = `ok` ;
 - `sync.status` = connecté/backend configuré ;

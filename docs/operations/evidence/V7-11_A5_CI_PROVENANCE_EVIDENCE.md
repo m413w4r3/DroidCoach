@@ -81,3 +81,67 @@ git log -p contient aussi des chemins locaux dans des versions antérieures, ens
 - JVM, lint, build et assemblage Android locaux restent différés ; aucun résultat local Android n’est revendiqué.
 - Le scan ciblé ne remplace pas un scanner dédié. Aucun secret réel n’a été trouvé ; les chemins personnels et identifiants P2 ci-dessus restent des findings à corriger ou à accepter explicitement.
 - Vague 2 : après notification du parent, relancer la commande Android exacte sur le SHA intégré et compléter la preuve de provenance.
+
+## Suivi F1 — validation du SHA intégré et sanitisation
+
+- Date : 2026-11-08
+- Worktree de validation : worktree temporaire détaché sous `/tmp`, sur `04fdc77f38a8d215644cecfa4d5707030fbfa2ee` (branche intégrée `feat/atlas-v7-11-migration-readiness`). Le worktree d’audit est resté sur `audit/v7-11-a5-ci-provenance`; les builds n’ont pas modifié cette branche.
+- SHA de l’audit initial : `8dac699cdb37e2f858a76e4cf7f9fc3bcd613e9c`; base V7-09 : `a5aca4b54088d43f4829adf31049417dd8cf32a6` (40 commits / 107 chemins).
+- Aucune suite distante GitHub n’a été interrogée pour `04fdc77`; ces résultats sont des reproductions locales.
+
+### Suites locales sur `04fdc77`
+
+| Commande | Statut | Résultat |
+|---|---|---|
+| `python3 -m pytest -q` (racine) | **PASS** | 496 passés, 1 ignoré, 48 sous-cas passés, 4 warnings. |
+| `cd backend && python3 -m pytest -q` | **PASS** | 451 passés, 1 ignoré, 3 warnings. |
+| `cd integrations/relay/pc && npm ci --offline && npm run test:unit` | **PASS** | Installation hors ligne réussie ; 18 fichiers, 131/131 tests passés. |
+| `node --test --test-skip-pattern='pinned relay integration on 4402' integrations/relay/proxy/test/proxy.test.mjs` | **PASS** | 18/18 tests passés ; le cas épinglé sur 4402 a été exclu et aucun Relay live n’a été contacté. |
+
+### Android local sur `04fdc77`
+
+Commande exécutée depuis `android/` :
+
+```sh
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --offline --max-workers=2 --console=plain
+```
+
+Statut global : **PASS**, `BUILD SUCCESSFUL`, 84 tâches exécutées. Le rapport JUnit contient 934 tests, 0 échec, 0 erreur et 0 test ignoré. `lintDebug` a produit 0 erreur et 80 avertissements. Aucun émulateur ni appareil n’a été lancé.
+
+| Artefact | Taille | SHA-256 |
+|---|---:|---|
+| `app-debug.apk` | 15 838 975 octets | `27baca26312fa6981b8e11fc846eb32b08f41c7a631df36a69df1c986239d13e` |
+| `app-debug-androidTest.apk` | 1 578 552 octets | `9db0a3ff434d0d9ac87780a3dcaf5bb89c19bb37b656f7b398ebb6ed332e1bff` |
+
+### Image Core locale sur `04fdc77`
+
+Commande exécutée : `docker build --build-context contracts=/tmp/atlas-v7-11-a5-f1-04fdc77/contracts -t atlas-core-v7-11-candidate /tmp/atlas-v7-11-a5-f1-04fdc77/backend`.
+
+- Statut : **PASS** ; image locale `sha256:2c5ae216e1ed292cd11cbc87ec392b9e546187a52727156754afb440c2f1cd57`, taille 150 498 024 octets. Aucun digest de dépôt n’est attaché (`RepoDigests=[]`).
+- `ENTRYPOINT`: `python /usr/local/bin/atlas-core-entrypoint.py` ; `CMD`: `uvicorn atlas_backend.main:app --host 127.0.0.1 --port 8100`.
+- Vérification par conteneur éphémère `--rm` : `backend/atlas_backend/v4_auth.py` et `backend/atlas_backend/v4_assertion.py` sont présents. Le processus de vérification s’est terminé ; aucun service Core n’a été démarré ni laissé actif.
+
+### Sanitisation et scan postérieur
+
+Les cinq fichiers demandés ont été corrigés dans l’arbre courant, sans altérer le sens des preuves :
+
+| Chemin:ligne | Statut | Marqueur appliqué |
+|---|---|---|
+| `docs/operations/evidence/V7-01B_READONLY_AMBIGUITIES_AUDIT.md:23` | **CORRIGÉ — P2** | ``<HOME>/<REPO>/<GATEWAY_DB_PATH>`` |
+| `docs/operations/evidence/V7-06A_TEST_RED.md:6,28` | **CORRIGÉ — P2** | ``<SESSION_ID>`` et `<ANDROID_SDK>` |
+| `docs/operations/evidence/V7_INTEGRATION_ANDROID_RELAY.md:17,70` | **CORRIGÉ — P2** | ``<HOME>/<REPO>`` et ``<PLAN_ID>`` |
+| `docs/operations/evidence/V7_LIVE_RELAY_C.md:23` | **CORRIGÉ — P2** | `<RELAY_DEVICE_ID>` |
+| `docs/operations/evidence/V7-10_A5_R2_EMULATOR.log:81` | **CORRIGÉ — P2** | `<AVD_SERIAL>` |
+
+Scan après sanitisation : 107 chemins de la campagne V7-09→HEAD et 87 preuves versionnées, soit 149 fichiers distincts examinés dans leur contenu courant. Le scanner dédié `gitleaks` n’est pas installé ; les motifs ciblés et la revue manuelle ont été utilisés. Aucun chemin absolu personnel, serial AVD brut, `device_id` brut, clé privée, token de service, credential réel, adresse MAC ou donnée personnelle réelle n’a été trouvé dans l’arbre courant. Les correspondances de forme restantes sont des valeurs de tests/fixtures, du code de validation et des noms de capacités Kotlin ; aucune n’a été évaluée comme secret réel. Aucun `.env` ni chemin nommé credentials/secrets n’est suivi ; les 87 preuves ont le mode Git `100644`.
+
+**Résidu historique Git :** les valeurs remplacées restent accessibles dans les commits précédents. Le commit de sanitisation conserve aussi leur forme supprimée dans son patch Git. Aucun historique n’a été réécrit et aucun push n’a eu lieu ; le scan courant ne doit donc pas être interprété comme une purge des anciens objets Git.
+
+### Statut et limites F1
+
+- Android JVM, lint, APK debug et APK androidTest : **PASS** sur `04fdc77`; test sur émulateur/appareil : **NOT_RUN**.
+- Image Core construite et fichiers v4 vérifiés : **PASS** ; conteneur de service : **NOT_RUN**.
+- Suites racine, backend, connecteur et proxy : **PASS** sur `04fdc77`.
+- Sanitisation du contenu courant et scan ciblé : **PASS** ; historiques Git : **résidu P2 documenté**.
+- GitHub Actions au SHA intégré, Relay live 4402, Core 8100, Gateway 18789, Funnel, ADB et Pixel : **NOT_RUN**, conformément au périmètre.
+- Cette validation porte sur le SHA intégré `04fdc77` fourni pour F1. Elle ne remplace pas le rerun final demandé par le parent après intégration du correctif A1-F2.
