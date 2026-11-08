@@ -333,7 +333,12 @@ def create_app(
 ) -> FastAPI:
     database_setting = db_path or os.getenv("ATLAS_DB_PATH") or BASE_DIR / "data" / "atlas.sqlite3"
     database_path = Path(database_setting)
-    store = SQLiteStore(database_path)
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    initialization_lock_fd = _acquire_core_database_lock(database_path)
+    try:
+        store = SQLiteStore(database_path)
+    finally:
+        _release_core_database_lock(initialization_lock_fd)
 
     def env_flag(name: str, default: bool) -> bool:
         value = os.getenv(name)
@@ -381,59 +386,64 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         database_lock_fd = _acquire_core_database_lock(database_path)
-        _app.state.core_database_lock_fd = database_lock_fd
-        stop_expiry_sweeper = asyncio.Event()
-
-        async def maintain_chat_cache() -> None:
-            while not stop_expiry_sweeper.is_set():
-                try:
-                    await asyncio.to_thread(cleanup_v4_chat_cache, store)
-                except Exception:  # noqa: BLE001 - cache maintenance must not stop the API
-                    _LOGGER.warning("V4 chat cache cleanup failed")
-                try:
-                    await asyncio.wait_for(
-                        stop_expiry_sweeper.wait(), timeout=CHAT_CACHE_CLEANUP_INTERVAL_SECONDS
-                    )
-                except asyncio.TimeoutError:
-                    pass
-
-        def expire_one_batch() -> int:
-            with store.transaction(timeout=_PROPOSAL_EXPIRY_LOCK_TIMEOUT_SECONDS) as connection:
-                return expiration_store.expire_due_proposals(
-                    connection,
-                    now=store.now_iso(),
-                    batch_size=expiry_batch_size,
-                    source="SWEEPER",
-                )
-
-        async def maintain_proposal_expirations() -> None:
-            while not stop_expiry_sweeper.is_set():
-                try:
-                    await asyncio.to_thread(expire_one_batch)
-                except Exception:  # noqa: BLE001 - each failed tick is isolated and contains no row data
-                    _LOGGER.warning("V4 proposal expiration sweep tick failed")
-                try:
-                    await asyncio.wait_for(stop_expiry_sweeper.wait(), timeout=expiry_interval_seconds)
-                except asyncio.TimeoutError:
-                    pass
-
+        stop_expiry_sweeper: asyncio.Event | None = None
         cleanup_task: asyncio.Task[None] | None = None
         expiry_task: asyncio.Task[None] | None = None
+        lock_state_registered = False
         try:
+            _app.state.core_database_lock_fd = database_lock_fd
+            lock_state_registered = True
+            stop_expiry_sweeper = asyncio.Event()
+
+            async def maintain_chat_cache() -> None:
+                while not stop_expiry_sweeper.is_set():
+                    try:
+                        await asyncio.to_thread(cleanup_v4_chat_cache, store)
+                    except Exception:  # noqa: BLE001 - cache maintenance must not stop the API
+                        _LOGGER.warning("V4 chat cache cleanup failed")
+                    try:
+                        await asyncio.wait_for(
+                            stop_expiry_sweeper.wait(), timeout=CHAT_CACHE_CLEANUP_INTERVAL_SECONDS
+                        )
+                    except asyncio.TimeoutError:
+                        pass
+
+            def expire_one_batch() -> int:
+                with store.transaction(timeout=_PROPOSAL_EXPIRY_LOCK_TIMEOUT_SECONDS) as connection:
+                    return expiration_store.expire_due_proposals(
+                        connection,
+                        now=store.now_iso(),
+                        batch_size=expiry_batch_size,
+                        source="SWEEPER",
+                    )
+
+            async def maintain_proposal_expirations() -> None:
+                while not stop_expiry_sweeper.is_set():
+                    try:
+                        await asyncio.to_thread(expire_one_batch)
+                    except Exception:  # noqa: BLE001 - each failed tick is isolated and contains no row data
+                        _LOGGER.warning("V4 proposal expiration sweep tick failed")
+                    try:
+                        await asyncio.wait_for(stop_expiry_sweeper.wait(), timeout=expiry_interval_seconds)
+                    except asyncio.TimeoutError:
+                        pass
+
             cleanup_task = asyncio.create_task(maintain_chat_cache())
             expiry_task = (
                 asyncio.create_task(maintain_proposal_expirations()) if expiry_sweeper_enabled else None
             )
             yield
         finally:
-            stop_expiry_sweeper.set()
+            if stop_expiry_sweeper is not None:
+                stop_expiry_sweeper.set()
             background_tasks = [task for task in (cleanup_task, expiry_task) if task is not None]
             try:
                 if background_tasks:
                     await asyncio.gather(*background_tasks, return_exceptions=True)
             finally:
                 try:
-                    del _app.state.core_database_lock_fd
+                    if lock_state_registered:
+                        del _app.state.core_database_lock_fd
                 finally:
                     _release_core_database_lock(database_lock_fd)
 

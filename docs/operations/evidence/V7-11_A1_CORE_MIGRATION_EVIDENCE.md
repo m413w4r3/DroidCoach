@@ -224,3 +224,86 @@ git diff --check
 Les tests d’exclusivité ouvrent deux applications/lifespans dans le même processus sur des descripteurs séparés; aucune campagne multi-processus distincte n’a été faite. Le mécanisme s’appuie sur `flock` advisory fourni par le système de fichiers. Les CLI offline ne consultent pas le verrou et doivent rester arrêtées pendant l’exécution de Core.
 
 **Prochaine action :** revue parent du commit local; aucun push effectué.
+
+## V7-11B-P7 — fiabilité du test et verrouillage de l’initialisation
+
+- **Base de travail :** `5fc3322fe59f2bbd6246812e21c6dd56163a708e`.
+- **Branche :** `audit/v7-11-a1-core-migration`.
+- **Scope d’écriture :** `backend/atlas_backend/main.py`, `backend/tests/test_core_db_lock.py` et ce rapport.
+- **Environnement :** bases temporaires pytest uniquement; aucun service live, ADB ou appareil.
+
+### Diagnostic du blocage
+
+Le test `test_different_databases_can_start_together` a été exécuté dix fois, avec une limite de huit secondes par processus : les dix exécutions ont réussi en 0,94–1,02 s. Le blocage signalé précédemment n’a donc pas été reproduit. Le chemin asynchrone qui peut attendre lors de l’arrêt est la tâche de nettoyage du cache, exécutée via `asyncio.to_thread`; `asyncio.run` attend aussi l’arrêt de son executor par défaut. C’est une piste plausible pour une attente lors du nettoyage de tâches/executor, mais les éléments disponibles ne permettent pas d’établir cette cause comme certaine.
+
+Le test est maintenant borné par `asyncio.wait_for(..., timeout=5)`, exécute le petit nettoyage SQLite inline pour éviter que la fermeture de l’executor masque un échec du test, et vérifie après les lifespans qu’aucune tâche asyncio ne reste active. Les contextes `async with` assurent l’annulation et le nettoyage du lifespan en cas d’exception ou de timeout.
+
+### Course d’initialisation SQLite
+
+La course signalée était réelle : `SQLiteStore.__init__` appelle `initialize()` et peut créer ou migrer le schéma avant l’acquisition du verrou dans le lifespan. `create_app` acquiert maintenant le même verrou avant de construire `SQLiteStore`, puis le libère dans un `finally`, y compris si l’initialisation lève une exception. Le lifespan acquiert ensuite le verrou pour toute la durée où l’application sert des requêtes et le libère après le nettoyage de ses tâches. Cela ferme la fenêtre de migration concurrente sans déplacer la construction des routes ou refactoriser `create_app`.
+
+### Résultats
+
+| Oracle | Statut | Résultat |
+|---|---|---|
+| Reproduction en boucle du test deux bases | **PASS** | 10/10 réussites, chaque processus en 1,09–1,26 s; hang non reproduit. |
+| Test borné et absence de tâches asyncio résiduelles | **PASS** | Timeout explicite de 5 s, nettoyage des tâches et assertion qu’aucune tâche ne fuit. |
+| Initialisation/migration protégée par le verrou | **PASS** | Pendant `SQLiteStore.initialize`, une deuxième acquisition échoue avec « already in use ». |
+| Arrêt normal | **PASS** | Après sortie des lifespans, le verrou peut être repris; l’ouverture offline et `integrity_check` réussissent. |
+| Erreur d’initialisation du store | **PASS** | Exception synthétique; verrou repris immédiatement après. |
+| Erreur pendant le démarrage du lifespan | **PASS** | Échec synthétique de création de tâche; aucune tâche résiduelle et verrou repris. |
+| Exception dans le corps du lifespan | **PASS** | Exception propagée; tâches arrêtées et verrou repris. |
+| Tests ciblés verrou + sweeper | **PASS** | `11 passed, 1 warning` en 1,69 s. |
+| Suite backend | **PASS** | `463 passed, 1 skipped, 3 warnings` en 51,52 s. |
+| Suite racine | **PASS** | `508 passed, 1 skipped, 4 warnings, 48 subtests passed` en 49,45 s. |
+| `git diff --check` | **PASS** | Sans erreur. |
+| Processus Core multiples distincts | **NOT_RUN** | Tests d’exclusivité dans un même processus et descripteurs séparés; campagne multi-processus non demandée par cet oracle. |
+
+### Commandes exécutées
+
+Depuis `backend/` :
+
+```sh
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q tests/test_core_db_lock.py tests/test_v4_proposal_expiration.py::test_lifespan_sweeper_logs_tick_error_and_stops_cleanly tests/test_v4_proposal_expiration.py::test_lifespan_sweeper_can_be_disabled
+ATLAS_AGENT_ADAPTER=mock python3 -m pytest -q
+```
+
+La boucle de dix exécutions a été lancée depuis `backend/` avec une limite de huit secondes par processus :
+
+```sh
+python3 - <<'PY'
+import subprocess
+import time
+
+command = [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_core_db_lock.py::test_different_databases_can_start_together",
+]
+for iteration in range(1, 11):
+    started = time.monotonic()
+    result = subprocess.run(command, capture_output=True, text=True, timeout=8)
+    elapsed = time.monotonic() - started
+    if result.returncode:
+        print(f"{iteration}/10 failed after {elapsed:.2f}s")
+        print(result.stdout)
+        print(result.stderr)
+        raise SystemExit(result.returncode)
+    summary = next(line for line in result.stdout.splitlines() if "passed" in line)
+    print(f"{iteration}/10 {summary}; process={elapsed:.2f}s")
+PY
+```
+
+Sortie : 10 lignes `1 passed, 1 warning`, temps par processus de 1,09–1,26 s. Depuis la racine du worktree :
+
+```sh
+python3 -m pytest -q
+git diff --check
+```
+
+Le correctif de course d’initialisation est inclus dans le même verrou d’écriture single-writer. La cause exacte de l’ancien blocage reste indéterminée tant qu’il ne peut pas être reproduit; le test est maintenant déterministe et chaque exécution est bornée.
+
+**Prochaine action :** revue parent du commit local; aucun push effectué.
