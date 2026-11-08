@@ -88,7 +88,7 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | Gate | Statut | Portée |
 |---|---|---|
 | `GO_V7_11_MAIN_AND_CI` | **GO** sur `9f0c783` ; **à revalider** sur `c031cb5` après push | PR #3 verte ; nouveau code à pousser. |
-| `GO_V7_11_CODE_PROVENANCE` | **GO local pour l'APK ; STALE pour l'image Core** | APK exact `bb703ec7…` inchangé ; image Core `528af664…` construite à `a3d72db`, **avant le correctif B7** ; rebuild au SHA code final requis avant tout live. |
+| `GO_V7_11_CODE_PROVENANCE` | **GO local** | APK exact `bb703ec7…` inchangé ; image Core finale `1e4c8e6c…` construite à `7efbefc` (B7 inclus) et active en live ; P2 : inspection Docker indépendante `UNKNOWN`, image locale non poussée en registre. |
 | `GO_V7_11_FINAL_IMAGE_PROVENANCE` | **GO local avec P2** | B12 : image `sha256:1e4c8e6c…`, 150 520 138 octets, build propre à `7efbefc`, tag unique, marqueurs B7 + `FileReplayNonceCache` ; image/tag live `8604535e…` inchangés. P2 : inspection Docker indépendante `UNKNOWN` (B13), image non poussée en registre. |
 | `GO_V7_11_ANTI_REPLAY_TOPOLOGY` | **GO local avec limitations P2** | A4-F3 GO ; verrou + garde + cache durable P6 + fiabilité P7 ; conditions live : cache dir persistant 0700, un seul Core/volume, secrets HMAC distincts par key_id, horloge stable. |
 | `GO_V7_11_AUTH_STAGING` | **GO local partiel** | Inchangé ; stack complète isolée non exécutée. |
@@ -102,7 +102,7 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_ANDROID_PRESERVATION_PHYSICAL` | **GO_WITH_LIMITATIONS** | Installation in-place sur Pixel 9 Pro XL API 37 : APK exact `bb703ec7…`, données byte-identiques, HOME/permissions conservés, aucun crash. QA fonctionnelle et APPLY NOT_RUN. |
 | `GO_V7_11_RELAY_SYNC_AVD` | **NOT_RUN** | Aucun E2E Relay avec Android ; le stack isolé B1 ne vaut pas test AVD. |
 | `GO_V7_11_ISOLATED_STACK` | **GO local final** | B1 (stack neuf) + B12 (image finale sur **copie réelle** migrée) : health 200, v5, backup 0600, verrou, cache 0700, legacy 200/401, Relay/proxy/connecteur, fail-closed ; live inchangé. Déviation bridge/`0.0.0.0` interne documentée. |
-| `GO_V7_11_IDENTITY_BINDING` | **BLOCKED / UNKNOWN** | B2 : base live `user_version=3`, tables V4 absentes, `device_ref` absent ; le libellé `pixel-v7` n'existe que côté connecteur. Vérification impossible avant migration live. |
+| `GO_V7_11_IDENTITY_BINDING` | **NOT_RUN** | Base live désormais v5, mais l'authentification reste `legacy` : aucun principal, credential ou binding V4 n'a été créé/vérifié. Le binding réel reste à faire avec autorisation dédiée. |
 | `GO_V7_11_REAL_COPY_MIGRATION` | **GO local final** | B5 puis B9/B10 : migration v3→v5 sur copie réelle PASS avec le code corrigé ; backup 0600, fail-closed, 3 propositions sans propriétaire, 1 candidate expiration, live toujours v3. |
 | `GO_V7_11_BACKUP_PERMISSIONS` | **GO local avec limites P2/P3** | B7/B8/B9/B10 : backup `0600` avec `O_EXCL`/`O_NOFOLLOW`, fail-closed, P1 fermé sur copie réelle ; fsync répertoire, mémoire, `os.close` et portabilité restent P2/P3. |
 | `GO_V7_11_INDEPENDENT_FINAL_COPY_REVIEW` | **GO local avec limites** | B10 : P1 fermé sur données live, 0 P0/P1 ; migration live NO-GO. |
@@ -110,8 +110,11 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_INDEPENDENT_ISOLATED_REVIEW` | **GO local avec P2 / NO-GO live** | B4 : 0 P0/P1, 2 P2 ; vérification Docker directe UNKNOWN ; aucun test/live exécuté par le relecteur. |
 | `GO_V7_11_BACKUP_ROLLBACK_PLAN` | **GO local avec limites** | Backup live Core/Pixel/connecteur exécuté et restauration testée sur copies ; pas de restauration live, pas de copie hors site/chiffrée. |
 | `GO_V7_11_LIVE_BACKUP` | **GO local avec limites** | Fenêtre du 2026-11-08 : Core arrêté ~14 s, DB/sidecar copiés, Pixel V7-07 vérifié, connecteur 3/3 restauré sur copie, Relay jamais arrêté ; B11 GO local, 0 P0/P1, 2 P2 fermés. |
+| `GO_V7_11_LIVE_MIGRATION` | **GO local** | Migration live v3→v5 exécutée le 2026-11-08 : backup frais `9f5c8fd2…`, image `1e4c8e6c…`, v5/ledger/intégrité/FK, backup B7 `0600`, legacy 200/401, Relay intact ; B14 GO local, 0 P0/P1. |
+| `GO_V7_11_SCHEMA_V5_LIVE` | **GO local** | Base live v5, ledger `[1..5]`, `device_ref`, contrôle logique 17/19 tables MATCH, seules différences attendues (état d'expiration + ledger). |
+| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **NOT_RUN** | Pixel déconnecté d'ADB après la migration ; app/HOME/Keystore/consentements non observés. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Image finale qualifiée localement mais **migration live non autorisée** ; décision sur la proposition `PENDING_ANDROID` à prendre **avant le premier démarrage** (le sweeper l'expire immédiatement) ; binding réel non vérifié ; Relay non administrable ; backup local sans hors-site/chiffrement ; procédure connecteur non déployée. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Migration v3→v5 **exécutée** et image finale active, mais cutover complet non qualifié : sync Android post-migration NOT_RUN, binding/principal non configurés, Relay non administrable, backup local sans hors-site/chiffrement, DB live 0644, aucun APPLY. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -341,3 +344,53 @@ L'image est locale, non poussée en registre. La qualification utilise l'adaptat
 5. **Rollback** : image live `8604535e…` + backup v3 frais + procédure de restauration testée ; toute écriture post-backup perdue en cas de rollback.
 6. Après migration : vérifier v5, compteurs, health, sync legacy de l'app, absence d'erreurs, puis seulement envisager principal/binding, Relay admin et la suite V4.
 7. `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO** jusqu'à cette autorisation.
+
+## 13. Addendum — migration live v3→v5 et image finale (2026-11-08/09)
+
+Paquet autorisé : « Migrer le live v3→v5 maintenant », avec acceptation de l'expiration de la proposition `PENDING_ANDROID`.
+
+### 13.1 Exécution
+
+- Core arrêté à `2026-11-08T22:45:25Z` (exit 0), backup frais v3 `9f5c8fd2…` (integrity ok, FK 0, compteurs 3/2/2/4/1, états APPLIED/PENDING_ANDROID/REJECTED), fichiers `0600`.
+- Image finale `1e4c8e6c…` déployée via `compose.yaml` + `compose.openclaw.yaml` + override privé persistant (`0600`) ; config `network_mode: host`, `read_only`, tmpfs, volume, trois secrets, `cap_drop: ALL`, `no-new-privileges`, restart/healthcheck préservés.
+- Core redémarré à `22:45:41Z` — **~16 s d'indisponibilité** — health **200**.
+- Ancienne image `8604535e…` (tag `atlas-core-atlas-core`) conservée pour rollback.
+- Relay jamais arrêté (`StartedAt` inchangé, health 200).
+
+### 13.2 État après migration
+
+- Base **v5**, ledger `[1,2,3,4,5]`, intégrité ok, FK 0.
+- Propositions 3 (APPLIED 1 / **EXPIRED 1** / REJECTED 1), événements 2, consentements 2, événements de consentement 4, historique 1, événement d'expiration 1.
+- Backup B7 `atlas.sqlite3.pre-v4.bak` : régulier, **0600**, v3, intégrité ok, `193fcae4…`.
+- Verrou `atlas.sqlite3.lock` `0600` ; cache `/data/replay` `0700`.
+- Legacy : token live **200** / faux token **401** ; adapter OpenClaw et capabilities préservés ; 0 erreur Core.
+- La proposition `PENDING_ANDROID` est passée à `EXPIRED` au premier démarrage, comme autorisé ; le backup v3 conserve l'état antérieur.
+
+### 13.3 Contrôle logique et rollback
+
+- Comparatif v3↔v5 : **17/19 tables MATCH** ; seules différences attendues : une ligne `agent_proposals_v4` (colonne `state` uniquement) et le ledger 3→5 ; 6 nouvelles tables V4/V5 ; aucune table supprimée.
+- Runbook de rollback exact : image `8604535e…`, volume `atlas-core-data`, backup `9f5c8fd2…`, restauration en `0600/10001`, renommage du sidecar B7 et du lock, contrôles v3, redémarrage old image. **Non exécuté.**
+- Preuves : [`evidence/V7-11B_LIVE_MIGRATION_EVIDENCE.md`](evidence/V7-11B_LIVE_MIGRATION_EVIDENCE.md), [`evidence/V7-11B_LIVE_MIGRATION_LOGICAL_CHECK.md`](evidence/V7-11B_LIVE_MIGRATION_LOGICAL_CHECK.md), [`evidence/V7-11B_LIVE_ROLLBACK_RUNBOOK.md`](evidence/V7-11B_LIVE_ROLLBACK_RUNBOOK.md).
+
+### 13.4 Revue B14 et limites
+
+B14 : **GO_WITH_LIMITATIONS local / NO-GO cutover**, **0 P0/P1**. P2 rollback et conservation logique **fermés** ; l'inspection Docker indépendante reste `UNKNOWN` ; le backup local sans hors-site/chiffrement et la DB live `0644` restent des risques acceptés.
+
+Limites actuelles :
+
+1. **Pixel déconnecté d'ADB** : sync Android post-migration, HOME, Keystore et consentements `NOT_RUN`.
+2. **Binding/principal non configurés** : auth toujours `legacy`, aucune credential/binding V4.
+3. **Relay non administré** : recréation non testée, backup connecteur non déployé.
+4. **Backup local uniquement**, DB live `0644`, aucun APPLY/réconciliation.
+
+### 13.5 Gates
+
+| Gate | Statut |
+|---|---|
+| `GO_V7_11_LIVE_MIGRATION` | **GO local** |
+| `GO_V7_11_SCHEMA_V5_LIVE` | **GO local** |
+| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **NOT_RUN** |
+| `GO_V7_11_IDENTITY_BINDING` | **NOT_RUN** |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** (cutover complet) |
+
+Prochaine étape recommandée : reconnecter le Pixel et vérifier la synchronisation post-migration en lecture seule, avant toute configuration de binding ou de Relay.
