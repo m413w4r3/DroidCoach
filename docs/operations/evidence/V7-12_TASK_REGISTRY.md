@@ -54,6 +54,8 @@
 10. Un seul appareil Relay actif (`pixel-v7`) ; le principal Android est nouveau, avec un nouveau `device_ref`. **Aucun consentement historique n'est transféré.** Les consentements existants restent inchangés ; le Pixel devra les renouveler explicitement via l'application.
 11. Le jeu de capacités du principal couvre exactement les opérations produit du Pixel : lecture/chat/proposition et écritures de synchronisation consenties, sans DIRECT ni TOOL. Une capability ne vaut jamais consentement.
 12. La révocation du bearer partagé LEGACY reste soumise à une confirmation explicite unique du propriétaire après présentation des contrôles.
+13. Un credential `TOOL` distinct est provisionné avec un principal `TOOL`, la **même valeur** que `ATLAS_TOOL_TOKEN` (exigence de `require_tool`), des grants de lecture/proposition, `ATLAS_V4_TOOL_PRINCIPAL_ID` côté Core et aucun binding. Il reste dormant tant que le plugin `atlas_core_tools` est désactivé.
+14. Les propositions historiques ont `device_ref=NULL` ; elles ne sont pas réattribuées au nouveau principal et aucun backfill n'est exécuté en V7-12. Les nouvelles propositions appartiennent au nouveau `device_ref`.
 
 ## 4. Tickets et propriété des fichiers
 
@@ -116,6 +118,8 @@
 | A2 intégré | `026e994a9c1265b7da1837576eff8a68ddb12cea` ; tests connecteur **140 passed**, proxy **20 passed / 1 skipped** (Relay isolé non lancé), audit production **0 vulnérabilité**. |
 | Relay non-root | Image `atlas-relay-v7-12:local` testée avec `--user 1000:1000 --read-only --tmpfs /tmp`, health `/health` = 200 ; le Compose doit fixer `user: "1000:1000"`. |
 | Service token | `~/.local/state/atlas-relay/v7-12/service-token` : 64 octets, sans newline final, 0600 UID 1000, conforme au lecteur A2. |
+| Android JVM + lint | `./gradlew :app:testDebugUnitTest :app:lintDebug --max-workers=1` : **BUILD SUCCESSFUL** (2 min 20 s) sur le SHA intégré. |
+| Propositions historiques | 3 lignes, toutes `device_ref IS NULL` ; aucune réattribution au nouveau principal, aucun backfill. |
 
 ## 8. Notes de reprise
 

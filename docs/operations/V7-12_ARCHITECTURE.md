@@ -135,6 +135,8 @@ Le chiffrement au repos du stockage hôte est vérifié : `/home/nill` est sur Z
 - Credential : audience `RELAY`, généré localement, stocké haché en base.
 - Binding : `relay_device_id` réel de `pixel-v7` → `principal_id`.
 - Capacités : exactement les opérations produit du Pixel (lecture, chat, proposition, écritures de synchronisation, ack, consentement). Une capability ne remplace jamais un consentement.
+- Credential `TOOL` distinct : principal de kind `TOOL`, même valeur que `ATLAS_TOOL_TOKEN`, grants de lecture/proposition pour les routes `/internal/v4/*`, `ATLAS_V4_TOOL_PRINCIPAL_ID` côté Core, aucun binding. Il reste dormant tant que le plugin `atlas_core_tools` est désactivé.
+- Les propositions historiques ont actuellement `device_ref=NULL` ; elles ne sont pas réattribuées au nouveau principal. Aucun backfill n'est exécuté pendant V7-12. Les nouvelles propositions sont créées sous le nouveau `device_ref`.
 - Le connecteur utilise sa map privée `relay_device_id → {principal_id, credential_file}` et signe chaque requête V4 avec l'assertion HMAC.
 - Le Core valide signature, fenêtre temporelle, key ID, nonce anti-rejeu, principal, `device_ref` et binding actif.
 - `DIRECT` n'est pas provisionné. `LEGACY` reste transitoire en mode `dual` ; le passage en `principal` et la révocation du bearer partagé sont des étapes séparées, la révocation exigeant une confirmation explicite du propriétaire.
