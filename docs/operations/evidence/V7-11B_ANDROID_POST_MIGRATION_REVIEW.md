@@ -49,3 +49,25 @@ Avant une nouvelle tentative, choisir un seul chemin et obtenir son autorisation
 - Aucun accès indépendant au Pixel ou aux valeurs live Core/Relay ; aucun ADB, test, mutation ou action Android exécutés.
 - Les résultats runtime présentés sont ceux rapportés dans la preuve opérateur, pas des observations reproduites.
 - Une sonde HTTP a renvoyé l’absence de connexion dans le sandbox. L’auto-review a rejeté la tentative de supprimer un éventuel fichier temporaire de sortie, estimant que cette suppression violerait la lecture seule stricte. Aucun contournement n’a été tenté ; l’existence d’un tel artefact reste inconnue.
+
+## Re-revue après activation du chemin
+
+**Cible :** preuve mise à jour dans `dea1fb4` ; le fichier correspondant dans ce worktree (`HEAD=09d809a`) est identique. Cette re-revue et son commit s’ajoutent à `09d809a`, sans amendement.
+**Verdict : GO_WITH_LIMITATIONS local / NO-GO cutover.** Aucun P0/P1 confirmé ; le P2 de sanitisation est clos et le P2 de vérification runtime reste `UNKNOWN`.
+
+| # | Point repris | Statut | Conclusion |
+|---|---|---|---|
+| 1 | Sanitisation | **PASS — P2 clos** | La preuve dit désormais seulement « nœud hors ligne » (ligne 42) ; l’ancien libellé du pair n’y figure plus. Aucun identifiant Tailscale ni valeur interdite n’est publié. |
+| 2 | État du chemin | **PASS (preuve opérateur)** | La preuve rapporte mode avion désactivé par l’utilisateur, Wi-Fi validé sans VPN, Tailscale mobile toujours hors ligne, proxy 4400 et connecteur 4401 actifs, health/metrics 200, `relay_connected=true`, WebSocket 101 et Funnel ciblant le proxy. Ces éléments sont documentés, non reproduits par le relecteur. |
+| 3 | Tentative de sync | **PASS pour `BLOCKED / PARTIAL`** | `MainActivity` a été ouverte et `CoreV4SyncWorker` forcé (job 253) ; aucun appel app n’est observé au Core ou au connecteur et le fichier de sync reste inchangé. Le chemin de transport paraît sain selon la preuve, mais la sync n’a pas eu lieu : le blocage est bien à l’émission/déclenchement côté app, pas un échec du Core. La cause précise reste inconnue : absence de données en attente, endpoint/trigger non aligné ou sync non déclenchée sont des hypothèses, pas des défauts confirmés. |
+| 4 | Vérification runtime indépendante | **UNKNOWN — P2 maintenu** | L’activation et les métriques sont des résultats rapportés par l’opérateur. Cette re-revue n’a pas utilisé ADB, Docker, `ss`, Tailscale ni sondes live ; le sandbox ne permet toujours pas de promouvoir ces états en PASS indépendant. |
+| 5 | Gates | **PASS** | La preuve mise à jour indique sync `BLOCKED / PARTIAL`, binding `NOT_RUN` et `GO_V7_11_LIVE_CHANGE_READINESS` `NO-GO`. Aucun gate ne qualifie la sync réussie, le binding ou le cutover. |
+
+### Findings après re-revue
+
+- **P0 :** aucun.
+- **P1 :** aucun.
+- **P2 sanitisation :** clos par la suppression du libellé de nœud.
+- **P2 runtime :** `UNKNOWN`, ouvert jusqu’à une vérification indépendante autorisée et accessible.
+
+Le résultat partiel est correctement borné : le transport est rapporté sain, mais aucune requête de sync n’a été émise et la sync Android n’est pas qualifiée. Garder `GO_V7_11_LIVE_CHANGE_READINESS` à **NO-GO**.
