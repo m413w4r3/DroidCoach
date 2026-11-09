@@ -35,6 +35,7 @@ from .openclaw_adapter import (
 )
 from .store import SQLiteStore
 from .v4_assertion import (
+    FileReplayNonceCache,
     HEADER_NAMES as RELAY_ASSERTION_HEADER_NAMES,
     RelayAssertionError,
     ReplayNonceCache,
@@ -65,6 +66,9 @@ _CONTRACT_DIR = Path(__file__).resolve().parents[2] / "contracts" / "v4"
 _LOGGER = logging.getLogger(__name__)
 CHAT_CACHE_RETENTION = timedelta(hours=24)
 CHAT_CACHE_CLEANUP_INTERVAL_SECONDS = 60
+# Extra startup-time tolerance for connector/Core clock skew; the independent
+# Relay assertion freshness window remains +/-120,000 ms in v4_assertion.
+CLOCK_SKEW_MS = 5_000
 _CHAT_WORKERS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="atlas-v4-chat")
 _TOOL_CAPABILITIES = {
     "atlas_get_day_plan": "day_plan.read",
@@ -496,6 +500,9 @@ def create_v4_router(
     agent: Any | None = None,
 ) -> APIRouter:
     """Build the fixed V4 route set around the existing SQLite and projection services."""
+    # Capture once per app/router construction. A restarted Core gets a new
+    # lower bound together with its fresh process-local replay cache.
+    core_started_at_ms = int(time.time() * 1000)
     projections = V4ProjectionStore(store)
     active_capabilities = dict(capabilities if capabilities is not None else _configured_capabilities())
     auth_mode = os.getenv("ATLAS_V4_AUTH_MODE", "legacy")
@@ -519,7 +526,12 @@ def create_v4_router(
         file_path=os.getenv("ATLAS_V4_RELAY_ASSERTION_KEYS_FILE"),
         testing="PYTEST_CURRENT_TEST" in os.environ,
     )
-    relay_replay_cache = ReplayNonceCache()
+    replay_cache_dir = os.getenv("ATLAS_V4_REPLAY_CACHE_DIR")
+    relay_replay_cache = (
+        FileReplayNonceCache(replay_cache_dir)
+        if replay_cache_dir is not None
+        else ReplayNonceCache()
+    )
 
     class _RollbackRouteResponse(Exception):
         def __init__(self, response: JSONResponse) -> None:
@@ -776,6 +788,8 @@ def create_v4_router(
                 or not hmac.compare_digest(supplied, expected)
             ):
                 return generic_auth_failure(request, capability, fallback)
+            if registry.credential_state(supplied) == "REVOKED":
+                return generic_auth_failure(request, capability, fallback)
             context = AuthContext("legacy-android", _device_ref(expected), "legacy-android", "LEGACY", "LEGACY", frozenset())
             request.state.atlas_auth_context = context
             if capability in _CAPABILITY_ENV_ALLOWLIST and not active_capabilities.get(capability, False):
@@ -809,6 +823,12 @@ def create_v4_router(
                 or binding[0] != context.principal_id
                 or binding[1] != context.device_ref
             ):
+                return generic_auth_failure(request, capability, fallback)
+            try:
+                assertion_timestamp_ms = int(request.headers.get(RELAY_ASSERTION_HEADER_NAMES["timestamp"], ""))
+            except (TypeError, ValueError):
+                return generic_auth_failure(request, capability, fallback)
+            if assertion_timestamp_ms < core_started_at_ms - CLOCK_SKEW_MS:
                 return generic_auth_failure(request, capability, fallback)
         elif context.audience not in {"DIRECT", "LEGACY"}:
             return generic_auth_failure(request, capability, fallback)

@@ -20,7 +20,7 @@ Audit sans modification de configuration, session, service ou fichier préexista
 
 ## 1. Événements `exec` et arguments du statut
 
-J’ai lu en mode SQLite `mode=ro` la base Gateway `/home/nill/.openclaw/agents/atlas/agent/openclaw-agent.sqlite`, tables `session_windows`, `transcript_events` et `trajectory_runtime_events`. Les coordonnées ci-dessous sont les numéros de séquence des événements, avec leurs horodatages UTC; les clés de session sont synthétiques et leurs suffixes suffisent à les distinguer.
+J’ai lu en mode SQLite `mode=ro` la base Gateway ``<HOME>/<REPO>/<GATEWAY_DB_PATH>``, tables `session_windows`, `transcript_events` et `trajectory_runtime_events`. Les coordonnées ci-dessous sont les numéros de séquence des événements, avec leurs horodatages UTC; les clés de session sont synthétiques et leurs suffixes suffisent à les distinguer.
 
 Pour la session `…d788`, la ligne `transcript_events.seq=5` à `20:18:44.420Z` est un message assistant contenant explicitement un `toolCall` nommé `exec`, avec les champs d’arguments `code:string` et `title:string`. La trajectoire runtime enregistre `tool.call exec` à `20:18:44.439Z`, puis `tool.result exec` à `20:18:44.593Z`, `success=true`; le transcript indique `status=completed` et `isError=false`. Une seconde exécution dans cette même session commence à `20:25:49.123Z` (`seq=11`) avec `code`, `title` et `awaitResults:boolean`; son résultat est aussi terminé avec succès.
 

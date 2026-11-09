@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import sqlite3
+import stat
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -255,7 +257,9 @@ class SQLiteStore:
             self._record_migration_quarantine("MIGRATION_LEDGER_MISMATCH", payload)
             return
 
-        if any(version not in applied_by_version for version, _name, _statements in migrations):
+        # This backup protects the transition to the V4 schema; later V5-only upgrades do not
+        # create or consume a pre-V4 backup.
+        if user_version < 4 or 4 not in applied_by_version:
             self._create_coherent_pre_migration_backup()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -284,17 +288,131 @@ class SQLiteStore:
         if not self.path.exists():
             return
         backup_path = self.path.with_suffix(self.path.suffix + ".pre-v4.bak")
-        if backup_path.exists():
-            with sqlite3.connect(backup_path) as backup:
-                result = backup.execute("PRAGMA integrity_check").fetchone()[0]
-            if result != "ok":
-                raise MigrationIntegrityError("la sauvegarde pré-migration existante est invalide")
-            return
-        with self.connect() as source, sqlite3.connect(backup_path) as destination:
-            source.backup(destination)
-            result = destination.execute("PRAGMA integrity_check").fetchone()[0]
-            if result != "ok":
-                raise MigrationIntegrityError("la sauvegarde pré-migration est invalide")
+        existing_backup_message = (
+            "une sauvegarde pré-migration existe déjà ; vérifier puis déplacer l'ancien backup avant de relancer"
+        )
+        try:
+            backup_path.lstat()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise MigrationIntegrityError(
+                "impossible de vérifier l'absence de la sauvegarde pré-migration"
+            ) from exc
+        else:
+            raise MigrationIntegrityError(existing_backup_message)
+
+        try:
+            flags = os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW
+            backup_fd = os.open(backup_path, flags, 0o600)
+        except FileExistsError as exc:
+            raise MigrationIntegrityError(existing_backup_message) from exc
+        except (AttributeError, OSError) as exc:
+            raise MigrationIntegrityError(
+                "impossible de créer la sauvegarde pré-migration en mode 0600"
+            ) from exc
+
+        try:
+            os.fchmod(backup_fd, 0o600)
+            created_stat = os.fstat(backup_fd)
+            if (
+                not stat.S_ISREG(created_stat.st_mode)
+                or created_stat.st_uid != os.geteuid()
+                or stat.S_IMODE(created_stat.st_mode) != 0o600
+            ):
+                raise MigrationIntegrityError(
+                    "la sauvegarde pré-migration n'a pas les permissions ou le propriétaire requis"
+                )
+
+            with self.connect() as source, sqlite3.connect(":memory:") as destination:
+                source_version = int(source.execute("PRAGMA user_version").fetchone()[0])
+                source.backup(destination)
+                result = destination.execute("PRAGMA integrity_check").fetchone()[0]
+                if result != "ok":
+                    raise MigrationIntegrityError("la sauvegarde pré-migration est invalide")
+                if int(destination.execute("PRAGMA user_version").fetchone()[0]) != source_version:
+                    raise MigrationIntegrityError(
+                        "la sauvegarde pré-migration ne correspond pas à la version source"
+                    )
+                backup_bytes = destination.serialize()
+
+            remaining = memoryview(backup_bytes)
+            while remaining:
+                written = os.write(backup_fd, remaining)
+                if written <= 0:
+                    raise OSError("écriture incomplète de la sauvegarde pré-migration")
+                remaining = remaining[written:]
+            os.ftruncate(backup_fd, len(backup_bytes))
+            os.fsync(backup_fd)
+
+            written_stat = os.fstat(backup_fd)
+            path_stat = backup_path.lstat()
+            if (
+                not stat.S_ISREG(written_stat.st_mode)
+                or not stat.S_ISREG(path_stat.st_mode)
+                or (written_stat.st_dev, written_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino)
+                or written_stat.st_uid != os.geteuid()
+                or path_stat.st_uid != os.geteuid()
+                or stat.S_IMODE(written_stat.st_mode) != 0o600
+                or stat.S_IMODE(path_stat.st_mode) != 0o600
+                or written_stat.st_size != len(backup_bytes)
+            ):
+                raise MigrationIntegrityError(
+                    "la sauvegarde pré-migration a échoué à la vérification du fichier"
+                )
+
+            readback_parts = []
+            readback_offset = 0
+            while readback_offset < written_stat.st_size:
+                chunk = os.pread(
+                    backup_fd,
+                    min(1024 * 1024, written_stat.st_size - readback_offset),
+                    readback_offset,
+                )
+                if not chunk:
+                    raise MigrationIntegrityError(
+                        "la sauvegarde pré-migration est tronquée après écriture"
+                    )
+                readback_parts.append(chunk)
+                readback_offset += len(chunk)
+            readback = b"".join(readback_parts)
+            if readback != backup_bytes:
+                raise MigrationIntegrityError(
+                    "la sauvegarde pré-migration diffère des données vérifiées"
+                )
+            with sqlite3.connect(":memory:") as verification:
+                verification.deserialize(readback)
+                result = verification.execute("PRAGMA integrity_check").fetchone()[0]
+                if result != "ok":
+                    raise MigrationIntegrityError(
+                        "integrity_check de la sauvegarde pré-migration a échoué après écriture"
+                    )
+                if int(verification.execute("PRAGMA user_version").fetchone()[0]) != source_version:
+                    raise MigrationIntegrityError(
+                        "la version de la sauvegarde pré-migration est incorrecte après écriture"
+                    )
+        except Exception as exc:
+            try:
+                created_stat = os.fstat(backup_fd)
+                current_path_stat = backup_path.lstat()
+                if (created_stat.st_dev, created_stat.st_ino) == (
+                    current_path_stat.st_dev,
+                    current_path_stat.st_ino,
+                ):
+                    os.unlink(backup_path)
+            except FileNotFoundError:
+                pass
+            except OSError as cleanup_error:
+                raise MigrationIntegrityError(
+                    "échec de la sauvegarde pré-migration et suppression du fichier partiel impossible"
+                ) from cleanup_error
+            if isinstance(exc, MigrationIntegrityError):
+                raise
+            raise MigrationIntegrityError(
+                "la création ou la vérification de la sauvegarde pré-migration a échoué"
+            ) from exc
+        finally:
+            os.close(backup_fd)
 
     def _verify_v4_integrity(self) -> None:
         with self.connect() as connection:

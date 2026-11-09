@@ -3,7 +3,7 @@
 Date : 2026-10-31
 Base instrumentée : `0b0ba01` (Phase B intégrée, aucun correctif)
 Commit des tests : `6d749c73d824adf9a13b3ae76622efdad3b64f14`
-Session auteur : `d1ff1caa-eb64-4e25-8a6f-b0cadc12c281` — `codex/gpt-6-luna`, `xhigh`
+Session auteur : `<SESSION_ID>` — `codex/gpt-6-luna`, `xhigh`
 Worktree : `/tmp/atlas-v7-06a-test-android`
 
 ## Résultat de la suite complète sur la base instrumentée
@@ -25,7 +25,7 @@ Commande parent de vérification ciblée :
 
 ```sh
 cd /tmp/atlas-v7-06a-test-android/android
-ANDROID_HOME=/home/nill/Android/Sdk ./gradlew :app:testDebugUnitTest --offline \
+ANDROID_HOME=<ANDROID_SDK> ./gradlew :app:testDebugUnitTest --offline \
   --tests '...CoreV4SyncClientTest.lostConsentResponseIsRetriedWithSameBodyAndKey' \
   --tests '...CoreV4SyncClientTest.lostPlanResponseIsRetriedWithSameBodyAndKey' \
   --tests '...RelayBackendTransportTest.duplicateInFlightRequestIdDoesNotReplaceFirstWaiter' \

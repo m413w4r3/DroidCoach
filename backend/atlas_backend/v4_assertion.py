@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import hmac
 import json
@@ -134,6 +135,318 @@ class ReplayNonceCache:
             return True
 
 
+class FileReplayNonceCache:
+    """Durable, process-shared nonce reservations in a private directory."""
+
+    _LOCK_NAME = ".lock"
+    _MAX_EXPIRY_BYTES = 32
+
+    def __init__(
+        self,
+        directory: str | os.PathLike[str],
+        *,
+        capacity: int = 8192,
+        ttl_seconds: int = 300,
+        cleanup_scan_limit: int = 128,
+    ) -> None:
+        if capacity < 1 or ttl_seconds < 1 or cleanup_scan_limit < 1:
+            raise ValueError("Replay cache limits must be positive")
+        if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+            raise ValueError("File replay cache requires O_NOFOLLOW and O_DIRECTORY")
+        self.capacity = capacity
+        self.ttl_seconds = ttl_seconds
+        self.cleanup_scan_limit = cleanup_scan_limit
+        self.directory = self._validate_directory_path(directory)
+        self._directory_fd = self._open_private_directory()
+
+    @staticmethod
+    def _validate_directory_path(directory: str | os.PathLike[str]) -> Path:
+        try:
+            raw_path = os.fspath(directory)
+        except TypeError:
+            raise ValueError("ATLAS_V4_REPLAY_CACHE_DIR must be an absolute path") from None
+        if not isinstance(raw_path, str) or not os.path.isabs(raw_path):
+            raise ValueError("ATLAS_V4_REPLAY_CACHE_DIR must be an absolute path")
+        path = Path(os.path.abspath(raw_path))
+        repository_root = Path(__file__).resolve().parents[2]
+        try:
+            path.relative_to(repository_root)
+        except ValueError:
+            return path
+        raise ValueError("ATLAS_V4_REPLAY_CACHE_DIR must be outside the repository")
+
+    def _open_private_directory(self) -> int:
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        try:
+            directory_fd = os.open(os.sep, flags)
+            components = self.directory.parts[1:]
+            for index, component in enumerate(components):
+                is_target = index == len(components) - 1
+                created = False
+                try:
+                    child_fd = os.open(component, flags, dir_fd=directory_fd)
+                except FileNotFoundError:
+                    try:
+                        os.mkdir(component, mode=0o700, dir_fd=directory_fd)
+                        created = True
+                    except FileExistsError:
+                        pass
+                    child_fd = os.open(component, flags, dir_fd=directory_fd)
+                try:
+                    if created:
+                        os.fchmod(child_fd, 0o700)
+                    info = os.fstat(child_fd)
+                    if not stat.S_ISDIR(info.st_mode):
+                        raise ValueError("ATLAS_V4_REPLAY_CACHE_DIR contains a non-directory component")
+                    if is_target and (info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700):
+                        raise ValueError("ATLAS_V4_REPLAY_CACHE_DIR must be owned by Core and mode 0700")
+                except (OSError, ValueError):
+                    try:
+                        os.close(child_fd)
+                    except OSError:
+                        pass
+                    raise
+                os.close(directory_fd)
+                directory_fd = child_fd
+            if not components:
+                raise ValueError("ATLAS_V4_REPLAY_CACHE_DIR cannot be the filesystem root")
+            return directory_fd
+        except (OSError, ValueError):
+            try:
+                os.close(directory_fd)
+            except (OSError, UnboundLocalError):
+                pass
+            raise
+
+    @staticmethod
+    def _nonce_name(key_id: str, nonce: str) -> str:
+        if not isinstance(key_id, str) or not isinstance(nonce, str) or "\0" in key_id or "\0" in nonce:
+            raise ValueError("invalid replay cache key")
+        canonical = f"{key_id}\0{nonce}".encode("utf-8", errors="strict")
+        return hashlib.sha256(canonical).hexdigest()
+
+    @staticmethod
+    def _is_nonce_name(name: str) -> bool:
+        return len(name) == 64 and all(character in "0123456789abcdef" for character in name)
+
+    def _acquire_directory_lock(self) -> int | None:
+        if not isinstance(self._directory_fd, int):
+            return None
+        flags = os.O_RDWR | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        descriptor: int | None = None
+        created = False
+        try:
+            try:
+                descriptor = os.open(
+                    self._LOCK_NAME,
+                    flags | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                    dir_fd=self._directory_fd,
+                )
+                created = True
+            except FileExistsError:
+                descriptor = os.open(self._LOCK_NAME, flags, dir_fd=self._directory_fd)
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                os.close(descriptor)
+                return None
+            if created:
+                os.fsync(descriptor)
+                os.fsync(self._directory_fd)
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            return descriptor
+        except OSError:
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            return None
+
+    def _read_expiration(self, name: str) -> int | None:
+        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        descriptor = os.open(name, flags, dir_fd=self._directory_fd)
+        try:
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                return None
+            contents = bytearray()
+            while len(contents) <= self._MAX_EXPIRY_BYTES:
+                part = os.read(descriptor, self._MAX_EXPIRY_BYTES + 1 - len(contents))
+                if not part:
+                    break
+                contents.extend(part)
+            if len(contents) > self._MAX_EXPIRY_BYTES or not contents or not contents.isdigit():
+                return None
+            return int(contents)
+        finally:
+            os.close(descriptor)
+
+    def _discard_expired_target(self, name: str, now_ms: int) -> bool:
+        try:
+            expiration_ms = self._read_expiration(name)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        if expiration_ms is None:
+            return False
+        if expiration_ms > now_ms:
+            return True
+        try:
+            os.unlink(name, dir_fd=self._directory_fd)
+            os.fsync(self._directory_fd)
+            return True
+        except OSError:
+            return False
+
+    def _cleanup_expired(self, now_ms: int) -> bool:
+        scan_fd: int | None = None
+        removed_any = False
+        try:
+            scan_fd = os.dup(self._directory_fd)
+            with os.scandir(scan_fd) as entries:
+                for index, entry in enumerate(entries):
+                    if index >= self.cleanup_scan_limit:
+                        break
+                    name = entry.name
+                    if not self._is_nonce_name(name):
+                        continue
+                    expiration_ms = self._read_expiration(name)
+                    if expiration_ms is None:
+                        return False
+                    if expiration_ms <= now_ms:
+                        os.unlink(name, dir_fd=self._directory_fd)
+                        removed_any = True
+            if removed_any:
+                os.fsync(self._directory_fd)
+            return True
+        except OSError:
+            return False
+        finally:
+            if scan_fd is not None:
+                try:
+                    os.close(scan_fd)
+                except OSError:
+                    pass
+
+    def _nonce_file_count(self) -> int | None:
+        scan_fd: int | None = None
+        count = 0
+        max_scanned = self.capacity + self.cleanup_scan_limit + 2
+        try:
+            scan_fd = os.dup(self._directory_fd)
+            with os.scandir(scan_fd) as entries:
+                for index, entry in enumerate(entries):
+                    if index >= max_scanned:
+                        return self.capacity
+                    if self._is_nonce_name(entry.name):
+                        count += 1
+                        if count >= self.capacity:
+                            return count
+            return count
+        except OSError:
+            return None
+        finally:
+            if scan_fd is not None:
+                try:
+                    os.close(scan_fd)
+                except OSError:
+                    pass
+
+    def _create_nonce_file(self, name: str, expiration_ms: int) -> bool:
+        flags = (
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_NOFOLLOW
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(name, flags, 0o600, dir_fd=self._directory_fd)
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                return False
+            payload = str(expiration_ms).encode("ascii")
+            offset = 0
+            while offset < len(payload):
+                written = os.write(descriptor, payload[offset:])
+                if written <= 0:
+                    return False
+                offset += written
+            os.fsync(descriptor)
+            os.fsync(self._directory_fd)
+            return True
+        except FileExistsError:
+            return False
+        except OSError:
+            # Keep a partially created marker in place: EEXIST then fails closed.
+            return False
+        finally:
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    def reserve(self, key_id: str, nonce: str, *, now: float | None = None) -> bool:
+        """Atomically reserve a nonce; I/O, capacity, and cleanup failures deny it."""
+        try:
+            name = self._nonce_name(key_id, nonce)
+            now_seconds = time.time() if now is None else now
+            now_ms = int(round(now_seconds * 1000))
+            expiration_ms = now_ms + self.ttl_seconds * 1000
+        except (OverflowError, TypeError, ValueError, UnicodeError):
+            return False
+
+        lock_fd = self._acquire_directory_lock()
+        if lock_fd is None:
+            return False
+        try:
+            if not self._cleanup_expired(now_ms):
+                return False
+            if not self._discard_expired_target(name, now_ms):
+                return False
+            count = self._nonce_file_count()
+            if count is None or count >= self.capacity:
+                return False
+            return self._create_nonce_file(name, expiration_ms)
+        finally:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            try:
+                os.close(lock_fd)
+            except OSError:
+                pass
+
+    def close(self) -> None:
+        descriptor = getattr(self, "_directory_fd", None)
+        if descriptor is not None:
+            self._directory_fd = None
+            os.close(descriptor)
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except OSError:
+            pass
+
+
 def verify_relay_assertion(
     headers: Mapping[str, str],
     *,
@@ -141,7 +454,7 @@ def verify_relay_assertion(
     path: str,
     body: bytes,
     keys: Mapping[str, bytes],
-    replay_cache: ReplayNonceCache,
+    replay_cache: ReplayNonceCache | FileReplayNonceCache,
     now_ms: int | None = None,
 ) -> str:
     values = {name: headers.get(header) for name, header in HEADER_NAMES.items()}

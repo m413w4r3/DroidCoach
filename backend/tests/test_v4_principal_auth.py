@@ -5,15 +5,23 @@ import base64
 import hashlib
 import hmac
 import json
+import stat
 import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
+import atlas_backend.v4_assertion as v4_assertion_module
+import atlas_backend.v4_router as v4_router_module
 
 from atlas_backend.main import create_app
 from atlas_backend.store import SQLiteStore
 from atlas_backend.v4_assertion import (
+    FileReplayNonceCache,
     RelayAssertionError,
     ReplayNonceCache,
     canonical_message,
@@ -510,6 +518,224 @@ def test_relay_assertion_binds_credential_to_active_session_and_rejects_replay(t
     assert revoked_identity.status_code == 401
 
 
+def test_relay_assertion_pre_restart_is_rejected_but_startup_skew_is_tolerated(tmp_path, monkeypatch):
+    secret = b"synthetic-restart-assertion-key-only-for-tests"
+    encoded = base64.urlsafe_b64encode(secret).decode("ascii").rstrip("=")
+    monkeypatch.setenv("ATLAS_V4_RELAY_ASSERTION_KEYS_JSON", json.dumps({"test-key-1": encoded}))
+
+    now_ms = [1_800_000_000_000]
+    controlled_clock = SimpleNamespace(time=lambda: now_ms[0] / 1000)
+    monkeypatch.setattr(v4_router_module, "time", controlled_clock)
+    monkeypatch.setattr(v4_assertion_module, "time", controlled_clock)
+
+    _first_app, registry, first_client = make_app(tmp_path, monkeypatch)
+    principal_id, _device_ref = registry.create_principal(
+        principal_id="restart-principal", device_ref="restart-device"
+    )
+    token = "synthetic-restart-relay-credential-token"
+    registry.add_credential(principal_id, token, audience="RELAY")
+    grant_consent_capability(registry, principal_id)
+    registry.add_binding("restart-relay-session", principal_id)
+
+    def signed_body() -> bytes:
+        return json.dumps(
+            {
+                **CONSENT_BODY,
+                "request_id": str(uuid.uuid4()),
+                "idempotency_key": str(uuid.uuid4()),
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def relay_post(client, *, timestamp: int, nonce: str, body: bytes):
+        return client.post(
+            "/v4/sync/consent-state",
+            content=body,
+            headers=_relay_headers(
+                token,
+                secret,
+                "restart-relay-session",
+                nonce=nonce,
+                timestamp=timestamp,
+                body=body,
+            ),
+        )
+
+    # The assertion is created after the first app starts and is accepted once.
+    assertion_timestamp_ms = now_ms[0] + 10_000
+    now_ms[0] = assertion_timestamp_ms
+    assertion_body = signed_body()
+    accepted_before_restart = relay_post(
+        first_client,
+        timestamp=assertion_timestamp_ms,
+        nonce="restart-replay-nonce",
+        body=assertion_body,
+    )
+    assert accepted_before_restart.status_code == 200
+
+    # Recreating the app simulates a Core restart: the SQLite identity remains,
+    # while the router gets a new in-memory replay cache and startup timestamp.
+    restart_started_at_ms = 1_800_000_020_000
+    now_ms[0] = restart_started_at_ms
+    _restarted_app, _restarted_registry, restarted_client = make_app(tmp_path, monkeypatch)
+    replay_after_restart = relay_post(
+        restarted_client,
+        timestamp=assertion_timestamp_ms,
+        nonce="restart-replay-nonce",
+        body=assertion_body,
+    )
+    assert replay_after_restart.status_code == 401
+
+    # Fresh assertions at/after startup pass, and a connector clock 3 s behind
+    # is within the explicit 5 s startup tolerance.
+    after_start_timestamp_ms = restart_started_at_ms + 1_000
+    now_ms[0] = after_start_timestamp_ms
+    accepted_after_start = relay_post(
+        restarted_client,
+        timestamp=after_start_timestamp_ms,
+        nonce="restart-new-assertion-nonce",
+        body=signed_body(),
+    )
+    assert accepted_after_start.status_code == 200
+
+    tolerated_started_at_ms = restart_started_at_ms + 2_000
+    now_ms[0] = tolerated_started_at_ms
+    _tolerated_app, _tolerated_registry, tolerated_client = make_app(tmp_path, monkeypatch)
+    tolerated_timestamp_ms = tolerated_started_at_ms - 3_000
+    accepted_with_clock_skew = relay_post(
+        tolerated_client,
+        timestamp=tolerated_timestamp_ms,
+        nonce="restart-tolerated-skew-nonce",
+        body=signed_body(),
+    )
+    assert accepted_with_clock_skew.status_code == 200
+
+
+def test_file_replay_nonce_cache_is_shared_private_and_expiring(tmp_path):
+    cache_dir = tmp_path / "relay-replay-cache"
+    first = FileReplayNonceCache(cache_dir)
+    second = FileReplayNonceCache(cache_dir)
+    key_id = "synthetic-key-id"
+    nonce = "synthetic-nonce-that-must-not-be-stored-in-clear"
+    token = "synthetic-bearer-token-that-must-not-be-stored"
+
+    assert stat.S_IMODE(cache_dir.stat().st_mode) == 0o700
+    assert first.reserve(key_id, nonce, now=100)
+    assert not first.reserve(key_id, nonce, now=100)
+    assert not second.reserve(key_id, nonce, now=100)
+    assert second.reserve(key_id, "different-synthetic-nonce", now=101)
+
+    with ThreadPoolExecutor(max_workers=4) as workers:
+        concurrent = list(
+            workers.map(
+                lambda index: (first if index % 2 else second).reserve(
+                    key_id, "one-concurrent-reservation", now=102
+                ),
+                range(8),
+            )
+        )
+    assert concurrent.count(True) == 1
+
+    nonce_file = cache_dir / hashlib.sha256(f"{key_id}\0{nonce}".encode()).hexdigest()
+    assert stat.S_IMODE(nonce_file.stat().st_mode) == 0o600
+    assert nonce_file.read_bytes() == b"400000"
+    stored = b"".join(path.name.encode() + path.read_bytes() for path in cache_dir.iterdir())
+    assert nonce.encode() not in stored
+    assert token.encode() not in stored
+
+    # The first reservation expires at 400 s and can then be atomically renewed.
+    assert first.reserve(key_id, nonce, now=400)
+
+
+def test_file_replay_nonce_cache_rejects_symlinks_and_repository_paths(tmp_path):
+    target = tmp_path / "real-replay-cache"
+    target.mkdir(mode=0o700)
+    alias = tmp_path / "replay-cache-alias"
+    alias.symlink_to(target, target_is_directory=True)
+    with pytest.raises(OSError):
+        FileReplayNonceCache(alias)
+    with pytest.raises(ValueError, match="absolute path"):
+        FileReplayNonceCache("relative-replay-cache")
+
+    public = tmp_path / "public-replay-cache"
+    public.mkdir(mode=0o700)
+    public.chmod(0o755)
+    with pytest.raises(ValueError, match="mode 0700"):
+        FileReplayNonceCache(public)
+
+    repository_cache = Path(__file__).resolve().parents[2] / "backend" / "replay-cache-test-only"
+    with pytest.raises(ValueError, match="outside the repository"):
+        FileReplayNonceCache(repository_cache)
+
+
+def test_file_replay_nonce_cache_fails_closed_when_full_or_storage_errors(tmp_path, monkeypatch):
+    full_cache = FileReplayNonceCache(tmp_path / "bounded-cache", capacity=1)
+    assert full_cache.reserve("kid", "first", now=100)
+    assert not full_cache.reserve("kid", "second", now=100)
+
+    unreadable_cache = FileReplayNonceCache(tmp_path / "unreadable-cache")
+    with monkeypatch.context() as patch:
+        def unreadable(_directory_fd):
+            raise PermissionError("synthetic unreadable cache directory")
+
+        patch.setattr(v4_assertion_module.os, "scandir", unreadable)
+        assert not unreadable_cache.reserve("kid", "unreadable", now=100)
+
+    write_error_cache = FileReplayNonceCache(tmp_path / "write-error-cache")
+    assert write_error_cache.reserve("kid", "warm", now=100)
+    with monkeypatch.context() as patch:
+        def disk_full(_descriptor, _payload):
+            raise OSError(28, "synthetic full cache volume")
+
+        patch.setattr(v4_assertion_module.os, "write", disk_full)
+        assert not write_error_cache.reserve("kid", "disk-full", now=101)
+    # A partial/empty marker is retained and makes later attempts fail closed.
+    assert not write_error_cache.reserve("kid", "disk-full", now=101)
+
+
+def test_router_file_replay_cache_rejects_replay_after_clock_rollback(tmp_path, monkeypatch):
+    secret = b"synthetic-durable-cache-assertion-key-only-for-tests"
+    encoded = base64.urlsafe_b64encode(secret).decode("ascii").rstrip("=")
+    monkeypatch.setenv("ATLAS_V4_RELAY_ASSERTION_KEYS_JSON", json.dumps({"test-key-1": encoded}))
+    monkeypatch.setenv("ATLAS_V4_REPLAY_CACHE_DIR", str(tmp_path / "persistent-replay-cache"))
+
+    now_ms = [1_800_000_000_000]
+    controlled_clock = SimpleNamespace(time=lambda: now_ms[0] / 1000)
+    monkeypatch.setattr(v4_router_module, "time", controlled_clock)
+    monkeypatch.setattr(v4_assertion_module, "time", controlled_clock)
+
+    _first_app, registry, first_client = make_app(tmp_path, monkeypatch)
+    principal_id, _device_ref = registry.create_principal(
+        principal_id="durable-cache-principal", device_ref="durable-cache-device"
+    )
+    token = "synthetic-durable-cache-relay-credential-token"
+    registry.add_credential(principal_id, token, audience="RELAY")
+    grant_consent_capability(registry, principal_id)
+    registry.add_binding("durable-cache-relay-session", principal_id)
+    body = json.dumps(
+        {**CONSENT_BODY, "request_id": str(uuid.uuid4()), "idempotency_key": str(uuid.uuid4())},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    timestamp_ms = now_ms[0]
+    headers = _relay_headers(
+        token,
+        secret,
+        "durable-cache-relay-session",
+        nonce="durable-cache-clock-rollback-nonce",
+        timestamp=timestamp_ms,
+        body=body,
+    )
+    accepted = first_client.post("/v4/sync/consent-state", content=body, headers=headers)
+    assert accepted.status_code == 200
+
+    # A 30 s backward Core clock step makes the old timestamp appear 30 s in
+    # the future; startup and freshness checks pass, so the durable cache must deny it.
+    now_ms[0] = timestamp_ms - 30_000
+    _restarted_app, _restarted_registry, restarted_client = make_app(tmp_path, monkeypatch)
+    replayed = restarted_client.post("/v4/sync/consent-state", content=body, headers=headers)
+    assert replayed.status_code == 401
+
+
 def test_relay_assertion_key_file_requires_private_regular_file(tmp_path):
     encoded = base64.urlsafe_b64encode(b"synthetic-file-assertion-key-test-only").decode("ascii").rstrip("=")
     key_file = tmp_path / "relay-keys.json"
@@ -926,6 +1152,86 @@ def test_revoked_legacy_credential_stays_revoked_after_store_restart_and_reimpor
         assert connection.execute(
             "SELECT state FROM principals_v4 WHERE principal_id=?", (principal_id,)
         ).fetchone()["state"] == "ACTIVE"
+
+
+def test_legacy_mode_rejects_explicitly_revoked_imported_bearer(tmp_path, monkeypatch):
+    token = "x" * 48
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
+    monkeypatch.setenv("ATLAS_V4_CURSOR_SECRET", "synthetic-cursor-secret-for-tests-only-0001")
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", "synthetic-tool-token-unique")
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", "{}")
+    app = create_app(db_path=tmp_path / "legacy-revoked-bearer" / "atlas.sqlite3", token=token)
+    registry = V4PrincipalRegistry(app.state.store)
+    client = Client(app)
+    assert registry.credential_state(token) is None
+    historical = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+    assert historical.status_code == 200
+
+    _principal_id, _device_ref, credential_id = registry.import_legacy(token)
+    assert registry.credential_state(token) == "ACTIVE"
+    active = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+    assert active.status_code == 200
+    assert registry.revoke_credential(credential_id)
+    assert registry.credential_state(token) == "REVOKED"
+
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "AUTH_REQUIRED"
+
+
+def test_legacy_mode_accepts_historical_bearer_when_registry_table_is_absent(tmp_path, monkeypatch):
+    token = "y" * 48
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
+    monkeypatch.setenv("ATLAS_V4_CURSOR_SECRET", "synthetic-cursor-secret-for-tests-only-0001")
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", "synthetic-tool-token-unique")
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", "{}")
+    app = create_app(db_path=tmp_path / "legacy-without-registry" / "atlas.sqlite3", token=token)
+    client = Client(app)
+    with app.state.store.connect() as connection:
+        connection.execute("DROP TABLE credentials_v4")
+
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+
+    assert response.status_code == 200
+
+
+def test_legacy_mode_does_not_treat_revoked_nonlegacy_credential_as_tombstone(tmp_path, monkeypatch):
+    token = "z" * 48
+    monkeypatch.setenv("ATLAS_V4_AUTH_MODE", "legacy")
+    monkeypatch.setenv("ATLAS_V4_CURSOR_SECRET", "synthetic-cursor-secret-for-tests-only-0001")
+    monkeypatch.setenv("ATLAS_TOOL_TOKEN", "synthetic-tool-token-unique")
+    monkeypatch.setenv("ATLAS_V4_CAPABILITIES_JSON", "{}")
+    app = create_app(db_path=tmp_path / "legacy-with-revoked-direct" / "atlas.sqlite3", token=token)
+    registry = V4PrincipalRegistry(app.state.store)
+    client = Client(app)
+    principal_id, _device_ref = registry.create_principal(principal_id="revoked-direct-credential")
+    credential_id = registry.add_credential(principal_id, token, audience="DIRECT")
+    assert registry.revoke_credential(credential_id)
+
+    response = client.post(
+        "/v4/sync/consent-state",
+        headers=consent_headers(token),
+        json=CONSENT_BODY,
+    )
+
+    assert response.status_code == 200
 
 
 def test_legacy_dual_rollback_preserves_proposals_and_ack_events(tmp_path, monkeypatch):
