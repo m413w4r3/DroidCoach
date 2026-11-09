@@ -71,3 +71,27 @@ Avant une nouvelle tentative, choisir un seul chemin et obtenir son autorisation
 - **P2 runtime :** `UNKNOWN`, ouvert jusqu’à une vérification indépendante autorisée et accessible.
 
 Le résultat partiel est correctement borné : le transport est rapporté sain, mais aucune requête de sync n’a été émise et la sync Android n’est pas qualifiée. Garder `GO_V7_11_LIVE_CHANGE_READINESS` à **NO-GO**.
+
+## Preuve chat
+
+**Cible :** la preuve `12e023c` correspond au contenu de ce worktree (`HEAD=b5e948a`). Cette mise à jour s’ajoute à `b5e948a`, sans amendement.
+**Verdict final : GO local avec limitation / NO-GO cutover complet.** Aucun P0/P1 confirmé ; le P2 de sanitisation reste clos et le P2 runtime indépendant reste `UNKNOWN`.
+
+| Contrôle | Statut | Conclusion |
+|---|---|---|
+| Connexion app → Core v5 par le Coach | **PASS (preuve opérateur)** | L’écran Coach ouvert dans l’app a envoyé un POST au service de chat ; réponse HTTP 200 à 12:25:52Z. La réponse affichée est rapportée par l’utilisateur, non reproduite par le relecteur. Le contenu du message n’est pas repris ici. |
+| Connecteur | **PASS (preuve opérateur)** | `connections_opened_total=1`, `sessions_opened_total=1`, `active_sessions=1`, `requests_total=1`, `errors_total=0`, latence d’environ 13 s. |
+| Proxy WebSocket | **PASS (preuve opérateur)** | Upgrade HTTP 101 rapporté à 12:25:19Z. |
+| État local de l’app | **PASS (preuve opérateur)** | Deux fichiers d’état locaux ont été réécrits vers 12:25Z ; aucun contenu ni nom de fichier n’est exposé ici. |
+| `CoreV4SyncWorker` dédié | **NOT_OBSERVED** | Le job forcé a tourné sans requête HTTP séparée. Le chat prouve la connectivité app → Core v5, mais ne qualifie pas le cycle de sync d’état. |
+| Runtime indépendant | **UNKNOWN — P2 maintenu** | Les compteurs, codes HTTP et l’affichage de la réponse sont issus de la preuve opérateur. Aucun accès indépendant ADB, Docker ou réseau n’a été effectué dans cette re-revue. |
+| Gates | **PASS** | Sync post-migration : **PASS avec limitation** par le chat ; binding : **NOT_RUN** ; readiness du cutover complet : **NO-GO**. |
+
+### Findings après preuve chat
+
+- **P0 :** aucun.
+- **P1 :** aucun.
+- **P2 sanitisation :** clos ; le libellé de nœud est remplacé par un état générique, et cette section n’ajoute ni contenu de message, ni secret, ni donnée de routage détaillée.
+- **P2 runtime indépendant :** **UNKNOWN**, non promu en PASS.
+
+La connectivité app → Core v5 est désormais prouvée dans le parcours Coach observé et rapporté. La qualification reste limitée à ce parcours : le worker de sync dédié n’a pas émis de requête séparée, le binding n’a pas été testé et le cutover complet reste **NO-GO**.
