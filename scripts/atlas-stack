@@ -131,8 +131,8 @@ if (gateway_env.get("TMPDIR") != "/tmp"
         or "OPENCLAW_GATEWAY_TOKEN" in gateway_env
         or gateway_test != ["CMD", "node", "openclaw.mjs", "gateway", "health", "--port", "18789", "--timeout", "5000"]
         or gateway.get("healthcheck", {}).get("timeout") != "21s"
-        or gateway.get("healthcheck", {}).get("interval") != "30s"
-        or gateway.get("healthcheck", {}).get("retries") != 3
+        or gateway.get("healthcheck", {}).get("interval") != "10s"
+        or gateway.get("healthcheck", {}).get("retries") != 12
         or gateway.get("healthcheck", {}).get("start_period") != "20s"
         or not update_capture_mount
         or update_capture_mount.get("type") != "bind"
