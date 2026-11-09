@@ -94,7 +94,7 @@ Aucun `network_mode: host`, aucun socket Docker, aucun port Core/Gateway/Relay/m
 
 | Suite | SHA | Résultat |
 |---|---|---|
-| Backend `pytest -q` | intégré | 474 passed, 1 skipped |
+| Backend `pytest -q` | intégré A4 `62ee4e7` | **508 passed, 1 skipped** (86 tests V4 ciblés PASS) |
 | Connecteur `npm run test:unit` | intégré | 140 passed |
 | Proxy `node --test` | intégré | 20 passed, 1 skipped (Relay isolé non lancé) |
 | Audit production connecteur | intégré | 0 vulnérabilité |
