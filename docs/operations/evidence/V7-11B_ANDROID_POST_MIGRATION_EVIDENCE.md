@@ -14,9 +14,9 @@
 | Données applicatives | **PASS** — 15/15 noms `shared_prefs` présents, permissions 23/23 identiques |
 | Crash/ANR | **PASS** — aucun FATAL/ANR pour l'app |
 | Core v5 | **PASS** — health 200, v5, intégrité ok, FK 0 |
-| **Sync Android → Core v5** | **BLOCKED / NOT_RUN** — aucun chemin réseau disponible |
+| **Sync Android → Core v5** | **BLOCKED / PARTIAL** — chemin activé, aucune requête émise par l'app |
 
-La sync n'a pas échoué côté Core : elle n'a **jamais été tentée avec succès** faute de chemin réseau. Aucune requête applicative n'apparaît dans les logs Core depuis la migration.
+La sync n'a pas échoué côté Core : aucune requête applicative n'a été émise. Après activation du chemin Funnel/connecteur et exécution forcée du worker, l'app n'a toujours envoyé aucune requête. Le blocage est désormais **côté déclenchement/configuration de l'app**, pas côté Core.
 
 ## 2. État Pixel
 
@@ -38,17 +38,26 @@ Le fichier de synchronisation applicatif a été réécrit localement vers 12:07
 
 | Constat | Détail |
 |---|---|
-| Pixel | mode avion actif ; Wi-Fi connecté et validé ; **aucun VPN actif** |
-| Tailscale mobile | nœud `pixel-9-pro-xl` **hors ligne**, dernière vue il y a 34 jours |
+| Pixel | mode avion **désactivé par l'utilisateur** vers 12:13Z ; Wi-Fi connecté et validé ; **aucun VPN actif** |
+| Tailscale mobile | paquet installé, nœud **hors ligne**, dernière vue il y a 34 jours |
 | Core | écoute uniquement sur `127.0.0.1:8100` |
-| Relay | écoute uniquement sur `127.0.0.1:4402` |
-| Funnel Tailscale | `8443 → 127.0.0.1:4400` ; **proxy 4400 absent** |
+| Relay | écoute uniquement sur `127.0.0.1:4402`, inchangé |
+| Funnel Tailscale | `8443 → 127.0.0.1:4400` ; proxy 4400 **actif** |
 | Tailscale Serve | `/ → 127.0.0.1:8770` ; ne sert pas le Core |
-| Proxy/connecteur PC | absents (aucun listener 4400/4401) |
+| Proxy/connecteur PC | proxy 4400 **actif** (health 200) ; connecteur 4401 **actif** (`relay_connected=true`, 0 erreur) |
 | Requêtes app dans le Core | **aucune** (hors `/health` et le test legacy synthétique) |
-| Job de sync | `CoreV4SyncWorker` planifié mais non exécuté (latence restante) |
+| Job de sync | `CoreV4SyncWorker` exécuté via job 253 (`Running job [FORCED]`), puis replanifié ; aucune requête |
 
-Aucune modification réseau n'a été faite : le mode avion, le Wi-Fi, Tailscale, le Funnel, le Serve et les services 4400/4401 sont restés en l'état.
+Seul le mode avion a été désactivé par l'utilisateur. Le proxy et le connecteur ont ensuite été démarrés à la demande, sans modification du bearer, du Relay ni de la configuration Core. Aucun réglage Wi-Fi/Tailscale/Funnel n'a été changé.
+
+### 3.1 Activation du chemin Funnel et tentative de sync
+
+- Proxy 4400 : health 200, WebSocket upgrade 101, amont Relay 4402.
+- Connecteur 4401 : metrics 200, `relay_connected=true`, `errors_total=0`.
+- `MainActivity` ouverte ; job `CoreV4SyncWorker` forcé ; le job a démarré puis a été replanifié.
+- Aucune requête non-health dans le Core, aucun `requests_total` côté connecteur, aucune réécriture de `atlas_core_v4_sync.xml` (mtime inchangé à 12:07Z).
+- Conclusion : le chemin est sain, mais l'app n'émet pas de requête de sync (absence de données en attente, endpoint/trigger non aligné, ou sync non déclenchée). Le Core v5 n'est pas en cause.
+- Le proxy et le connecteur restent actifs mais ne sont pas supervisés ; ils s'arrêteront à la fin de session/au redémarrage. Aucun bearer ni Relay n'a été modifié.
 
 ## 4. Ce qui n'a pas été testé
 
@@ -62,19 +71,20 @@ Aucune modification réseau n'a été faite : le mode avion, le Wi-Fi, Tailscale
 
 | Gate | Statut |
 |---|---|
-| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **BLOCKED / NOT_RUN** — chemin réseau absent |
+| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **BLOCKED / PARTIAL** — chemin Funnel/connecteur sain, aucune requête app |
 | `GO_V7_11_IDENTITY_BINDING` | **NOT_RUN** — auth legacy, aucun principal/binding |
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** — cutover complet |
 
 ## 6. Conditions pour débloquer
 
-Une autorisation distincte est nécessaire pour l'un des chemins suivants :
+Le chemin Funnel/connecteur est désormais actif. Pour finaliser la vérification, il faut soit :
 
-1. exposer le Core au tailnet (Tailscale Serve sur `8100`, tailnet uniquement), puis relancer la vérification avec l'app ;
-2. démarrer le proxy 4400 et le connecteur 4401 avec leur configuration/identité, puis vérifier le chemin Relay ;
-3. confirmer que l'application doit rester locale et que la sync distante est hors périmètre.
+1. déclencher une action de sync côté app (écran/paramètre de synchronisation ou donnée en attente) et vérifier les requêtes Core/connecteur ;
+2. confirmer l'endpoint attendu par l'app (le fichier de sync ne contient pas d'URL extractible) et l'aligner si nécessaire ;
+3. exposer le Core au tailnet (Tailscale Serve `8100`) si l'app utilise ce chemin plutôt que le Funnel ;
+4. confirmer que l'application doit rester locale et que la sync distante est hors périmètre.
 
-Aucune de ces actions n'est couverte par la présente preuve. Le Core v5, les backups et l'image finale restent en place.
+Le Core v5, les backups, l'image finale, le proxy et le connecteur restent en place. Aucune permission, aucun consentement et aucun bearer n'ont été modifiés.
 
 ## 7. Sanitisation
 
