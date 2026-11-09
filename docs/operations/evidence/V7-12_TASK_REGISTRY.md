@@ -99,7 +99,22 @@
 | `GO_PIXEL_REMOTE_SYNC` | BLOCKED — Pixel non connecté |
 | `GO_PIXEL_COACH_DAILY_USE` | BLOCKED — Pixel non connecté |
 
-## 7. Notes de reprise
+## 7. Preuves parent à l'ouverture
+
+| Élément | Preuve |
+|---|---|
+| Backup de sécurité live | `~/.local/state/atlas-stack/backups/pre-v7-12-20261109T181021Z` (0700, 287 Mo), Core SQLite cohérente, `identity/devices/operations.json` valides, OpenClaw SQLite cohérente, manifeste SHA-256. |
+| Secrets V7-12 | `~/.local/state/atlas-core/secrets/v7-12/` (keyring + cursor, 0600, UID 10001) et `~/.local/state/atlas-relay/v7-12/` (assertion + service token, 0600, UID 1000). Key ID non secret : `v7-12-relay-20261109`. |
+| Env file privé | `~/.config/atlas/stack.env` 0600 ; aucun secret en valeur, uniquement des chemins. |
+| Base SQLite live | `user_version=5`, `integrity_check=ok`, FK 0 ; base passée en mode 0600, verrou 0600, replay 0700. |
+| Tests backend | `pytest -q` : **474 passed, 1 skipped** ; le correctif harness V7-11 `850f6a2` est présent. |
+| Tests connecteur | `npm run test:unit` : **131 passed**. |
+| Tests proxy | `node --test integrations/relay/proxy/test` : **19 passed**. |
+| Funnel public | `https://all.taildc7886.ts.net:8443/health` et `/ready` → 200 ; certificat Let's Encrypt valide. |
+| Pixel | Absent : `adb devices` vide, nœud Tailscale offline. |
+| Branche | `feat/atlas-v7-12-docker-runtime` : `931b028` (registre), `018fc91` (architecture), `65664e5` (migration/rollback). |
+
+## 8. Notes de reprise
 
 - Ne jamais utiliser `docker compose down -v`.
 - Ne jamais recréer `atlas-core-data`.
