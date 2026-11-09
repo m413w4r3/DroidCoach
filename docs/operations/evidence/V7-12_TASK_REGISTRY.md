@@ -112,7 +112,10 @@
 | Tests proxy | `node --test integrations/relay/proxy/test` : **19 passed**. |
 | Funnel public | `https://all.taildc7886.ts.net:8443/health` et `/ready` → 200 ; certificat Let's Encrypt valide. |
 | Pixel | Absent : `adb devices` vide, nœud Tailscale offline. |
-| Branche | `feat/atlas-v7-12-docker-runtime` : `931b028` (registre), `018fc91` (architecture), `65664e5` (migration/rollback). |
+| Branche | `feat/atlas-v7-12-docker-runtime` : `931b028` (registre), `018fc91` (architecture), `65664e5` (migration/rollback), `026e994` (A2 intégré). |
+| A2 intégré | `026e994a9c1265b7da1837576eff8a68ddb12cea` ; tests connecteur **140 passed**, proxy **20 passed / 1 skipped** (Relay isolé non lancé), audit production **0 vulnérabilité**. |
+| Relay non-root | Image `atlas-relay-v7-12:local` testée avec `--user 1000:1000 --read-only --tmpfs /tmp`, health `/health` = 200 ; le Compose doit fixer `user: "1000:1000"`. |
+| Service token | `~/.local/state/atlas-relay/v7-12/service-token` : 64 octets, sans newline final, 0600 UID 1000, conforme au lecteur A2. |
 
 ## 8. Notes de reprise
 
