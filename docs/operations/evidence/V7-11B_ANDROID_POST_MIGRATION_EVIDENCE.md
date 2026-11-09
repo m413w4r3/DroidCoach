@@ -14,9 +14,10 @@
 | Données applicatives | **PASS** — 15/15 noms `shared_prefs` présents, permissions 23/23 identiques |
 | Crash/ANR | **PASS** — aucun FATAL/ANR pour l'app |
 | Core v5 | **PASS** — health 200, v5, intégrité ok, FK 0 |
-| **Sync Android → Core v5** | **BLOCKED / PARTIAL** — chemin activé, aucune requête émise par l'app |
+| **Coach app → Core v5** | **PASS** — `POST /v2/agent/chat` **200** à 12:25:52Z, session connecteur active, réponse visible dans l'app |
+| **CoreV4SyncWorker dédié** | **NOT_OBSERVED** — le job a tourné mais n'a pas émis de requête HTTP séparée |
 
-La sync n'a pas échoué côté Core : aucune requête applicative n'a été émise. Après activation du chemin Funnel/connecteur et exécution forcée du worker, l'app n'a toujours envoyé aucune requête. Le blocage est désormais **côté déclenchement/configuration de l'app**, pas côté Core.
+La connexion app→Core v5 est **prouvée** par le chat Coach : l'utilisateur a écrit « test », le Core v5 a répondu `200` sur `/v2/agent/chat`, le connecteur a ouvert une session (1 requête, 0 erreur) et l'app a affiché la réponse. Le worker de synchronisation d'état n'a pas émis de requête séparée ; cela ne remet pas en cause la connectivité prouvée par le chat.
 
 ## 2. État Pixel
 
@@ -45,44 +46,50 @@ Le fichier de synchronisation applicatif a été réécrit localement vers 12:07
 | Funnel Tailscale | `8443 → 127.0.0.1:4400` ; proxy 4400 **actif** |
 | Tailscale Serve | `/ → 127.0.0.1:8770` ; ne sert pas le Core |
 | Proxy/connecteur PC | proxy 4400 **actif** (health 200) ; connecteur 4401 **actif** (`relay_connected=true`, 0 erreur) |
-| Requêtes app dans le Core | **aucune** (hors `/health` et le test legacy synthétique) |
-| Job de sync | `CoreV4SyncWorker` exécuté via job 253 (`Running job [FORCED]`), puis replanifié ; aucune requête |
+| Requêtes app dans le Core | **`POST /v2/agent/chat` 200** à 12:25:52Z (hors `/health` et test legacy synthétique) |
+| Session connecteur | `connections_opened_total=1`, `sessions_opened_total=1`, `active_sessions=1`, `requests_total=1`, `errors_total=0`, latence ~13 s |
+| WebSocket proxy | upgrades **101** à 12:25:19Z |
+| Job de sync | `CoreV4SyncWorker` exécuté via job 253 (`Running job [FORCED]`), puis replanifié ; aucune requête HTTP séparée |
+| État app | `atlas_local_state.xml` et `atlas_relay_configuration.xml` réécrits à 12:25Z ; réponse Coach visible |
 
 Seul le mode avion a été désactivé par l'utilisateur. Le proxy et le connecteur ont ensuite été démarrés à la demande, sans modification du bearer, du Relay ni de la configuration Core. Aucun réglage Wi-Fi/Tailscale/Funnel n'a été changé.
 
-### 3.1 Activation du chemin Funnel et tentative de sync
+### 3.1 Activation du chemin Funnel et preuve de connexion Coach
 
 - Proxy 4400 : health 200, WebSocket upgrade 101, amont Relay 4402.
 - Connecteur 4401 : metrics 200, `relay_connected=true`, `errors_total=0`.
-- `MainActivity` ouverte ; job `CoreV4SyncWorker` forcé ; le job a démarré puis a été replanifié.
-- Aucune requête non-health dans le Core, aucun `requests_total` côté connecteur, aucune réécriture de `atlas_core_v4_sync.xml` (mtime inchangé à 12:07Z).
-- Conclusion : le chemin est sain, mais l'app n'émet pas de requête de sync (absence de données en attente, endpoint/trigger non aligné, ou sync non déclenchée). Le Core v5 n'est pas en cause.
+- `MainActivity` ouverte ; l'utilisateur a envoyé « test » au Coach.
+- Core v5 : **`POST /v2/agent/chat` 200** à 12:25:52Z.
+- Connecteur : `connections_opened_total=1`, `sessions_opened_total=1`, `active_sessions=1`, `requests_total=1`, `errors_total=0`, latence ~13 s.
+- Proxy : upgrades **101** à 12:25:19Z.
+- App : `atlas_local_state.xml` et `atlas_relay_configuration.xml` réécrits à 12:25Z ; réponse Coach affichée.
+- `CoreV4SyncWorker` forcé (job 253) : le job a démarré puis a été replanifié, sans requête HTTP séparée. Ce worker d'état n'est pas la preuve de connectivité ; le chat l'est.
 - Le proxy et le connecteur restent actifs mais ne sont pas supervisés ; ils s'arrêteront à la fin de session/au redémarrage. Aucun bearer ni Relay n'a été modifié.
 
 ## 4. Ce qui n'a pas été testé
 
-- Sync Android avec le Core v5.
+- Sync d'état du `CoreV4SyncWorker` en tant que requête HTTP séparée ; le chat Coach a prouvé la connectivité app→Core v5.
 - Rafraîchissement des consentements et des propositions via l'app.
-- Chat Coach/OpenClaw réel.
+- APPLY, backfill, réconciliation d'expiration, révocation, changement de bearer.
 - Keystore au-delà de l'absence d'erreur (clé non exportable).
-- APPLY, backfill, révocation, changement de bearer.
 
 ## 5. Gates
 
 | Gate | Statut |
 |---|---|
-| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **BLOCKED / PARTIAL** — chemin Funnel/connecteur sain, aucune requête app |
+| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **PASS avec limitation** — chat Coach `POST /v2/agent/chat` 200 et session connecteur ; worker d'état dédié non observé |
 | `GO_V7_11_IDENTITY_BINDING` | **NOT_RUN** — auth legacy, aucun principal/binding |
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** — cutover complet |
 
-## 6. Conditions pour débloquer
+## 6. Conditions restantes
 
-Le chemin Funnel/connecteur est désormais actif. Pour finaliser la vérification, il faut soit :
+Le chemin Funnel/connecteur est actif et la connexion Coach est prouvée. Les points suivants restent hors de cette preuve :
 
-1. déclencher une action de sync côté app (écran/paramètre de synchronisation ou donnée en attente) et vérifier les requêtes Core/connecteur ;
-2. confirmer l'endpoint attendu par l'app (le fichier de sync ne contient pas d'URL extractible) et l'aligner si nécessaire ;
-3. exposer le Core au tailnet (Tailscale Serve `8100`) si l'app utilise ce chemin plutôt que le Funnel ;
-4. confirmer que l'application doit rester locale et que la sync distante est hors périmètre.
+1. **Binding/principal V4** : auth legacy, 0 principal et 0 credential ; aucune identité/binding configurée.
+2. **Relay/connecteur** : proxy et connecteur actifs mais non supervisés ; recréation Relay non testée, sauvegarde connecteur 3 fichiers non déployée.
+3. **Backup** : local au même hôte, sans chiffrement au repos ni copie hors site ; DB live `0644`.
+4. **Données** : 3 propositions (APPLIED/EXPIRED/REJECTED), aucun APPLY/backfill/réconciliation supplémentaire.
+5. **Sync d'état dédiée** : worker non observé en requête HTTP séparée ; le chat Coach suffit à la connectivité, pas à qualifier chaque cycle de sync.
 
 Le Core v5, les backups, l'image finale, le proxy et le connecteur restent en place. Aucune permission, aucun consentement et aucun bearer n'ont été modifiés.
 
