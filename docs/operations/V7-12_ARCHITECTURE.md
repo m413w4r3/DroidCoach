@@ -104,7 +104,8 @@ Le proxy et le connecteur n'acceptent ces noms DNS **que** dans un mode Docker e
 ### OpenClaw
 
 - Bind mount complet de `~/.openclaw` vers le **même chemin absolu** `/home/nill/.openclaw`.
-- `HOME=/home/nill`, UID/GID 1000 : les chemins absolus déjà présents dans `openclaw.json` restent valides.
+- Bind séparé de `~/.openclaw.update-captures` vers `/home/nill/.openclaw.update-captures` (0700, UID 1000) pour les captures Doctor pré-réparation ; sans lui, le bootstrap journalise `EROFS` et continue.
+- `HOME=/home/nill`, `TMPDIR=/tmp`, `XDG_CACHE_HOME=/home/nill/.cache`, UID/GID 1000 : les chemins absolus déjà présents dans `openclaw.json` restent valides.
 - Préservés : configuration, agent `atlas`, sessions, bases SQLite, authentification provider, workspace, répertoire de secrets et clé de chiffrement des profils.
 - Le service systemd `openclaw-gateway.service` reste installé pour rollback mais est arrêté avant le démarrage du conteneur. Deux Gateways ne doivent jamais écrire dans le même état.
 

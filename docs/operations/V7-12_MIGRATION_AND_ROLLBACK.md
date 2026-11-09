@@ -90,7 +90,7 @@ curl -kfsS https://all.taildc7886.ts.net:8443/ready
 Préconditions : Pixel connecté en USB, APK V7-11 présent et hash vérifié, session Relay `pixel-v7` active.
 
 1. Pré-vol lecture seule (API 37, package, hash, rôle HOME, permissions).
-2. Vérifier que l'app est en mode RELAY et que la session Noise se connecte via le Funnel public.
+2. Vérifier que l'app est en mode RELAY et que la session Noise se connecte via le Funnel public. L'APK V7-11 propose encore DIRECT et le sélectionne par défaut sur une configuration neuve : choisir explicitement RELAY dans l'écran de configuration, sans réappairer ni régénérer l'identité.
 3. Coach : démarrage à froid, nouvelle conversation, plusieurs messages, persistance.
 4. Sync : « Synchroniser maintenant ». Comme le `device_ref` est nouveau, l'app doit demander un **re-consentement explicite** ; ne jamais modifier les consentements par script.
 5. Plan : proposition A0, diff, REJECT sans mutation, APPLY seulement après validation UI, ACK durable.
