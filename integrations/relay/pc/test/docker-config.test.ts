@@ -4,11 +4,15 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertBackendHttpUrl } from "../src/backend.js";
-import { configFromEnvironment, createConnector, readPrivateServiceToken, validateConnectorEndpoints } from "../src/connector.js";
+import { configFromEnvironment, createConnector, principalMapCoversActiveDevices, readPrivateServiceToken, validateConnectorEndpoints, type ConnectorRuntime } from "../src/connector.js";
+import { DeviceRegistry, type DeviceRecord } from "../src/device-registry.js";
+import { PROTOCOL_V2 } from "../src/protocol.js";
 import { parseRelayUrl } from "../src/relay-link.js";
+import { FakeSecureChannel, hello, request } from "./helpers.js";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryDirectories: string[] = [];
+const activeRuntimes: ConnectorRuntime[] = [];
 
 beforeEach(() => {
   vi.stubEnv("ATLAS_DOCKER_NETWORK", "");
@@ -20,7 +24,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  for (const runtime of activeRuntimes.splice(0).reverse()) await runtime.stop();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   await Promise.all(temporaryDirectories.splice(0).map((directory) =>
     rm(directory, { recursive: true, force: true })));
 });
@@ -154,6 +160,66 @@ describe("ATLAS_SERVICE_TOKEN_FILE", () => {
   });
 });
 
+describe("principal map active-device coverage", () => {
+  it("requires every active device, allows extra entries, and ignores revoked devices", () => {
+    const active = makeDeviceRecord("relay-active");
+    const revoked = makeDeviceRecord("relay-revoked", "2026-11-01T00:00:00.000Z");
+    const credential = { principalId: "synthetic-principal", credential: "synthetic-credential" };
+
+    expect(principalMapCoversActiveDevices(new Map([[active.device_id, credential]]), [active])).toBe(true);
+    expect(principalMapCoversActiveDevices(new Map(), [active])).toBe(false);
+    expect(principalMapCoversActiveDevices(new Map([
+      [active.device_id, credential], ["relay-extra", credential],
+    ]), [active])).toBe(true);
+    expect(principalMapCoversActiveDevices(new Map(), [revoked])).toBe(true);
+    expect(principalMapCoversActiveDevices(new Map(), [])).toBe(true);
+  });
+
+  it("keeps V4 active when the valid map covers the active registry", async () => {
+    const { stateDir, paired, mapPath, credentialPath } = await preparePrincipalMap();
+    await writePrivateFile(credentialPath, "synthetic-principal-credential\n");
+    await writePrincipalMap(mapPath, {
+      [paired.device.device_id]: { principal_id: "synthetic-principal", credential_file: credentialPath },
+    });
+    const calls = await exerciseV4Chat(stateDir, paired.device.device_id, paired.token, mapPath);
+    expect(calls).toMatchObject([{
+      url: "http://127.0.0.1:8100/v4/agent/chat",
+      authorization: "Bearer synthetic-principal-credential",
+      contract: "4",
+      capability: "coach.chat",
+    }]);
+  });
+
+  it("disables V4 before loading map credentials or assertion when an active device is missing", async () => {
+    const { stateDir, paired, mapPath, credentialPath, legacyTokenPath } = await preparePrincipalMap();
+    await writePrivateFile(credentialPath, "synthetic-principal-credential\n");
+    await writePrivateFile(legacyTokenPath, "synthetic-legacy-bearer\n");
+    await writePrincipalMap(mapPath, {
+      "relay-device-extra": { principal_id: "synthetic-extra-principal", credential_file: credentialPath },
+    });
+    const calls = await exerciseV4Chat(stateDir, paired.device.device_id, paired.token, mapPath, {
+      v4AndroidTokenFile: legacyTokenPath,
+      verifyV2: true,
+    });
+    expect(calls).toMatchObject([{
+      url: "http://127.0.0.1:8100/v2/agent/status",
+      authorization: "Bearer synthetic-service-bearer",
+      contract: null,
+    }]);
+  });
+
+  it("keeps V4 disabled for a covered map whose credential file is invalid", async () => {
+    const { stateDir, paired, mapPath, credentialPath } = await preparePrincipalMap();
+    await writeFile(credentialPath, "synthetic-invalid-mode-credential\n", { mode: 0o600 });
+    await chmod(credentialPath, 0o644);
+    await writePrincipalMap(mapPath, {
+      [paired.device.device_id]: { principal_id: "synthetic-principal", credential_file: credentialPath },
+    });
+    const calls = await exerciseV4Chat(stateDir, paired.device.device_id, paired.token, mapPath);
+    expect(calls).toHaveLength(0);
+  });
+});
+
 async function makeTemporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "atlas-service-token-test-"));
   temporaryDirectories.push(directory);
@@ -163,4 +229,117 @@ async function makeTemporaryDirectory(): Promise<string> {
 async function writePrivateFile(path: string, content: string): Promise<void> {
   await writeFile(path, content, { mode: 0o600 });
   await chmod(path, 0o600);
+}
+
+function makeDeviceRecord(device_id: string, revoked_at: string | null = null): DeviceRecord {
+  return {
+    device_id,
+    label: "synthetic device",
+    token_sha256: "0".repeat(64),
+    capabilities: [],
+    created_at: "2026-11-01T00:00:00.000Z",
+    revoked_at,
+  };
+}
+
+async function preparePrincipalMap(): Promise<{
+  stateDir: string;
+  paired: Awaited<ReturnType<DeviceRegistry["pair"]>>;
+  mapPath: string;
+  credentialPath: string;
+  legacyTokenPath: string;
+}> {
+  const stateDir = await makeTemporaryDirectory();
+  const registry = new DeviceRegistry(join(stateDir, "devices.json"));
+  const paired = await registry.pair("synthetic principal-map device", ["v4.coach.chat", "coach.status"]);
+  return {
+    stateDir,
+    paired,
+    mapPath: join(stateDir, "principal-map.json"),
+    credentialPath: join(stateDir, "principal-credential"),
+    legacyTokenPath: join(stateDir, "legacy-token"),
+  };
+}
+
+async function writePrincipalMap(path: string, value: Record<string, { principal_id: string; credential_file: string }>): Promise<void> {
+  await writePrivateFile(path, JSON.stringify(value));
+}
+
+async function exerciseV4Chat(
+  stateDir: string,
+  deviceId: string,
+  deviceToken: string,
+  mapPath: string,
+  overrides: { v4AndroidTokenFile?: string; verifyV2?: boolean } = {},
+): Promise<Array<{ url: string; authorization: string | null; contract: string | null; capability: string | null }>> {
+  vi.stubEnv("NODE_ENV", "test");
+  const calls: Array<{ url: string; authorization: string | null; contract: string | null; capability: string | null }> = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    calls.push({
+      url: String(input),
+      authorization: headers.get("authorization"),
+      contract: headers.get("x-atlas-contract-version"),
+      capability: headers.get("x-atlas-capability"),
+    });
+    return new Response(JSON.stringify({ reply: "synthetic answer" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  });
+  const { verifyV2 = false, ...connectorOverrides } = overrides;
+  const runtime = await createConnector({
+    stateDir,
+    relayUrl: "wss://relay.example.org",
+    allowLoopbackWs: false,
+    backendUrl: "http://127.0.0.1:8100",
+    serviceToken: "synthetic-service-bearer",
+    metricsPort: 0,
+    v4Enabled: true,
+    v4AuthMode: "principal",
+    requirePrincipalBinding: true,
+    v4PrincipalMapFile: mapPath,
+    v4RelayAssertionKeyId: "synthetic-test-key",
+    v4RelayAssertionSecret: Buffer.from("synthetic-test-relay-assertion-secret").toString("base64url"),
+    ...connectorOverrides,
+  });
+  activeRuntimes.push(runtime);
+
+  const channel = new FakeSecureChannel();
+  const peer = runtime.sessions.create(channel);
+  await peer.receive(JSON.stringify(hello(deviceId, deviceToken, {
+    protocol: PROTOCOL_V2,
+    capabilities: ["v4.coach.chat", "coach.status"],
+  })));
+  const sessionId = String(channel.lastMessage().session_id);
+  const requestId = "00000000-0000-4000-8000-000000000112";
+  const operationRequest = request(sessionId, "v4.coach.chat.request", {
+    contract_version: 4,
+    schema_version: 4,
+    request_id: requestId,
+    capability: "coach.chat",
+    sent_at: "2026-11-01T00:00:00Z",
+    conversation_id: "synthetic-principal-map-session",
+    message: "Synthetic chat request",
+    consent_version: 1,
+    shared_categories: [],
+  }, {
+    protocol: PROTOCOL_V2,
+    request_id: requestId,
+    idempotency_key: requestId,
+  });
+  try {
+    await peer.receive(JSON.stringify(operationRequest));
+    if (verifyV2) {
+      const v2RequestId = "00000000-0000-4000-8000-000000000113";
+      await peer.receive(JSON.stringify(request(sessionId, "coach.status", {}, {
+        protocol: PROTOCOL_V2,
+        request_id: v2RequestId,
+        idempotency_key: v2RequestId,
+      })));
+    }
+    return calls;
+  } finally {
+    peer.close();
+  }
 }

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertBackendHttpUrl, BackendClient } from "./backend.js";
-import { DeviceRegistry } from "./device-registry.js";
+import { DeviceRegistry, type DeviceRecord } from "./device-registry.js";
 import { ConnectorDiagnostics } from "./diagnostics.js";
 import { loadOrCreateIdentity } from "./identity.js";
 import { ConnectorMetrics } from "./metrics.js";
@@ -108,21 +108,32 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   let serviceToken = config.serviceToken;
   if (config.serviceTokenFile !== undefined) serviceToken = await readPrivateServiceToken(config.serviceTokenFile);
 
+  const registry = new DeviceRegistry(join(config.stateDir, "devices.json"));
+  // Validate existing state before creating any connector identity or opening a relay.
+  const devices = await registry.list();
+
   let v4Enabled = config.v4Enabled === true;
   if (!["legacy", "dual", "principal"].includes(config.v4AuthMode ?? "legacy")) v4Enabled = false;
   let principalCredentials: Map<string, { principalId: string; credential: string }> | undefined;
   let legacyAndroidToken: string | undefined;
   let relayAssertion: { keyId: string; secret: Uint8Array } | undefined;
   if (v4Enabled) {
-    const map = await readPrivateV4PrincipalMap(config.v4PrincipalMapFile);
+    const map = await readPrivateV4PrincipalMapIndex(config.v4PrincipalMapFile);
     const credentialMode = selectV4CredentialMode(
       config.v4AuthMode ?? "legacy", config.requirePrincipalBinding === true, map.status,
     );
     if (credentialMode === "principal-map" && map.status === "valid") {
-      relayAssertion = await readPrivateV4RelayAssertion(config.v4RelayAssertionKeyId,
-        config.v4RelayAssertionSecretFile, config.v4RelayAssertionSecret);
-      if (relayAssertion) principalCredentials = map.credentials;
-      else v4Enabled = false;
+      if (!principalMapCoversActiveDevices(map.entries, devices)) {
+        v4Enabled = false;
+        process.stderr.write("ATLAS V4 disabled: principal map does not cover active devices\n");
+      } else {
+        principalCredentials = await loadPrincipalMapCredentials(map.entries);
+        if (principalCredentials) {
+          relayAssertion = await readPrivateV4RelayAssertion(config.v4RelayAssertionKeyId,
+            config.v4RelayAssertionSecretFile, config.v4RelayAssertionSecret);
+        }
+        if (!principalCredentials || !relayAssertion) v4Enabled = false;
+      }
     } else if (credentialMode === "legacy-fallback") {
       legacyAndroidToken = await readPrivateV4AndroidToken(config.v4AndroidTokenFile);
       v4Enabled = Boolean(legacyAndroidToken);
@@ -130,9 +141,6 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
       v4Enabled = false;
     }
   }
-  const registry = new DeviceRegistry(join(config.stateDir, "devices.json"));
-  // Validate existing state before creating any connector identity or opening a relay.
-  await registry.list();
   const identityPath = join(config.stateDir, "identity.json");
   const { identity, keyPair } = await loadOrCreateIdentity(identityPath);
   const metrics = new ConnectorMetrics();
@@ -202,6 +210,11 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
       await metrics.close();
     },
   };
+}
+
+/** Returns true when every non-revoked device has a principal-map entry. */
+export function principalMapCoversActiveDevices<T>(credentials: Map<string, T>, devices: DeviceRecord[]): boolean {
+  return devices.every((device) => device.revoked_at !== null || credentials.has(device.device_id));
 }
 
 export function selectV4CredentialMode(
@@ -284,8 +297,21 @@ export type PrincipalMapRead =
   | { status: "invalid" }
   | { status: "valid"; credentials: Map<string, { principalId: string; credential: string }> };
 
+type PrincipalMapEntry = { principalId: string; credentialFile: string };
+type PrincipalMapIndexRead =
+  | { status: "absent" }
+  | { status: "invalid" }
+  | { status: "valid"; entries: Map<string, PrincipalMapEntry> };
+
 /** Loads Relay-ID → principal credential mappings from a private JSON file. */
 export async function readPrivateV4PrincipalMap(path: string | undefined): Promise<PrincipalMapRead> {
+  const map = await readPrivateV4PrincipalMapIndex(path);
+  if (map.status !== "valid") return map;
+  const credentials = await loadPrincipalMapCredentials(map.entries);
+  return credentials ? { status: "valid", credentials } : { status: "invalid" };
+}
+
+async function readPrivateV4PrincipalMapIndex(path: string | undefined): Promise<PrincipalMapIndexRead> {
   if (!path) return { status: "absent" };
   try {
     await lstat(path);
@@ -300,7 +326,7 @@ export async function readPrivateV4PrincipalMap(path: string | undefined): Promi
     if (!isRecord(value) || Object.keys(value).length < 1 || Object.keys(value).length > 4096) {
       return { status: "invalid" };
     }
-    const credentials = new Map<string, { principalId: string; credential: string }>();
+    const entries = new Map<string, PrincipalMapEntry>();
     for (const [relayDeviceId, entry] of Object.entries(value)) {
       if (!relayDeviceId || relayDeviceId.length > 256 || !isRecord(entry)
         || Object.keys(entry).sort().join(",") !== "credential_file,principal_id"
@@ -308,14 +334,24 @@ export async function readPrivateV4PrincipalMap(path: string | undefined): Promi
         || typeof entry.credential_file !== "string" || !isAbsolute(entry.credential_file)) {
         return { status: "invalid" };
       }
-      const credential = await readPrivateV4AndroidToken(entry.credential_file);
-      if (!credential) return { status: "invalid" };
-      credentials.set(relayDeviceId, { principalId: entry.principal_id, credential });
+      entries.set(relayDeviceId, { principalId: entry.principal_id, credentialFile: entry.credential_file });
     }
-    return { status: "valid", credentials };
+    return { status: "valid", entries };
   } catch {
     return { status: "invalid" };
   }
+}
+
+async function loadPrincipalMapCredentials(
+  entries: Map<string, PrincipalMapEntry>,
+): Promise<Map<string, { principalId: string; credential: string }> | undefined> {
+  const credentials = new Map<string, { principalId: string; credential: string }>();
+  for (const [relayDeviceId, entry] of entries) {
+    const credential = await readPrivateV4AndroidToken(entry.credentialFile);
+    if (!credential) return undefined;
+    credentials.set(relayDeviceId, { principalId: entry.principalId, credential });
+  }
+  return credentials;
 }
 
 /** Loads a base64url-encoded dedicated connector-to-Core assertion secret. */
