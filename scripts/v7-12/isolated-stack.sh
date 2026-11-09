@@ -232,7 +232,7 @@ PY
 CORE_ID="$(compose ps -q atlas-core)"
 [[ -n "$CORE_ID" ]] || fail "isolated Core container is missing"
 SEED_CODE='import json,sys; from atlas_backend.store import SQLiteStore; from atlas_backend.v4_auth import V4PrincipalRegistry; d=json.load(sys.stdin); r=V4PrincipalRegistry(SQLiteStore("/data/atlas.sqlite3")); r.create_principal(principal_id=d["principal_id"],device_ref=d["device_ref"]); r.add_credential(d["principal_id"],d["relay_credential"],audience="RELAY",credential_id=d["credential_id"]); r.set_capability(d["principal_id"],"consent.state.write",True); r.add_binding(d["relay_device_id"],d["principal_id"]); print("synthetic_registry_seeded")'
-docker exec -i --user 0 -w /app/backend "$CORE_ID" python -c "$SEED_CODE" < "$STACK_TMP/seed.json"
+docker exec -i --user 10001:10001 -w /app/backend "$CORE_ID" python -c "$SEED_CODE" < "$STACK_TMP/seed.json"
 
 python3 - "$STACK_TMP/seed.json" <<'PY'
 import base64
@@ -353,7 +353,7 @@ print("core_volume_persistence=PASS")
 PY
 
 REVOKE_CODE='import json,sys; from atlas_backend.store import SQLiteStore; from atlas_backend.v4_auth import V4PrincipalRegistry; d=json.load(sys.stdin); assert V4PrincipalRegistry(SQLiteStore("/data/atlas.sqlite3")).revoke_credential(d["credential_id"]); print("synthetic_credential_revoked")'
-docker exec -i --user 0 -w /app/backend "$CORE_ID" python -c "$REVOKE_CODE" < "$STACK_TMP/seed.json"
+docker exec -i --user 10001:10001 -w /app/backend "$CORE_ID" python -c "$REVOKE_CODE" < "$STACK_TMP/seed.json"
 
 python3 - "$STACK_TMP/seed.json" <<'PY'
 import base64,hashlib,hmac,json,sys,time,uuid
