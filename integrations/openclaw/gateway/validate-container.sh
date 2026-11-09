@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# A3 historical validation of the image default entrypoint (which runs
+# `openclaw doctor --fix`). V7-12 production deliberately uses
+# `init: true` + `entrypoint: ["node", "/app/openclaw.mjs"]` to bypass that
+# unattended repair on the live codex-plugin state; see README.md. This script
+# must be adapted before being used as the production oracle.
 set -Eeuo pipefail
 set +x
 umask 077

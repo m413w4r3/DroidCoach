@@ -197,6 +197,13 @@ services:
 
   openclaw-gateway:
     image: ghcr.io/openclaw/openclaw@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5
+    # Bypass the image activation wrapper, which runs `doctor --fix` before
+    # every gateway start. The live codex plugin state refuses that unattended
+    # migration; the systemd production Gateway also runs the CLI directly.
+    init: true
+    entrypoint:
+      - node
+      - /app/openclaw.mjs
     user: "1000:1000"
     restart: unless-stopped
     read_only: true
@@ -222,8 +229,6 @@ services:
         bind:
           create_host_path: false
     command:
-      - node
-      - openclaw.mjs
       - gateway
       - --port
       - "18789"

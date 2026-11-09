@@ -2,6 +2,22 @@
 
 Image validée : `ghcr.io/openclaw/openclaw@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5` (2026.10.5).
 
+> **Écart production V7-12 (2026-11-09).** L'entrypoint image `docker-entrypoint.mjs`
+> lance automatiquement `openclaw doctor --fix --non-interactive` avant chaque
+> démarrage du Gateway. Sur l'état live, Doctor refuse la migration du plugin
+> `codex` (« immutable action order and authority ») et empêche le Gateway de
+> démarrer. La production utilise donc `init: true` et
+> `entrypoint: ["node", "/app/openclaw.mjs"]`, avec
+> `command: ["gateway", "--port", "18789", "--bind", "lan"]` : c'est exactement
+> la CLI lancée par le service systemd, sans réparation automatique. Les
+> captures temporaires de plugin incompatibles ont été déplacées sous
+> `~/.openclaw.update-captures/plugin-captures-quarantine-*` ; l'état durable
+> `openclaw.json`, agents, sessions, SQLite, auth provider et workspace n'a pas
+> été modifié. Validé en live : health `OK`, plugin `codex` chargé, agent
+> `atlas`, modèle `openai/gpt-6-luna`, `atlas_core_tools` désactivé. La
+> définition ci-dessous reste la référence A3 d'origine (entrypoint image
+> complet) ; le Compose V7-12 la remplace par l'écart documenté ci-dessus.
+
 Définition à intégrer au service Compose `openclaw-gateway` :
 
 ```yaml

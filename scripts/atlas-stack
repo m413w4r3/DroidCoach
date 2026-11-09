@@ -257,10 +257,11 @@ service_ports() {
 }
 
 connector_metrics() {
-  local raw
+  local raw parsed
   raw="$(compose exec -T atlas-connector node -e "fetch('http://127.0.0.1:4401/metrics').then(async r=>{if(!r.ok)process.exit(2);const x=await r.json();process.stdout.write(JSON.stringify({relay_connected:x.relay_connected===true,active_sessions:Number.isInteger(x.active_sessions)?x.active_sessions:null}))}).catch(()=>process.exit(2))" 2>/dev/null || true)"
-  if [[ "$raw" =~ ^\{"relay_connected":(true|false),"active_sessions":([0-9]+|null)\}$ ]]; then
-    printf '%s\n' "$raw"
+  parsed="$(printf '%s' "$raw" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d.get("relay_connected"),bool); a=d.get("active_sessions"); assert a is None or isinstance(a,int); print("relay_connected=%s active_sessions=%s" % (str(d["relay_connected"]).lower(), a))' 2>/dev/null || true)"
+  if [[ -n "$parsed" ]]; then
+    printf '%s\n' "$parsed"
   else
     printf 'unavailable\n'
   fi
@@ -284,10 +285,8 @@ render_status() {
   metrics="$(connector_metrics)"
   if [[ "$metrics" == unavailable ]]; then
     printf 'metrics unavailable\n'
-  elif [[ "$metrics" =~ ^\{"relay_connected":(true|false),"active_sessions":([0-9]+|null)\}$ ]]; then
-    printf 'relay_connected=%s active_sessions=%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
   else
-    printf 'metrics unavailable\n'
+    printf '%s\n' "$metrics"
   fi
 }
 
