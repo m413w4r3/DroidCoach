@@ -3,22 +3,24 @@ import { lstat, open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BackendClient } from "./backend.js";
+import { assertBackendHttpUrl, BackendClient } from "./backend.js";
 import { DeviceRegistry } from "./device-registry.js";
 import { ConnectorDiagnostics } from "./diagnostics.js";
 import { loadOrCreateIdentity } from "./identity.js";
 import { ConnectorMetrics } from "./metrics.js";
 import { OperationExecutor } from "./operations.js";
-import { RelayLink } from "./relay-link.js";
+import { parseRelayUrl, RelayLink } from "./relay-link.js";
 import { SessionManager } from "./session.js";
 
 export interface ConnectorConfig {
   stateDir: string;
   relayUrl: string;
   allowLoopbackWs: boolean;
+  dockerNetwork?: boolean;
   serverId?: string;
   backendUrl: string;
   serviceToken?: string;
+  serviceTokenFile?: string;
   v4Enabled?: boolean;
   v4AuthMode?: string;
   requirePrincipalBinding?: boolean;
@@ -43,6 +45,11 @@ export interface ConnectorRuntime {
 }
 
 export function configFromEnvironment(): ConnectorConfig {
+  const dockerNetwork = process.env.ATLAS_DOCKER_NETWORK === "1";
+  const relayUrl = process.env.ATLAS_RELAY_URL ?? "ws://127.0.0.1:4400";
+  const backendUrl = process.env.ATLAS_BACKEND_URL ?? "http://127.0.0.1:8100";
+  const serviceToken = process.env.ATLAS_SERVICE_TOKEN;
+  const serviceTokenFile = process.env.ATLAS_SERVICE_TOKEN_FILE;
   const stateDir = process.env.ATLAS_RELAY_STATE_DIR ?? join(homedir(), ".local", "state", "atlas-relay");
   const metricsPort = integerEnv("ATLAS_METRICS_PORT", 4401, 1, 65_535);
   const v4AuthMode = process.env.ATLAS_V4_AUTH_MODE ?? "legacy";
@@ -61,11 +68,13 @@ export function configFromEnvironment(): ConnectorConfig {
   }
   return {
     stateDir,
-    relayUrl: process.env.ATLAS_RELAY_URL ?? "ws://127.0.0.1:4400",
-    allowLoopbackWs: process.env.ATLAS_ALLOW_LOOPBACK_WS === "1",
+    relayUrl,
+    allowLoopbackWs: dockerNetwork || process.env.ATLAS_ALLOW_LOOPBACK_WS === "1",
+    dockerNetwork,
     ...(process.env.ATLAS_RELAY_SERVER_ID ? { serverId: process.env.ATLAS_RELAY_SERVER_ID } : {}),
-    backendUrl: process.env.ATLAS_BACKEND_URL ?? "http://127.0.0.1:8100",
-    ...(process.env.ATLAS_SERVICE_TOKEN ? { serviceToken: process.env.ATLAS_SERVICE_TOKEN } : {}),
+    backendUrl,
+    ...(serviceToken ? { serviceToken } : {}),
+    ...(serviceTokenFile !== undefined ? { serviceTokenFile } : {}),
     v4Enabled: process.env.ATLAS_V4_ENABLED === "1",
     v4AuthMode,
     requirePrincipalBinding: requirePrincipalBinding === "1",
@@ -79,7 +88,26 @@ export function configFromEnvironment(): ConnectorConfig {
   };
 }
 
+/** Validates both fixed outbound destinations before the connector touches its state. */
+export function validateConnectorEndpoints(config: Pick<ConnectorConfig,
+  "relayUrl" | "backendUrl" | "allowLoopbackWs" | "dockerNetwork">): void {
+  const dockerNetwork = config.dockerNetwork === true;
+  parseRelayUrl(config.relayUrl, {
+    dockerNetwork,
+    allowLoopbackWs: dockerNetwork || config.allowLoopbackWs,
+  });
+  assertBackendHttpUrl(config.backendUrl, { dockerNetwork });
+}
+
 export async function createConnector(config: ConnectorConfig): Promise<ConnectorRuntime> {
+  const dockerNetwork = config.dockerNetwork === true;
+  validateConnectorEndpoints(config);
+  if (config.serviceToken !== undefined && config.serviceTokenFile !== undefined) {
+    throw new Error("configure exactly one service token source");
+  }
+  let serviceToken = config.serviceToken;
+  if (config.serviceTokenFile !== undefined) serviceToken = await readPrivateServiceToken(config.serviceTokenFile);
+
   let v4Enabled = config.v4Enabled === true;
   if (!["legacy", "dual", "principal"].includes(config.v4AuthMode ?? "legacy")) v4Enabled = false;
   let principalCredentials: Map<string, { principalId: string; credential: string }> | undefined;
@@ -111,7 +139,8 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   const diagnostics = new ConnectorDiagnostics();
   const backend = new BackendClient({
     baseUrl: config.backendUrl,
-    ...(config.serviceToken ? { serviceToken: config.serviceToken } : {}),
+    ...(serviceToken ? { serviceToken } : {}),
+    dockerNetwork,
     v4Enabled,
     ...(diagnostics.enabled ? {
       fetcher: async (input, init) => {
@@ -135,17 +164,18 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   let relay: RelayLink;
   const operationExecutor = new OperationExecutor(backend, {
     relayConnected: () => relay.connected,
-    backendConfigured: () => Boolean(config.backendUrl && config.serviceToken),
+    backendConfigured: () => Boolean(config.backendUrl && serviceToken),
     uncertainOutcome: () => metrics.uncertainOutcome(),
   }, Date.now, join(config.stateDir, "operations.json"), diagnostics);
   await operationExecutor.initialize();
   const sessions = new SessionManager(registry, operationExecutor, metrics, {
     relayConnected: () => relay.connected,
-    backendConfigured: () => Boolean(config.backendUrl && config.serviceToken),
+    backendConfigured: () => Boolean(config.backendUrl && serviceToken),
   });
   relay = new RelayLink({
     relayUrl: config.relayUrl,
-    allowLoopbackWs: config.allowLoopbackWs,
+    allowLoopbackWs: dockerNetwork || config.allowLoopbackWs,
+    dockerNetwork,
     serverId: config.serverId ?? `atlas-pc-${identity.fingerprint.slice(0, 32)}`,
     daemonKeyPair: keyPair,
     sessions,
@@ -211,7 +241,7 @@ async function readPrivateFile(
     const file = await handle.stat();
     const owner = process.getuid();
     if (!file.isFile() || file.uid !== owner || beforeOpen.uid !== owner ||
-        (file.mode & 0o777) !== 0o600 || beforeOpen.dev !== file.dev || beforeOpen.ino !== file.ino ||
+        (file.mode & 0o7777) !== 0o600 || beforeOpen.dev !== file.dev || beforeOpen.ino !== file.ino ||
         file.size < 1 || file.size > maxBytes) {
       return undefined;
     }
@@ -228,6 +258,16 @@ async function readPrivateFile(
   } finally {
     await handle?.close().catch(() => {});
   }
+}
+
+/** Loads the non-V4 service bearer from an owner-controlled secret file outside the checkout. */
+export async function readPrivateServiceToken(path: string): Promise<string> {
+  const token = await readPrivateFile(path, 4_096, true);
+  if (token === undefined || token.length < 1 || Buffer.byteLength(token, "utf8") > 4_096
+      || token.endsWith("\n") || token.endsWith("\r") || /[^\x21-\x7e]/.test(token)) {
+    throw new Error("ATLAS_SERVICE_TOKEN_FILE is unavailable or invalid");
+  }
+  return token;
 }
 
 /** Reads the dedicated legacy Core Android bearer used only by the explicit dev fallback. */

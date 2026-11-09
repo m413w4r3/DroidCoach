@@ -144,10 +144,10 @@ function socketReader(socket) {
   };
 }
 
-function websocketRequest(target, extraHeaders = '', { optionalHeaders = true } = {}) {
+function websocketRequest(target, extraHeaders = '', { optionalHeaders = true, host = 'proxy.test' } = {}) {
   const lines = [
     `GET ${target} HTTP/1.1`,
-    'Host: proxy.test',
+    `Host: ${host}`,
     'Connection: keep-alive, Upgrade',
     'Upgrade: websocket',
     `Sec-WebSocket-Key: ${WS_KEY}`,
@@ -235,6 +235,42 @@ test('configuration binds to loopback and rejects public addresses', () => {
   assert.throws(() => createProxy({ upstreamHost: 'relay.example.test' }), /upstreamHost must be a loopback IP literal/);
 });
 
+test('Docker network mode allows only the canonical internal Relay destination', () => {
+  const config = readConfig({
+    ATLAS_PROXY_DOCKER_NETWORK: '1',
+    LISTEN_HOST: '0.0.0.0',
+    LISTEN_PORT: '4400',
+    UPSTREAM_HOST: 'ATLAS-RELAY',
+    UPSTREAM_PORT: '4000',
+  });
+  assert.deepEqual(config, {
+    listenHost: '0.0.0.0', listenPort: 4400, upstreamHost: 'atlas-relay', upstreamPort: 4000, dockerNetwork: true,
+  });
+  assert.throws(() => readConfig({
+    LISTEN_HOST: '0.0.0.0', UPSTREAM_HOST: 'atlas-relay', UPSTREAM_PORT: '4000',
+  }), /LISTEN_HOST must be 127\.0\.0\.1/);
+  assert.throws(() => readConfig({
+    ATLAS_PROXY_DOCKER_NETWORK: '1', LISTEN_HOST: '0.0.0.0', UPSTREAM_HOST: 'evil.example', UPSTREAM_PORT: '4000',
+  }), /UPSTREAM_HOST=atlas-relay/);
+  for (const upstreamHost of [
+    'atlas-relay:4000', 'http://atlas-relay', 'atlas-relay/path', 'atlas-relay?route=other',
+    'user@atlas-relay', '::1', '[::1]',
+  ]) {
+    assert.throws(() => readConfig({
+      ATLAS_PROXY_DOCKER_NETWORK: '1', LISTEN_HOST: '0.0.0.0', UPSTREAM_HOST: upstreamHost, UPSTREAM_PORT: '4000',
+    }), `Docker mode must reject UPSTREAM_HOST=${upstreamHost}`);
+  }
+  assert.throws(() => readConfig({
+    ATLAS_PROXY_DOCKER_NETWORK: '1', LISTEN_HOST: '0.0.0.0', UPSTREAM_HOST: 'atlas-relay', UPSTREAM_PORT: '04000',
+  }), /UPSTREAM_PORT=4000/);
+  assert.throws(() => readConfig({
+    ATLAS_PROXY_DOCKER_NETWORK: '1', LISTEN_HOST: '0.0.0.0', UPSTREAM_HOST: 'atlas-relay',
+  }), /UPSTREAM_PORT=4000/);
+  assert.throws(() => createProxy({
+    dockerNetwork: true, listenHost: '0.0.0.0', upstreamHost: 'evil.example', upstreamPort: 4000,
+  }), /upstream atlas-relay:4000/);
+});
+
 test('HTTP allowlist proxies health and ready, and refuses other paths and methods', async (t) => {
   const upstreamPaths = [];
   const upstream = await startUpstream((req, res) => {
@@ -292,6 +328,32 @@ test('HTTP allowlist proxies health and ready, and refuses other paths and metho
   assert.equal(parseResponse(websocketMetrics).status, 404);
 });
 
+test('client Host and forwarding headers cannot change the configured HTTP destination', async (t) => {
+  let observedHost;
+  let observedPath;
+  const upstream = await startUpstream((req, res) => {
+    observedHost = req.headers.host;
+    observedPath = req.url;
+    res.end('fixed destination');
+  });
+  const { proxy, port } = await startProxy(upstream.port);
+  t.after(async () => {
+    await closeProxy(proxy);
+    await upstream.close();
+  });
+
+  const response = await rawExchange(port,
+    'GET /health HTTP/1.1\r\nHost: evil.example:18789\r\nX-Forwarded-Host: attacker.example\r\nConnection: close\r\n\r\n');
+  assert.equal(parseResponse(response).status, 200);
+  assert.equal(observedHost, `127.0.0.1:${upstream.port}`);
+  assert.equal(observedPath, '/health');
+
+  const absoluteForm = await rawExchange(port,
+    'GET http://evil.example:18789/health HTTP/1.1\r\nHost: evil.example:18789\r\nConnection: close\r\n\r\n');
+  assert.equal(parseResponse(absoluteForm).status, 404);
+  assert.equal(observedPath, '/health');
+});
+
 test('WebSocket upgrade forwards routing headers and preserves text and binary frames byte for byte', async (t) => {
   let upstreamRequest;
   const upstream = await startUpstream((_req, res) => {
@@ -300,6 +362,7 @@ test('WebSocket upgrade forwards routing headers and preserves text and binary f
   }, (req, socket, head) => {
     upstreamRequest = {
       url: req.url,
+      host: req.headers.host,
       key: req.headers['sec-websocket-key'],
       version: req.headers['sec-websocket-version'],
       protocol: req.headers['sec-websocket-protocol'],
@@ -335,6 +398,7 @@ test('WebSocket upgrade forwards routing headers and preserves text and binary f
       port,
       `/ws?serverId=${queryMarker}&role=client&v=2&connectionId=synthetic-connection`,
       'Content-Length: 0\r\nX-Private-Header: do-not-forward',
+      { host: 'evil.example:18789' },
     );
   } catch (error) {
     assert.fail(`${error.message}; upstream=${JSON.stringify(upstreamRequest)}; logs=${JSON.stringify(capturedLogs)}`);
@@ -345,6 +409,7 @@ test('WebSocket upgrade forwards routing headers and preserves text and binary f
   assert.equal(response.headers.get('sec-websocket-protocol'), 'atlas.remote.v1');
   assert.deepEqual(upstreamRequest, {
     url: `/ws?serverId=${queryMarker}&role=client&v=2&connectionId=synthetic-connection`,
+    host: `127.0.0.1:${upstream.port}`,
     key: WS_KEY,
     version: '13',
     protocol: 'atlas.remote.v1, atlas.remote.debug',
@@ -635,18 +700,29 @@ test('SIGTERM and SIGINT stop the listener with exit code zero and release the p
   }
 });
 
-test('pinned relay integration on 4402', async (t) => {
-  if (!await canConnect(4402)) {
-    t.skip('127.0.0.1:4402 is not listening; do not start or modify the relay here');
+test('isolated relay integration uses only an explicitly supplied high loopback port', async (t) => {
+  const configuredRelay = process.env.ATLAS_TEST_RELAY_URL;
+  if (!configuredRelay) {
+    t.skip('set ATLAS_TEST_RELAY_URL to an isolated synthetic Relay on a loopback port above 15000');
+    return;
+  }
+  const relayUrl = new URL(configuredRelay);
+  const relayPort = Number(relayUrl.port);
+  if (relayUrl.protocol !== 'ws:' || !['127.0.0.1', 'localhost', '[::1]'].includes(relayUrl.hostname) || relayPort <= 15_000) {
+    throw new Error('ATLAS_TEST_RELAY_URL must be ws:// loopback on a port above 15000');
+  }
+  if (!await canConnect(relayPort)) {
+    t.skip(`isolated Relay is not listening on loopback port ${relayPort}`);
     return;
   }
 
-  const proxy = createProxy({ listenPort: 0, upstreamHost: '127.0.0.1', upstreamPort: 4402 });
+  const proxy = createProxy({ listenPort: 0, upstreamHost: '127.0.0.1', upstreamPort: relayPort });
   const proxyPort = (await proxy.listen()).port;
   t.after(() => closeProxy(proxy));
 
+  const relayHttpBase = `http://127.0.0.1:${relayPort}`;
   for (const route of ['health', 'ready']) {
-    const direct = await fetch(`http://127.0.0.1:4402/${route}`, { signal: AbortSignal.timeout(3_000) });
+    const direct = await fetch(`${relayHttpBase}/${route}`, { signal: AbortSignal.timeout(3_000) });
     const proxied = await fetch(`http://127.0.0.1:${proxyPort}/${route}`, { signal: AbortSignal.timeout(3_000) });
     assert.equal(proxied.status, direct.status, `/${route} status`);
     assert.equal(proxied.headers.get('content-type'), direct.headers.get('content-type'), `/${route} content-type`);

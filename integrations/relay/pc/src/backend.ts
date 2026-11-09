@@ -7,6 +7,8 @@ export type FetchLike = typeof fetch;
 export interface BackendConfig {
   baseUrl: string;
   serviceToken?: string;
+  /** Explicit allowlist for the private Docker service DNS name. */
+  dockerNetwork?: boolean;
   timeoutMs?: number;
   chatTimeoutMs?: number;
   /** V4 requires an explicit connector opt-in and a dedicated Android bearer. */
@@ -89,6 +91,29 @@ export function assertLoopbackHttpUrl(value: string): URL {
   return url;
 }
 
+/** Validates the exact backend service URL allowed on the private Docker network. */
+export function assertBackendHttpUrl(value: string, options: { dockerNetwork?: boolean } = {}): URL {
+  if (options.dockerNetwork !== true) return assertLoopbackHttpUrl(value);
+
+  const parts = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(?:\?[^#]*)?(?:#.*)?$/.exec(value);
+  if (!parts) throw new Error("Docker network mode requires http://atlas-core:8100 with no path, query, or fragment");
+  const authority = parts[2] ?? "";
+  const path = parts[3] ?? "";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Docker network mode requires http://atlas-core:8100 with no path, query, or fragment");
+  }
+  if (url.protocol !== "http:" || authority.toLowerCase() !== "atlas-core:8100"
+      || path !== "" || value.includes("?") || value.includes("#")
+      || url.hostname !== "atlas-core" || url.port !== "8100"
+      || url.username || url.password) {
+    throw new Error("Docker network mode requires http://atlas-core:8100 with no path, query, or fragment");
+  }
+  return new URL("http://atlas-core:8100");
+}
+
 export class BackendClient {
   readonly baseUrl: URL;
   private readonly fetcher: FetchLike;
@@ -96,7 +121,7 @@ export class BackendClient {
   private readonly chatTimeoutMs: number;
 
   constructor(private readonly config: BackendConfig) {
-    this.baseUrl = assertLoopbackHttpUrl(config.baseUrl);
+    this.baseUrl = assertBackendHttpUrl(config.baseUrl, { dockerNetwork: config.dockerNetwork === true });
     this.fetcher = config.fetcher ?? fetch;
     this.timeoutMs = config.timeoutMs ?? 5_000;
     this.chatTimeoutMs = config.chatTimeoutMs ?? DEFAULT_CHAT_TIMEOUT_MS;

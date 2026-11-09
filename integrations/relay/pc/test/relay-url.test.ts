@@ -30,6 +30,25 @@ describe("production relay URL policy", () => {
     expect(() => parseRelayUrl("ws://relay.example.org:4400")).toThrow();
   });
 
+  it("accepts only atlas-relay:4000 in explicit Docker network mode", () => {
+    const relay = parseRelayUrl("ws://ATLAS-RELAY:4000", { dockerNetwork: true });
+    expect(relay.hostname).toBe("atlas-relay");
+    expect(relay.port).toBe("4000");
+    expect(parseRelayUrl("ws://atlas-relay:4000/ws", { dockerNetwork: true }).pathname).toBe("/ws");
+    expect(() => parseRelayUrl("ws://atlas-relay:4000", { allowLoopbackWs: true })).toThrow();
+    for (const value of [
+      "wss://atlas-relay:4000",
+      "ws://evil.example:4000",
+      "ws://atlas-relay:4001",
+      "ws://user@atlas-relay:4000",
+      "ws://atlas-relay:4000/other",
+      "ws://atlas-relay:4000?",
+      "ws://atlas-relay:4000#fragment",
+    ]) {
+      expect(() => parseRelayUrl(value, { dockerNetwork: true }), value).toThrow();
+    }
+  });
+
   it("rejects userinfo, queries, fragments, unsupported paths, and non-WebSocket schemes", () => {
     for (const value of [
       "wss://user:secret@relay.example.org",
