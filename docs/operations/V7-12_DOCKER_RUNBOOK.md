@@ -86,7 +86,7 @@ Le wrapper lit `ATLAS_STACK_ENV_FILE` ou, par défaut, `~/.config/atlas/stack.en
 
 ### Le conteneur Gateway ne démarre pas
 
-0. Le Gateway est le seul service avec accès Internet (`atlas-egress`) : son bootstrap peut contacter le registre npm/plugins avant d'écouter. Un timeout réseau côté Gateway n'indique pas un problème Core/Relay ; vérifier d'abord l'accès Internet de l'hôte et le réseau `atlas-egress`.
+0. Le Gateway est le seul service avec accès Internet (`atlas-egress`) pour le provider modèle. Depuis V7-12, l'entrypoint `doctor --fix` de l'image est contourné (CLI directe) : le lookup npm de bootstrap ne bloque plus le démarrage, mais l'egress reste requis pour les appels provider. Un timeout réseau côté Gateway n'indique pas un problème Core/Relay ; vérifier l'accès Internet de l'hôte et le réseau `atlas-egress`, puis `openclaw gateway health`.
 1. Vérifier que `openclaw-gateway.service` est arrêté.
 2. Vérifier les permissions de `~/.openclaw` : UID/GID 1000, répertoires 0700, fichiers 0600.
 3. Vérifier `HOME=/home/nill`, `OPENCLAW_STATE_DIR`, `OPENCLAW_CONFIG_PATH`.

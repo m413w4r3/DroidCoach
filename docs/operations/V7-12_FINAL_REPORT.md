@@ -4,8 +4,9 @@
 **Date :** 2026-11-09
 **Branche :** `feat/atlas-v7-12-docker-runtime`
 **Base réconciliée :** `b44d0ffd467b5b90b606b8ccb08a370af4629df9`
-**SHA final :** `PENDING` (dernier commit fonctionnel `8e26e69`)
-**CI finale :** `PENDING` (à vérifier sur le SHA poussé)
+**SHA final testé :** `d54b0cdb0eba75110cdf52bf622c6153948efa39` (HEAD poussé ; dernier correctif code `589034b`, dernier commit fonctionnel `8e26e69`)
+**CI finale :** **PASS** — GitHub Actions run [42694492543](https://github.com/m413w4r3/DroidCoach/actions/runs/42694492543), jobs `verify` et `relay-node` verts.
+**Note :** le présent rapport et les notes d'architecture/runbook sont ajoutés par un commit documentaire postérieur à ce SHA ; aucun code produit n'a changé.
 
 ## 1. Réconciliation Git
 
@@ -17,7 +18,7 @@
 | B16 / B17 | `b73c335` / `e5e67d2` |
 | Intégration V7-11 | `16f85cb`, `b44d0ff` |
 | Base V7-12 | `b44d0ff` (contient V7-11 + B16/B17) |
-| SHA final intégré | `PENDING` |
+| SHA final intégré / testé | `d54b0cdb0eba75110cdf52bf622c6153948efa39` |
 
 Aucun force-push, aucun merge direct sur `main`, aucune branche utile abandonnée.
 
@@ -25,10 +26,10 @@ Aucun force-push, aucun merge direct sur `main`, aucune branche utile abandonné
 
 | Image | Référence | Digest / ID |
 |---|---|---|
-| Core V7-12 | build `backend/Dockerfile` | `atlas-core-v7-12:v7-12-local` = `sha256:fbbc6ce241a6…` (A4 + A6) |
-| Relay | wrapper `deploy/relay/Dockerfile` sur `atlas-paseo-relay:r3a` | base `sha256:75d68fd8…` ; wrapper `atlas-relay-v7-12:v7-12-local` = `sha256:08d1d0500e47…` |
-| Proxy | build `integrations/relay/proxy/Dockerfile` | `atlas-proxy-v7-12:v7-12-local` = `sha256:e0b23fef0c13…` |
-| Connecteur | build `integrations/relay/pc/Dockerfile` | `atlas-connector-v7-12:v7-12-local` = `sha256:3bc98f889b85…` |
+| Core V7-12 | build `backend/Dockerfile` | `atlas-core-v7-12:v7-12-local` = `sha256:fbbc6ce241a6484b126a50b741505a7db78f65bffb9107c327a563ea0d0932eb` (A4 + A6) |
+| Relay | wrapper `deploy/relay/Dockerfile` sur `atlas-paseo-relay:r3a` | base `sha256:75d68fd8…` ; wrapper `atlas-relay-v7-12:v7-12-local` = `sha256:08d1d0500e47015fbff985dab49bc6777df6ec2b608e78db477394d50038107b` |
+| Proxy | build `integrations/relay/proxy/Dockerfile` | `atlas-proxy-v7-12:v7-12-local` = `sha256:e0b23fef0c1387f216b149ea260855a38cc7f6d70ceed9fe46e6928c6b7a11bd` |
+| Connecteur | build `integrations/relay/pc/Dockerfile` | `atlas-connector-v7-12:v7-12-local` = `sha256:3bc98f889b853639103c366b314213b6bf560d021ecf4dc85ac41a625c67577c` |
 | Gateway OpenClaw | `ghcr.io/openclaw/openclaw@sha256:f40d1e66…` | `2026.10.5` |
 | Python base | `python:3.12-slim@sha256:5e2bdb1b…` | épinglé |
 | Node base | `node:24-bookworm-slim@sha256:01d566e8…` | épinglé |
@@ -64,7 +65,7 @@ Aucun force-push, aucun merge direct sur `main`, aucune branche utile abandonné
 
 | Élément | Valeur |
 |---|---|
-| Appareil Relay actif | `pixel-v7`, unique parmi 20 entrées (19 révoquées), ID conservé hors document |
+| Appareil Relay actif | `pixel-v7`, unique parmi 20 entrées (19 révoquées), ID conservé hors document ; `identity.json` SHA-256 `cf172580…` et `devices.json` SHA-256 `d27a6bede…` identiques au backup pré-cutover ; tokens de pairing inchangés |
 | Principal Android | `prn_fHH…C8L` (référence tronquée), `device_ref` aléatoire, aucun consentement historique transféré |
 | Credential RELAY | généré, 0600 propriétaire 1000, installé dans `~/.local/state/atlas-relay/v7-12/relay-credential` (non affiché) |
 | Binding | 1 ligne `ACTIVE` vers l'ID Relay réel de `pixel-v7` ; aucun binding TOOL |
@@ -73,6 +74,7 @@ Aucun force-push, aucun merge direct sur `main`, aucune branche utile abandonné
 | Registre V4 live | 2 principaux, 2 credentials, 1 binding, 20 grants, 25 événements (`4 PROVISIONED`, `20 CAPABILITY_CHANGED`, `1 RELAY_BOUND`) ; vérificateur 22/22 PASS |
 | Consentements / propositions | `consent_states_v4=2`, `agent_proposals_v4=3` inchangés (snapshot hash-only identique) ; `ACTIVITY_STATUS` reste `REVOKED` ; re-consentement Pixel explicite requis |
 | Legacy | bearer partagé et token outil conservés byte-identiques aux valeurs historiques ; mode `dual` maintenu ; **aucune révocation LEGACY** sans confirmation propriétaire |
+| Journal opérations connecteur | L'entrée `coach.chat.request` de l'ancien `operations.json` (1 033 octets) avait un `expiresAt` dépassé ; le connecteur l'a élaguée au démarrage et a réécrit un journal valide de 43 octets (`entries: []`). La copie pré-cutover conserve l'ancien journal ; aucune perte d'identité/devices. |
 
 ## 6. État Pixel et recette réelle
 
@@ -108,6 +110,7 @@ Aucun force-push, aucun merge direct sur `main`, aucune branche utile abandonné
 | Stack isolée V7-12 | intégré `8e26e69` (run 11) | **PASS complet** avec la définition Compose de production, y compris Gateway `init` + CLI directe : cinq services healthy, `doctor`/`status` PASS (`relay_connected=true`), HMAC/rejeu/signature invalide PASS, restart/persistance Core PASS, révocation credential PASS, persistance identité connecteur PASS, backup/restore PASS (intégrité SQLite, FK 0, manifeste 98 entrées, rotation 7 jours, copie de restauration), `replay_quiescent=PASS`, arrêt propre sans suppression de volume. |
 | Migration live V7-12 | `8e26e69` | Anciens proxy/connecteur/Gateway systemd/Relay arrêtés ; snapshot frais ; provisioning 2/2/1/20/25 ; vérificateur **22/22 PASS** ; Core-only up + backup opérationnel vérifié ; stack complète cinq healthy ; `doctor` PASS ; Funnel 200 ; seul 4400 publié ; Core→Gateway OK ; plugin `codex` chargé ; tokens legacy préservés. |
 | Recette Pixel physique | `BLOCKED` | non exécutable sans appareil |
+| CI GitHub Actions | `d54b0cd` | **PASS** — run 42694492543 : `verify` (Android JVM/lint/assemble, backend) et `relay-node` (connecteur, proxy) verts |
 
 ## 9. Gates
 

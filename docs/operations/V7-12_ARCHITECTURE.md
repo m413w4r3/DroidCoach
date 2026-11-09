@@ -107,7 +107,8 @@ Le proxy et le connecteur n'acceptent ces noms DNS **que** dans un mode Docker e
 - Bind séparé de `~/.openclaw.update-captures` vers `/home/nill/.openclaw.update-captures` (0700, UID 1000) pour les captures Doctor pré-réparation ; sans lui, le bootstrap journalise `EROFS` et continue.
 - `HOME=/home/nill`, `TMPDIR=/tmp`, `XDG_CACHE_HOME=/home/nill/.cache`, UID/GID 1000 : les chemins absolus déjà présents dans `openclaw.json` restent valides.
 - Préservés : configuration, agent `atlas`, sessions, bases SQLite, authentification provider, workspace, répertoire de secrets et clé de chiffrement des profils.
-- Le service systemd `openclaw-gateway.service` reste installé pour rollback mais est arrêté avant le démarrage du conteneur. Deux Gateways ne doivent jamais écrire dans le même état.
+- Le service systemd `openclaw-gateway.service` reste installé pour rollback mais est arrêté **et désactivé** avant le démarrage du conteneur. Deux Gateways ne doivent jamais écrire dans le même état.
+- L'entrypoint image qui exécute `doctor --fix` avant chaque démarrage est contourné en production : `init: true` + `entrypoint: ["node","/app/openclaw.mjs"]` + commande CLI directe, comme le service systemd. Sur l'état live, Doctor refuse la migration du plugin `codex` ; les captures temporaires incompatibles sont déplacées sous `~/.openclaw.update-captures/plugin-captures-quarantine-*`, sans toucher à l'état durable. Voir `integrations/openclaw/gateway/README.md`.
 
 ## 6. Secrets
 
