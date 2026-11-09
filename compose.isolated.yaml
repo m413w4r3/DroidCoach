@@ -254,9 +254,9 @@ services:
         - "18789"
         - --timeout
         - "5000"
-      interval: 30s
+      interval: 10s
       timeout: 21s
-      retries: 3
+      retries: 12
       start_period: 20s
     logging: *bounded-logging
 

@@ -122,7 +122,9 @@
 | Propositions historiques | 3 lignes, toutes `device_ref IS NULL` ; aucune réattribution au nouveau principal, aucun backfill. |
 | A1 intégré | `010ff1511f8e4951ab9610119540dd8fc7e78f44`, cherry-pick `8898cfa1…` ; 8 fichiers, 2 244 insertions. Compose/config PASS, image Core `sha256:a2febe6b…` (10001, `0.0.0.0:8100`, 1 worker), health mock 200, backend 474 passed/1 skipped, backup/restore synthétique PASS. |
 | A2 fix intégré | `d29cb29667dcd1692430a71a148c74aa6a59bcf0`, cherry-pick `0542cc7…` ; map partielle → V4 désactivé sans fallback, V2 conservé. Connecteur **144 passed**, proxy 20 passed/1 skipped. Images `:local` reconstruites : relay `08d1d0500e47`, proxy `e0b23fef0c13`, connector `1df5d2d3ab3d`. |
-| Stack isolée | Lancée après intégration A1/A2 ; résultat `PENDING`. |
+| Stack isolée | Les cinq services sont **healthy** ; `doctor`/`status` PASS (compose, secrets, volume, réseaux internal/edge/egress). HMAC accepté, rejeu refusé, signature invalide refusée, redémarrage Core et persistance du volume PASS, révocation du credential PASS. Le harness a été corrigé pour exécuter le seeding en UID 10001 (`8b542bd`) et créer un `operations.json` vide (`063feaa`). Backup/restore et persistance identité connecteur : run final `PENDING`. |
+| A3 intégré | `83c1527` (cherry-pick `7b1de29`) : `integrations/openclaw/gateway/README.md` + `validate-container.sh`, 554 lignes. Validation isolée du Gateway avec copie de l'état réel, healthcheck authentifié, agent/modèle/OAuth/tools, read_only, aucun docker.sock, état live/systemd non modifiés. |
+| A2 image fix intégré | `09b0637` (cherry-pick `613ac0c`) : `package.json`/`package-lock.json`/`dist` lisibles par l'utilisateur node ; `node -e require('/app/package.json')` PASS ; 144 tests connecteur PASS. |
 
 ## 8. Scout A4 et A5 — conclusions
 
