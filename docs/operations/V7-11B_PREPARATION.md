@@ -112,9 +112,9 @@ Preuve complète : [V7-11_RELAY_ADMIN_RECON.md](evidence/V7-11_RELAY_ADMIN_RECON
 | `GO_V7_11_LIVE_BACKUP` | **GO local avec limites** | Fenêtre du 2026-11-08 : Core arrêté ~14 s, DB/sidecar copiés, Pixel V7-07 vérifié, connecteur 3/3 restauré sur copie, Relay jamais arrêté ; B11 GO local, 0 P0/P1, 2 P2 fermés. |
 | `GO_V7_11_LIVE_MIGRATION` | **GO local** | Migration live v3→v5 exécutée le 2026-11-08 : backup frais `9f5c8fd2…`, image `1e4c8e6c…`, v5/ledger/intégrité/FK, backup B7 `0600`, legacy 200/401, Relay intact ; B14 GO local, 0 P0/P1. |
 | `GO_V7_11_SCHEMA_V5_LIVE` | **GO local** | Base live v5, ledger `[1..5]`, `device_ref`, contrôle logique 17/19 tables MATCH, seules différences attendues (état d'expiration + ledger). |
-| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **NOT_RUN** | Pixel déconnecté d'ADB après la migration ; app/HOME/Keystore/consentements non observés. |
+| `GO_V7_11_ANDROID_POST_MIGRATION_SYNC` | **BLOCKED / PARTIAL** | Pixel reconnecté et intact ; proxy 4400 + connecteur 4401 actifs (WS 101) ; `CoreV4SyncWorker` forcé mais **aucune requête app** vers Core/connecteur ; cause côté trigger/config app, pas Core. |
 | `GO_V7_11_INDEPENDENT_SECURITY_REVIEW` | **GO avec limitations P2** | A4-F3 sur `a3d72db` : 0 P0/P1 ; 3 nouveaux P2 + réserves héritées ; conditions de déploiement listées ci-dessus. |
-| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Migration v3→v5 **exécutée** et image finale active, mais cutover complet non qualifié : sync Android post-migration NOT_RUN, binding/principal non configurés, Relay non administrable, backup local sans hors-site/chiffrement, DB live 0644, aucun APPLY. |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** | Migration v3→v5 **exécutée** et image finale active, mais cutover complet non qualifié : sync Android **BLOCKED/PARTIAL** (app silencieuse malgré chemin actif), binding/principal non configurés, Relay non administrable, backup local sans hors-site/chiffrement, DB live 0644, aucun APPLY. |
 | `GO_PRODUCT_INSTALL` | **GO partiel** | Installation in-place et préservation **PASS** sur Pixel physique API 37 (preuve `evidence/V7-11B_PIXEL_INSTALL_EVIDENCE.md`) ; QA fonctionnelle complète NOT_RUN ; APPLY NOT_RUN. |
 | `GO_LIVE_SECURITY` | **NO-GO / NOT_RUN** | Aucun test live. |
 | `GO_DAILY_PILOT` | **NO-GO / NOT_RUN** | Pilote E interdit. |
@@ -394,3 +394,34 @@ Limites actuelles :
 | `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** (cutover complet) |
 
 Prochaine étape recommandée : reconnecter le Pixel et vérifier la synchronisation post-migration en lecture seule, avant toute configuration de binding ou de Relay.
+
+## 14. Addendum — vérification Pixel après migration (2026-11-09)
+
+### 14.1 Pixel et application
+
+- Pixel reconnecté, Android 17 / API 37, APK exact `bb703ec7…`, version 1/0.1.0, certificat `da301466…eeee`.
+- HOME `dev.atlas.coach`, `LauncherActivity` au premier plan, 15/15 noms `shared_prefs`, permissions 23/23 identiques au backup d'installation, aucun FATAL/ANR/Keystore.
+- L'utilisateur a désactivé le mode avion ; Wi-Fi validé, aucun VPN actif ; Tailscale mobile reste hors ligne (dernière vue 34 j).
+
+### 14.2 Chemin réseau et tentative de sync
+
+- Core v5 toujours sur `127.0.0.1:8100` ; Relay sur `127.0.0.1:4402`.
+- Proxy 4400 et connecteur 4401 démarrés à la demande : proxy health 200, connecteur `relay_connected=true`, `errors_total=0`, WS 101 ; Funnel `8443→4400` désormais ciblé.
+- `MainActivity` ouverte ; `CoreV4SyncWorker` forcé (job 253, « Running job [FORCED] ») puis replanifié.
+- **Aucune requête** app vers Core ou connecteur, aucun `requests_total`, `atlas_core_v4_sync.xml` inchangé (mtime 12:07Z). La sync est **BLOCKED/PARTIAL** : transport sain, app silencieuse ; la cause précise (données en attente, endpoint, trigger) n'est pas établie.
+- Aucune permission, aucun consentement, aucun bearer, aucun réglage Wi-Fi/Tailscale/Funnel n'a été modifié. Le proxy et le connecteur ne sont pas supervisés et s'arrêteront à la fin de session/au redémarrage.
+
+### 14.3 Revue B15 et limites
+
+B15 : **GO_WITH_LIMITATIONS local / NO-GO cutover**, 0 P0/P1. P2 sanitisation (libellé de nœud Tailscale) **clos** ; P2 runtime Docker/ADB `UNKNOWN` (sandbox). `BLOCKED/PARTIAL` confirmé ; binding `NOT_RUN`, cutover `NO-GO`.
+
+Preuves : [`evidence/V7-11B_ANDROID_POST_MIGRATION_EVIDENCE.md`](evidence/V7-11B_ANDROID_POST_MIGRATION_EVIDENCE.md), [`evidence/V7-11B_ANDROID_POST_MIGRATION_REVIEW.md`](evidence/V7-11B_ANDROID_POST_MIGRATION_REVIEW.md).
+
+### 14.4 Conditions pour débloquer
+
+1. Déclencher une action de sync dans l'app (écran/paramètre ou donnée en attente) et observer Core/connecteur ; aucune permission/bearer à changer.
+2. Ou confirmer l'endpoint attendu par l'app et l'aligner avec le Funnel/connecteur.
+3. Ou exposer le Core au tailnet via Serve 8100 si l'app utilise ce chemin.
+4. Ou confirmer que l'app reste locale et que la sync distante est hors périmètre ; dans ce cas, arrêter proxy/connecteur et retirer le Funnel si non désiré.
+
+`GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO** pour le cutover complet.
