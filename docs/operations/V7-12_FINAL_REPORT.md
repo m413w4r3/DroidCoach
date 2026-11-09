@@ -99,7 +99,8 @@ Aucun `network_mode: host`, aucun socket Docker, aucun port Core/Gateway/Relay/m
 | Proxy `node --test` | intégré | 20 passed, 1 skipped (Relay isolé non lancé) |
 | Audit production connecteur | intégré | 0 vulnérabilité |
 | Android JVM + lint | intégré | BUILD SUCCESSFUL (2 min 20 s) |
-| Stack isolée V7-12 | `PENDING` | `PENDING` |
+| Gateway OpenClaw (A3) | intégré `83c1527` | **PASS** : image épinglée, healthcheck authentifié, agent `atlas`/`openai/gpt-6-luna`, profil OAuth, `atlas_core_tools` désactivé, outils refusés, read_only, aucun docker.sock, SIGTERM/restart, 10 bases SQLite intègres, 125 sessions, manifeste live inchangé (106 053 fichiers, 3 095 465 071 octets, SHA-256 `13c6fcc9…`), systemd PID 3305 inchangé. |
+| Stack isolée V7-12 | intégré `8c39145` | **PASS complet** : cinq services healthy, `doctor`/`status` PASS, HMAC/rejeu/signature invalide PASS, restart/persistance Core PASS, révocation credential PASS, persistance identité connecteur PASS (`identity.json`/`devices.json`/`operations.json`), backup/restore PASS (intégrité SQLite, FK 0, manifeste 98 entrées, rotation 7 jours, copie de restauration), arrêt propre sans suppression de volume. |
 | Recette Pixel physique | `BLOCKED` | non exécutable sans appareil |
 
 ## 9. Gates
