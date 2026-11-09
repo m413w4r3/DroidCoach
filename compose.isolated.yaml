@@ -1,0 +1,295 @@
+name: atlas-core-isolated
+
+services:
+  atlas-core:
+    image: atlas-core-v7-12:${ATLAS_IMAGE_TAG:-local}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      additional_contexts:
+        contracts: ./contracts
+    user: "10001:10001"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      ATLAS_DB_PATH: /data/atlas.sqlite3
+      ATLAS_AGENT_ADAPTER: mock
+      OPENCLAW_BASE_URL: http://openclaw-gateway:18789
+      OPENCLAW_AGENT_ID: atlas
+      OPENCLAW_TIMEOUT_S: "30"
+      ATLAS_CHAT_V4_DEADLINE_S: "40"
+      ATLAS_AGENT_DAILY_TOKENS_ENFORCED: "false"
+      ATLAS_V4_ENABLED: "1"
+      ATLAS_V4_AUTH_MODE: ${ATLAS_V4_AUTH_MODE:-dual}
+      ATLAS_V4_TOOL_PRINCIPAL_ID: ${ATLAS_V4_TOOL_PRINCIPAL_ID:-}
+      ATLAS_V4_REPLAY_CACHE_DIR: /data/replay
+      ATLAS_V4_RELAY_ASSERTION_KEYS_FILE: /run/secrets/atlas_v4_relay_assertion_keys
+      ATLAS_V4_CURSOR_SECRET_FILE: /run/secrets/atlas_v4_cursor
+      ATLAS_V4_CAPABILITIES_JSON: >-
+        {"day_plan.read":true,"activity_status.read":true,"plan_revision.propose":true,"usage_summary.read":true,"goal_progress.read":true,"training_plan.read":true,"coach.chat":true,"day_plan.snapshot.write":true,"activity_status.write":true,"usage_summary.write":true,"goal_progress.write":true,"training_plan.write":true,"consent.state.write":true,"proposal.ack":true}
+    ports:
+      - "127.0.0.1:18100:8100"
+    secrets:
+      - atlas_token
+      - atlas_tool_token
+      - openclaw_gateway_token
+      - atlas_v4_relay_assertion_keys
+      - atlas_v4_cursor
+    volumes:
+      - atlas-core-isolated-data:/data
+    networks:
+      atlas-internal:
+        aliases:
+          - atlas-core
+      atlas-edge: {}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: &bounded-logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  atlas-relay:
+    image: atlas-relay-v7-12:${ATLAS_IMAGE_TAG:-local}
+    build:
+      context: ./deploy/relay
+      dockerfile: Dockerfile
+    user: "1000:1000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      LANG: C.UTF-8
+      PASEO_RELAY_HOST: 0.0.0.0
+      PASEO_RELAY_PORT: "4000"
+    networks:
+      atlas-internal:
+        aliases:
+          - atlas-relay
+    healthcheck:
+      test:
+        - CMD
+        - busybox
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:4000/health
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging: *bounded-logging
+
+  atlas-proxy:
+    image: atlas-proxy-v7-12:${ATLAS_IMAGE_TAG:-local}
+    build:
+      context: ./integrations/relay/proxy
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      ATLAS_PROXY_DOCKER_NETWORK: "1"
+      LISTEN_HOST: 0.0.0.0
+      LISTEN_PORT: "4400"
+      UPSTREAM_HOST: atlas-relay
+      UPSTREAM_PORT: "4000"
+    networks:
+      atlas-internal:
+        aliases:
+          - atlas-proxy
+      atlas-edge: {}
+    ports:
+      - "127.0.0.1:14400:4400"
+    depends_on:
+      atlas-relay:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4400/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging: *bounded-logging
+
+  atlas-connector:
+    image: atlas-connector-v7-12:${ATLAS_IMAGE_TAG:-local}
+    build:
+      context: ./integrations/relay/pc
+      dockerfile: Dockerfile
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      ATLAS_RELAY_URL: ws://atlas-relay:4000
+      ATLAS_ALLOW_LOOPBACK_WS: "1"
+      ATLAS_DOCKER_NETWORK: "1"
+      ATLAS_RELAY_STATE_DIR: /state
+      ATLAS_BACKEND_URL: http://atlas-core:8100
+      ATLAS_METRICS_PORT: "4401"
+      ATLAS_V4_ENABLED: "1"
+      ATLAS_V4_AUTH_MODE: ${ATLAS_V4_CONNECTOR_AUTH_MODE:-dual}
+      ATLAS_REQUIRE_PRINCIPAL_BINDING: "1"
+      ATLAS_CORE_PRINCIPAL_MAP_FILE: /run/secrets/atlas_connector_principal_map
+      ATLAS_V4_RELAY_ASSERTION_KEY_ID: ${ATLAS_V4_RELAY_ASSERTION_KEY_ID:?Set_ATLAS_V4_RELAY_ASSERTION_KEY_ID}
+      ATLAS_V4_RELAY_ASSERTION_SECRET_FILE: /run/secrets/atlas_connector_assertion_secret
+      ATLAS_SERVICE_TOKEN_FILE: /run/secrets/atlas_connector_service_token
+    ports:
+      - "127.0.0.1:14401:4401"
+    secrets:
+      - atlas_connector_assertion_secret
+      - atlas_connector_principal_map
+      - atlas_connector_service_token
+    volumes:
+      - ${ATLAS_CONNECTOR_STATE_DIR:?Set_ATLAS_CONNECTOR_STATE_DIR}:/state:rw
+    networks:
+      atlas-internal:
+        aliases:
+          - atlas-connector
+      atlas-edge: {}
+    depends_on:
+      atlas-relay:
+        condition: service_healthy
+      atlas-core:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4401/metrics').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging: *bounded-logging
+
+  openclaw-gateway:
+    image: ghcr.io/openclaw/openclaw@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5
+    user: "1000:1000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m,mode=1777
+      - /home/nill/.cache:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /home/nill
+      OPENCLAW_STATE_DIR: /home/nill/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/nill/.openclaw/openclaw.json
+      TMPDIR: /tmp
+      XDG_CACHE_HOME: /home/nill/.cache
+    volumes:
+      - ${OPENCLAW_STATE_DIR:?Set_OPENCLAW_STATE_DIR}:/home/nill/.openclaw:rw
+      - type: bind
+        source: ${OPENCLAW_UPDATE_CAPTURES_DIR:?Set_OPENCLAW_UPDATE_CAPTURES_DIR}
+        target: /home/nill/.openclaw.update-captures
+        read_only: false
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:14402:18789"
+    command:
+      - node
+      - openclaw.mjs
+      - gateway
+      - --port
+      - "18789"
+      - --bind
+      - lan
+    networks:
+      atlas-internal:
+        aliases:
+          - openclaw-gateway
+      atlas-edge: {}
+      atlas-egress: {}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - openclaw.mjs
+        - gateway
+        - health
+        - --port
+        - "18789"
+        - --timeout
+        - "5000"
+      interval: 30s
+      timeout: 21s
+      retries: 3
+      start_period: 20s
+    logging: *bounded-logging
+
+networks:
+  atlas-internal:
+    driver: bridge
+    internal: true
+  # Isolated host test ports use ingress without adding Internet NAT.
+  atlas-edge:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+  atlas-egress:
+    driver: bridge
+
+volumes:
+  atlas-core-isolated-data:
+    name: atlas-core-isolated-data
+
+secrets:
+  atlas_token:
+    file: ${ATLAS_TOKEN_FILE:?Set_ATLAS_TOKEN_FILE_before_running_compose}
+  atlas_tool_token:
+    file: ${ATLAS_TOOL_TOKEN_FILE:?Set_ATLAS_TOOL_TOKEN_FILE_before_running_compose}
+  openclaw_gateway_token:
+    file: ${OPENCLAW_GATEWAY_TOKEN_FILE:?Set_OPENCLAW_GATEWAY_TOKEN_FILE_before_running_compose}
+  atlas_v4_relay_assertion_keys:
+    file: ${ATLAS_RELAY_ASSERTION_KEYS_FILE:?Set_ATLAS_RELAY_ASSERTION_KEYS_FILE}
+  atlas_v4_cursor:
+    file: ${CORE_CURSOR_SECRET_FILE:?Set_CORE_CURSOR_SECRET_FILE}
+  atlas_connector_assertion_secret:
+    file: ${CONNECTOR_ASSERTION_SECRET_FILE:?Set_CONNECTOR_ASSERTION_SECRET_FILE}
+  atlas_connector_principal_map:
+    file: ${CONNECTOR_PRINCIPAL_MAP_FILE:?Set_CONNECTOR_PRINCIPAL_MAP_FILE}
+  atlas_connector_service_token:
+    file: ${CONNECTOR_SERVICE_TOKEN_FILE:?Set_CONNECTOR_SERVICE_TOKEN_FILE}

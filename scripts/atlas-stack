@@ -1,0 +1,543 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+ENV_FILE="${ATLAS_STACK_ENV_FILE:-${HOME:?HOME is required}/.config/atlas/stack.env}"
+COMPOSE_FILE="${ATLAS_STACK_COMPOSE_FILE:-$ROOT/compose.yaml}"
+PROJECT="${ATLAS_STACK_PROJECT:-atlas-core}"
+SERVICES=(atlas-core atlas-relay atlas-proxy atlas-connector openclaw-gateway)
+
+fail() {
+  printf 'atlas-stack: %s\n' "$1" >&2
+  exit 2
+}
+
+check_env_file() {
+  [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || fail "env file is missing or unsafe"
+  local mode
+  mode="$(stat -c '%a' -- "$ENV_FILE" 2>/dev/null || true)"
+  [[ "$mode" == "600" ]] || fail "env file must have mode 0600"
+}
+
+check_project() {
+  [[ "$PROJECT" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] || fail "invalid Compose project name"
+  [[ -f "$COMPOSE_FILE" && ! -L "$COMPOSE_FILE" ]] || fail "Compose file is missing or unsafe"
+}
+
+compose() {
+  docker compose --env-file "$ENV_FILE" -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+}
+
+check_docker() {
+  command -v docker >/dev/null 2>&1 || fail "Docker is unavailable"
+  docker version >/dev/null 2>&1 || fail "Docker daemon is unavailable"
+  docker compose version >/dev/null 2>&1 || fail "Docker Compose is unavailable"
+}
+
+is_production() {
+  [[ "$PROJECT" == "atlas-core" && "$(basename -- "$COMPOSE_FILE")" == "compose.yaml" ]]
+}
+
+validate_config() {
+  python3 - "$ENV_FILE" "$COMPOSE_FILE" "$PROJECT" <<'PY'
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+
+env_file, compose_file, project = sys.argv[1:]
+cmd = ["docker", "compose", "--env-file", env_file, "-p", project, "-f", compose_file, "config", "--format", "json"]
+try:
+    result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+except FileNotFoundError:
+    print("compose_config=FAIL (Docker Compose unavailable)")
+    raise SystemExit(1)
+if result.returncode:
+    print("compose_config=FAIL (configuration rejected; output suppressed)")
+    raise SystemExit(1)
+try:
+    config = json.loads(result.stdout)
+except json.JSONDecodeError:
+    print("compose_config=FAIL (configuration output invalid)")
+    raise SystemExit(1)
+
+expected_services = {"atlas-core", "atlas-relay", "atlas-proxy", "atlas-connector", "openclaw-gateway"}
+services = config.get("services", {})
+if set(services) != expected_services:
+    print("compose_config=FAIL (service set differs)")
+    raise SystemExit(1)
+isolated = project == "atlas-core-isolated" or "isolated" in os.path.basename(compose_file)
+networks = config.get("networks", {})
+edge = networks.get("atlas-edge", {})
+edge_options = edge.get("driver_opts", {})
+egress = networks.get("atlas-egress", {})
+egress_options = egress.get("driver_opts", {})
+if (networks.get("atlas-internal", {}).get("internal") is not True
+        or networks.get("atlas-internal", {}).get("driver") != "bridge"
+        or egress.get("internal") is True
+        or egress.get("driver") != "bridge"
+        or egress_options.get("com.docker.network.bridge.enable_ip_masquerade") == "false"
+        or edge.get("driver") != "bridge"
+        or edge_options.get("com.docker.network.bridge.enable_ip_masquerade") != "false"):
+    print("compose_config=FAIL (network isolation differs)")
+    raise SystemExit(1)
+expected_volume = "atlas-core-isolated-data" if isolated else "atlas-core-data"
+volume_cfg = config.get("volumes", {}).get(expected_volume, {})
+if volume_cfg.get("name") != expected_volume:
+    print("compose_config=FAIL (persistent volume name differs)")
+    raise SystemExit(1)
+
+expected_aliases = {
+    "atlas-core": "atlas-core",
+    "atlas-relay": "atlas-relay",
+    "atlas-proxy": "atlas-proxy",
+    "atlas-connector": "atlas-connector",
+    "openclaw-gateway": "openclaw-gateway",
+}
+for service_name, alias in expected_aliases.items():
+    service = services[service_name]
+    if service.get("network_mode") is not None or service.get("read_only") is not True:
+        print("compose_config=FAIL (network or filesystem isolation differs)")
+        raise SystemExit(1)
+    attached = service.get("networks", {})
+    if "atlas-internal" not in attached or alias not in attached["atlas-internal"].get("aliases", []):
+        print("compose_config=FAIL (internal DNS alias differs)")
+        raise SystemExit(1)
+    if service_name == "openclaw-gateway" and "atlas-egress" not in attached:
+        print("compose_config=FAIL (Gateway egress network missing)")
+        raise SystemExit(1)
+    if service_name != "openclaw-gateway" and "atlas-egress" in attached:
+        print("compose_config=FAIL (egress network is attached to a non-Gateway service)")
+        raise SystemExit(1)
+    expected_edge = (service_name == "atlas-proxy" if not isolated
+                     else service_name in {"atlas-core", "atlas-proxy", "atlas-connector", "openclaw-gateway"})
+    if ("atlas-edge" in attached) != expected_edge:
+        print("compose_config=FAIL (host ingress network attachment differs)")
+        raise SystemExit(1)
+
+gateway = services["openclaw-gateway"]
+gateway_env = gateway.get("environment", {})
+gateway_test = gateway.get("healthcheck", {}).get("test", [])
+gateway_mounts = gateway.get("volumes", [])
+if gateway.get("image") != "ghcr.io/openclaw/openclaw@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5":
+    print("compose_config=FAIL (Gateway image is not digest pinned)")
+    raise SystemExit(1)
+update_capture_mount = next((mount for mount in gateway_mounts
+                             if mount.get("target") == "/home/nill/.openclaw.update-captures"), None)
+if (gateway_env.get("TMPDIR") != "/tmp"
+        or gateway_env.get("XDG_CACHE_HOME") != "/home/nill/.cache"
+        or "OPENCLAW_GATEWAY_TOKEN" in gateway_env
+        or gateway_test != ["CMD", "node", "openclaw.mjs", "gateway", "health", "--port", "18789", "--timeout", "5000"]
+        or gateway.get("healthcheck", {}).get("timeout") != "21s"
+        or gateway.get("healthcheck", {}).get("interval") != "30s"
+        or gateway.get("healthcheck", {}).get("retries") != 3
+        or gateway.get("healthcheck", {}).get("start_period") != "20s"
+        or not update_capture_mount
+        or update_capture_mount.get("type") != "bind"
+        or update_capture_mount.get("read_only", False) is not False
+        or update_capture_mount.get("bind", {}).get("create_host_path", False) is not False):
+    print("compose_config=FAIL (Gateway runtime, healthcheck or capture mount differs)")
+    raise SystemExit(1)
+try:
+    capture_info = os.lstat(update_capture_mount.get("source", ""))
+except OSError:
+    print("compose_config=FAIL (Gateway update-capture directory is missing)")
+    raise SystemExit(1)
+if (stat.S_ISLNK(capture_info.st_mode) or not stat.S_ISDIR(capture_info.st_mode)
+        or stat.S_IMODE(capture_info.st_mode) != 0o700 or capture_info.st_uid != 1000):
+    print("compose_config=FAIL (Gateway update-capture directory permissions or owner differ)")
+    raise SystemExit(1)
+if "512m" not in gateway.get("tmpfs", [""])[0] or "nodev" not in gateway.get("tmpfs", [""])[0]:
+    print("compose_config=FAIL (Gateway temporary filesystem differs)")
+    raise SystemExit(1)
+
+expected_ports = {
+    "atlas-core": {("127.0.0.1", "18100", 8100)} if isolated else set(),
+    "atlas-relay": set(),
+    "atlas-proxy": {("127.0.0.1", "14400" if isolated else "4400", 4400)},
+    "atlas-connector": {("127.0.0.1", "14401", 4401)} if isolated else set(),
+    "openclaw-gateway": {("127.0.0.1", "14402", 18789)} if isolated else set(),
+}
+for service_name, service in services.items():
+    actual = set()
+    for port in service.get("ports", []):
+        actual.add((str(port.get("host_ip", "0.0.0.0")), str(port.get("published", "")), int(port.get("target", 0))))
+    if actual != expected_ports[service_name]:
+        print("compose_config=FAIL (published port set differs)")
+        raise SystemExit(1)
+
+core_caps = json.loads(services["atlas-core"].get("environment", {}).get("ATLAS_V4_CAPABILITIES_JSON", "{}"))
+expected_caps = {
+    "day_plan.read", "activity_status.read", "plan_revision.propose", "usage_summary.read",
+    "goal_progress.read", "training_plan.read", "coach.chat", "day_plan.snapshot.write",
+    "activity_status.write", "usage_summary.write", "goal_progress.write", "training_plan.write",
+    "consent.state.write", "proposal.ack",
+}
+if set(core_caps) != expected_caps or not all(value is True for value in core_caps.values()):
+    print("compose_config=FAIL (Core capability list differs)")
+    raise SystemExit(1)
+
+if not isolated:
+    gateway = services["openclaw-gateway"]
+    core = services["atlas-core"]
+    if core.get("user") != "10001:10001" or core.get("environment", {}).get("ATLAS_V4_ENABLED") != "1":
+        print("compose_config=FAIL (Core runtime identity or V4 mode differs)")
+        raise SystemExit(1)
+    dockerfile = os.path.join(os.path.dirname(compose_file), "backend", "Dockerfile")
+    try:
+        dockerfile_text = open(dockerfile, encoding="utf-8").read()
+    except OSError:
+        print("compose_config=FAIL (Core Dockerfile unavailable)")
+        raise SystemExit(1)
+    if '"--host", "0.0.0.0", "--port", "8100", "--workers", "1"' not in dockerfile_text:
+        print("compose_config=FAIL (Core listener or worker count differs)")
+        raise SystemExit(1)
+    if "FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b" not in dockerfile_text:
+        print("compose_config=FAIL (Core base image is not digest pinned)")
+        raise SystemExit(1)
+
+owners = {
+    "atlas_token": 10001,
+    "atlas_tool_token": 10001,
+    "openclaw_gateway_token": 10001,
+    "atlas_v4_relay_assertion_keys": 10001,
+    "atlas_v4_cursor": 10001,
+    "atlas_connector_assertion_secret": 1000,
+    "atlas_connector_principal_map": 1000,
+    "atlas_connector_service_token": 1000,
+}
+secrets = config.get("secrets", {})
+if set(secrets) != set(owners):
+    print("secret_files=FAIL (secret source set differs)")
+    raise SystemExit(1)
+for name, uid in owners.items():
+    path_value = secrets[name].get("file")
+    if not isinstance(path_value, str):
+        print("secret_files=FAIL (secret source missing)")
+        raise SystemExit(1)
+    path = os.path.abspath(os.path.expanduser(path_value))
+    try:
+        file_info = os.lstat(path)
+        parent_info = os.lstat(os.path.dirname(path))
+    except OSError:
+        print("secret_files=FAIL (one or more secret files are missing)")
+        raise SystemExit(1)
+    if (stat.S_ISLNK(file_info.st_mode) or not stat.S_ISREG(file_info.st_mode)
+            or stat.S_IMODE(file_info.st_mode) != 0o600 or file_info.st_uid != uid
+            or stat.S_ISLNK(parent_info.st_mode) or not stat.S_ISDIR(parent_info.st_mode)
+            or stat.S_IMODE(parent_info.st_mode) != 0o700
+            or (os.geteuid() != 0 and parent_info.st_uid != os.geteuid())):
+        print("secret_files=FAIL (permissions or owner do not match)")
+        raise SystemExit(1)
+
+print(f"compose_config=PASS services=5 project={project} volume={expected_volume}")
+print("secret_files=PASS permissions=0600 directories=0700 owners=verified")
+PY
+}
+
+service_id() {
+  local service="$1" ids
+  ids="$(compose ps -aq "$service" 2>/dev/null || true)"
+  if [[ -z "$ids" ]]; then
+    return 1
+  fi
+  printf '%s\n' "$ids" | head -n 1
+}
+
+service_health() {
+  local cid="$1"
+  docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || printf 'missing|none'
+}
+
+service_ports() {
+  local cid="$1"
+  docker inspect --format '{{range $p,$cfg := .NetworkSettings.Ports}}{{if $cfg}}{{range $cfg}}{{.HostIp}}:{{.HostPort}}->{{$p}} {{end}}{{end}}{{end}}' "$cid" 2>/dev/null | xargs || true
+}
+
+connector_metrics() {
+  local raw
+  raw="$(compose exec -T atlas-connector node -e "fetch('http://127.0.0.1:4401/metrics').then(async r=>{if(!r.ok)process.exit(2);const x=await r.json();process.stdout.write(JSON.stringify({relay_connected:x.relay_connected===true,active_sessions:Number.isInteger(x.active_sessions)?x.active_sessions:null}))}).catch(()=>process.exit(2))" 2>/dev/null || true)"
+  if [[ "$raw" =~ ^\{"relay_connected":(true|false),"active_sessions":([0-9]+|null)\}$ ]]; then
+    printf '%s\n' "$raw"
+  else
+    printf 'unavailable\n'
+  fi
+}
+
+render_status() {
+  printf '%-20s %-18s %s\n' SERVICE HEALTH PUBLISHED_PORTS
+  local service cid health ports
+  for service in "${SERVICES[@]}"; do
+    if ! cid="$(service_id "$service")"; then
+      printf '%-20s %-18s %s\n' "$service" absent none
+      continue
+    fi
+    health="$(service_health "$cid")"
+    ports="$(service_ports "$cid")"
+    [[ -n "$ports" ]] || ports=none
+    printf '%-20s %-18s %s\n' "$service" "$health" "$ports"
+  done
+  printf 'Pixel/Relay transport: '
+  local metrics
+  metrics="$(connector_metrics)"
+  if [[ "$metrics" == unavailable ]]; then
+    printf 'metrics unavailable\n'
+  elif [[ "$metrics" =~ ^\{"relay_connected":(true|false),"active_sessions":([0-9]+|null)\}$ ]]; then
+    printf 'relay_connected=%s active_sessions=%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    printf 'metrics unavailable\n'
+  fi
+}
+
+wait_healthy() {
+  local timeout="${ATLAS_STACK_HEALTH_TIMEOUT_S:-240}"
+  [[ "$timeout" =~ ^[0-9]+$ ]] || fail "health timeout must be an integer"
+  local deadline=$((SECONDS + timeout)) service cid state all_healthy
+  while (( SECONDS <= deadline )); do
+    all_healthy=1
+    for service in "${SERVICES[@]}"; do
+      if ! cid="$(service_id "$service")"; then
+        all_healthy=0
+        break
+      fi
+      state="$(service_health "$cid")"
+      if [[ "$state" != running\|healthy ]]; then
+        if [[ "$state" == running\|none ]]; then
+          :
+        fi
+        all_healthy=0
+        break
+      fi
+    done
+    if (( all_healthy == 1 )); then
+      printf 'healthchecks=PASS services=5\n'
+      return 0
+    fi
+    sleep 2
+  done
+  render_status
+  fail "one or more services did not become healthy before timeout"
+}
+
+check_networks() {
+  local ids id label internal masquerade found_internal=0 found_egress=0 found_edge=0
+  ids="$(docker network ls -q --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true)"
+  for id in $ids; do
+    label="$(docker network inspect --format '{{index .Labels "com.docker.compose.network"}}' "$id" 2>/dev/null || true)"
+    internal="$(docker network inspect --format '{{.Internal}}' "$id" 2>/dev/null || true)"
+    masquerade="$(docker network inspect --format '{{index .Options "com.docker.network.bridge.enable_ip_masquerade"}}' "$id" 2>/dev/null || true)"
+    if [[ "$label" == atlas-internal && "$internal" == true ]]; then found_internal=1; fi
+    if [[ "$label" == atlas-egress && "$internal" == false && "$masquerade" != false ]]; then found_egress=1; fi
+    if [[ "$label" == atlas-edge && "$internal" == false && "$masquerade" == false ]]; then found_edge=1; fi
+  done
+  if (( found_internal == 1 )); then printf 'network_atlas-internal=PASS internal=true\n'; else printf 'network_atlas-internal=FAIL\n'; return 1; fi
+  if (( found_edge == 1 )); then printf 'network_atlas-edge=PASS masquerade=false\n'; else printf 'network_atlas-edge=FAIL\n'; return 1; fi
+  if (( found_egress == 1 )); then printf 'network_atlas-egress=PASS internal=false\n'; else printf 'network_atlas-egress=FAIL\n'; return 1; fi
+}
+
+check_volume() {
+  local volume
+  if [[ "$PROJECT" == atlas-core-isolated || "$(basename -- "$COMPOSE_FILE")" == compose.isolated.yaml ]]; then
+    volume=atlas-core-isolated-data
+  else
+    volume=atlas-core-data
+  fi
+  if docker volume inspect "$volume" >/dev/null 2>&1; then
+    printf 'volume_%s=PASS\n' "$volume"
+  else
+    printf 'volume_%s=FAIL\n' "$volume"
+    return 1
+  fi
+}
+
+check_health() {
+  local failed=0 service cid state
+  for service in "${SERVICES[@]}"; do
+    if ! cid="$(service_id "$service")"; then
+      printf 'health_%s=FAIL absent\n' "$service"
+      failed=1
+      continue
+    fi
+    state="$(service_health "$cid")"
+    if [[ "$state" == running\|healthy ]]; then
+      printf 'health_%s=PASS\n' "$service"
+    else
+      printf 'health_%s=FAIL state=%s\n' "$service" "$state"
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
+check_tailscale() {
+  command -v tailscale >/dev/null 2>&1 || { printf 'tailscale=FAIL unavailable\n'; return 1; }
+  tailscale status >/dev/null 2>&1 || { printf 'tailscale=FAIL disconnected\n'; return 1; }
+  printf 'tailscale=PASS\n'
+  local funnel
+  funnel="$(tailscale funnel status 2>/dev/null || true)"
+  if [[ "$funnel" == *8443* && "$funnel" == *127.0.0.1:4400* ]]; then
+    printf 'funnel_8443_to_127.0.0.1:4400=PASS\n'
+  else
+    printf 'funnel_8443_to_127.0.0.1:4400=FAIL\n'
+    return 1
+  fi
+}
+
+check_zfs() {
+  local backup_root
+  backup_root="$(python3 - "$ENV_FILE" <<'PY'
+import os,sys
+values={}
+for line in open(sys.argv[1],encoding="utf-8"):
+    s=line.strip()
+    if not s or s.startswith("#") or "=" not in s: continue
+    k,v=s.split("=",1)
+    if len(v)>=2 and v[0]==v[-1] and v[0] in "\"'": v=v[1:-1]
+    values[k.strip()]=v.strip()
+value=values.get("ATLAS_BACKUP_DIR",os.path.join(os.path.expanduser("~"),".local/state/atlas-stack/backups"))
+print(os.path.expanduser(os.path.expandvars(value)))
+PY
+  )"
+  python3 - "$backup_root" <<'PY'
+import subprocess,sys
+path=sys.argv[1]
+try:
+    mount=subprocess.run(["findmnt","-n","-o","FSTYPE,SOURCE","--target",path],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False)
+    fields=mount.stdout.strip().split(None,1)
+    if mount.returncode or len(fields)!=2 or fields[0]!="zfs": raise ValueError
+    enc=subprocess.run(["zfs","get","-H","-o","value","encryption",fields[1]],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False)
+    key=subprocess.run(["zfs","get","-H","-o","value","keystatus",fields[1]],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False)
+    if enc.returncode or key.returncode or enc.stdout.strip()!="aes-256-gcm" or key.stdout.strip()!="available": raise ValueError
+except (OSError,ValueError):
+    print("zfs_encryption=FAIL (aes-256-gcm not verified)")
+    raise SystemExit(1)
+print("zfs_encryption=PASS aes-256-gcm key=available")
+PY
+}
+
+check_clock() {
+  local synchronized
+  synchronized="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)"
+  if [[ "$synchronized" == yes || "$synchronized" == true ]]; then
+    printf 'clock_sync=PASS\n'
+  else
+    printf 'clock_sync=FAIL\n'
+    return 1
+  fi
+}
+
+stop_systemd_gateway_for_up() {
+  is_production || return 0
+  command -v systemctl >/dev/null 2>&1 || return 0
+  if systemctl --user is-active --quiet openclaw-gateway.service; then
+    printf 'warning: stopping active openclaw-gateway.service before Compose starts\n' >&2
+    systemctl --user stop openclaw-gateway.service || fail "could not stop the systemd Gateway"
+  fi
+}
+
+doctor() {
+  local failed=0
+  check_docker || failed=1
+  validate_config || failed=1
+  check_volume || failed=1
+  check_networks || failed=1
+  check_health || failed=1
+  if is_production; then
+    check_tailscale || failed=1
+    check_zfs || failed=1
+    check_clock || failed=1
+    local systemd_active container_active
+    systemd_active=0
+    container_active=0
+    if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet openclaw-gateway.service; then systemd_active=1; fi
+    if [[ -n "$(compose ps --status running -q openclaw-gateway 2>/dev/null || true)" ]]; then container_active=1; fi
+    if (( systemd_active == 1 && container_active == 1 )); then
+      printf 'gateway_multiplicity=FAIL systemd_and_container_active\n'
+      failed=1
+    else
+      printf 'gateway_multiplicity=PASS\n'
+    fi
+  else
+    printf 'host_tailscale_funnel_zfs_clock=NOT_APPLICABLE (isolated project)\n'
+    printf 'gateway_multiplicity=NOT_APPLICABLE (isolated project)\n'
+  fi
+  return "$failed"
+}
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/atlas-stack {doctor|up|status|logs|backup|restart|down}
+Environment overrides for isolated operation: ATLAS_STACK_ENV_FILE,
+ATLAS_STACK_COMPOSE_FILE, ATLAS_STACK_PROJECT.
+EOF
+}
+
+main() {
+  (($# >= 1)) || { usage >&2; exit 2; }
+  local action="$1"
+  shift
+  check_env_file
+  check_project
+  case "$action" in
+    doctor)
+      (($# == 0)) || fail "doctor takes no arguments"
+      doctor
+      ;;
+    up)
+      (($# == 0)) || fail "up takes no arguments"
+      check_docker
+      validate_config || fail "Compose configuration or secret file check failed"
+      stop_systemd_gateway_for_up
+      if [[ "${ATLAS_STACK_BUILD_IMAGES:-1}" == 1 ]]; then
+        compose build
+        compose up -d
+      elif [[ "${ATLAS_STACK_BUILD_IMAGES:-1}" == 0 ]]; then
+        compose up --no-build -d
+      else
+        fail "ATLAS_STACK_BUILD_IMAGES must be 0 or 1"
+      fi
+      wait_healthy
+      ;;
+    status)
+      (($# == 0)) || fail "status takes no arguments"
+      check_docker
+      render_status
+      ;;
+    logs)
+      local tail=100
+      if (($# > 1)); then fail "logs accepts at most one tail count"; fi
+      if (($# == 1)); then tail="$1"; fi
+      [[ "$tail" =~ ^[0-9]+$ ]] || fail "log tail must be an integer"
+      check_docker
+      compose logs --tail "$tail"
+      ;;
+    backup)
+      (($# == 0)) || fail "backup takes no arguments"
+      check_docker
+      python3 "$ROOT/scripts/v7-12/backup.py" --env-file "$ENV_FILE" --compose-file "$COMPOSE_FILE" --project "$PROJECT"
+      ;;
+    restart)
+      (($# == 0)) || fail "restart takes no arguments"
+      check_docker
+      stop_systemd_gateway_for_up
+      compose restart
+      wait_healthy
+      ;;
+    down)
+      (($# == 0)) || fail "down takes no arguments"
+      check_docker
+      compose down --remove-orphans
+      ;;
+    -h|--help|help)
+      usage
+      ;;
+    *)
+      usage >&2
+      fail "unknown action: $action"
+      ;;
+  esac
+}
+
+main "$@"
