@@ -51,25 +51,51 @@ Vérifier que 4400/4401 ne sont plus en écoute. Ne pas lancer `scripts/r3a/star
 
 ### Étape 2 — Fenêtre Core et provisioning identité
 
-1. Arrêter le conteneur Core historique (`docker stop atlas-core-atlas-core-1`).
-2. Vérifier le volume et la base : `user_version=5`, intégrité, FK, registre vide.
-3. Exécuter le provisioning hors ligne, conteneur one-off, UID 10001, Core arrêté :
-   - principal `ANDROID` avec **nouveau** `device_ref` ;
-   - credential `RELAY` généré ;
-   - binding vers l'ID Relay réel de `pixel-v7` ;
-   - capabilities produit minimales ;
-   - vérification des deltas exacts et des compteurs.
-4. Écrire la map privée du connecteur (`relay_device_id → principal_id + credential_file`) avec le chemin **interne au conteneur**.
-5. Vérifier les permissions : credentials et map 0600, propriétaire 1000 ; keyring/cursor 0600, propriétaire 10001.
-6. Ne jamais afficher ni journaliser un bearer, un secret HMAC ou un identifiant brut.
+1. Vérifier que `atlas_token` et `atlas_tool_token` V7-12 sont **byte-identiques** aux secrets legacy (`~/.local/state/atlas-core/secrets/compose/atlas-core.token` et `atlas-tool.token`) ; ne jamais régénérer le bearer partagé avant la confirmation propriétaire LEGACY.
+2. Prendre un snapshot frais hors ligne : backup SQLite cohérent du Core arrêté, verrou, `/data/replay`, secrets Core, `identity.json`/`devices.json`/`operations.json`, état OpenClaw (Gateway arrêté), `stack.env`, manifeste SHA-256 et intégrité SQLite.
+3. Arrêter le conteneur Core historique (`docker stop atlas-core-atlas-core-1`) puis le retirer (`docker rm atlas-core-atlas-core-1`) ; l'image et le volume restent.
+4. Vérifier le volume et la base : `user_version=5`, intégrité, FK, registre vide.
+5. Extraire l'ID Relay actif de `pixel-v7` depuis `devices.json` et exécuter le provisioning hors ligne dans un conteneur `--network none --read-only --user 10001:10001`, volume `atlas-core-data:/data`, dépôt en lecture seule, token outil monté depuis son fichier privé :
+
+```sh
+docker run --rm --user 10001:10001 --network none --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16m --entrypoint python \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -v atlas-core-data:/data -v "$PWD:/repo:ro" \
+  -v "$HOME/.local/state/atlas-core/secrets/v7-12/atlas-tool-token:/run/secrets/atlas_tool_token:ro" \
+  atlas-core-v7-12:v7-12-local \
+  /repo/scripts/v7-12/provision-relay-principal.py \
+    --db /data/atlas.sqlite3 --relay-device-id "$RELAY_DEVICE_ID" \
+    --relay-credential-output /data/.v7-12-cutover/relay-credential \
+    --map-output /data/.v7-12-cutover/principal-map.json \
+    --receipt /data/.v7-12-cutover/receipt.json \
+    --snapshot /data/.v7-12-cutover/snapshot.json \
+    --credential-container-path /state/v7-12/relay-credential \
+    --tool-token-file /run/secrets/atlas_tool_token
+```
+
+6. Vérifier en lecture seule avec le vérificateur (exporter la base, la réception, le snapshot, la map et le credential vers un répertoire temporaire privé 0700 possédé par l'opérateur, puis exécuter en UID 1000 `--network none --read-only` avec `--require-keyring`) :
+
+```sh
+python /repo/scripts/v7-12/verify-v4-cutover.py \
+  --db /work/atlas.sqlite3 --relay-devices-file /work/devices.json \
+  --relay-credential /work/relay-credential --tool-token-file /work/tool-token \
+  --map /work/principal-map.json --receipt /work/receipt.json \
+  --snapshot /work/snapshot.json --keyring-file /work/keyring.json --require-keyring
+```
+
+7. Copier `relay-credential` et `principal-map.json` vers `~/.local/state/atlas-relay/v7-12/` (0600, propriétaire 1000), renseigner `ATLAS_V4_TOOL_PRINCIPAL_ID` dans `stack.env`, conserver le reçu/snapshot en preuve privée, puis supprimer `/data/.v7-12-cutover` du volume.
+8. Vérifier les permissions : credentials et map 0600, propriétaire 1000 ; keyring/cursor 0600, propriétaire 10001.
+9. Ne jamais afficher ni journaliser un bearer, un secret HMAC ou un identifiant brut.
 
 ### Étape 3 — Bascule des conteneurs
 
-1. Arrêter l'ancien Relay `atlas-v7-relay` (aucun volume).
-2. Arrêter `openclaw-gateway.service` et attendre la libération de 18789.
+1. Arrêter l'ancien Relay `atlas-v7-relay` (aucun volume) ; conserver l'image `atlas-paseo-relay:r3a`.
+2. Arrêter `openclaw-gateway.service`, vérifier la libération de 18789, puis la **désactiver** au démarrage automatique (`systemctl --user disable openclaw-gateway.service`) afin qu'un reboot ne crée pas un second Gateway sur `~/.openclaw`. Le service reste installé pour le rollback.
 3. Vérifier qu'aucun processus n'écrit dans `~/.openclaw`.
-4. Démarrer la stack : `./scripts/atlas-stack up`.
-5. Vérifier les cinq healthchecks et l'absence de publication des ports 8100/4000/4401/18789.
+4. Démarrer uniquement Core, attendre son healthcheck, exécuter `./scripts/atlas-stack backup` (Core quiescé pour le replay), puis vérifier restauration/manifeste/intégrité. Ce backup est la preuve opérationnelle pré-live.
+5. Relancer Core si nécessaire (`docker compose up -d --no-build --wait atlas-core`) puis démarrer la stack complète avec `ATLAS_STACK_BUILD_IMAGES=0 ./scripts/atlas-stack up` (ne pas reconstruire les images validées).
+6. Vérifier les cinq healthchecks et l'absence de publication des ports 8100/4000/4401/18789.
 
 ### Étape 4 — Oracles internes
 
@@ -114,7 +140,7 @@ Préconditions : Pixel connecté en USB, APK V7-11 présent et hash vérifié, s
 | Relay | Relancer `atlas-v7-relay` sur 127.0.0.1:4402 | Aucun volume. |
 | Connecteur | Restaurer l'ancien env-file, relancer le processus hôte, vérifier identity/devices/operations | État préservé ; une map/credential dormant peut rester. |
 | Core | Revenir à l'image précédente `sha256:1e4c8e6c…` et à l'override legacy ; restaurer la DB seulement si nécessaire | Un restore perd les écritures postérieures au backup ; afficher la perte. |
-| Gateway | Arrêter le conteneur, redémarrer `openclaw-gateway.service`, vérifier le même état | Aucun double écrivain. |
+| Gateway | Arrêter le conteneur, `systemctl --user enable --now openclaw-gateway.service`, vérifier le même état | Aucun double écrivain ; ne jamais démarrer tant que le conteneur Gateway tourne. |
 | Docker | `docker compose down` sans `-v`, volumes conservés | Aucune suppression. |
 | Pixel | Installer l'APK précédent en place, données préservées | Pas de `pm clear`, pas de désinstallation. |
 | Tailscale | Aucune modification | — |
