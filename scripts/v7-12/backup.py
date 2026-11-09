@@ -246,19 +246,12 @@ def copy_openclaw_state(source: Path, destination: Path) -> None:
 def copy_core_secrets(core_id: str, destination: Path) -> None:
     destination.mkdir(mode=0o700)
     for name in CORE_SECRET_NAMES:
-        try:
-            result = subprocess.run(["docker", "exec", core_id, "cat", f"/run/secrets/{name}"],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-        except FileNotFoundError:
-            raise BackupError("Docker is unavailable while copying Core restore material") from None
-        if result.returncode != 0 or not result.stdout:
-            raise BackupError("a required Core restore secret could not be copied or was empty")
         path = destination / name
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        with os.fdopen(fd, "wb") as output:
-            output.write(result.stdout)
-            output.flush()
-            os.fsync(output.fileno())
+        run_quiet(["docker", "cp", f"{core_id}:/run/secrets/{name}", str(path)],
+                  label=f"copying Core restore secret {name}")
+        os.chmod(path, 0o600)
+        if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+            raise BackupError(f"Core restore secret {name} is missing, unsafe, or empty")
 
 
 def copy_connector_state(source: Path, destination: Path) -> None:
@@ -363,33 +356,29 @@ def main() -> int:
         if stopped:
             compose.run("stop", "--timeout", "30", *stopped, label="stopping snapshot writers")
 
-        temporary_db = f"/data/.atlas-backup-{uuid.uuid4().hex}.sqlite3"
-        backup_sql = (
-            "import sqlite3,sys; "
-            "src=sqlite3.connect('file:/data/atlas.sqlite3?mode=ro',uri=True); "
-            "dst=sqlite3.connect(sys.argv[1]); src.backup(dst); dst.close(); src.close()"
-        )
+        journal_mode = compose.run(
+            "exec", "-T", "atlas-core", "python", "-c",
+            "import sqlite3; print(sqlite3.connect('file:/data/atlas.sqlite3?mode=ro',uri=True)"
+            ".execute('PRAGMA journal_mode').fetchone()[0])",
+            label="checking SQLite journal mode",
+        ).strip().lower()
+        if journal_mode != "delete":
+            raise BackupError(
+                f"SQLite journal mode must be delete for a quiescent snapshot (found {journal_mode})"
+            )
+
+        # Stop the sole SQLite writer so the database and replay sidecars are
+        # copied at the same quiescent instant; no online-backup window remains.
+        if running(compose, "atlas-core"):
+            stopped.append("atlas-core")
+            compose.run("stop", "--timeout", "30", "atlas-core", label="quiescing Core for snapshot")
+
         database_path = core_dir / "atlas.sqlite3"
-        try:
-            run_quiet(["docker", "exec", core_id, "python", "-c", backup_sql, temporary_db],
-                      label="SQLite online backup API")
-            run_quiet(["docker", "cp", f"{core_id}:{temporary_db}", str(database_path)],
-                      label="copying SQLite backup")
-        finally:
-            try:
-                run_quiet(["docker", "exec", core_id, "python", "-c", "import os,sys; os.unlink(sys.argv[1])", temporary_db],
-                          label="removing temporary SQLite backup")
-            except BackupError:
-                pass
+        run_quiet(["docker", "cp", f"{core_id}:/data/atlas.sqlite3", str(database_path)],
+                  label="copying quiescent SQLite database")
         os.chmod(database_path, 0o600)
         sqlite_info = sqlite_checks(database_path)
         copy_core_secrets(core_id, core_dir / "secrets")
-
-        # The online SQLite backup above is coherent; stop Core before copying
-        # the lock and replay sidecars so no nonce cache write races the copy.
-        if running(compose, "atlas-core"):
-            stopped.append("atlas-core")
-            compose.run("stop", "--timeout", "30", "atlas-core", label="quiescing Core for replay cache copy")
 
         run_quiet(["docker", "cp", f"{core_id}:/data/atlas.sqlite3.lock", str(core_dir / "atlas.sqlite3.lock")],
                   label="copying Core lock file")
@@ -410,7 +399,7 @@ def main() -> int:
                 "integrity_check": sqlite_info[0],
                 "foreign_key_violations": sqlite_info[1],
                 "user_version": sqlite_info[2],
-                "capture": "sqlite3.Connection.backup",
+                "capture": "quiescent file copy after Core stop",
                 "replay_capture": "stopped file copy after Core quiesce",
             },
             "connector_files": ["identity.json", "devices.json", "operations.json"],
