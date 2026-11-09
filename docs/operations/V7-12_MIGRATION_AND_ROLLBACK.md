@@ -158,7 +158,14 @@ Ne jamais utiliser `docker compose down -v`. Ne jamais supprimer `atlas-core-dat
 
 ## 5. Après migration
 
-- Le service systemd Gateway reste installé et arrêté ; il ne doit jamais tourner en même temps que le conteneur.
+- Le service systemd Gateway reste installé, arrêté et **désactivé** ; il ne doit jamais tourner en même temps que le conteneur. Un reboot ne doit pas le relancer.
 - Les anciens backups et images de rollback sont conservés.
 - `docs/operations/V7-12_FINAL_REPORT.md` consigne SHA, CI, images/digests, volumes, services, tests, backups, binding, Pixel, Tailscale, rollback et verdict.
 - Les prochains travaux sont pilotés par les retours d'usage quotidien, pas par un backlog spéculatif.
+
+## 6. Retour d'expérience du cutover live (2026-11-09)
+
+- L'entrypoint image OpenClaw exécute `doctor --fix --non-interactive` avant le Gateway. Sur l'état live, Doctor refuse la migration du plugin `codex` et le Gateway ne sert pas. La production utilise `init: true` + entrypoint `node /app/openclaw.mjs` + commande CLI directe, identique au service systemd, sans réparation automatique. Les captures temporaires incompatibles ont été déplacées sous `~/.openclaw.update-captures/plugin-captures-quarantine-*`. Ne pas relancer l'entrypoint image complet sans réévaluer ce refus.
+- `scripts/atlas-stack status` affiche désormais `relay_connected=true|false active_sessions=N` à partir des métriques connecteur ; une métrique invalide affiche `unavailable` sans masquer l'erreur.
+- Backups de référence : `pre-cutover-20261109T194727Z` (sécurité, 75 744 entrées) et `atlas-backup-20261109T201453Z-56b83945` (opérationnel vérifié, 75 813 entrées).
+- Le bearer LEGACY et le token outil sont byte-identiques aux valeurs historiques ; le mode reste `dual`. Aucune révocation LEGACY ne doit être faite avant la preuve Pixel et la confirmation propriétaire.
