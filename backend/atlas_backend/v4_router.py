@@ -13,6 +13,7 @@ import math
 import os
 import re
 import sqlite3
+import stat
 import threading
 import time
 import uuid
@@ -418,6 +419,100 @@ def _configured_capabilities() -> dict[str, bool]:
     return result
 
 
+def _read_cursor_secret_file(file_path: str) -> bytes:
+    """Read a private cursor secret without following or trusting a pathname race."""
+    if not isinstance(file_path, str) or not file_path or not os.path.isabs(file_path):
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE must be an absolute path")
+    path = Path(file_path)
+    try:
+        before = path.lstat()
+    except OSError:
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE is unavailable") from None
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE must be a regular non-symlink file")
+    if before.st_uid != os.geteuid() or stat.S_IMODE(before.st_mode) != 0o600:
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE must be owned by the process with mode 0600")
+    if not 1 <= before.st_size <= 4096:
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE must contain 1 to 4096 bytes")
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE requires O_NOFOLLOW support")
+
+    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE is unavailable or unsafe") from None
+    try:
+        opened = os.fstat(descriptor)
+        identity = (before.st_dev, before.st_ino)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or (opened.st_dev, opened.st_ino) != identity
+            or opened.st_uid != os.geteuid()
+            or stat.S_IMODE(opened.st_mode) != 0o600
+            or not 1 <= opened.st_size <= 4096
+        ):
+            raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE changed or is unsafe")
+        content = bytearray()
+        while len(content) <= 4096:
+            part = os.read(descriptor, min(1024, 4097 - len(content)))
+            if not part:
+                break
+            content.extend(part)
+        after_fd = os.fstat(descriptor)
+        try:
+            after_path = path.lstat()
+        except OSError:
+            raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE changed while reading") from None
+        stable_fields = ("st_dev", "st_ino", "st_uid", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if (
+            len(content) > 4096
+            or len(content) != before.st_size
+            or any(getattr(opened, field) != getattr(after_fd, field) for field in stable_fields)
+            or any(getattr(before, field) != getattr(after_path, field) for field in stable_fields)
+            or (after_path.st_dev, after_path.st_ino) != identity
+        ):
+            raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE changed or is too large")
+    except OSError:
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE could not be read") from None
+    finally:
+        os.close(descriptor)
+
+    try:
+        secret = bytes(content).decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        raise ValueError("ATLAS_V4_CURSOR_SECRET_FILE must contain UTF-8") from None
+    if secret.endswith("\r\n"):
+        secret = secret[:-2]
+    elif secret.endswith("\n"):
+        secret = secret[:-1]
+    if len(secret) < 32:
+        raise ValueError("cursor secret must contain at least 32 characters")
+    return secret.encode("utf-8")
+
+
+def _configured_cursor_secret(auth_mode: str) -> bytes | None:
+    env_name = "ATLAS_V4_CURSOR_SECRET"
+    file_name = "ATLAS_V4_CURSOR_SECRET_FILE"
+    has_env = env_name in os.environ
+    has_file = file_name in os.environ
+    if has_env and has_file:
+        raise ValueError("configure only one V4 cursor secret source")
+    if has_env:
+        raw_secret = os.environ[env_name]
+        if len(raw_secret) < 32:
+            raise ValueError("ATLAS_V4_CURSOR_SECRET must contain at least 32 characters")
+        try:
+            return raw_secret.encode("utf-8", errors="strict")
+        except UnicodeEncodeError:
+            raise ValueError("ATLAS_V4_CURSOR_SECRET must be valid UTF-8") from None
+    if has_file:
+        return _read_cursor_secret_file(os.environ[file_name])
+    if auth_mode == "principal":
+        raise ValueError("ATLAS_V4_CURSOR_SECRET or ATLAS_V4_CURSOR_SECRET_FILE is required in principal mode")
+    return None
+
+
 def _device_ref(android_token: str) -> str:
     return "android-" + hashlib.sha256(android_token.encode("utf-8")).hexdigest()[:32]
 
@@ -515,12 +610,7 @@ def create_v4_router(
         if schema_version < 5 or migration is None:
             raise ValueError("V4 proposal expiration migration is incomplete")
     registry = V4PrincipalRegistry(store)
-    cursor_secret_raw = os.getenv("ATLAS_V4_CURSOR_SECRET")
-    if cursor_secret_raw is not None and len(cursor_secret_raw) < 32:
-        raise ValueError("ATLAS_V4_CURSOR_SECRET must contain at least 32 characters")
-    if auth_mode == "principal" and cursor_secret_raw is None:
-        raise ValueError("ATLAS_V4_CURSOR_SECRET is required in principal mode")
-    cursor_secret = cursor_secret_raw.encode("utf-8") if cursor_secret_raw else None
+    cursor_secret = _configured_cursor_secret(auth_mode)
     relay_assertion_keys = load_assertion_keys(
         raw_json=os.getenv("ATLAS_V4_RELAY_ASSERTION_KEYS_JSON"),
         file_path=os.getenv("ATLAS_V4_RELAY_ASSERTION_KEYS_FILE"),
