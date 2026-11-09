@@ -121,7 +121,16 @@
 | Android JVM + lint | `./gradlew :app:testDebugUnitTest :app:lintDebug --max-workers=1` : **BUILD SUCCESSFUL** (2 min 20 s) sur le SHA intégré. |
 | Propositions historiques | 3 lignes, toutes `device_ref IS NULL` ; aucune réattribution au nouveau principal, aucun backfill. |
 
-## 8. Notes de reprise
+## 8. Scout A4 et A5 — conclusions
+
+| Ticket | Conclusion |
+|---|---|
+| A4 scout | Plan complet accepté. Provisioning atomique retenu : 2 principals (ANDROID/TOOL), 2 credentials (RELAY/TOOL), 1 binding Android, 20 grants (14+6), 25 événements (4 PROVISIONED + 20 CAPABILITY_CHANGED + 1 RELAY_BOUND). Le credential TOOL réutilise `ATLAS_TOOL_TOKEN`. Le parser connecteur ne rejette pas encore une map partielle : suivi P1 A2. |
+| A4 producteur | Démarré en full-access : support `ATLAS_V4_CURSOR_SECRET_FILE`, méthode batch atomique, script de provisioning, vérificateur read-only. |
+| A5 scout | Pixel absent (0 appareil ADB). Deux points bloquants pour la recette : l'app propose encore DIRECT et le sélectionne par défaut ; le store de consentement local ne lie pas `version/synced_version` à un `device_ref`, donc le re-consentement doit être déclenché par une action UI explicite, pas par une simple sync. |
+| A5 producteur | Différé ; la limite de 3 producteurs est atteinte (A1/A3/A4). Ticket Android séparé après leurs commits. |
+
+## 9. Notes de reprise
 
 - Ne jamais utiliser `docker compose down -v`.
 - Ne jamais recréer `atlas-core-data`.
