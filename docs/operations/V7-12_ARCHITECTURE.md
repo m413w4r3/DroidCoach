@@ -25,7 +25,7 @@ Pixel 9 Pro XL (Android 17)
 Tailscale Funnel (hôte Linux, inchangé)
   │  tcp 8443 → 127.0.0.1:4400
   ▼
-atlas-proxy (conteneur, réseau interne)
+atlas-proxy (conteneur, réseaux ingress + interne)
   │  http/ws atlas-relay:4000
   ▼
 atlas-relay (conteneur, réseau interne)
@@ -51,7 +51,7 @@ Aucun autre service n'a d'accès Internet direct. Aucun `network_mode: host`.
 |---|---|---|---|---|---|---|
 | `atlas-core` | `backend/Dockerfile`, base Python épinglée | `atlas-internal` | aucun | `10001:10001` | volume `atlas-core-data:/data` | `GET http://127.0.0.1:8100/health` |
 | `atlas-relay` | `deploy/relay/Dockerfile` (FROM image Relay qualifiée + busybox) | `atlas-internal` | aucun | image (root applicatif) | aucun état persistant | `GET http://127.0.0.1:4000/health` |
-| `atlas-proxy` | `integrations/relay/proxy/Dockerfile`, Node 24 épinglé | `atlas-internal` | `127.0.0.1:4400:4400` **seul port publié** | `node` (UID 1000) | aucun | `GET http://127.0.0.1:4400/health` |
+| `atlas-proxy` | `integrations/relay/proxy/Dockerfile`, Node 24 épinglé | `atlas-internal` + `atlas-edge` | `127.0.0.1:4400:4400` **seul port publié** | `node` (UID 1000) | aucun | `GET http://127.0.0.1:4400/health` |
 | `atlas-connector` | `integrations/relay/pc/Dockerfile`, Node 24 épinglé | `atlas-internal` | aucun (métriques 4401 internes) | `1000:1000` | bind `~/.local/state/atlas-relay:/state` + secrets read-only | `GET http://127.0.0.1:4401/metrics` |
 | `openclaw-gateway` | `ghcr.io/openclaw/openclaw@sha256:f40d1e66…` (2026.10.5) | `atlas-internal` + `atlas-egress` | aucun | `1000:1000` | bind `~/.openclaw:/home/nill/.openclaw` | `openclaw gateway health --port 18789` |
 
@@ -72,7 +72,10 @@ Le Core conserve **un seul worker**, un seul écrivain SQLite, le verrou SQLite,
 | Réseau | Type | Membres | Rôle |
 |---|---|---|---|
 | `atlas-internal` | bridge `internal: true` | les cinq services | communications privées, DNS Docker |
-| `atlas-egress` | bridge | `openclaw-gateway` uniquement | sortie Internet du provider modèle |
+| `atlas-edge` | bridge avec `com.docker.network.bridge.enable_ip_masquerade: "false"` | `atlas-proxy` uniquement | ingress hôte `127.0.0.1:4400`, sans NAT donc sans accès Internet |
+| `atlas-egress` | bridge avec NAT | `openclaw-gateway` uniquement | sortie Internet du provider modèle |
+
+**Pourquoi `atlas-edge` n'est pas `internal: true` :** Docker bloque la publication de port hôte sur un réseau `internal: true` (vérifié : `127.0.0.1:4400` injoignable). `atlas-edge` est un bridge sans masquerade : l'hôte atteint le proxy par le port publié, mais le proxy n'a pas d'accès Internet (testé : sortie vers `1.1.1.1` en timeout). Il n'est donc pas un réseau de sortie Internet ; c'est uniquement le chemin d'ingress du Funnel.
 
 Adresses stables :
 

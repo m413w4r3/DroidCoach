@@ -43,7 +43,7 @@
 ## 3. Décisions d'architecture verrouillées
 
 1. Un seul `compose.yaml` racine, projet `atlas-core`, cinq services : `atlas-core`, `atlas-relay`, `atlas-proxy`, `atlas-connector`, `openclaw-gateway`.
-2. Réseau Docker privé `atlas-internal` (`internal: true`) pour les cinq services ; réseau `atlas-egress` réservé au Gateway. Aucun `network_mode: host`.
+2. Réseau Docker privé `atlas-internal` (`internal: true`) pour les cinq services ; réseau `atlas-edge` (bridge sans NAT, `enable_ip_masquerade=false`) pour le seul proxy, afin de publier `127.0.0.1:4400` sans accès Internet (un réseau `internal: true` bloque la publication de port, vérifié) ; réseau `atlas-egress` avec NAT réservé au Gateway. Aucun `network_mode: host`.
 3. Seule publication hôte : `127.0.0.1:4400:4400` pour le proxy. Core, Relay, connecteur (4401) et Gateway (18789) ne sont pas publiés.
 4. DNS internes : `http://atlas-core:8100`, `ws://atlas-relay:4000`, `http://openclaw-gateway:18789`. Le proxy écoute `0.0.0.0:4400` dans son conteneur et utilise strictement `atlas-relay:4000` comme amont.
 5. L'adaptation Docker des URL est autorisée uniquement par un mode explicite et une allowlist de noms exacts ; aucune URL client ne peut choisir la destination.
