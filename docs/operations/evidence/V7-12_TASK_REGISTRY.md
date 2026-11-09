@@ -120,6 +120,9 @@
 | Service token | `~/.local/state/atlas-relay/v7-12/service-token` : 64 octets, sans newline final, 0600 UID 1000, conforme au lecteur A2. |
 | Android JVM + lint | `./gradlew :app:testDebugUnitTest :app:lintDebug --max-workers=1` : **BUILD SUCCESSFUL** (2 min 20 s) sur le SHA intégré. |
 | Propositions historiques | 3 lignes, toutes `device_ref IS NULL` ; aucune réattribution au nouveau principal, aucun backfill. |
+| A1 intégré | `010ff1511f8e4951ab9610119540dd8fc7e78f44`, cherry-pick `8898cfa1…` ; 8 fichiers, 2 244 insertions. Compose/config PASS, image Core `sha256:a2febe6b…` (10001, `0.0.0.0:8100`, 1 worker), health mock 200, backend 474 passed/1 skipped, backup/restore synthétique PASS. |
+| A2 fix intégré | `d29cb29667dcd1692430a71a148c74aa6a59bcf0`, cherry-pick `0542cc7…` ; map partielle → V4 désactivé sans fallback, V2 conservé. Connecteur **144 passed**, proxy 20 passed/1 skipped. Images `:local` reconstruites : relay `08d1d0500e47`, proxy `e0b23fef0c13`, connector `1df5d2d3ab3d`. |
+| Stack isolée | Lancée après intégration A1/A2 ; résultat `PENDING`. |
 
 ## 8. Scout A4 et A5 — conclusions
 
