@@ -19,6 +19,8 @@ const LOOPBACK_WS_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 export interface RelayUrlPolicyOptions {
   /** Explicit opt-in for an unencrypted local relay; otherwise the environment must equal "1". */
   allowLoopbackWs?: boolean;
+  /** Exact internal Relay service name and port for the private Docker network. */
+  dockerNetwork?: boolean;
 }
 
 type TestOnlyTlsOptions = Pick<ClientOptions, "ca"> & Pick<ClientRequestArgs, "lookup">;
@@ -31,6 +33,7 @@ export interface RelayLinkOptions {
   metrics: ConnectorMetrics;
   WebSocketClass?: typeof WebSocket;
   allowLoopbackWs?: boolean;
+  dockerNetwork?: boolean;
   /** Test harness only. Production configuration does not read TLS overrides from the environment. */
   testOnlyTlsOptions?: TestOnlyTlsOptions;
   reconnectMinMs?: number;
@@ -61,7 +64,10 @@ export class RelayLink {
   constructor(private readonly options: RelayLinkOptions) {
     this.baseUrl = parseRelayUrl(
       options.relayUrl,
-      options.allowLoopbackWs === undefined ? {} : { allowLoopbackWs: options.allowLoopbackWs },
+      {
+        ...(options.allowLoopbackWs !== undefined ? { allowLoopbackWs: options.allowLoopbackWs } : {}),
+        ...(options.dockerNetwork === true ? { dockerNetwork: true } : {}),
+      },
     );
     if (!options.serverId || Buffer.byteLength(options.serverId, "utf8") > 200) throw new Error("invalid relay server id");
     this.WebSocketClass = options.WebSocketClass ?? WebSocket;
@@ -339,6 +345,14 @@ export function parseRelayUrl(value: string, options: RelayUrlPolicyOptions = {}
     if (/^[0-9.]+$/.test(addressHost) || isIP(normalizedHost) !== 0 || !isValidDnsHostname(hostname)) {
       throw new Error("relay URL host is invalid");
     }
+  }
+
+  if (options.dockerNetwork === true) {
+    if (scheme !== "ws:" || rawHost.toLowerCase() !== "atlas-relay" || rawPort !== "4000"
+        || (path !== "" && path !== "/ws")) {
+      throw new Error("Docker network mode requires ws://atlas-relay:4000 with an empty path or /ws");
+    }
+    return new URL(`ws://atlas-relay:4000${path}`);
   }
 
   if (scheme === "ws:") {

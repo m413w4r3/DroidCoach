@@ -428,3 +428,62 @@ Preuves : [`evidence/V7-11B_ANDROID_POST_MIGRATION_EVIDENCE.md`](evidence/V7-11B
 5. **Worker d'état** : cycle dédié non observé ; le chat suffit à la connectivité, pas à qualifier chaque cycle de sync.
 
 `GO_V7_11_LIVE_CHANGE_READINESS` reste **NO-GO** pour le cutover complet.
+
+## 15. Addendum — design et revue indépendante du binding V4 (2026-11-09)
+
+### 15.1 Paquet et périmètre
+
+L'utilisateur a demandé un audit et un design en lecture seule du binding V4 : principal, credential, capability, binding Relay et transition d'authentification. B16 a produit le design final `docs/operations/evidence/V7-11B_BINDING_DESIGN.md` au commit `b73c335` (1 090 lignes) ; B17 l'a relu indépendamment au commit `e5e67d2`. Aucune commande live, aucun ADB, aucun test, aucun secret et aucune mutation Core/Relay n'ont été exécutés. Le design part de la base `256d517e…`.
+
+### 15.2 État vérifié en lecture seule
+
+- Core live : `user_version=5`, auth `legacy`, zéro principal, zéro credential et zéro binding V4.
+- Montage Core : volume nommé unique sur `/data`, `ATLAS_DB_PATH=/data/atlas.sqlite3` ; base régulière, mode `0644`, intégrité et clés étrangères valides.
+- Connecteur : V4 en mode legacy, aucune map principal, identité Relay valide en `0600`, un seul appareil actif portant le libellé `pixel-v7` parmi 20 entrées.
+- Chemin réseau : proxy 4400 et métriques connecteur 4401 actifs ; chat app→Core v5 déjà prouvé en `200`. Aucune route produit supplémentaire n'a été appelée par B16/B17.
+- Relay : inchangé, non administré, non recréé ; `operations.json` reste hors du backup standard.
+
+### 15.3 Design B16
+
+Le design couvre :
+
+- les kinds `ANDROID`/`TOOL`/`LEGACY`, les audiences `DIRECT`/`RELAY`/`TOOL`/`LEGACY`, le hash SHA-256 des bearers et les capabilities explicites ;
+- l'assertion HMAC Relay (méthode, chemin, timestamp, nonce, device Relay, hash du corps), la fenêtre ±120 s, le cache anti-rejeu fichier persistant et les clés distinctes par `key_id` ;
+- le binding `relay_device_id → principal_id → device_ref`, sans réutilisation ni réactivation d'un binding révoqué ;
+- les options A (registre en legacy), B (Relay dual, bearer app inchangé), C (app DIRECT) et D (cutover principal/révocation), avec une recommandation : répétition isolée, puis B ; C et D séparés ;
+- une phase 0 de backup Core/connecteur et de génération des secrets hors dépôt ;
+- une phase 1 fail-closed de provisioning avec arrêt Core, vérification de l'`ATLAS_DB_PATH` effectif, du montage `/data`, des chemins sans symlink, de l'inode, du propriétaire, du mode, de `user_version=5`, de l'intégrité et des clés étrangères ;
+- un trap qui restaure la configuration Core legacy sur échec avant validation dual, en gardant le connecteur arrêté ;
+- un oracle par deltas logiques exacts pour les CLI mutantes : `principal add`, `credential add`, `binding add` et `capability set` ne peuvent modifier que les tables et lignes attendues ; les tables non concernées et les lignes préexistantes restent identiques ; l'égalité du hash global n'est exigée que pour les étapes read-only et le backup ;
+- un contrôle final des compteurs attendus (1 principal, 1 credential, 1 binding, 1 grant, 4 événements) ;
+- une phase 2/3 explicitement partielle et non autonome, sans exécution live.
+
+### 15.4 Revue B17
+
+B17 a trouvé puis suivi :
+
+- **P1-01** (précontrôles avant arrêt et trap) : fermé.
+- **P1-02** (cible SQLite non liée au conteneur) : fermé par la lecture de l'environnement effectif, la comparaison du volume et les contrôles `lstat`/`realpath`/inode.
+- **P1-03** (le hash strict annulait les mutations attendues) : fermé après la correction B16 par l'oracle de deltas logiques exacts.
+- **P1-04** (TypeError BLOB) : faux positif retiré après vérification du code ; `canon()` ne reçoit que les lignes encodées, pas les dicts décodés. Le parent a reproduit le comportement sur une base synthétique avec une ligne BLOB : aucune TypeError, et une modification BLOB échoue proprement sur l'allowlist.
+
+Verdict final B17 : **P1-01/02/03/04 CLOSED ; 0 P0/P1/P2**. `GO_V7_11_BINDING_DESIGN` est **GO local** pour l'acceptation du design documentaire. La phase Relay dual reste **NO-GO** jusqu'à une répétition isolée réussie, la vérification de sauvegarde et restauration Core/connecteur incluant `operations.json`, le contrôle Paseo d'arrêt/reprise du connecteur, les décisions du propriétaire et une autorisation ciblée. `GO_V7_11_IDENTITY_BINDING` reste `NOT_RUN` ; `GO_V7_11_RELAY_DUAL` reste `NOT_RUN / NO-GO` ; `GO_V7_11_LIVE_CHANGE_READINESS` reste `NO-GO`.
+
+### 15.5 Gates
+
+| Gate | Statut |
+|---|---|
+| `GO_V7_11_BINDING_DESIGN` | **GO local** — design et oracle relus, 0 P0/P1/P2 ; aucune exécution live |
+| `GO_V7_11_IDENTITY_BINDING` | **NOT_RUN** — zéro principal/credential/binding live |
+| `GO_V7_11_RELAY_DUAL` | **NOT_RUN / NO-GO** — répétition, backup/restore, contrôle Paseo et autorisation requis |
+| `GO_V7_11_LIVE_CHANGE_READINESS` | **NO-GO** — cutover complet non qualifié |
+
+### 15.6 Conditions et prochaine étape
+
+1. Exécuter la répétition isolée sur une copie v5 synthétique : provisioning, assertion HMAC, mauvais audience/binding/key ID, rejeu, map invalide ou incomplète, redémarrage et rollback.
+2. Démontrer un backup Core et un backup connecteur cohérents (`identity.json`, `devices.json`, `operations.json`), puis une restauration sur copie.
+3. Faire confirmer par le propriétaire le contrôle Paseo d'arrêt/reprise du connecteur, l'UID effectif des services et le volume Core réel.
+4. Décider explicitement l'option A/B/C/D, les capabilities minimales, le partage ou la séparation du `device_ref`, le wrapper d'injection du cursor secret et la politique de révocation.
+5. Seulement ensuite, demander une autorisation ciblée pour une phase live ; ne pas modifier le bearer app, ne pas révoquer, ne pas lancer de chat V4 réel comme test.
+
+Aucune de ces étapes n'est autorisée par le présent addendum. Le proxy 4400 et le connecteur 4401 restent actifs mais non supervisés ; le Pixel n'est pas connecté à ADB au moment de cet addendum.

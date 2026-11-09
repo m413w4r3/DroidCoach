@@ -757,6 +757,18 @@ def test_relay_assertion_key_file_requires_private_regular_file(tmp_path):
         load_assertion_keys(raw_json=json.dumps({"file-key": encoded}), file_path=None)
 
 
+def test_relay_assertion_keys_reject_duplicate_secrets_and_duplicate_json_keys():
+    encoded = base64.urlsafe_b64encode(b"synthetic-duplicate-assertion-key-test").decode("ascii").rstrip("=")
+    with pytest.raises(ValueError, match="secret distinct"):
+        load_assertion_keys(raw_json=json.dumps({"key-a": encoded, "key-b": encoded}),
+                             file_path=None, testing=True)
+    duplicate_json = json.dumps({"key-a": encoded}).replace(
+        f'"{encoded}"', f'"{encoded}", "key-a": "{encoded}"'
+    )
+    with pytest.raises(ValueError, match="invalide"):
+        load_assertion_keys(raw_json=duplicate_json, file_path=None, testing=True)
+
+
 def test_proposal_pull_and_ack_are_scoped_to_authenticated_device(tmp_path, monkeypatch):
     app, registry, client = make_app(tmp_path, monkeypatch)
     projections = V4ProjectionStore(app.state.store)

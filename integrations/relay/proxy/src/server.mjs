@@ -52,19 +52,36 @@ function hostPort(host, port) {
 }
 
 export function readConfig(env = process.env) {
+  const dockerNetwork = env.ATLAS_PROXY_DOCKER_NETWORK === '1';
   const listenHost = env.LISTEN_HOST ?? '127.0.0.1';
   const upstreamHost = env.UPSTREAM_HOST ?? '127.0.0.1';
-  if (listenHost !== '127.0.0.1') {
-    throw new TypeError('LISTEN_HOST must be 127.0.0.1');
+  const listenPort = parsePort(env.LISTEN_PORT ?? '4400', 'LISTEN_PORT', true);
+  const upstreamPort = parsePort(env.UPSTREAM_PORT ?? '4402', 'UPSTREAM_PORT', false);
+  if (dockerNetwork) {
+    if (listenHost !== '0.0.0.0' || listenPort !== 4400) {
+      throw new TypeError('Docker network mode requires LISTEN_HOST=0.0.0.0 and LISTEN_PORT=4400');
+    }
+    if (typeof env.UPSTREAM_HOST !== 'string' || env.UPSTREAM_HOST.toLowerCase() !== 'atlas-relay') {
+      throw new TypeError('Docker network mode requires UPSTREAM_HOST=atlas-relay');
+    }
+    if (env.UPSTREAM_PORT !== '4000') {
+      throw new TypeError('Docker network mode requires UPSTREAM_PORT=4000');
+    }
+    return {
+      listenHost,
+      listenPort,
+      upstreamHost: 'atlas-relay',
+      upstreamPort: 4000,
+      dockerNetwork: true,
+    };
   }
-  if (!isLoopbackAddress(upstreamHost)) {
-    throw new TypeError('UPSTREAM_HOST must be a loopback IP literal');
-  }
+  if (listenHost !== '127.0.0.1') throw new TypeError('LISTEN_HOST must be 127.0.0.1');
+  if (!isLoopbackAddress(upstreamHost)) throw new TypeError('UPSTREAM_HOST must be a loopback IP literal');
   return {
     listenHost,
-    listenPort: parsePort(env.LISTEN_PORT ?? '4400', 'LISTEN_PORT', true),
+    listenPort,
     upstreamHost,
-    upstreamPort: parsePort(env.UPSTREAM_PORT ?? '4402', 'UPSTREAM_PORT', false),
+    upstreamPort,
   };
 }
 
@@ -291,12 +308,21 @@ function armConnectTimeout(request, timeoutMs, onTimeout) {
 }
 
 export function createProxy(options = {}) {
+  const dockerNetwork = options.dockerNetwork === true;
   const listenHost = options.listenHost ?? '127.0.0.1';
   const listenPort = options.listenPort ?? 4400;
-  const upstreamHost = options.upstreamHost ?? '127.0.0.1';
+  let upstreamHost = options.upstreamHost ?? '127.0.0.1';
   const upstreamPort = options.upstreamPort ?? 4402;
-  if (listenHost !== '127.0.0.1') throw new TypeError('listenHost must be 127.0.0.1');
-  if (!isLoopbackAddress(upstreamHost)) throw new TypeError('upstreamHost must be a loopback IP literal');
+  if (dockerNetwork) {
+    if (listenHost !== '0.0.0.0') throw new TypeError('Docker network mode requires listenHost=0.0.0.0');
+    if (typeof upstreamHost !== 'string' || upstreamHost.toLowerCase() !== 'atlas-relay' || upstreamPort !== 4000) {
+      throw new TypeError('Docker network mode requires upstream atlas-relay:4000');
+    }
+    upstreamHost = 'atlas-relay';
+  } else {
+    if (listenHost !== '127.0.0.1') throw new TypeError('listenHost must be 127.0.0.1');
+    if (!isLoopbackAddress(upstreamHost)) throw new TypeError('upstreamHost must be a loopback IP literal');
+  }
   parsePort(listenPort, 'listenPort', true);
   parsePort(upstreamPort, 'upstreamPort', false);
   const limits = validateLimits({ ...DEFAULT_LIMITS, ...options.limits });
