@@ -258,8 +258,8 @@ service_ports() {
 
 connector_metrics() {
   local raw parsed
-  raw="$(compose exec -T atlas-connector node -e "fetch('http://127.0.0.1:4401/metrics').then(async r=>{if(!r.ok)process.exit(2);const x=await r.json();process.stdout.write(JSON.stringify({relay_connected:x.relay_connected===true,active_sessions:Number.isInteger(x.active_sessions)?x.active_sessions:null}))}).catch(()=>process.exit(2))" 2>/dev/null || true)"
-  parsed="$(printf '%s' "$raw" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d.get("relay_connected"),bool); a=d.get("active_sessions"); assert a is None or isinstance(a,int); print("relay_connected=%s active_sessions=%s" % (str(d["relay_connected"]).lower(), a))' 2>/dev/null || true)"
+  raw="$(compose exec -T atlas-connector node -e "fetch('http://127.0.0.1:4401/metrics').then(async r=>{if(!r.ok)process.exit(2);const x=await r.json();process.stdout.write(JSON.stringify({relay_connected:x.relay_connected,active_sessions:x.active_sessions}))}).catch(()=>process.exit(2))" 2>/dev/null || true)"
+  parsed="$(printf '%s' "$raw" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d.get("relay_connected"),bool); a=d.get("active_sessions"); assert a is None or (isinstance(a,int) and not isinstance(a,bool)); print("relay_connected=%s active_sessions=%s" % (str(d["relay_connected"]).lower(), a))' 2>/dev/null || true)"
   if [[ -n "$parsed" ]]; then
     printf '%s\n' "$parsed"
   else
