@@ -54,6 +54,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--receipt", required=True, type=Path)
     parser.add_argument("--snapshot", required=True, type=Path)
     parser.add_argument("--keyring-file", type=Path)
+    parser.add_argument("--require-keyring", action="store_true")
     return parser
 
 
@@ -518,6 +519,9 @@ def main() -> int:
             if not keys or len(keys) > 2 or len(set(keys.values())) != len(keys):
                 raise VerificationError("assertion keyring must have one or two distinct key secrets")
         check("assertion_keyring_distinct_secrets", keyring_oracle)
+    elif args.require_keyring:
+        checks.append({"name": "assertion_keyring_distinct_secrets", "status": "FAIL",
+                       "reason": "keyring file is required for this cutover"})
 
     if connection is not None:
         connection.close()

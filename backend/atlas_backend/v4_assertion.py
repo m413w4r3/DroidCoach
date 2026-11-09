@@ -29,12 +29,21 @@ class RelayAssertionError(ValueError):
     pass
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
 def parse_assertion_keys(raw: str | None) -> dict[str, bytes]:
     if not raw:
         return {}
     try:
-        value = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
+        value = json.loads(raw, object_pairs_hook=_unique_json_object)
+    except (TypeError, json.JSONDecodeError, ValueError):
         raise ValueError("ATLAS_V4_RELAY_ASSERTION_KEYS_JSON invalide") from None
     if not isinstance(value, dict) or not value or len(value) > 2:
         raise ValueError("ATLAS_V4_RELAY_ASSERTION_KEYS_JSON doit contenir une ou deux clés")
@@ -49,6 +58,8 @@ def parse_assertion_keys(raw: str | None) -> dict[str, bytes]:
         if len(secret) < 32:
             raise ValueError("chaque clé d’assertion doit contenir au moins 32 octets")
         result[key_id] = secret
+    if len(set(result.values())) != len(result):
+        raise ValueError("chaque clé d’assertion doit utiliser un secret distinct")
     return result
 
 

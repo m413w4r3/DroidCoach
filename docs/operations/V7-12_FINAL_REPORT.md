@@ -25,10 +25,10 @@ Aucun force-push, aucun merge direct sur `main`, aucune branche utile abandonné
 
 | Image | Référence | Digest / ID |
 |---|---|---|
-| Core V7-12 | build `backend/Dockerfile` | `PENDING` |
-| Relay | wrapper `deploy/relay/Dockerfile` sur `atlas-paseo-relay:r3a` | base `sha256:75d68fd8…` ; wrapper `PENDING` |
-| Proxy | build `integrations/relay/proxy/Dockerfile` | `PENDING` |
-| Connecteur | build `integrations/relay/pc/Dockerfile` | `PENDING` |
+| Core V7-12 | build `backend/Dockerfile` | `atlas-core-v7-12:v7-12-local` = `sha256:16d1f708d29f…` (A4 inclus) |
+| Relay | wrapper `deploy/relay/Dockerfile` sur `atlas-paseo-relay:r3a` | base `sha256:75d68fd8…` ; wrapper `atlas-relay-v7-12:v7-12-local` = `sha256:08d1d0500e47…` |
+| Proxy | build `integrations/relay/proxy/Dockerfile` | `atlas-proxy-v7-12:v7-12-local` = `sha256:e0b23fef0c13…` |
+| Connecteur | build `integrations/relay/pc/Dockerfile` | `atlas-connector-v7-12:v7-12-local` = `sha256:8badcb86d618…` |
 | Gateway OpenClaw | `ghcr.io/openclaw/openclaw@sha256:f40d1e66…` | `2026.10.5` |
 | Python base | `python:3.12-slim@sha256:5e2bdb1b…` | épinglé |
 | Node base | `node:24-bookworm-slim@sha256:01d566e8…` | épinglé |
@@ -94,13 +94,13 @@ Aucun `network_mode: host`, aucun socket Docker, aucun port Core/Gateway/Relay/m
 
 | Suite | SHA | Résultat |
 |---|---|---|
-| Backend `pytest -q` | intégré A4 `62ee4e7` | **508 passed, 1 skipped** (86 tests V4 ciblés PASS) |
-| Connecteur `npm run test:unit` | intégré | 140 passed |
+| Backend `pytest -q` | intégré A4 + correctif A6 | **509 passed, 1 skipped** (87 tests V4 ciblés PASS) |
+| Connecteur `npm run test:unit` | intégré + correctif A6 | 144 passed |
 | Proxy `node --test` | intégré | 20 passed, 1 skipped (Relay isolé non lancé) |
 | Audit production connecteur | intégré | 0 vulnérabilité |
 | Android JVM + lint | intégré | BUILD SUCCESSFUL (2 min 20 s) |
 | Gateway OpenClaw (A3) | intégré `83c1527` | **PASS** : image épinglée, healthcheck authentifié, agent `atlas`/`openai/gpt-6-luna`, profil OAuth, `atlas_core_tools` désactivé, outils refusés, read_only, aucun docker.sock, SIGTERM/restart, 10 bases SQLite intègres, 125 sessions, manifeste live inchangé (106 053 fichiers, 3 095 465 071 octets, SHA-256 `13c6fcc9…`), systemd PID 3305 inchangé. |
-| Stack isolée V7-12 | intégré `8c39145` | **PASS complet** : cinq services healthy, `doctor`/`status` PASS, HMAC/rejeu/signature invalide PASS, restart/persistance Core PASS, révocation credential PASS, persistance identité connecteur PASS (`identity.json`/`devices.json`/`operations.json`), backup/restore PASS (intégrité SQLite, FK 0, manifeste 98 entrées, rotation 7 jours, copie de restauration), arrêt propre sans suppression de volume. |
+| Stack isolée V7-12 | intégré `62ee4e7` (run 7, image A4) | **PASS complet** : cinq services healthy, `doctor`/`status` PASS, HMAC/rejeu/signature invalide PASS, restart/persistance Core PASS, révocation credential PASS, persistance identité connecteur PASS (`identity.json`/`devices.json`/`operations.json`), backup/restore PASS (intégrité SQLite, FK 0, manifeste 98 entrées, rotation 7 jours, copie de restauration), arrêt propre sans suppression de volume. Le lecteur strict `ATLAS_V4_CURSOR_SECRET_FILE` démarre correctement dans le conteneur. |
 | Recette Pixel physique | `BLOCKED` | non exécutable sans appareil |
 
 ## 9. Gates

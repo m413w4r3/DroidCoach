@@ -161,7 +161,7 @@ describe("ATLAS_SERVICE_TOKEN_FILE", () => {
 });
 
 describe("principal map active-device coverage", () => {
-  it("requires every active device, allows extra entries, and ignores revoked devices", () => {
+  it("requires exactly the active device set and ignores revoked devices only when absent from the map", () => {
     const active = makeDeviceRecord("relay-active");
     const revoked = makeDeviceRecord("relay-revoked", "2026-11-01T00:00:00.000Z");
     const credential = { principalId: "synthetic-principal", credential: "synthetic-credential" };
@@ -170,7 +170,10 @@ describe("principal map active-device coverage", () => {
     expect(principalMapCoversActiveDevices(new Map(), [active])).toBe(false);
     expect(principalMapCoversActiveDevices(new Map([
       [active.device_id, credential], ["relay-extra", credential],
-    ]), [active])).toBe(true);
+    ]), [active])).toBe(false);
+    expect(principalMapCoversActiveDevices(new Map([
+      [revoked.device_id, credential],
+    ]), [revoked])).toBe(false);
     expect(principalMapCoversActiveDevices(new Map(), [revoked])).toBe(true);
     expect(principalMapCoversActiveDevices(new Map(), [])).toBe(true);
   });

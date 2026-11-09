@@ -393,6 +393,10 @@ IDENTITY_AFTER="$(identity_hash)"
 [[ "$IDENTITY_BEFORE" == "$IDENTITY_AFTER" ]] || fail "connector identity changed after restart"
 say "connector_state_persistence=PASS identity_devices_operations=present"
 
+replay_digest() {
+  docker exec "$(compose ps -q atlas-core)" python -c 'import hashlib,pathlib; root=pathlib.Path("/data/replay"); h=hashlib.sha256(); [ (h.update(str(p.relative_to(root)).encode()+b"\0"), h.update(p.read_bytes())) for p in sorted(root.rglob("*")) if p.is_file() ]; print(h.hexdigest())'
+}
+CORE_REPLAY_BEFORE="$(replay_digest)"
 mkdir -m 0700 "$STACK_TMP/backups/atlas-backup-20200101T000000Z-deadbeef" \
   "$STACK_TMP/backups/operator-note"
 printf 'synthetic\n' > "$STACK_TMP/backups/atlas-backup-20200101T000000Z-deadbeef/old"
@@ -403,8 +407,27 @@ touch -d '30 days ago' "$STACK_TMP/backups/atlas-backup-20200101T000000Z-deadbee
 [[ -d "$STACK_TMP/backups/operator-note" ]] || fail "backup rotation removed an unrelated directory"
 BACKUP_DIR="$(find "$STACK_TMP/backups" -mindepth 1 -maxdepth 1 -type d -name 'atlas-backup-*' -print -quit)"
 [[ -n "$BACKUP_DIR" ]] || fail "new isolated backup was not created"
+python3 - "$BACKUP_DIR/core/replay" "$CORE_REPLAY_BEFORE" "$BACKUP_DIR/metadata.json" <<'PY'
+import hashlib,json,pathlib,sys
+root=pathlib.Path(sys.argv[1]); expected=sys.argv[2]
+h=hashlib.sha256()
+for p in sorted(root.rglob("*")):
+    if p.is_file():
+        h.update(str(p.relative_to(root)).encode()+b"\0")
+        h.update(p.read_bytes())
+if h.hexdigest()!=expected:
+    raise SystemExit("backup replay cache differs from quiescent source")
+metadata=json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+if metadata.get("sqlite",{}).get("replay_capture")!="stopped file copy after Core quiesce":
+    raise SystemExit("backup metadata does not record quiescent replay capture")
+PY
+deadline=$((SECONDS + 60))
+until [[ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$(compose ps -q atlas-core)" 2>/dev/null || true)" == healthy ]]; do
+  (( SECONDS < deadline )) || fail "isolated Core did not recover after backup quiesce"
+  sleep 2
+done
 "$ROOT/scripts/v7-12/restore-check.py" "$BACKUP_DIR" --restore-to "$STACK_TMP/restored"
-say "backup_restore=PASS integrity=ok foreign_key_check=empty manifest=verified rotation=7d"
+say "backup_restore=PASS integrity=ok foreign_key_check=empty manifest=verified rotation=7d replay_quiescent=PASS"
 
 compose down --remove-orphans
 STACK_STARTED=0

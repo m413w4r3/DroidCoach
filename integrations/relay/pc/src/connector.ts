@@ -212,9 +212,13 @@ export async function createConnector(config: ConnectorConfig): Promise<Connecto
   };
 }
 
-/** Returns true when every non-revoked device has a principal-map entry. */
+/** Returns true only when the principal map covers exactly the non-revoked device set. */
 export function principalMapCoversActiveDevices<T>(credentials: Map<string, T>, devices: DeviceRecord[]): boolean {
-  return devices.every((device) => device.revoked_at !== null || credentials.has(device.device_id));
+  const activeDeviceIds = new Set(
+    devices.filter((device) => device.revoked_at === null).map((device) => device.device_id),
+  );
+  if (credentials.size !== activeDeviceIds.size) return false;
+  return [...credentials.keys()].every((deviceId) => activeDeviceIds.has(deviceId));
 }
 
 export function selectV4CredentialMode(

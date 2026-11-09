@@ -385,6 +385,12 @@ def main() -> int:
         sqlite_info = sqlite_checks(database_path)
         copy_core_secrets(core_id, core_dir / "secrets")
 
+        # The online SQLite backup above is coherent; stop Core before copying
+        # the lock and replay sidecars so no nonce cache write races the copy.
+        if running(compose, "atlas-core"):
+            stopped.append("atlas-core")
+            compose.run("stop", "--timeout", "30", "atlas-core", label="quiescing Core for replay cache copy")
+
         run_quiet(["docker", "cp", f"{core_id}:/data/atlas.sqlite3.lock", str(core_dir / "atlas.sqlite3.lock")],
                   label="copying Core lock file")
         os.chmod(core_dir / "atlas.sqlite3.lock", 0o600)
@@ -405,6 +411,7 @@ def main() -> int:
                 "foreign_key_violations": sqlite_info[1],
                 "user_version": sqlite_info[2],
                 "capture": "sqlite3.Connection.backup",
+                "replay_capture": "stopped file copy after Core quiesce",
             },
             "connector_files": ["identity.json", "devices.json", "operations.json"],
             "openclaw_state_root": "openclaw",
@@ -419,8 +426,7 @@ def main() -> int:
                   label="verifying newly created backup")
         success = True
     finally:
-        for service in stopped:
-            started.append(service)
+        started = list(reversed(stopped))
         if started:
             try:
                 compose.run("start", *started, label="restarting snapshot writers")

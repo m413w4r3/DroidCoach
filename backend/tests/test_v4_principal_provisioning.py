@@ -255,6 +255,7 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
 
 def _run_verifier(
     files: dict[str, Path | str], *, map_value: dict | None = None, keyring_file: Path | None = None,
+    require_keyring: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     if map_value is not None:
         mapping_path = Path(files["map"])
@@ -272,6 +273,8 @@ def _run_verifier(
         ]
     if keyring_file is not None:
         command.extend(["--keyring-file", str(keyring_file)])
+    if require_keyring:
+        command.append("--require-keyring")
     return subprocess.run(
         command,
         cwd=BACKEND,
@@ -384,6 +387,10 @@ def test_verifier_requires_distinct_assertion_keyring_secrets_when_provided(tmp_
     assert failed.returncode != 0
     assert "assertion_keyring_distinct_secrets" in failed.stdout
     assert encoded_a not in failed.stdout + failed.stderr
+
+    missing = _run_verifier(files, require_keyring=True)
+    assert missing.returncode != 0
+    assert "assertion_keyring_distinct_secrets" in missing.stdout
 
 
 def test_provision_cli_refuses_nonempty_registry_and_leaves_existing_rows_unchanged(tmp_path):
