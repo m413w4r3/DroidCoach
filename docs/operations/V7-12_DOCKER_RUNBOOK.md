@@ -86,6 +86,7 @@ Le wrapper lit `ATLAS_STACK_ENV_FILE` ou, par défaut, `~/.config/atlas/stack.en
 
 ### Le conteneur Gateway ne démarre pas
 
+0. Le Gateway est le seul service avec accès Internet (`atlas-egress`) : son bootstrap peut contacter le registre npm/plugins avant d'écouter. Un timeout réseau côté Gateway n'indique pas un problème Core/Relay ; vérifier d'abord l'accès Internet de l'hôte et le réseau `atlas-egress`.
 1. Vérifier que `openclaw-gateway.service` est arrêté.
 2. Vérifier les permissions de `~/.openclaw` : UID/GID 1000, répertoires 0700, fichiers 0600.
 3. Vérifier `HOME=/home/nill`, `OPENCLAW_STATE_DIR`, `OPENCLAW_CONFIG_PATH`.
@@ -116,7 +117,7 @@ Les journaux ne doivent contenir ni bearer, ni clé HMAC, ni contenu de conversa
 
 ## 6. Sauvegarde et restauration
 
-- `backup` capture le Core via l'API SQLite de sauvegarde, les trois fichiers du connecteur et l'état OpenClaw, avec manifeste SHA-256, contrôle de permissions et `integrity_check`.
+- `backup` capture le Core via l'API SQLite de sauvegarde, les trois fichiers du connecteur, l'état OpenClaw et les secrets/credentials nécessaires au restore (secrets Core, état privé connecteur `v7-12`, `stack.env`), avec manifeste SHA-256, contrôle de permissions et `integrity_check`.
 - La rotation quotidienne conserve les sauvegardes récentes ; ne pas supprimer manuellement les archives de rollback.
 - Le stockage hôte est chiffré ZFS `aes-256-gcm`. Ne pas copier les archives vers un support non chiffré.
 - Une restauration remplace l'état : elle exige l'arrêt du service concerné, une sauvegarde de l'état courant et l'affichage explicite de la perte des écritures postérieures au backup.
