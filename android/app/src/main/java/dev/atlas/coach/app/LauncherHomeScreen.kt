@@ -665,7 +665,7 @@ private fun LauncherHomeContent(
                 )
                 if (!compactFooter) {
                     HomeFooterAction(
-                        label = if (controller.isEmergencyPaused) "Fin" else "Pause",
+                        label = if (controller.isEmergencyPaused) "Fin" else "Urgence",
                         description = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes",
                         tag = "launcher_emergency_pause",
                         modifier = Modifier.weight(1f),
@@ -681,7 +681,7 @@ private fun LauncherHomeContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     HomeFooterAction(
-                        label = if (controller.isEmergencyPaused) "Fin" else "Pause",
+                        label = if (controller.isEmergencyPaused) "Fin" else "Urgence",
                         description = if (controller.isEmergencyPaused) "Terminer la pause d'urgence" else "Activer la pause d'urgence hors ligne pendant 30 minutes",
                         tag = "launcher_emergency_pause",
                         modifier = Modifier.weight(1f),

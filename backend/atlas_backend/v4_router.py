@@ -277,6 +277,18 @@ def _error_payload(
     return payload
 
 
+def _consent_required_message(category: str | None = None) -> str:
+    if category:
+        return (
+            f"Le consentement Android « {category} » n’est pas accordé. "
+            "Ouvrez ATLAS > Partage backend pour l’accorder."
+        )
+    return (
+        "Le consentement Android requis n’est pas accordé. "
+        "Ouvrez ATLAS > Partage backend pour accorder la catégorie concernée."
+    )
+
+
 def _error_response(
     request: Request,
     code: str,
@@ -333,7 +345,7 @@ def _chat_error_response(request_id: str, code: str, capability: str = "coach.ch
     messages = {
         "BAD_REQUEST": "La requête ne respecte pas le schéma V4.",
         "AUTH_REQUIRED": "Authentification Android requise.",
-        "CONSENT_REQUIRED": "Le consentement Android n’est pas GRANTED.",
+        "CONSENT_REQUIRED": _consent_required_message(),
         "STALE_VERSION": "La version de consentement est obsolète.",
         "STALE_DATA": "Les données Android doivent être resynchronisées avant cette opération.",
         "CAPABILITY_UNAVAILABLE": "Capability désactivée.",
@@ -857,7 +869,7 @@ def create_v4_router(
             for consent_category in tool_consent_categories(capability):
                 state = projections.consent_state(device_ref, consent_category)
                 if state is None or state["state"] != "GRANTED":
-                    return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+                    return _error_response(request, "CONSENT_REQUIRED", _consent_required_message(consent_category),
                                            capability, status=403, fallback_request_id=parsed_id)
                 projection_failure = require_projection_consent(
                     device_ref, consent_category, int(state["consent_version"]), capability, request
@@ -935,7 +947,7 @@ def create_v4_router(
                                 request: Request) -> JSONResponse | None:
         state = projections.consent_state(device_ref, category)
         if state is None or state["state"] != "GRANTED":
-            return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+            return _error_response(request, "CONSENT_REQUIRED", _consent_required_message(category),
                                    capability, status=403)
         current = int(state["consent_version"])
         if version < current:
@@ -957,7 +969,7 @@ def create_v4_router(
     ) -> JSONResponse | None:
         state = projections.consent_state(device_ref, category)
         if state is None or state["state"] != "GRANTED":
-            return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+            return _error_response(request, "CONSENT_REQUIRED", _consent_required_message(category),
                                    capability, status=403)
         persisted_version = int(state["consent_version"])
         if persisted_version != current_version:
@@ -978,7 +990,7 @@ def create_v4_router(
             )
         final_state = projections.consent_state(device_ref, category)
         if final_state is None or final_state["state"] != "GRANTED":
-            return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+            return _error_response(request, "CONSENT_REQUIRED", _consent_required_message(category),
                                    capability, status=403)
         if int(final_state["consent_version"]) != persisted_version:
             return _error_response(request, "STALE_VERSION", "La version de consentement a changé pendant la requête.",
@@ -996,7 +1008,7 @@ def create_v4_router(
     ) -> JSONResponse | None:
         state = projections.consent_state(device_ref, category)
         if state is None or state["state"] != "GRANTED":
-            return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+            return _error_response(request, "CONSENT_REQUIRED", _consent_required_message(category),
                                    capability, status=403)
         version = int(state["consent_version"])
         if expected_version is not None and version != expected_version:
@@ -1081,7 +1093,7 @@ def create_v4_router(
         for consent_category in tool_consent_categories(cap):
             consent_state = projections.consent_state(device_ref, consent_category)
             if consent_state is None or consent_state["state"] != "GRANTED":
-                return _error_response(request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.",
+                return _error_response(request, "CONSENT_REQUIRED", _consent_required_message(consent_category),
                                        cap, status=403, fallback_request_id=request_id)
             operation_consent_versions[consent_category] = int(consent_state["consent_version"])
 
@@ -1298,7 +1310,7 @@ def create_v4_router(
             request,
             require_projection=True,
         ) if consent_state is not None else _error_response(
-            request, "CONSENT_REQUIRED", "Le consentement Android n’est pas GRANTED.", capability, status=403
+            request, "CONSENT_REQUIRED", _consent_required_message(), capability, status=403
         )
         if projection_failure is not None:
             return projection_failure
@@ -1378,7 +1390,7 @@ def create_v4_router(
                         return _error_response(
                             request,
                             "CONSENT_REQUIRED",
-                            "Le consentement Android n’est pas GRANTED.",
+                            _consent_required_message(required_category),
                             capability,
                             status=403,
                             fallback_request_id=request_id,
@@ -1409,7 +1421,7 @@ def create_v4_router(
         if capability == "activity_status.write":
             day_plan_consent = projections.consent_state(device_ref, "DAY_PLAN")
             if day_plan_consent is None or day_plan_consent["state"] != "GRANTED":
-                return _error_response(request, "CONSENT_REQUIRED", "Le consentement DAY_PLAN n’est pas GRANTED.",
+                return _error_response(request, "CONSENT_REQUIRED", _consent_required_message("DAY_PLAN"),
                                        capability, status=403, fallback_request_id=request_id)
             day_plan_consent_version = int(day_plan_consent["consent_version"])
             plan_consent_failure = require_projection_consent(

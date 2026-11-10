@@ -194,6 +194,7 @@ def test_new_tool_principal_without_consent_is_denied(tmp_path, monkeypatch):
     )
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "CONSENT_REQUIRED"
+    assert "DAY_PLAN" in response.json()["error"]["message"]
 
 
 def test_principal_mode_requires_cursor_secret_and_unknown_mode_fails_startup(tmp_path, monkeypatch):
