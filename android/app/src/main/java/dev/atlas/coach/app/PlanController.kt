@@ -127,8 +127,8 @@ class PlanController(
         private set
     var inboxEntries by mutableStateOf(this.inboxRepository.all())
         private set
-    var inboxPendingAckCount by mutableStateOf(this.inboxRepository.pendingAcks().size)
-        private set
+    /** Reads the shared inbox outbox on each composition so worker-delivered ACKs cannot leave a stale count. */
+    val inboxPendingAckCount: Int get() = inboxRepository.pendingAcks().size
 
     init {
         refresh()
@@ -193,7 +193,6 @@ class PlanController(
 
     fun refreshInbox() {
         inboxEntries = inboxRepository.all()
-        inboxPendingAckCount = inboxRepository.pendingAcks().size
     }
 
     fun a1Consent(): A1Consent? = requireRepository().a1Consent()

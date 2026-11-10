@@ -29,6 +29,7 @@ import dev.atlas.coach.sync.relay.RelaySettings
 import dev.atlas.coach.sync.agent.coach.RelayBackendChatRequestExecutor
 import dev.atlas.coach.sync.relay.RelayTransportMode
 import dev.atlas.coach.sync.v4.CoreV4ConsentState
+import dev.atlas.coach.sync.v4.CoreV4SyncScheduler
 import dev.atlas.coach.sync.v4.RelayBackendCoreV4Session
 import dev.atlas.coach.sync.v4.RelayCoreV4Session
 import dev.atlas.coach.sync.v4.RelayCoreV4SessionRegistry
@@ -80,6 +81,7 @@ class RelaySettingsController(
         { config, credentials -> RelayBackendTransport(config, credentials, consentGate = consentGate) },
 ) {
     private val allowLoopbackWs = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    private val appContext = context.applicationContext
     private val settingsStore = AndroidRelaySettingsStore(context)
     private val credentialStore = KeystoreRelayCredentialStore(context, settingsStore)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -419,6 +421,9 @@ class RelaySettingsController(
                 lastConnectedAtUtcMillis = now
                 settingsStore.updateLastConnected(now)
                 lastError = RelaySettingsErrorPolicy.afterStateChange(acceptedState, lastError)
+                // A fresh relay session must refresh the persisted V4 status instead of
+                // leaving the previous OFFLINE/ERROR presentation on screen.
+                runCatching { CoreV4SyncScheduler.enqueueImmediate(appContext) }
             }
             RelayConnectionState.OFFLINE,
             RelayConnectionState.AUTH_REQUIRED,
